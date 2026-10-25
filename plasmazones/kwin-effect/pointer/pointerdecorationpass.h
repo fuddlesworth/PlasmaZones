@@ -13,6 +13,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 
 #include <QHash> // std::hash<QString> specialization for the unordered_map key below
+#include <QImage>
 #include <QPointF>
 #include <QRectF>
 #include <QSet>
@@ -33,7 +34,6 @@ class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
-class PlatformCursorImage;
 class RenderDevice;
 class RenderTarget;
 class RenderViewport;
@@ -254,6 +254,15 @@ public:
     /// canvas, so an output going away invalidates it wholesale.
     void outputRemoved(KWin::LogicalOutput* screen);
 
+    /// The cursor's image may have changed (KWin's `cursorShapeChanged`: a
+    /// theme shape, an animation frame, a commit to a cursor surface a client
+    /// supplies). Marks the kept image stale, so the next paintOutput reads it
+    /// again. See m_cursorImage.
+    void cursorChanged()
+    {
+        m_cursorImageStale = true;
+    }
+
     /// Drop the sampled trail because the canvas it was measured against has
     /// moved under it.
     ///
@@ -269,9 +278,10 @@ public:
     /// compositor reset). Null-safe against a torn-down `KWin::effects`.
     ///
     /// Does NOT clear the derived chain state — m_engaged, m_engagedLayers,
-    /// m_anyAboveLayer, m_maxReachLogical, m_maxTrailSeconds, m_sampleWindowSeconds
-    /// all stand. Its one caller is teardown, where nothing reads them afterwards;
-    /// a caller that wanted a live reset would have to rebuildChain() as well.
+    /// m_anyAboveLayer, m_anyNeedsCursor, m_maxReachLogical, m_maxTrailSeconds,
+    /// m_sampleWindowSeconds all stand. Its one caller is teardown, where
+    /// nothing reads them afterwards; a caller that wanted a live reset would
+    /// have to rebuildChain() as well.
     void reset();
 
 private:
@@ -445,12 +455,16 @@ private:
     /// Draw a unit NDC quad for a buffer stage (FBO to FBO, no projection).
     static void drawFullscreenQuad();
 
-    /// Upload (or reuse) @p cursor as the sprite for a `needsCursor` pack.
-    /// Returns null when there is no cursor image, in which case
-    /// uPointerFlags.x is pushed as 0. Takes the image paintOutput already
-    /// read rather than asking KWin itself, because that read must stay
-    /// outside the draw bracket (see paintOutput).
-    KWin::GLTexture* cursorSpriteTexture(const KWin::PlatformCursorImage& cursor);
+    /// Upload (or reuse) the kept cursor image (m_cursorImage) as the sprite
+    /// for a `needsCursor` pack. Returns null when there is no cursor image,
+    /// in which case uPointerFlags.x is pushed as 0.
+    KWin::GLTexture* cursorSpriteTexture();
+
+    /// Read the cursor image from KWin into m_cursorImage, if it is stale or
+    /// was read on another output than @p screen, and otherwise do nothing.
+    /// Called at the top of paintOutput and nowhere else; see m_cursorImage
+    /// for why.
+    void refreshCursorImage(KWin::LogicalOutput* screen);
 
     /// Is @p screen covered by the effect's fullscreen gate? Inline and header-
     /// resident because both TUs that gate on suppression consult it: every liveness,
@@ -513,10 +527,13 @@ private:
     ///     sprite copy and trail along the mirrored motion until its own hide
     ///     is released, and only then does the raised counter read as gone.
     ///     A `below` chain never holds a hide and is unaffected.
+    ///
+    /// The image half reads the kept image (m_cursorImage) and trusts only a
+    /// fresh read. A stale one answers "not gone" there and leaves the call to
+    /// the counter: a cursor coming back from blank would otherwise read gone
+    /// until a paint refreshed it, and a pass that thinks the sprite is gone
+    /// asks for no paint.
     bool cursorSpriteGone() const;
-    /// The same test against a @p cursor image the caller already read, so a
-    /// frame that needs the image for other things asks KWin for it once.
-    bool cursorSpriteGone(const KWin::PlatformCursorImage& cursor) const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
     /// decorating, repainting away what is still on screen first. @p next
@@ -557,10 +574,9 @@ private:
     void repaintStale(const QRectF& stale) const;
 
     /// The cursor sprite's rect in @p screen's device-px canvas, hotspot
-    /// applied. A null rect when the compositor reports no cursor image.
+    /// applied, from the kept image and the live cursor position. A null rect
+    /// when no image is kept or the cursor has none.
     QRectF cursorCanvasRect(KWin::LogicalOutput* screen) const;
-    /// The same rect from a @p cursor image the caller already read.
-    QRectF cursorCanvasRect(KWin::LogicalOutput* screen, const KWin::PlatformCursorImage& cursor) const;
 
     /// Take the compositor's cursor hide, if an `above` layer is engaged and
     /// the pointer is on @p screen. A no-op when something else already hides
@@ -590,6 +606,9 @@ private:
     bool m_engaged = false;
     std::vector<EngagedLayer> m_engagedLayers;
     bool m_anyAboveLayer = false;
+    /// Some engaged layer declares `needsCursor`, so a frame uploads the
+    /// sprite. Cached here for the same reason as m_anyAboveLayer.
+    bool m_anyNeedsCursor = false;
 
     /// Outputs the fullscreen gate covers. See setSuppressedOutputs. Compared
     /// only, never dereferenced, and outputRemoved does not need to prune it:
@@ -625,8 +644,36 @@ private:
     // ctor.
     std::unordered_map<QString, CompiledPointerPack> m_packCache;
 
-    /// The uploaded cursor sprite, keyed on the source QImage's cacheKey so a
-    /// theme or shape change re-uploads and a stationary cursor does not.
+    /// The cursor image and hotspot the pass last read from KWin.
+    ///
+    /// EffectsHandler::cursorImage() is not a cheap getter. For a cursor a
+    /// client supplies (an X client through Xwayland, such as Steam or VLC)
+    /// KWin has no theme image to hand back, so it allocates a texture and a
+    /// framebuffer, paints the cursor scene into them, reads the result back
+    /// synchronously and leaves GL_BLEND disabled behind it. Read inside the
+    /// draw bracket it switched blending off under the next layer's quad, which
+    /// then wrote its transparent texels over the frame as black (PR #1164).
+    ///
+    /// So it is read in one place, refreshCursorImage() at the top of
+    /// paintOutput, where the paint's own GL context is current and a guard
+    /// puts back the state the read disturbs, and only when cursorChanged()
+    /// marked the copy stale or the pointer is on another output. KWin's
+    /// screencast keeps its cursor the same way. Everything else, on and off
+    /// the paint path, reads this copy, so a cursor that changed since the last
+    /// paint is one frame stale there: the sprite rect's union with
+    /// m_lastSpriteCanvasRect absorbs that, and cursorSpriteGone trusts only a
+    /// fresh read. Kept as its parts rather than a PlatformCursorImage so this
+    /// header needs no KWin include.
+    QImage m_cursorImage;
+    QPointF m_cursorHotSpot;
+    /// The output m_cursorImage was read on: KWin grabs a client's cursor at
+    /// the scale of the output under it, so another output needs a new read.
+    KWin::LogicalOutput* m_cursorImageOutput = nullptr;
+    /// Starts true: nothing has been read yet.
+    bool m_cursorImageStale = true;
+
+    /// The uploaded cursor sprite, keyed on m_cursorImage's cacheKey, which
+    /// changes only when refreshCursorImage() reads a new image.
     std::unique_ptr<KWin::GLTexture> m_cursorSprite;
     qint64 m_cursorSpriteKey = 0;
 

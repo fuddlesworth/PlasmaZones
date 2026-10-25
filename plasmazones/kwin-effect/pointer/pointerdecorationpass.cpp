@@ -167,6 +167,7 @@ void PointerDecorationPass::rebuildChain()
 
     m_engagedLayers.clear();
     m_anyAboveLayer = false;
+    m_anyNeedsCursor = false;
     m_maxReachLogical = 0.0;
     m_maxTrailSeconds = 0.0;
     m_sampleWindowSeconds = 0.0;
@@ -224,6 +225,9 @@ void PointerDecorationPass::rebuildChain()
         m_sampleWindowSeconds = std::max(m_sampleWindowSeconds, eff.resolvedTrailWindow(parameters));
         if (eff.layer == PPS::PointerShaderEffect::Layer::Above) {
             m_anyAboveLayer = true;
+        }
+        if (eff.needsCursor) {
+            m_anyNeedsCursor = true;
         }
         m_engagedLayers.push_back(EngagedLayer{effectId, eff, parameters, reach});
     }
@@ -470,27 +474,19 @@ QRectF PointerDecorationPass::damageLogicalRect(KWin::LogicalOutput* screen, qin
 
 QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen) const
 {
-    if (!screen || !KWin::effects) {
+    // The kept image, possibly one cursor change old (see m_cursorImage); the
+    // position is read live, so only the sprite's size and hotspot can lag.
+    if (!screen || !KWin::effects || m_cursorImage.isNull()) {
         return {};
     }
-    return cursorCanvasRect(screen, KWin::effects->cursorImage());
-}
-
-QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen,
-                                               const KWin::PlatformCursorImage& cursor) const
-{
-    if (!screen || !KWin::effects || cursor.isNull()) {
-        return {};
-    }
-    const QImage img = cursor.image();
-    const qreal dpr = img.devicePixelRatio() > 0.0 ? img.devicePixelRatio() : 1.0;
+    const qreal dpr = m_cursorImage.devicePixelRatio() > 0.0 ? m_cursorImage.devicePixelRatio() : 1.0;
     // The hotspot is expressed in the sprite image's own device pixels, so it
     // divides by the image's dpr to reach logical px — not by the OUTPUT's
     // scale, which need not match the cursor theme's size.
-    const QPointF logicalTopLeft = KWin::effects->cursorPos() - cursor.hotSpot() / dpr;
+    const QPointF logicalTopLeft = KWin::effects->cursorPos() - m_cursorHotSpot / dpr;
     const qreal scale = screen->scale();
     const QPointF canvasTopLeft = (logicalTopLeft - screen->geometryF().topLeft()) * scale;
-    const QSizeF canvasSize(img.width() / dpr * scale, img.height() / dpr * scale);
+    const QSizeF canvasSize(m_cursorImage.width() / dpr * scale, m_cursorImage.height() / dpr * scale);
     return QRectF(canvasTopLeft, canvasSize);
 }
 
@@ -555,17 +551,10 @@ bool PointerDecorationPass::cursorSpriteGone() const
     if (!KWin::effects) {
         return false;
     }
-    return cursorSpriteGone(KWin::effects->cursorImage());
-}
-
-bool PointerDecorationPass::cursorSpriteGone(const KWin::PlatformCursorImage& cursor) const
-{
-    if (!KWin::effects) {
-        return false;
-    }
     // An empty image is a client-installed blank cursor: nothing is on screen
-    // to decorate, whatever the hide counter says.
-    if (cursor.isNull()) {
+    // to decorate, whatever the hide counter says. Only a fresh read says so;
+    // a stale one is left to the counter (see the header).
+    if (!m_cursorImageStale && m_cursorImage.isNull()) {
         return true;
     }
     // A non-empty image with the counter at zero is KWin's own composited (or
@@ -775,6 +764,10 @@ void PointerDecorationPass::invalidateShaderCache()
 
 void PointerDecorationPass::outputGeometryChanged()
 {
+    // A scale change alters the size KWin grabs a client's cursor at, with no
+    // cursor change to say so. Ahead of the early return: the image is read
+    // whether or not a trail is live.
+    m_cursorImageStale = true;
     if (!m_output) {
         return;
     }
@@ -800,6 +793,12 @@ void PointerDecorationPass::outputGeometryChanged()
 
 void PointerDecorationPass::outputRemoved(KWin::LogicalOutput* screen)
 {
+    if (m_cursorImageOutput == screen) {
+        // Compared only, but a later output allocated at the same address
+        // would read as the one the image was taken on.
+        m_cursorImageOutput = nullptr;
+        m_cursorImageStale = true;
+    }
     if (m_output != screen) {
         return;
     }
@@ -848,6 +847,10 @@ void PointerDecorationPass::reset()
     m_lastSpriteCanvasRect = QRectF();
     m_output = nullptr;
     m_hasTimeOrigin = false;
+    m_cursorImage = QImage();
+    m_cursorHotSpot = QPointF();
+    m_cursorImageOutput = nullptr;
+    m_cursorImageStale = true;
 }
 
 } // namespace PlasmaZones

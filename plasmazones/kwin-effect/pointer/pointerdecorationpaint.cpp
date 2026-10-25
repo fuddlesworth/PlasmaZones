@@ -230,21 +230,19 @@ void PointerDecorationPass::unbindUnits(int firstUnit, int endUnit)
 
 // ── Cursor sprite ───────────────────────────────────────────────────────────
 
-KWin::GLTexture* PointerDecorationPass::cursorSpriteTexture(const KWin::PlatformCursorImage& cursor)
+KWin::GLTexture* PointerDecorationPass::cursorSpriteTexture()
 {
-    if (cursor.isNull()) {
+    if (m_cursorImage.isNull()) {
         return nullptr;
     }
-    const QImage img = cursor.image();
-    // Keyed on the QImage's cacheKey: a stationary theme cursor re-uses the
-    // upload every frame, and a theme or shape change (a resize arrow, a text
-    // caret) produces a different key and re-uploads exactly once. A cursor a
-    // client supplies is grabbed into a fresh image on every read, so it
-    // re-uploads each frame; the sprite is cursor-sized, so that stays cheap.
-    if (m_cursorSprite && m_cursorSpriteKey == img.cacheKey()) {
+    // Keyed on the kept image's cacheKey, which changes only when
+    // refreshCursorImage() reads a new one: a stationary cursor re-uses the
+    // upload every frame, theme and client cursors alike, and a shape change
+    // (a resize arrow, a text caret) re-uploads exactly once.
+    if (m_cursorSprite && m_cursorSpriteKey == m_cursorImage.cacheKey()) {
         return m_cursorSprite.get();
     }
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::upload(img);
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::upload(m_cursorImage);
     if (!tex) {
         qCWarning(lcEffect) << "Pointer pass could not upload the cursor sprite — uPointerFlags.x stays 0";
         return nullptr;
@@ -252,8 +250,26 @@ KWin::GLTexture* PointerDecorationPass::cursorSpriteTexture(const KWin::Platform
     tex->setFilter(GL_LINEAR);
     tex->setWrapMode(GL_CLAMP_TO_EDGE);
     m_cursorSprite = std::move(tex);
-    m_cursorSpriteKey = img.cacheKey();
+    m_cursorSpriteKey = m_cursorImage.cacheKey();
     return m_cursorSprite.get();
+}
+
+void PointerDecorationPass::refreshCursorImage(KWin::LogicalOutput* screen)
+{
+    if (!m_cursorImageStale && m_cursorImageOutput == screen) {
+        return;
+    }
+    // The read can paint the cursor scene into a target of its own and leave
+    // GL_BLEND disabled (see m_cursorImage). This guard puts back what it
+    // disturbs before anything else in the frame runs, so the state the draw
+    // guard below snapshots, and hands back, is the state KWin left here.
+    const ShaderInternal::ScopedGlState readGuard;
+    const KWin::PlatformCursorImage cursor = KWin::effects->cursorImage();
+    m_cursorImage = cursor.image();
+    m_cursorHotSpot = cursor.hotSpot();
+    m_cursorImageOutput = screen;
+    m_cursorImageStale = false;
+    qCDebug(lcEffect) << "Pointer pass read the cursor image:" << m_cursorImage.size() << "hotspot" << m_cursorHotSpot;
 }
 
 // ── Multipass buffer stages ─────────────────────────────────────────────────
@@ -437,19 +453,12 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     if (!m_engaged || !screen || screen != m_output || suppressedOn(screen) || !KWin::effects) {
         return;
     }
-    // The cursor image is read ONCE per frame, here, before the GL bracket
-    // below, and everything this frame needs from it (the gone test, the
-    // sprite rect, the sprite texture) is derived from this copy. For a cursor
-    // a client supplies, an X client through Xwayland such as Steam or VLC,
-    // KWin has no theme image to hand back: cursorImage() renders the cursor
-    // scene through its item renderer into an offscreen target and reads it
-    // back, and that renderer leaves GL_BLEND disabled. Read inside the
-    // bracket, it switched blending off under the next layer's quad, which
-    // then wrote its transparent texels over the finished frame as black. It
-    // is also a render and a readback per call, so one read is the cheap
-    // shape as well as the correct one.
-    const KWin::PlatformCursorImage cursor = KWin::effects->cursorImage();
-    if (cursorSpriteGone(cursor)) {
+    // The one place the cursor image is read from KWin, before the GL bracket
+    // below and only when it changed (see m_cursorImage). Everything this frame
+    // needs from it (the gone test, the sprite rect, the sprite texture) reads
+    // the kept copy, so nothing inside the bracket asks KWin for it.
+    refreshCursorImage(screen);
+    if (cursorSpriteGone()) {
         // There is no sprite left to decorate (a software KVM forwarding this
         // desktop's pointer to another machine, a client that installed a null
         // cursor). An effect that merely hides KWin's cursor to composite its
@@ -458,8 +467,8 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         // Drawing nothing here IS the erase: the compositor is already
         // repainting this region, so the previous frame's trail goes with it.
         // Tested after the output identity check rather than beside it so the
-        // cursorImage() read stays one per frame on the pointer's output, not
-        // one per output.
+        // image is refreshed for the pointer's output only, not for every
+        // output.
         releaseCursorHide(screen);
         return;
     }
@@ -497,15 +506,11 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     const double timeSeconds = double(nowMs - m_timeOriginMs) / 1000.0;
 
     const PPS::PointerFrameState state = m_history.frameState(nowMs, screen->scale());
-    const QRectF cursorRect = cursorCanvasRect(screen, cursor);
-    // Uploaded before the bracket too, and only when an engaged layer declares
-    // `needsCursor`: every other pack has uCursorSprite forced to -1 and never
-    // reads it.
-    const bool chainNeedsCursor =
-        std::any_of(m_engagedLayers.begin(), m_engagedLayers.end(), [](const EngagedLayer& layer) {
-            return layer.effect.needsCursor;
-        });
-    KWin::GLTexture* const frameSprite = chainNeedsCursor ? cursorSpriteTexture(cursor) : nullptr;
+    const QRectF cursorRect = cursorCanvasRect(screen);
+    // Uploaded once for the whole chain, before the bracket, and only when an
+    // engaged layer declares `needsCursor`: every other pack has uCursorSprite
+    // forced to -1 and never reads it.
+    KWin::GLTexture* const frameSprite = m_anyNeedsCursor ? cursorSpriteTexture() : nullptr;
 
     // Hand GL state back exactly as found: KWin's convention for an effect
     // that draws inside someone else's frame. Taken BEFORE the framebuffer
@@ -583,8 +588,8 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
 
         // The location test alone is exact: cacheUniformLocations already forces
         // uCursorSprite to -1 for a pack without needsCursor, so a surviving
-        // location implies the declaration. Never fetched here: the read that
-        // produced frameSprite disturbs GL state (see the top of this function).
+        // location implies the declaration. The texture is the one uploaded for
+        // the whole chain above.
         KWin::GLTexture* const sprite = pack->loc.uCursorSprite >= 0 ? frameSprite : nullptr;
 
         KWin::ShaderBinder binder(pack->shader.get());

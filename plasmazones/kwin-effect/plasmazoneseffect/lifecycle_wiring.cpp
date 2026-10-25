@@ -1020,6 +1020,13 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         m_pointerPass.outputGeometryChanged();
     });
 
+    // The pointer pass keeps the cursor image it last read, because reading a
+    // cursor a client supplies paints and reads back the cursor scene; this is
+    // what tells it a new read is due (see PointerDecorationPass::m_cursorImage).
+    connect(KWin::effects, &KWin::EffectsHandler::cursorShapeChanged, this, [this]() {
+        m_pointerPass.cursorChanged();
+    });
+
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
