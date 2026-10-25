@@ -254,10 +254,11 @@ public:
     /// canvas, so an output going away invalidates it wholesale.
     void outputRemoved(KWin::LogicalOutput* screen);
 
-    /// The cursor's image may have changed (KWin's `cursorShapeChanged`: a
-    /// theme shape, an animation frame, a commit to a cursor surface a client
-    /// supplies). Marks the kept image stale, so the next paintOutput reads it
-    /// again. See m_cursorImage.
+    /// The cursor's image may have changed (KWin's
+    /// `Cursors::currentCursorChanged`: a switch between the mouse and a tablet
+    /// tool, a theme shape, an animation frame, a commit to a cursor surface a
+    /// client supplies). Marks the kept image stale, so the next live
+    /// paintOutput reads it again. See m_cursorImage.
     void cursorChanged()
     {
         m_cursorImageStale = true;
@@ -541,9 +542,10 @@ private:
     /// `repaintStaleTrail`, which only damages an output being left).
     void dropTrail(KWin::LogicalOutput* next, qint64 nowMs);
 
-    /// Rebuild m_engaged / m_engagedLayers / m_maxReachLogical /
-    /// m_maxTrailSeconds / m_sampleWindowSeconds from the enable flag, the
-    /// profile and the registry.
+    /// Rebuild m_engaged / m_engagedLayers / m_anyAboveLayer /
+    /// m_anyNeedsCursor / m_maxReachLogical / m_maxTrailSeconds /
+    /// m_sampleWindowSeconds from the enable flag, the profile and the
+    /// registry.
     /// The one place the cost rule's verdict is decided.
     void rebuildChain();
 
@@ -607,7 +609,8 @@ private:
     std::vector<EngagedLayer> m_engagedLayers;
     bool m_anyAboveLayer = false;
     /// Some engaged layer declares `needsCursor`, so a frame uploads the
-    /// sprite. Cached here for the same reason as m_anyAboveLayer.
+    /// sprite. Derived in rebuildChain, like m_anyAboveLayer, so the per-frame
+    /// path does not walk m_engagedLayers to find out.
     bool m_anyNeedsCursor = false;
 
     /// Outputs the fullscreen gate covers. See setSuppressedOutputs. Compared
@@ -654,16 +657,28 @@ private:
     /// draw bracket it switched blending off under the next layer's quad, which
     /// then wrote its transparent texels over the frame as black (PR #1164).
     ///
-    /// So it is read in one place, refreshCursorImage() at the top of
-    /// paintOutput, where the paint's own GL context is current and a guard
-    /// puts back the state the read disturbs, and only when cursorChanged()
-    /// marked the copy stale or the pointer is on another output. KWin's
-    /// screencast keeps its cursor the same way. Everything else, on and off
-    /// the paint path, reads this copy, so a cursor that changed since the last
-    /// paint is one frame stale there: the sprite rect's union with
-    /// m_lastSpriteCanvasRect absorbs that, and cursorSpriteGone trusts only a
-    /// fresh read. Kept as its parts rather than a PlatformCursorImage so this
-    /// header needs no KWin include.
+    /// So it is read in one place, refreshCursorImage() in a live paintOutput,
+    /// where the paint's own GL context is current and a guard puts back the
+    /// state the read disturbs, and only when the copy was marked stale
+    /// (cursorChanged, outputGeometryChanged, outputRemoved, reset) or the
+    /// pointer is on another output. KWin's screencast keeps its cursor the same
+    /// way, keyed on the same signal. Everything else, on and off the paint
+    /// path, reads this copy, so a cursor that changed since the last paint is
+    /// one frame stale there. For the sprite rect that is harmless one way and
+    /// brief the other: a sprite that shrank is covered by the union with
+    /// m_lastSpriteCanvasRect, and one that grew is drawn partly outside that
+    /// frame's requested damage until the next request covers it.
+    /// cursorSpriteGone trusts only a fresh read. A null read stands until the
+    /// next cursor change, which is right for a blank cursor; KWin also answers
+    /// null when the grab cannot allocate its texture, and that reads the same
+    /// way. Kept as its parts rather than a PlatformCursorImage so this header
+    /// needs no KWin include.
+    ///
+    /// Known gap: KWin renders the grab on its PRIMARY render device, whatever
+    /// output pass the read sits inside. On a machine whose outputs render on
+    /// different GPUs, a read inside a secondary GPU's pass mixes the two, and
+    /// nothing on the effect side can choose the device. Reading only on a
+    /// cursor change makes that as rare as it can be.
     QImage m_cursorImage;
     QPointF m_cursorHotSpot;
     /// The output m_cursorImage was read on: KWin grabs a client's cursor at

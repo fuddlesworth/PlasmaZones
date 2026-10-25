@@ -262,7 +262,7 @@ void PointerDecorationPass::refreshCursorImage(KWin::LogicalOutput* screen)
     // The read can paint the cursor scene into a target of its own and leave
     // GL_BLEND disabled (see m_cursorImage). This guard puts back what it
     // disturbs before anything else in the frame runs, so the state the draw
-    // guard below snapshots, and hands back, is the state KWin left here.
+    // guard in paintOutput snapshots, and hands back, is the state KWin left.
     const ShaderInternal::ScopedGlState readGuard;
     const KWin::PlatformCursorImage cursor = KWin::effects->cursorImage();
     m_cursorImage = cursor.image();
@@ -453,6 +453,23 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
     if (!m_engaged || !screen || screen != m_output || suppressedOn(screen) || !KWin::effects) {
         return;
     }
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
+        // The chain went quiet. Release a hide taken by an `above` layer on a
+        // PREVIOUS frame here rather than a frame later: this frame's normal
+        // scene has already painted KWin's own cursor, so handing it back now
+        // is seamless instead of blinking. updateCursorHiding releases any
+        // hide this pass holds once the history is quiet, sprite or no sprite,
+        // so the gone test below has nothing to add on this path.
+        //
+        // Ahead of the image read: a quiet chain draws nothing, so it reads
+        // nothing either. The effect stays in the paint chain for other
+        // reasons (any window decoration keeps it there), and an animated
+        // cursor marks the kept image stale on every frame of its animation.
+        m_hasTimeOrigin = false;
+        updateCursorHiding();
+        return;
+    }
     // The one place the cursor image is read from KWin, before the GL bracket
     // below and only when it changed (see m_cursorImage). Everything this frame
     // needs from it (the gone test, the sprite rect, the sprite texture) reads
@@ -470,16 +487,6 @@ void PointerDecorationPass::paintOutput(const KWin::RenderTarget& renderTarget, 
         // image is refreshed for the pointer's output only, not for every
         // output.
         releaseCursorHide(screen);
-        return;
-    }
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    if (!m_history.isLive(nowMs, m_maxTrailSeconds)) {
-        // The chain went quiet. Release a hide taken by an `above` layer on a
-        // PREVIOUS frame here rather than a frame later: this frame's normal
-        // scene has already painted KWin's own cursor, so handing it back now
-        // is seamless instead of blinking.
-        m_hasTimeOrigin = false;
-        updateCursorHiding();
         return;
     }
     const QRectF damage = damageDeviceRect(screen, nowMs);

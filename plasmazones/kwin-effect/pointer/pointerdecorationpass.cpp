@@ -480,10 +480,13 @@ QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen) cons
         return {};
     }
     const qreal dpr = m_cursorImage.devicePixelRatio() > 0.0 ? m_cursorImage.devicePixelRatio() : 1.0;
-    // The hotspot is expressed in the sprite image's own device pixels, so it
-    // divides by the image's dpr to reach logical px — not by the OUTPUT's
+    // The hotspot is already LOGICAL px: KWin's cursor readers store it
+    // divided by the sprite's scale (xcursorreader's `hotspot / scale`, the
+    // SVG reader's size ratio), and a client cursor's grab hands back the
+    // surface-local hotspot. Only the image size is in the sprite's own
+    // device px, so only it divides by the image's dpr, not by the OUTPUT's
     // scale, which need not match the cursor theme's size.
-    const QPointF logicalTopLeft = KWin::effects->cursorPos() - m_cursorHotSpot / dpr;
+    const QPointF logicalTopLeft = KWin::effects->cursorPos() - m_cursorHotSpot;
     const qreal scale = screen->scale();
     const QPointF canvasTopLeft = (logicalTopLeft - screen->geometryF().topLeft()) * scale;
     const QSizeF canvasSize(m_cursorImage.width() / dpr * scale, m_cursorImage.height() / dpr * scale);
