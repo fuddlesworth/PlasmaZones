@@ -230,11 +230,15 @@ jobs:
           key: ccache-arch-${{ matrix.kde }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ccache-arch-${{ matrix.kde }}-
 
-      # What CI builds differs from a release build in three ways, each for
+      # What CI builds differs from CMake's Release in four ways, each for
       # time, none of them changing what the tests exercise:
       #   * ENABLE_LTO=OFF. LTO is on for Release, and it made every one of
       #     the ~600 test executables a whole-program link that ccache cannot
       #     cache. Release packaging (release.yml) keeps it.
+      #   * -O2 instead of CMake's -O3, which compiles markedly slower. -O2 is
+      #     also what the distributions build the shipped package with (stock
+      #     Arch's makepkg.conf, Debian, Fedora), so the tests run the
+      #     optimisation level most users get. NDEBUG stays, as in Release.
       #   * ENABLE_PCH=OFF. ccache cannot reuse a compile that read a
       #     precompiled header, and only three targets have one.
       #   * mold as the linker, for the same ~600 links.
@@ -250,6 +254,8 @@ jobs:
             -DBUILD_TESTING=ON \
             -DBUILD_TOOLS=ON \
             -DENABLE_LTO=OFF \
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG" \
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG" \
             -DENABLE_PCH=OFF \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -408,7 +414,8 @@ jobs:
           key: ccache-arch-shell-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ccache-arch-shell-
 
-      # LTO, PCH and the linker as in the `build` job, for the same reasons.
+      # LTO, -O2, PCH and the linker as in the `build` job, for the same
+      # reasons.
       - name: Configure
         run: |
           cmake -B build -G Ninja \
@@ -419,6 +426,8 @@ jobs:
             -DBUILD_TESTING=ON \
             -DBUILD_TOOLS=ON \
             -DENABLE_LTO=OFF \
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG" \
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG" \
             -DENABLE_PCH=OFF \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
