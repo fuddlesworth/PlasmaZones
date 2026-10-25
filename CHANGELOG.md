@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Rules can tell a monitor's resolution apart**: rules gain Screen width, Screen height and Aspect ratio conditions, so one monitor can get a different layout at a different resolution. A super-ultrawide that a KVM switch drops to half its width can keep one layout for each mode. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
+
+### Fixed
+
+- **Layout rules follow a monitor that rotates or changes resolution**: a layout chosen by a rule about the monitor's orientation stayed on the old layout after the monitor was rotated, until something unrelated changed. It now switches as soon as the monitor does, and the same goes for the new resolution and aspect ratio conditions. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
+
 ## [3.5.3] - 2026-10-24
 
 ### Fixed
