@@ -10,6 +10,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Echo pointer trail no longer leaves a black box over some apps**: moving the pointer over an app that supplies its own cursor image, as Steam and VLC do, turned the whole area around the Echo trail black with the echoes drawn inside it. The trail now draws over those apps the same way it does everywhere else. ([#1164](https://github.com/fuddlesworth/PlasmaZones/pull/1164))
+
 ## [3.5.3] - 2026-10-24
 
 ### Fixed
