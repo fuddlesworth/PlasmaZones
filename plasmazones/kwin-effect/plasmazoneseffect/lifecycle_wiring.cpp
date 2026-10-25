@@ -19,6 +19,7 @@
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
+#include <cursor.h>
 #include <virtualdesktops.h>
 #include <workspace.h>
 
@@ -1018,6 +1019,20 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // the trail draws at the wrong offset and size until the ring ages out.
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
         m_pointerPass.outputGeometryChanged();
+    });
+
+    // The pointer pass keeps the cursor image it last read, because reading a
+    // cursor a client supplies paints and reads back the cursor scene; this is
+    // what tells it a new read is due (see PointerDecorationPass::m_cursorImage).
+    // Cursors::currentCursorChanged rather than the effects API's
+    // cursorShapeChanged: KWin's cursorImage() reads the CURRENT cursor, which
+    // is a tablet tool's while a pen is in use, and cursorShapeChanged follows
+    // the mouse alone. This signal fires on a switch between the two and on
+    // every change to the current one's image, which is what KWin's screencast
+    // keys its own cursor copy on. Cursors::self() creates the singleton on
+    // first use and never clears it, so it is never null here.
+    connect(KWin::Cursors::self(), &KWin::Cursors::currentCursorChanged, this, [this]() {
+        m_pointerPass.cursorChanged();
     });
 
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin

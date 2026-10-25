@@ -18,6 +18,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Windows without a window class show up in the window picker**: an app that names no window class, as Gamescope can, was left out of the rule editor's window picker even though PlasmaZones places it. It is now listed by its title and can be picked for a Title condition. The modes that need a window class show it greyed out with a hint to match it by title. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 - **A window class picked from the window picker matches the window**: the picker offered only the last part of a window's class, such as "org.kde.konsole", while a Window Class condition compares the whole class KWin reports, such as "konsole org.kde.konsole", so a picked class set to equal never matched. The picker now offers the whole class. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+- **The Echo pointer trail no longer leaves a black box over some apps**: moving the pointer over an app that supplies its own cursor image, as Steam and VLC do, turned the whole area around the Echo trail black with the echoes drawn inside it. The trail now draws over those apps the same way it does everywhere else. ([#1164](https://github.com/fuddlesworth/PlasmaZones/pull/1164))
 
 ## [3.5.3] - 2026-10-24
 
