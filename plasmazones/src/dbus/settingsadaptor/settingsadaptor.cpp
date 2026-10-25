@@ -10,6 +10,7 @@
 #include "core/interfaces/interfaces.h"
 #include "core/utils/dbusvariantutils.h"
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "core/platform/logging.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -653,13 +654,12 @@ void SettingsAdaptor::provideRunningWindows(const QString& json)
     // relaying, because a bridge bug must not reach the clients' parsers: an
     // oversized blob is refused outright, and anything that is not the
     // expected JSON array of window rows is refused rather than handed to
-    // clients to parse. The cap is generous next to a real window list — it
-    // bounds a single call, it is not a working limit. There is no server-side
-    // cache to grow here, and the client cache REPLACES its contents per
-    // payload rather than accumulating.
-    constexpr int kMaxPayloadBytes = 1 << 20; // 1 MiB
+    // clients to parse. The cap is shared with the effect, which leaves out
+    // rows rather than build a payload past it. There is no server-side cache
+    // to grow here, and the client cache REPLACES its contents per payload
+    // rather than accumulating.
     const QByteArray utf8 = json.toUtf8();
-    if (utf8.size() > kMaxPayloadBytes) {
+    if (utf8.size() > PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes) {
         qCWarning(lcDbusSettings) << "provideRunningWindows: payload of" << utf8.size()
                                   << "bytes exceeds the boundary cap — dropped";
         return;

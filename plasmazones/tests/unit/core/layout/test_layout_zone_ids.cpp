@@ -8,9 +8,11 @@
  * The resnap's zone-position map merges every layout's zones and the remembered
  * zones of every window name them by id, so two layouts holding the same zone
  * id put windows in the wrong zone after a layout switch. The registry's
- * directory load and its import give a layout that copied another layout's
- * zone ids new ones, and the load writes them back to the user's file. The same
- * slot's shared re-slot helper (sameNumberedZones, F963(b)) is pinned here too.
+ * directory load, its import and its restore of a system layout give a layout
+ * that copied another layout's zone ids new ones, and a zone with no id one
+ * derived from its position, so every process names it alike. The load writes
+ * them back to the user's file. The same slot's shared re-slot helper
+ * (sameNumberedZones, F963(b)) is pinned here too.
  */
 
 #include <QDir>
@@ -19,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QUuid>
 #include <memory>
@@ -30,6 +33,7 @@
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include "helpers/IsolatedConfigGuard.h"
+#include "helpers/XdgEnvGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -102,6 +106,65 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(copyPath));
         QCOMPARE(zoneIdsOnDisk(kCopyId), reissued);
         QCOMPARE(zoneIdsOf(loadedRegistry(&owner), kCopyId), reissued);
+    }
+
+    // A user file with a zone that has no id loads with a derived one, holds
+    // it on disk afterwards, and a later load keeps it. FAILS without the
+    // write-back of a filled id (the file stays id-less).
+    void load_zoneWithoutIdIsWrittenBack()
+    {
+        QVERIFY(
+            writeJson(fileFor(kCopyId),
+                      withoutZoneIds(layoutJson(kCopyId, QStringLiteral("Bare"), {QUuid::createUuid().toString()}))));
+        QObject owner;
+        const QStringList derived = zoneIdsOf(loadedRegistry(&owner), kCopyId);
+        QCOMPARE(derived.size(), 1);
+        QVERIFY(!QUuid::fromString(derived.first()).isNull());
+        QCOMPARE(zoneIdsOnDisk(kCopyId), derived);
+        QCOMPARE(zoneIdsOf(loadedRegistry(&owner), kCopyId), derived);
+    }
+
+    // A system layout whose zone has no id, put back after the user's copy of
+    // it is removed, gets the id the directory scan derived for it, so the
+    // process that restored it and one that reloads from disk agree. FAILS
+    // without the reissue in restoreSystemLayout (the zone gets a random id).
+    void restore_systemZoneWithoutIdKeepsTheScannedId()
+    {
+        QTemporaryDir systemRoot;
+        QVERIFY(systemRoot.isValid());
+        const QString systemLayouts = systemRoot.path() + QStringLiteral("/plasmazones/layouts");
+        QVERIFY(QDir().mkpath(systemLayouts));
+        QVERIFY(
+            writeJson(systemLayouts + QLatin1Char('/') + QUuid::fromString(kOriginalId).toString(QUuid::WithoutBraces)
+                          + QStringLiteral(".json"),
+                      withoutZoneIds(layoutJson(kOriginalId, QStringLiteral("Shipped"),
+                                                {QUuid::createUuid().toString(), QUuid::createUuid().toString()}))));
+        // Restores XDG_DATA_DIRS on every exit, unsetting it again when it was
+        // unset before; declared before the registry's owner so the registry
+        // is gone first.
+        const XdgEnvGuard restoreDataDirs;
+        qputenv("XDG_DATA_DIRS", systemRoot.path().toUtf8());
+
+        QObject owner;
+        PhosphorZones::LayoutRegistry* registry = loadedRegistry(&owner);
+        PhosphorZones::Layout* shipped = registry->layoutById(QUuid::fromString(kOriginalId));
+        QVERIFY(shipped);
+        QVERIFY(shipped->isSystemLayout());
+        const QStringList scanned = idsOf(shipped);
+
+        // The user's copy: saving a system layout writes it to the user
+        // directory and remembers where it came from.
+        shipped->setName(QStringLiteral("Mine"));
+        shipped->markDirty();
+        registry->saveLayout(shipped);
+        QVERIFY(!shipped->isSystemLayout());
+        QCOMPARE(idsOf(shipped), scanned);
+
+        registry->removeLayout(shipped);
+        const PhosphorZones::Layout* restored = registry->layoutById(QUuid::fromString(kOriginalId));
+        QVERIFY(restored);
+        QVERIFY(restored != shipped);
+        QCOMPARE(idsOf(restored), scanned);
     }
 
     // An imported file holding a loaded layout's zone ids under another layout
@@ -184,6 +247,39 @@ private Q_SLOTS:
         QVERIFY(ids.last() != shared);
     }
 
+    // A hand-written layout may leave a zone's id out (the schema requires only
+    // its geometry). The reissue gives it one derived from the layout and its
+    // position, so every load in every process names it alike: the daemon and
+    // the settings app then agree on it, and a Zone rule picked in one matches
+    // in the other. FAILS if a missing id is left to Zone::fromJson, which
+    // mints a random one per parse.
+    void reissue_missingIdIsDerivedTheSameOnEveryLoad()
+    {
+        const QString kept = QUuid::createUuid().toString();
+        QJsonObject first = layoutJson(kCopyId, QStringLiteral("Hand written"), {kept, QString()});
+        QJsonArray zones = first.value(PhosphorZones::ZoneJsonKeys::Zones).toArray();
+        QJsonObject idless = zones.at(1).toObject();
+        idless.remove(PhosphorZones::ZoneJsonKeys::Id);
+        zones[1] = idless;
+        first[PhosphorZones::ZoneJsonKeys::Zones] = zones;
+        QJsonObject second = first;
+
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(first, {}), 1);
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(second, {}), 1);
+        const QStringList ids = zoneIdsIn(first);
+        QCOMPARE(ids.first(), kept);
+        QVERIFY(!QUuid::fromString(ids.last()).isNull());
+        QVERIFY(ids.last() != kept);
+        QCOMPARE(zoneIdsIn(second), ids);
+
+        // The parsed layout carries the derived id, not a fresh random one.
+        QObject owner;
+        PhosphorZones::Layout* layout = PhosphorZones::Layout::fromJson(first, &owner);
+        QVERIFY(layout);
+        QCOMPARE(layout->zones().size(), 2);
+        QCOMPARE(layout->zones().at(1)->id().toString(), ids.last());
+    }
+
     // Documents whose id is no UUID do not share their new zone ids: each
     // derives from its own random namespace, as Layout::fromJson gives each a
     // random layout id (F1052). FAILS if the null layout id is the namespace.
@@ -245,6 +341,20 @@ private:
         for (int i = 0; i < zones.size(); ++i) {
             QJsonObject zone = zones.at(i).toObject();
             zone[PhosphorZones::ZoneJsonKeys::Id] = zoneIds.at(i);
+            zones[i] = zone;
+        }
+        json[PhosphorZones::ZoneJsonKeys::Zones] = zones;
+        return json;
+    }
+
+    /// @p json with the id key dropped from every zone, as a hand-written
+    /// layout leaves it.
+    static QJsonObject withoutZoneIds(QJsonObject json)
+    {
+        QJsonArray zones = json.value(PhosphorZones::ZoneJsonKeys::Zones).toArray();
+        for (int i = 0; i < zones.size(); ++i) {
+            QJsonObject zone = zones.at(i).toObject();
+            zone.remove(PhosphorZones::ZoneJsonKeys::Id);
             zones[i] = zone;
         }
         json[PhosphorZones::ZoneJsonKeys::Zones] = zones;

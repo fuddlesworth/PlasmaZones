@@ -6,22 +6,26 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
+import "../../js/MatchWireValue.js" as MatchWireValue
 
 /**
  * @brief One leaf predicate row — `{ field, op, value }`.
  *
  * The field is a categorized picker and the operator is a dropdown; the value
- * field shape adapts to the field's value kind (string / number / bool).
- * Two-way: edits emit `leafChanged(updatedLeaf)`.
+ * editor is chosen by the field's value kind (see the Loader below): a text
+ * field, a number, a switch, or a picker for kinds whose values come from a
+ * list. Two-way: edits emit `leafChanged(updatedLeaf)`.
  */
 RowLayout {
     id: leaf
 
     /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
     required property var node
-    /// The RuleController (for operatorsForField).
+    /// The RuleController: operator lists, value hints and the zone options.
     required property QtObject controller
-    /// The SettingsController — populates the screen / activity pickers.
+    /// RulesPage's editor settings surface (`_editorAppSettings`): the screens,
+    /// activities, desktops and layouts the pickers list, and the shared
+    /// running-windows picker.
     required property QtObject appSettings
     // Each entry carries `{ value, wire, label, valueKind }` — the controller
     // owns the enum↔wire-string table; this component never reconstructs it.
@@ -46,7 +50,7 @@ RowLayout {
     // unknown field (non-empty but unrecognised) still shows its editors.
     readonly property bool _hasField: leaf.node.field !== undefined && String(leaf.node.field).length > 0
     // Operator options depend on the current field's enum value.
-    readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
+    readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? leaf.controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
 
     /// True when this condition may be removed. False at the ROOT of a match,
@@ -233,11 +237,10 @@ RowLayout {
 
             // Seed a value of the new field's kind so the leaf is immediately
             // well-typed rather than carrying an empty string a bool/number
-            // field would coerce: bool -> false, number -> 0, everything else
-            // (string / screen / activity / windowType / virtualDesktop picker)
-            // -> "". The picker kinds (including virtualDesktop) treat "" as the
-            // "no value yet" state and surface their placeholder until the user
-            // picks, mirroring the screen / activity editors.
+            // field would coerce: bool -> false, number -> 0, and every other
+            // kind (the text field and every picker) -> "". The pickers treat
+            // "" as the "no value yet" state and show their placeholder until
+            // the user picks.
             var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
             var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
             leaf._emit(value, carryOp, seedValue);
@@ -312,6 +315,9 @@ RowLayout {
             if (leaf._valueKind === "layout")
                 return layoutValueEditor;
 
+            if (leaf._valueKind === "zone")
+                return zoneValueEditor;
+
             return stringValueEditor;
         }
     }
@@ -369,7 +375,12 @@ RowLayout {
                     Layout.fillWidth: true
                     placeholderText: i18n("Value")
                     text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
-                    onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
+                    // Only on a real change, like the pickers: editingFinished
+                    // also fires when focus leaves an untouched field.
+                    onEditingFinished: {
+                        if (text !== (leaf.node.value !== undefined ? String(leaf.node.value) : ""))
+                            leaf._emit(leaf.node.field, leaf.node.op, text);
+                    }
                 }
 
                 ToolButton {
@@ -466,7 +477,7 @@ RowLayout {
     Component {
         id: virtualDesktopValueEditor
 
-        WideComboBox {
+        MatchValueCombo {
             id: desktopCombo
 
             readonly property int _count: leaf.appSettings && leaf.appSettings.virtualDesktopCount > 0 ? leaf.appSettings.virtualDesktopCount : 1
@@ -487,21 +498,15 @@ RowLayout {
             }
             textRole: "label"
             valueRole: "value"
-            currentIndex: {
-                var target = Number(leaf.node.value);
-                for (var i = 0; i < desktopCombo.model.length; ++i) {
-                    if (desktopCombo.model[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            // A rule may reference a desktop beyond the current count (the desktop
-            // was removed). Surface the stored number so the rule stays legible.
-            displayText: currentIndex >= 0 ? currentText : (leaf.node.value ? ("" + leaf.node.value) : i18n("Choose a desktop…"))
+            // The wire value is the 1-based desktop number, possibly stored as a
+            // string. 0 and an unparseable value are no desktop, so they show
+            // the placeholder. A desktop beyond the current count (it was
+            // removed) shows its stored number, so the rule stays legible.
+            value: Number(leaf.node.value) || ""
+            placeholderText: i18n("Choose a desktop…")
             Accessible.name: i18n("Desktop")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -509,15 +514,15 @@ RowLayout {
     Component {
         id: screenValueEditor
 
-        WideComboBox {
-            id: screenCombo
-
+        MatchValueCombo {
             // Drive the picker off `appSettings.screens` so the user picks
             // "LG Ultra HD · DP-2" while the wire value remains the raw
             // connector / virtual-screen id. displayLabel already carries the
             // connector; append a Primary marker here (a plain ComboBox has no
             // badge surface like the monitor tiles do) so the user can tell the
-            // primary monitor and which port each entry is on.
+            // primary monitor and which port each entry is on. A screen that
+            // isn't connected now (an offline monitor, a virtual-screen id
+            // whose physical monitor is unplugged) shows its stored id.
             readonly property var _screens: (leaf.appSettings && leaf.appSettings.screens) || []
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
@@ -532,23 +537,11 @@ RowLayout {
             })
             textRole: "label"
             valueRole: "name"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < screenCombo._screens.length; ++i) {
-                    if (screenCombo._screens[i].name === target)
-                        return i;
-                }
-                return -1;
-            }
-            // The rule may reference a screen that isn't currently connected
-            // (e.g. an offline monitor or a virtual-screen id whose physical
-            // monitor is unplugged). Surface the stored id so the user can
-            // tell what the rule pins to instead of an empty dropdown.
-            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a monitor…"))
+            value: leaf.node.value
+            placeholderText: i18n("Choose a monitor…")
             Accessible.name: i18n("Monitor")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -556,82 +549,41 @@ RowLayout {
     Component {
         id: activityValueEditor
 
-        WideComboBox {
-            id: activityCombo
-
+        MatchValueCombo {
             // Picker over `appSettings.activities`; the wire value stays the
             // activity UUID so the rule store format is unchanged. The `|| []`
             // covers the property being absent as well as the bridge being
-            // null, matching the screen / layout pickers in this file.
-            readonly property var _activities: (leaf.appSettings && leaf.appSettings.activities) || []
-
-            model: _activities
+            // null, matching the screen / layout pickers in this file. An
+            // activity that has been removed shows its stored id.
+            model: (leaf.appSettings && leaf.appSettings.activities) || []
             textRole: "name"
             valueRole: "id"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < activityCombo._activities.length; ++i) {
-                    if (activityCombo._activities[i].id === target)
-                        return i;
-                }
-                return -1;
-            }
-            // Fall back to the raw activity id (e.g. an activity that has
-            // been removed) so the rule's pin is visible even when no
-            // current activity matches.
-            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose an activity…"))
+            value: leaf.node.value
+            placeholderText: i18n("Choose an activity…")
             Accessible.name: i18n("Activity")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
 
+    // The closed-vocabulary editors below (window type, mode, orientation,
+    // colour scheme) read the field entry's `options`, `{value, wire, label}`
+    // triples from the controller. The stored value is the window type's enum
+    // int, or for the string fields the wire token itself. A value no option
+    // holds (a hand-edited rule, a token from a newer build) shows raw.
     Component {
         id: windowTypeValueEditor
 
-        WideComboBox {
-            // The field entry's `options` carry `{value: int, wire: token,
-            // label: localised}` triples — the wire value persisted in the
-            // rule store is the underlying int of the PhosphorProtocol::
-            // WindowType enum.
-            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
-
-            model: _options
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
             textRole: "label"
             valueRole: "value"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < _options.length; ++i) {
-                    if (_options[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            // Show the raw stored value (e.g. an out-of-range int from a
-            // hand-edited rule or a newer schema version) when no option
-            // matches, mirroring the screen / activity pickers above. The
-            // empty-string sentinel is the "no value yet" state the field
-            // picker's onSelected seeds for picker-kind fields (windowType /
-            // screen / activity) when the user switches in from another field —
-            // treat it as no-value so the placeholder shows. Plain `||` would also
-            // map int 0 (WindowType::Unknown) to the placeholder when no
-            // option matched it, but that path is unreachable: 0 always
-            // matches the Unknown option so currentIndex >= 0 and the
-            // fallback never runs.
-            displayText: {
-                if (currentIndex >= 0)
-                    return currentText;
-                var v = leaf.node.value;
-                if (v === undefined || v === null || v === "")
-                    return i18n("Choose a window type…");
-                return String(v);
-            }
+            value: leaf.node.value
+            placeholderText: i18n("Choose a window type…")
             Accessible.name: i18n("Window type")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -639,41 +591,17 @@ RowLayout {
     Component {
         id: modeValueEditor
 
-        WideComboBox {
-            // The field entry's `options` carry {value: token, wire: token,
-            // label: localised} triples. Mode is a string field, so the value
-            // persisted in the rule store IS the wire token ("snapping" /
-            // "tiling" / "scrolling"; Floating was dropped from the Mode
-            // condition).
-            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
-
-            model: _options
+        MatchValueCombo {
+            // "snapping" / "tiling" / "scrolling"; Floating was dropped from
+            // the Mode condition.
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
             textRole: "label"
             valueRole: "value"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < _options.length; ++i) {
-                    if (_options[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            // Show the raw stored token when no option matches (a hand-edited
-            // rule or a newer schema), mirroring the windowType / screen pickers.
-            // The empty-string sentinel is the "no value yet" state the field
-            // picker seeds when switching in from another field.
-            displayText: {
-                if (currentIndex >= 0)
-                    return currentText;
-                var v = leaf.node.value;
-                if (v === undefined || v === null || v === "")
-                    return i18n("Choose a mode…");
-                return String(v);
-            }
+            value: leaf.node.value
+            placeholderText: i18n("Choose a mode…")
             Accessible.name: i18n("Placement mode")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -681,35 +609,15 @@ RowLayout {
     Component {
         id: orientationValueEditor
 
-        WideComboBox {
-            // Screen orientation is a string field whose value IS the wire token
-            // ("portrait" / "landscape"); the options carry {value, wire, label}
-            // triples, same shape as the mode editor above.
-            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
-
-            model: _options
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
             textRole: "label"
             valueRole: "value"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < _options.length; ++i) {
-                    if (_options[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            displayText: {
-                if (currentIndex >= 0)
-                    return currentText;
-                var v = leaf.node.value;
-                if (v === undefined || v === null || v === "")
-                    return i18n("Choose an orientation…");
-                return String(v);
-            }
+            value: leaf.node.value
+            placeholderText: i18n("Choose an orientation…")
             Accessible.name: i18n("Screen orientation")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -717,35 +625,15 @@ RowLayout {
     Component {
         id: colorSchemeValueEditor
 
-        WideComboBox {
-            // Colour scheme is a string field whose value IS the wire token
-            // ("light" / "dark"); the options carry {value, wire, label}
-            // triples, same shape as the orientation editor above.
-            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
-
-            model: _options
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
             textRole: "label"
             valueRole: "value"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < _options.length; ++i) {
-                    if (_options[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            displayText: {
-                if (currentIndex >= 0)
-                    return currentText;
-                var v = leaf.node.value;
-                if (v === undefined || v === null || v === "")
-                    return i18n("Choose a scheme…");
-                return String(v);
-            }
+            value: leaf.node.value
+            placeholderText: i18n("Choose a scheme…")
             Accessible.name: i18n("Color scheme")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
             }
         }
     }
@@ -753,36 +641,81 @@ RowLayout {
     Component {
         id: layoutValueEditor
 
-        WideComboBox {
-            id: layoutCombo
-
+        MatchValueCombo {
             // Picker over `appSettings.activeLayoutMatchOptions`: the layouts
             // list with each native template row rewritten to its derived
             // "scrolling:<uuid>" wire form, plus the bare "scrolling:"
             // sentinel entry for a scrolling screen with no template. The
             // wire value stays the id the daemon's context resolvers stamp
             // for the screen (snap UUID, "autotile:<algo>", bare "scrolling:",
-            // or the prefixed template form). Mirrors the activity picker.
-            readonly property var _layouts: (leaf.appSettings && leaf.appSettings.activeLayoutMatchOptions) || []
-
-            model: _layouts
+            // or the prefixed template form). A deleted layout shows its
+            // stored id.
+            model: (leaf.appSettings && leaf.appSettings.activeLayoutMatchOptions) || []
             textRole: "displayName"
             valueRole: "id"
-            currentIndex: {
-                var target = leaf.node.value;
-                for (var i = 0; i < layoutCombo._layouts.length; ++i) {
-                    if (layoutCombo._layouts[i].id === target)
-                        return i;
-                }
-                return -1;
-            }
-            // Fall back to the raw id (e.g. a deleted layout) so the rule's pin
-            // stays visible even when no current layout matches.
-            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a layout…"))
+            value: leaf.node.value
+            placeholderText: i18n("Choose a layout…")
             Accessible.name: i18n("Active layout")
-            onActivated: function (index) {
-                if (currentValue !== leaf.node.value)
-                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: zoneValueEditor
+
+        PZCommon.CategoryMenuButton {
+            id: zonePicker
+
+            // Picker over `controller.zoneMatchOptions`, one submenu per
+            // layout in the layout pickers' order, so a long list of zones is
+            // reached by layout rather than scrolled through. The wire value
+            // stays the braced zone UUID the Zone condition matches on.
+            readonly property var _zones: (leaf.controller && leaf.controller.zoneMatchOptions) || []
+            // The option the stored id names, matched ignoring case as the
+            // rule engine's Equals does, or null for an unset or vanished zone.
+            readonly property var _current: {
+                const target = String(leaf.node.value || "");
+                if (target === "")
+                    return null;
+                for (let i = 0; i < zonePicker._zones.length; ++i) {
+                    if (MatchWireValue.same(String(zonePicker._zones[i].id), target))
+                        return zonePicker._zones[i];
+                }
+                return null;
+            }
+
+            // The category string is split on "/" into a submenu level, so a
+            // slash in a layout name is shown as the look-alike division slash
+            // (U+2215) to keep the layout one submenu. `order` keeps each
+            // submenu in zone-number order, the order the options arrive in,
+            // where the menu would otherwise sort its items by name.
+            items: zonePicker._zones.map(function (zone, index) {
+                return {
+                    "id": zone.id,
+                    "name": zone.zoneName,
+                    "category": String(zone.layoutName).replace(/\//g, "∕"),
+                    "categoryOrder": zone.layoutOrder,
+                    "order": index
+                };
+            })
+            currentId: zonePicker._current ? zonePicker._current.id : ""
+            // With no zones there is nothing to pick, but a rule already
+            // pointing at a vanished zone keeps showing its id.
+            enabled: zonePicker._zones.length > 0
+            placeholderText: zonePicker._zones.length > 0 ? i18n("Choose a zone…") : i18n("No zones in your layouts")
+            // The button names the layout as well as the zone, since the zone
+            // name alone is ambiguous across layouts. A zone whose layout was
+            // deleted shows its stored id, as the other pickers do.
+            displayText: zonePicker._current ? zonePicker._current.displayName : (leaf.node.value ? String(leaf.node.value) : zonePicker.placeholderText)
+            // The button's accessible name is its selection (displayText), so
+            // the field goes in the description, as the other pickers on the
+            // rules page do.
+            Accessible.description: i18n("Zone")
+            onSelected: function (id) {
+                if (id && !MatchWireValue.same(String(id), String(leaf.node.value || "")))
+                    leaf._emit(leaf.node.field, leaf.node.op, id);
             }
         }
     }

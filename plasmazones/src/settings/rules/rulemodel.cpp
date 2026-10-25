@@ -466,7 +466,13 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 
-    // Window-property match with no animation action — Applications.
+    // Window-property match with no animation action — Applications. The
+    // section is the per-window one, not only rules that name an app: a match
+    // on window state (the zone a window sits in, whether it is snapped,
+    // floating or maximized) lands here too. The section also seeds where a
+    // new rule is inserted (RuleController::bandSeededInsertIndex), and the
+    // Application band keeps a state-only rule below the Advanced rules a
+    // user ordered by hand instead of putting it on top of them.
     return Section::Application;
 }
 

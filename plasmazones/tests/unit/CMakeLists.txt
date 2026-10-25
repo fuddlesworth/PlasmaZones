@@ -1381,6 +1381,15 @@ target_link_libraries(test_gesture_end_decisions PRIVATE Qt6::Test Qt6::Core Pho
 target_include_directories(test_gesture_end_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_gesture_end_decisions COMMAND test_gesture_end_decisions)
 
+# The rows the rule editor's window picker is offered
+# (plasmazoneseffect/runningwindowsdecisions.h): each value spelled for the
+# rule field it fills, the classed/classless dedup, and the payload byte cap.
+# Same header-only reach.
+add_executable(test_running_windows_decisions ui/effect/test_running_windows_decisions.cpp)
+target_link_libraries(test_running_windows_decisions PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_running_windows_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_running_windows_decisions COMMAND test_running_windows_decisions)
+
 # The absolute rect of a virtual screen (plasmazoneseffect/virtualscreengeometry.h):
 # edges rounded, re-derived when its output moves (F806). Same header-only reach.
 add_executable(test_virtual_screen_geometry ui/effect/test_virtual_screen_geometry.cpp)
@@ -2712,6 +2721,21 @@ target_link_libraries(test_rule_controller_vocabulary
         plasmazones_core
 )
 add_test(NAME test_rule_controller_vocabulary COMMAND test_rule_controller_vocabulary)
+
+# The option lists the rule editor's pickers are built from
+# (rules/rulepickeroptions.cpp): the Zone condition's zones and the parsed
+# running-windows rows.
+add_executable(test_rule_picker_options
+    settings/rules/test_rule_picker_options.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulepickeroptions.cpp
+)
+target_link_libraries(test_rule_picker_options
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+add_test(NAME test_rule_picker_options COMMAND test_rule_picker_options)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

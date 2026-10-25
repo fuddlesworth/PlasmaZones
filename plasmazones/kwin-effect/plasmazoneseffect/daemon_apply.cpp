@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "runningwindowsdecisions.h"
 
 #include "shader_internal.h"
 #include "compositor/effectlogging.h"
@@ -28,7 +29,6 @@
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QScopeGuard>
-#include <QSet>
 #include <QStringList>
 
 #include "tilinghandler/tilinghandler.h"
@@ -311,12 +311,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometry;
         return;
     }
-    // Consume the drag-to-float marker FIRST, before the minimized early-return can bypass
-    // it. The marker is a one-shot: this float-restore event is exactly the one it was
+    // Consume the drag-to-float marker before the minimized branch below can bypass it.
+    // The marker is a one-shot: this float-restore event is exactly the one it was
     // waiting for, so it must be cleared whether or not we go on to apply the geometry.
     // Consuming it only on the non-minimized path left it armed when a drag-floated window
     // was minimized, and the next legitimate float-restore for that window was then wrongly
-    // skipped by the stale marker.
+    // skipped by the stale marker. A malformed payload rejected above returns before this
+    // line and leaves the marker in place, but only until drag end, which clears it
+    // whatever happened (lifecycle_wiring_drag.cpp).
     const bool wasDragFloated = zoneId.isEmpty() && m_dragActivation.floatedWindowIds.remove(liveWindowId);
 
     // Skip float-restore GEOMETRY on minimized windows: when a snapped window is minimized
@@ -402,7 +404,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // That keep lands no frame, so the output arm never sees the owed
             // screen arrive: the verdicts are owed now, on the screen the
             // pre-seed above already names. Deferred past a drag like there.
-            if (keptState && m_ruleScreenOwed.remove(w) > 0) {
+            if (keptState && m_ruleScreenOwed.remove(w)) {
                 if (m_dragTracker->isDragging()) {
                     m_dragSuppressedRuleInvalidations.insert(liveWindowId);
                 } else {
@@ -522,11 +524,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // geometry is already stored from the original snap. snap_all batches
     // carry previously-UNSNAPPED windows with no per-snap capture on this
     // path; those rely on the unified placement store's open-time /
-    // free-geometry capture for their float-back instead. The daemon's
-    // processBatchEntries calls clearPreTileGeometry only for __restore__
-    // entries (overflow windows); calling ensurePreSnapGeometryStored here
-    // would race that clear and store the zone geometry as pre-tile,
-    // corrupting the restore path on subsequent mode transitions.
+    // free-geometry capture for their float-back instead. The daemon's batch
+    // commit (SnapEngine, commit.cpp) unsnaps the __restore__ entries
+    // (PhosphorEngine::RestoreSentinel, windows a layout overflows) and owns
+    // their float-back rect; calling ensurePreSnapGeometryStored here would
+    // race that and store the zone geometry as pre-tile, corrupting the
+    // restore path on subsequent mode transitions.
 
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" is a layout
     // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
@@ -593,11 +596,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
             if (!skipMinimizedRestore) {
                 // The placement statement on a snapping screen. Every batch
-                // entry re-states (no batch producer is the subject of a user
-                // verb), so a maximized or fullscreen window keeps that state
-                // and the rect becomes the one it returns to (F509, F547). A
-                // float/restore entry (empty screenId) is judged on the screen
-                // its rect lies on, and keeps a maximize the same way (F548).
+                // entry is judged as a re-statement, those of the user-started
+                // snap_all and rotate batches included, so a maximized or
+                // fullscreen window keeps that state and the rect becomes the
+                // one it returns to (F509, F547). A float/restore entry (empty
+                // screenId) is judged on the screen its rect lies on, and keeps
+                // a maximize the same way (F548).
                 const QString target = p.screenId.isEmpty()
                     ? resolveEffectiveScreenId(p.geometry.center(), KWin::effects->screenAt(p.geometry.center()))
                     : p.screenId;
@@ -612,7 +616,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     keptState = !verdict.apply;
                     applyRect = verdict.applyRect;
                     // The single apply's owed-screen settle: a keep lands no frame.
-                    if (keptState && m_ruleScreenOwed.remove(p.window) > 0) {
+                    if (keptState && m_ruleScreenOwed.remove(p.window)) {
                         const QString keptId = getWindowId(p.window);
                         if (m_dragTracker->isDragging()) {
                             m_dragSuppressedRuleInvalidations.insert(keptId);
@@ -698,7 +702,9 @@ void PlasmaZonesEffect::slotRaiseWindowsRequested(const QStringList& windowIds)
     }
 
     for (const QString& windowId : windowIds) {
-        KWin::EffectWindow* w = findWindowById(windowId);
+        // By instance, as the sibling slots resolve a daemon-named window: the
+        // app-id fallback of findWindowById could raise a same-app sibling.
+        KWin::EffectWindow* w = findWindowByInstanceId(windowId);
         if (w && !w->isDeleted()) {
             KWin::Window* kw = w->window();
             if (kw) {
@@ -1038,10 +1044,14 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
     qCInfo(lcEffect) << "Running windows requested by KCM";
 
     QJsonArray windowArray;
-    QSet<QString> seenClasses;
+    // Which rows are kept, and why a classed and a classless window are keyed
+    // differently, is RunningWindowsDecisions::RowFilter's to say.
+    RunningWindowsDecisions::RowFilter filter;
+    RunningWindowsDecisions::PayloadBudget budget(PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes);
+    int overBudget = 0;
 
-    // Iterate in reverse (top-to-bottom) so deduplication keeps the topmost
-    // window's caption per class, which is more useful to the user
+    // Iterate in reverse (top-to-bottom) so the filter keeps the topmost
+    // window of each group, which is the one the user most likely means.
     const auto windows = KWin::effects->stackingOrder();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         KWin::EffectWindow* w = *it;
@@ -1063,62 +1073,48 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
-        QString windowClass = w->windowClass();
-        if (windowClass.isEmpty()) {
-            continue;
-        }
+        const QString rawClass = w->windowClass();
 
         // Hide the daemon's own overlay / editor windows from the rule picker —
         // surfacing `plasmazonesd` or `plasmazones-editor` as an authoring
         // target invites users to write rules against the very surfaces that
         // implement the rule engine. The settings app windowClass falls
         // outside `isOwnOverlayClass` so it stays pickable.
-        if (isOwnOverlayClass(windowClass)) {
+        if (isOwnOverlayClass(rawClass)) {
             continue;
-        }
-
-        // Normalize X11 "resourceName resourceClass" to just resourceClass
-        // (lowercased), matching the canonical form `normalizeAppId` produces
-        // for every other appId entry point — getWindowId, rule evaluators,
-        // placement prune patterns. An inline first-space split would
-        // drift in two ways: (1) a three-token resource string like
-        // "foo bar baz" yields "bar baz" here but "baz" through
-        // normalizeAppId; (2) case is preserved here but lowercased
-        // downstream — a rule the user authors against the picker's
-        // case-preserved output with `Equals` would silently never match.
-        windowClass = ::PhosphorIdentity::WindowId::normalizeAppId(QString(), windowClass);
-        if (windowClass.isEmpty()) {
-            continue;
-        }
-
-        // Deduplicate by windowClass (first seen = topmost due to reverse iteration)
-        if (seenClasses.contains(windowClass)) {
-            continue;
-        }
-        seenClasses.insert(windowClass);
-
-        QString appName = ::PhosphorIdentity::WindowId::deriveShortName(windowClass);
-        if (appName.isEmpty()) {
-            appName = windowClass;
         }
 
         // Pull the desktop-file basename from the underlying KWin::Window
-        // (EffectWindow doesn't expose desktopFileName directly). Empty
-        // for windows without a registered desktop file — the rule picker
-        // hides the entry from its DesktopFile mode in that case.
+        // (EffectWindow doesn't expose desktopFileName directly). Empty for a
+        // window without a registered desktop file, which the picker's
+        // DesktopFile mode then greys out.
         QString desktopFile;
         if (KWin::Window* kw = w->window()) {
             desktopFile = kw->desktopFileName();
         }
 
-        QJsonObject obj;
-        obj[QLatin1String("windowClass")] = windowClass;
-        obj[QLatin1String("appName")] = appName;
-        obj[QLatin1String("caption")] = w->caption();
-        obj[QLatin1String("desktopFile")] = desktopFile;
+        // A client that sets no app_id, and whose executable KWin cannot read
+        // for the fallback (a gamescope binary carrying file capabilities, for
+        // one), reaches us with a blank class. Placement still manages it, so
+        // it stays listed: the picker greys out the modes it has no value for
+        // and offers its caption to Title mode.
+        const RunningWindowsDecisions::Row row = RunningWindowsDecisions::makeRow(rawClass, w->caption(), desktopFile);
+        if (!filter.admits(row)) {
+            continue;
+        }
+        const QJsonObject obj = RunningWindowsDecisions::toJson(row);
+        if (!budget.take(QJsonDocument(obj).toJson(QJsonDocument::Compact).size())) {
+            ++overBudget;
+            continue;
+        }
+        filter.record(row);
         windowArray.append(obj);
     }
 
+    if (overBudget > 0) {
+        qCWarning(lcEffect) << "Running windows: left out" << overBudget
+                            << "windows to keep the list inside the daemon's payload cap";
+    }
     QString jsonString = QString::fromUtf8(QJsonDocument(windowArray).toJson(QJsonDocument::Compact));
     qCDebug(lcEffect) << "Providing" << windowArray.size() << "running windows to daemon";
 

@@ -178,7 +178,9 @@ public Q_SLOTS:
 
     /**
      * @brief Receive window list from KWin effect (callback)
-     * @param json JSON array of window objects
+     * @param json JSON array of window rows, shaped as the provideRunningWindows
+     *        docstring in org.plasmazones.Settings.xml gives it. A payload over
+     *        PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes is refused.
      */
     void provideRunningWindows(const QString& json);
 
@@ -244,7 +246,9 @@ Q_SIGNALS:
      * the KWin effect. Subscribers (SettingsController) cache the value
      * and present it to the UI without a blocking round-trip.
      *
-     * @param json JSON array: [{windowClass, appName, caption}, ...]
+     * @param json JSON array: [{windowClass, rawWindowClass, appName, caption,
+     *        desktopFile}, ...], as the runningWindowsAvailable docstring in
+     *        org.plasmazones.Settings.xml describes it.
      */
     void runningWindowsAvailable(const QString& json);
 
