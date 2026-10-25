@@ -22,7 +22,8 @@ import "../../js/FontUtils.js" as FontUtils
  *
  * Wire → user-label resolution stays on the QML side, keyed off the
  * controller's `matchFields()` / `operatorsForField()` tables already
- * cached on `RulesPage`. The C++ model deliberately exposes only
+ * cached on `RulesPage`, its zone options, and the app-settings lists
+ * the leaf editor's pickers read. The C++ model deliberately exposes only
  * the raw wire fields so the label-resolution logic lives in exactly
  * one place per axis (this file for the read-only view; the editor
  * components for authoring).
@@ -30,8 +31,9 @@ import "../../js/FontUtils.js" as FontUtils
 ColumnLayout {
     id: root
 
-    /// The RuleController — supplies the wire→label tables for
-    /// fields and operators. Threaded down from `RulesPage`.
+    /// The RuleController — supplies the wire→label tables for fields and
+    /// operators, and the zone options a Zone leaf's label comes from.
+    /// Threaded down from `RulesPage`.
     required property var controller
     /// Cached `controller.matchFields()` table. Same caching rationale as
     /// `RuleEditorBody` — the Q_INVOKABLE allocates a fresh list per call.
@@ -40,12 +42,12 @@ ColumnLayout {
     /// `{ all | any | none: [...] }`. Re-assigning this rebuilds the
     /// backing model and re-expands the tree.
     required property var matchJson
-    /// Composite app-settings surface (screens + activities), threaded down
-    /// from `RulesPage`. Used by `_valueLabel` to resolve screen-id /
-    /// activity-uuid leaves to the same friendly labels the leaf editor
-    /// shows. Optional — when null, screen/activity leaves fall back to the
-    /// raw wire value (still better than nothing, mirrors the editor's own
-    /// dangling-pin fallback).
+    /// Composite app-settings surface threaded down from `RulesPage`. Used by
+    /// `_valueLabel` to resolve screen ids, activity ids, layout ids and
+    /// desktop numbers to the same friendly labels the leaf editor shows.
+    /// Optional — when null, those leaves fall back to the raw wire value
+    /// (still better than nothing, mirrors the editor's own dangling-pin
+    /// fallback).
     property var appSettings: null
 
     /// Wire→label resolver for a field. Returns the wire string unchanged
@@ -81,6 +83,16 @@ ColumnLayout {
                 return ops[i].label;
         }
         return opWire;
+    }
+
+    /// True when a stored leaf value names the same entry as a list value:
+    /// strings match ignoring case, as the rule engine's Equals does and as
+    /// the leaf editor's pickers match them.
+    function _sameWireValue(a, b) {
+        if (typeof a === "string" && typeof b === "string")
+            return a.toLowerCase() === b.toLowerCase();
+
+        return a === b;
     }
 
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
@@ -121,7 +133,7 @@ ColumnLayout {
             var screens = root.appSettings.screens;
             if (screens) {
                 for (var i = 0; i < screens.length; ++i) {
-                    if (screens[i].name === value) {
+                    if (root._sameWireValue(screens[i].name, value)) {
                         // displayLabel carries make/model/resolution + connector;
                         // mark the primary monitor to match the editor's picker.
                         var label = screens[i].displayLabel || String(value);
@@ -143,7 +155,7 @@ ColumnLayout {
             var activities = root.appSettings.activities;
             if (activities) {
                 for (var j = 0; j < activities.length; ++j) {
-                    if (activities[j].id === value)
+                    if (root._sameWireValue(activities[j].id, value))
                         return activities[j].name || String(value);
                 }
             }
@@ -158,7 +170,7 @@ ColumnLayout {
             var layouts = root.appSettings.activeLayoutMatchOptions;
             if (layouts) {
                 for (var L = 0; L < layouts.length; ++L) {
-                    if (layouts[L].id === value)
+                    if (root._sameWireValue(layouts[L].id, value))
                         return layouts[L].displayName || String(value);
                 }
             }
@@ -168,7 +180,7 @@ ColumnLayout {
             var zones = root.controller.zoneMatchOptions;
             if (zones) {
                 for (var Z = 0; Z < zones.length; ++Z) {
-                    if (zones[Z].id === value)
+                    if (root._sameWireValue(zones[Z].id, value))
                         return zones[Z].displayName || String(value);
                 }
             }
@@ -183,7 +195,7 @@ ColumnLayout {
                     continue;
                 var opts = entry.options || [];
                 for (var o = 0; o < opts.length; ++o) {
-                    if (opts[o].value === value)
+                    if (root._sameWireValue(opts[o].value, value))
                         return opts[o].label || String(value);
                 }
                 break;
@@ -201,7 +213,7 @@ ColumnLayout {
                     continue;
                 var modeOpts = modeEntry.options || [];
                 for (var mo = 0; mo < modeOpts.length; ++mo) {
-                    if (modeOpts[mo].value === value)
+                    if (root._sameWireValue(modeOpts[mo].value, value))
                         return modeOpts[mo].label || String(value);
                 }
                 break;

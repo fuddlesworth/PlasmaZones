@@ -184,6 +184,34 @@ void TestRuleModel::sectionDerivation()
     columnWidth.params.insert(ActionParam::Value, 0.5);
     screenScroll.actions = {columnWidth};
     QCOMPARE(RuleModel::sectionFor(screenScroll), RuleModel::Section::Monitor);
+
+    // A window rule matching only PlasmaZones' own placement state (the zone
+    // a window sits in, whether it is snapped) names no application, so it
+    // is not filed under Applications. Adding an application leaf files it
+    // there again. FAILS if a zone-only rule reads as an application rule.
+    RuleAction keepAbove;
+    keepAbove.type = QString(ActionType::Float);
+    Rule zoneOnly;
+    zoneOnly.id = QUuid::createUuid();
+    zoneOnly.match = MatchExpression::makeLeaf(Field::Zone, Operator::Equals, QUuid::createUuid().toString());
+    zoneOnly.actions = {keepAbove};
+    QCOMPARE(RuleModel::sectionFor(zoneOnly), RuleModel::Section::Advanced);
+
+    Rule snappedOnScreen;
+    snappedOnScreen.id = QUuid::createUuid();
+    snappedOnScreen.match = MatchExpression::makeAll(
+        {MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, true),
+         MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"))});
+    snappedOnScreen.actions = {keepAbove};
+    QCOMPARE(RuleModel::sectionFor(snappedOnScreen), RuleModel::Section::Advanced);
+
+    Rule appInZone;
+    appInZone.id = QUuid::createUuid();
+    appInZone.match = MatchExpression::makeAll(
+        {MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
+         MatchExpression::makeLeaf(Field::Zone, Operator::Equals, QUuid::createUuid().toString())});
+    appInZone.actions = {keepAbove};
+    QCOMPARE(RuleModel::sectionFor(appInZone), RuleModel::Section::Application);
 }
 
 void TestRuleModel::compositeGraduatesToAdvanced()

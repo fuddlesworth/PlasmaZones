@@ -184,6 +184,39 @@ private Q_SLOTS:
         QVERIFY(ids.last() != shared);
     }
 
+    // A hand-written layout may leave a zone's id out (the schema requires only
+    // its geometry). The reissue gives it one derived from the layout and its
+    // position, so every load in every process names it alike: the daemon and
+    // the settings app then agree on it, and a Zone rule picked in one matches
+    // in the other. FAILS if a missing id is left to Zone::fromJson, which
+    // mints a random one per parse.
+    void reissue_missingIdIsDerivedTheSameOnEveryLoad()
+    {
+        const QString kept = QUuid::createUuid().toString();
+        QJsonObject first = layoutJson(kCopyId, QStringLiteral("Hand written"), {kept, QString()});
+        QJsonArray zones = first.value(PhosphorZones::ZoneJsonKeys::Zones).toArray();
+        QJsonObject idless = zones.at(1).toObject();
+        idless.remove(PhosphorZones::ZoneJsonKeys::Id);
+        zones[1] = idless;
+        first[PhosphorZones::ZoneJsonKeys::Zones] = zones;
+        QJsonObject second = first;
+
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(first, {}), 1);
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(second, {}), 1);
+        const QStringList ids = zoneIdsIn(first);
+        QCOMPARE(ids.first(), kept);
+        QVERIFY(!QUuid::fromString(ids.last()).isNull());
+        QVERIFY(ids.last() != kept);
+        QCOMPARE(zoneIdsIn(second), ids);
+
+        // The parsed layout carries the derived id, not a fresh random one.
+        QObject owner;
+        PhosphorZones::Layout* layout = PhosphorZones::Layout::fromJson(first, &owner);
+        QVERIFY(layout);
+        QCOMPARE(layout->zones().size(), 2);
+        QCOMPARE(layout->zones().at(1)->id().toString(), ids.last());
+    }
+
     // Documents whose id is no UUID do not share their new zone ids: each
     // derives from its own random namespace, as Layout::fromJson gives each a
     // random layout id (F1052). FAILS if the null layout id is the namespace.

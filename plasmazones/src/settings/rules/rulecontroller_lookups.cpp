@@ -81,38 +81,48 @@ void RuleController::setZoneNamesProvider(std::function<QStringList()> provider)
     // the same silence the label-lookup clears above keep. A real install
     // publishes immediately so the picker is populated before the first
     // registry reload.
-    if (m_zoneNamesProvider) {
-        refreshZoneLists();
-    }
+    refreshZoneNames();
 }
 
 void RuleController::setZoneMatchOptionsProvider(std::function<QVariantList()> provider)
 {
     // Same clear-keeps-the-last-list contract as setZoneNamesProvider.
     m_zoneMatchOptionsProvider = std::move(provider);
-    if (m_zoneMatchOptionsProvider) {
-        refreshZoneLists();
-    }
+    refreshZoneMatchOptions();
 }
 
 void RuleController::refreshZoneLists()
 {
-    // A cleared provider leaves its cached list alone rather than publishing an
-    // empty one, so a refresh that lands between the two teardown clears
-    // cannot blank a picker the user still has open.
-    if (m_zoneNamesProvider) {
-        QStringList next = m_zoneNamesProvider();
-        if (next != m_zoneNames) {
-            m_zoneNames = std::move(next);
-            Q_EMIT zoneNamesChanged();
-        }
+    refreshZoneNames();
+    refreshZoneMatchOptions();
+}
+
+// Both refreshers skip a cleared provider, leaving its cached list in place
+// rather than publishing an empty one: the parent's registry reload stays
+// connected until ~QObject, after teardown has cleared the providers, and a
+// refresh landing there must neither call an empty std::function nor blank a
+// picker the user still has open.
+void RuleController::refreshZoneNames()
+{
+    if (!m_zoneNamesProvider) {
+        return;
     }
-    if (m_zoneMatchOptionsProvider) {
-        QVariantList next = m_zoneMatchOptionsProvider();
-        if (next != m_zoneMatchOptions) {
-            m_zoneMatchOptions = std::move(next);
-            Q_EMIT zoneMatchOptionsChanged();
-        }
+    QStringList next = m_zoneNamesProvider();
+    if (next != m_zoneNames) {
+        m_zoneNames = std::move(next);
+        Q_EMIT zoneNamesChanged();
+    }
+}
+
+void RuleController::refreshZoneMatchOptions()
+{
+    if (!m_zoneMatchOptionsProvider) {
+        return;
+    }
+    QVariantList next = m_zoneMatchOptionsProvider();
+    if (next != m_zoneMatchOptions) {
+        m_zoneMatchOptions = std::move(next);
+        Q_EMIT zoneMatchOptionsChanged();
     }
 }
 

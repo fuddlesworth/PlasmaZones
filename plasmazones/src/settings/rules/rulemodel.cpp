@@ -466,8 +466,18 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 
-    // Window-property match with no animation action — Applications.
-    return Section::Application;
+    // Window-property match with no animation action — Applications, when a
+    // leaf names the application. A match whose window leaves are all
+    // PlasmaZones' own placement state (snapped, floating, tiled, the zone it
+    // sits in) names no application, so it does not belong under that heading,
+    // and no curated section describes it: it goes to Advanced / Custom.
+    QList<Field> fields;
+    collectFields(rule.match, fields);
+    const bool namesApplication = std::any_of(fields.cbegin(), fields.cend(), [](Field field) {
+        return !PhosphorRules::fieldIsContext(field) && field != Field::IsSnapped && field != Field::IsFloating
+            && field != Field::IsTiled && field != Field::Zone;
+    });
+    return namesApplication ? Section::Application : Section::Advanced;
 }
 
 int RuleModel::conditionCount(const MatchExpression& match)

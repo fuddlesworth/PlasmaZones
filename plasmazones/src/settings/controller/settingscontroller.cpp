@@ -5,9 +5,7 @@
 // wiring/teardown pair whose declaration-order and disconnect-before-reset
 // contracts reference each other in sequence (see the in-body banners).
 // Everything separable has already moved to the settingscontroller_*.cpp
-// siblings; the natural next split, the rule-label resolver installation
-// block, belongs in a _rulelabels.cpp when it is next touched
-// substantively.
+// siblings, the rule-label resolvers included (settingscontroller_rulelookups.cpp).
 
 #include "settingscontroller.h"
 
@@ -282,21 +280,22 @@ SettingsController::~SettingsController()
     // before ~QObject reaches the raw children, so it is gone while the
     // RuleController it borrows is still alive.
 
-    // Tear down the RuleController's label lookups while the
-    // captured member containers (m_layouts, m_activities, m_screens,
-    // etc.) are still alive. Members destruct in reverse declaration
-    // order BEFORE ~QObject tears down child QObjects — so by the time
-    // ~RuleController runs as part of the QObject teardown, those
-    // captured containers are already gone. Any model-signal slot that
-    // reaches a lookup during teardown would deref destroyed state.
-    // The leafLabel/actionLabel helpers in rulemodel_labels.cpp treat empty
-    // lookups as identity, so clearing here is the safe contract.
+    // Tear down the RuleController's label lookups while the state they
+    // read (m_layouts, m_activities, m_screenHelper and the rest) is still
+    // alive. Members destruct in reverse declaration order BEFORE ~QObject
+    // tears down child QObjects — so by the time ~RuleController runs as
+    // part of the QObject teardown, that state is already gone. Any
+    // model-signal slot that reaches a lookup during teardown would deref
+    // destroyed state. The label helpers (leafLabel in
+    // rulemodel_matchlabels.cpp, actionLabel in rulemodel_labels.cpp) treat
+    // empty lookups as identity, so clearing here is the safe contract.
     if (m_rulesPage) {
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
         m_rulesPage->setZoneLookup({});
-        // The zone-name provider captures `this` and walks m_localLayoutManager;
-        // clear it for the same reason (the controller keeps its last list).
+        // The zone-name and zone-option providers capture `this` and walk
+        // m_localLayoutManager; clear them for the same reason (the
+        // controller keeps their last lists).
         m_rulesPage->setZoneNamesProvider({});
         m_rulesPage->setZoneMatchOptionsProvider({});
         m_rulesPage->setVirtualDesktopLookup({});
@@ -318,11 +317,9 @@ SettingsController::~SettingsController()
         // ~QObject teardown); clear it too so a deferred dataChanged during
         // teardown can't run the lookup against the dangling registry.
         m_rulesPage->setDecorationPackLookup({});
-        // Drain any in-flight `dataChanged` emissions queued against
-        // the cleared lookups before the model captures the now-
-        // empty resolvers. refreshLabels walks every row once and
-        // rebuilds the label cache with the identity (empty) lookups
-        // so the next paint reads consistent data.
+        // Re-emit the label roles once against the now-empty (identity)
+        // lookups, so anything that paints during teardown reads raw ids
+        // consistently rather than a mix of resolved and raw labels.
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
@@ -375,12 +372,12 @@ SettingsController::SettingsController(QObject* parent)
     // share one install-once helper.
 
     // Auto-discovery pattern: every linked provider library has
-    // already registered a builder via static-init. The KCM just
+    // already registered a builder via static-init. The settings app just
     // publishes the registries it owns via the shared helper
     // (buildStandardLayoutSourceBundle) so the context-wiring is the
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
-    // service the KCM doesn't already publish.
+    // service the settings app doesn't already publish.
     m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
     m_localTemplateStore->loadTemplates();
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),
@@ -449,6 +446,10 @@ SettingsController::SettingsController(QObject* parent)
     // only when loadLayouts() is called — it watches nothing, so an explicit
     // call is the sole reload trigger. This one covers startup;
     // loadLayoutsAsync() re-calls it off the daemon's D-Bus layout signals.
+    // That is enough because every layout write goes through the daemon (the
+    // editor saves over D-Bus, DBusLayoutService), so a change it makes is
+    // always followed by one of those signals, and with the daemon down no
+    // layout changes on disk for this process to miss.
     m_localLayoutManager->loadLayouts();
     // `loadLayouts()` emits `layoutsChanged` synchronously, which the
     // handler wired above already routes through `recalcLocalLayouts()`
@@ -460,8 +461,8 @@ SettingsController::SettingsController(QObject* parent)
     // independent of the daemon and gets there via the signal path.
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
-    // The daemon owns its own AlgorithmRegistry + loader; the KCM runs in
-    // a separate process and binds to its own per-process registry
+    // The daemon owns its own AlgorithmRegistry + loader; the settings app
+    // runs in a separate process and binds to its own per-process registry
     // (m_localAlgorithmRegistry) so picker-side previews stay live even
     // when the daemon is down.
     //
@@ -798,8 +799,8 @@ SettingsController::SettingsController(QObject* parent)
         // disconnects them in ~QObject, which runs AFTER the unique_ptr members
         // are destroyed. An effectsChanged arriving in that window would have
         // seeded freed memory. Asking the owning pointer each time puts this
-        // dependency back under the rule the destructor enforces for the other
-        // eleven, with no extra teardown bookkeeping to forget.
+        // dependency back under the rule the destructor enforces for every
+        // other late-bound one, with no extra teardown bookkeeping to forget.
         const auto syncAnimation = [this]() {
             if (m_presetStore && m_animationShaderRegistry) {
                 PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Animation,
@@ -823,7 +824,8 @@ SettingsController::SettingsController(QObject* parent)
         syncSurface();
         syncPointer();
         // Overlay is NOT seeded here: m_overlayShaderRegistry does not exist
-        // yet. It is built roughly a hundred lines below, so seeding it from
+        // yet. It is built after installRuleLabelLookups(), further down this
+        // ctor, so seeding it from
         // this block only ever hit its own null guard and every overlay pack's
         // shipped presets stayed invisible to the settings UI. It is seeded, and
         // its reload edge connected, immediately after that registry is built.
@@ -923,9 +925,9 @@ SettingsController::SettingsController(QObject* parent)
     // apply / discard participate in the framework's Save/Discard.
     m_profilesPage = std::make_unique<ProfilePageController>(m_settings, *m_rulesPage, this);
 
-    // The rule-list label lookups (screen / activity / desktop / zone / layout
-    // / algorithm / shader / event / decoration) and the refreshes that keep
-    // them live. Installed exactly once; see settingscontroller_rulelookups.cpp.
+    // The rule-list label lookups, the two zone enumerators the rule editor's
+    // pickers read, and the refreshes that keep them live. Installed exactly
+    // once; see settingscontroller_rulelookups.cpp for the full set.
     installRuleLabelLookups();
 
     // Overlay shader registry — settings-side mirror of the daemon's. The

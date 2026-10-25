@@ -293,8 +293,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // and its windows snapped under the old ids lose those snaps once.
         const int reissued = LayoutUtils::reissueTakenZoneIds(merged, m_layouts);
         if (reissued > 0) {
-            qCWarning(lcZonesLib) << "Layout file" << filePath << "reused" << reissued
-                                  << "zone id(s) of another layout - gave them new ids";
+            qCWarning(lcZonesLib) << "Layout file" << filePath << "reused or lacked" << reissued
+                                  << "zone id(s) - gave them ids of its own";
         }
 
         auto layout = PhosphorZones::Layout::fromJson(merged, this);
@@ -671,7 +671,8 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
     // (F552). A layout-id collision below clones, which replaces them all.
     QJsonObject imported = doc.object();
     if (const int reissued = LayoutUtils::reissueTakenZoneIds(imported, m_layouts); reissued > 0) {
-        qCInfo(lcZonesLib) << "importLayout:" << reissued << "zone id(s) of another layout given new ids";
+        qCInfo(lcZonesLib) << "importLayout:" << reissued
+                           << "zone id(s) that another layout held or that were missing given ids of their own";
     }
 
     auto* parsed = PhosphorZones::Layout::fromJson(imported, this);

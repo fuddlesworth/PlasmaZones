@@ -913,12 +913,15 @@ private:
     QString latestWhatsNewVersion() const;
     /// Reads the bundled release history into m_whatsNewEntries. Ctor-only.
     void loadWhatsNew();
-    /// Install the RuleController's label resolvers (settingscontroller_rulelookups.cpp).
-    /// Called once from the ctor after m_rulesPage and the registries it reads exist.
+    /// Install the RuleController's label resolvers and its two zone
+    /// enumerators (settingscontroller_rulelookups.cpp). Called once from the
+    /// ctor after m_rulesPage and the layout registry exist. The overlay shader
+    /// registry is built after it, which its resolver null-guards; the zone
+    /// enumerators run at install and publish at once.
     void installRuleLabelLookups();
     /// Re-emit the rule model's label-derived roles; connected to every
-    /// upstream change a resolver reads (screens, activities, layouts, desktop
-    /// names, the three shader registries).
+    /// upstream change a resolver reads (screens, activities, layouts, zone
+    /// names, desktop names, the three shader registries).
     void refreshRuleLabels();
     void setNeedsSave(bool needs);
     /// Reload deferred by onExternalSettingsChanged() while edits were

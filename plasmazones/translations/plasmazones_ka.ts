@@ -688,8 +688,8 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="299"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="368"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="137"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="166"/>
@@ -2031,8 +2031,8 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="362"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="298"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
@@ -2206,37 +2206,32 @@
         <translation>მიმაგრებულია თუ არა ფანჯარა ზონაში (ხელით-ზონის რეჟიმი, სადაც ფილებად დაწყობილი ფანჯრები არაა მიმაგრებული).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
-        <source>The zone the window is snapped into (manual-zone mode only).</source>
-        <translation>ზონა, რომელშიც ფანჯარა მიმაგრებულია (მხოლოდ ხელით-ზონის რეჟიმი).</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="184"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
         <source>The monitor the window is on.</source>
         <translation>მონიტორი, რომელზეც ფანჯარაა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="186"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="189"/>
         <source>The virtual desktop the window is on.</source>
         <translation>ვირტუალური სამუშაო მაგიდა, რომელზეც ფანჯარაა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="188"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="191"/>
         <source>The KDE Activity the window is on.</source>
         <translation>KDE-ის აქტივობა, რომელზეც ფანჯარაა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="192"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="195"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>რამდენი ფანჯარაა ფილებად დაწყობილი ამ მონიტორსა და სამუშაო მაგიდაზე. საშუალებას აძლევს წესს, გადართოს ფილებად დაწყობის ალგორითმი ფანჯრების გახსნისა და დახურვისას, მაგალითად ცენტრირებული ერთფანჯრიანი განლაგება, რომელიც ადგილს უთმობს, როგორც კი მეორე ფანჯარა გაიხსნება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
         <translation>განლაგება, რომელიც ამჟამად აქტიურია მონიტორზე, ან იქ გამოყენებული გადახვევის ნიმუში. საშუალებას აძლევს წესს შეცვალოს შუალედები, გადადება ან დაბლოკვის მდგომარეობა იმ ეკრანისთვის, რომელიც მოცემულ განლაგებას ან ნიმუშს აჩვენებს. მას არ შეუძლია შეცვალოს, რომელი განლაგებაა მინიჭებული, ეს წრიული იქნებოდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="209"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
         <translation>სისტემის ფერთა სქემა ღიაა თუ მუქი. საშუალებას აძლევს წესს აირჩიოს სხვა შუალედები, გადადების ფერები ან განლაგებები, როცა სამუშაო მაგიდა დღისა და ღამის თემებს შორის გადაირთვება. წესები ხელახლა ამოქმედდება თემის შეცვლისთანავე.</translation>
     </message>
@@ -2435,17 +2430,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="73"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="548"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="541"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
         <translation>მონიტორი</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="506"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
         <translation>სამუშაო მაგიდა</translation>
@@ -2472,8 +2467,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="356"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="297"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="359"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="56"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="29"/>
@@ -2494,12 +2489,12 @@
         <translation>ავტოფილირება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="370"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="373"/>
         <source>Zone rectangles</source>
         <translation>ზონის მართკუთხედები</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="373"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="376"/>
         <source>Layout preview</source>
         <translation>განლაგების გადახედვა</translation>
     </message>
@@ -2529,12 +2524,17 @@
         <translation>იმართება თუ არა ფანჯარა ფილებად დაწყობის ძრავით.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="190"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
+        <source>The zone the window is snapped into, in snapping mode. A window spanning several zones counts as being in the first of them. It suits rules about how a window looks or stacks while it sits in a zone, not rules about where a window opens.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="193"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
         <translation>ძრავის რეჟიმი, რომლითაც ფანჯარა თავსდება (მიმაგრება, ფილებად დაწყობა ან გადახვევა).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="197"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="200"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
         <translation>მონიტორი შვეულ თუ თარაზულ ორიენტაციაშია. საშუალებას აძლევს წესს, შემობრუნებულ ეკრანზე სხვა განლაგება ან ალგორითმი აირჩიოს.</translation>
     </message>
@@ -3548,155 +3548,155 @@
         <translation>ჩანართის ინდიკატორი სვეტის გვერდით</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="221"/>
         <source>is</source>
         <translation>არის</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="220"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="223"/>
         <source>contains</source>
         <translation>შეიცავს</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="222"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="225"/>
         <source>starts with</source>
         <translation>იწყება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="224"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="227"/>
         <source>ends with</source>
         <translation>მთავრდება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="226"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="229"/>
         <source>matches regex</source>
         <translation>ემთხვევა რეგულარულ გამოსახულებას</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="228"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="231"/>
         <source>matches app-id</source>
         <translation>ემთხვევა app-id-ს</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="230"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="233"/>
         <source>greater than</source>
         <translation>მეტია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="232"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="235"/>
         <source>less than</source>
         <translation>ნაკლებია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="260"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="263"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="289"/>
         <source>Unknown</source>
         <translation>უცნობი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="261"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="264"/>
         <source>Normal window</source>
         <translation>ჩვეულებრივი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="262"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="265"/>
         <source>Dialog</source>
         <translation>დიალოგი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="263"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
         <source>Utility</source>
         <translation>დამხმარე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="264"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="267"/>
         <source>Toolbar</source>
         <translation>ხელსაწყოთა ზოლი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="268"/>
         <source>Splash screen</source>
         <translation>საწყისი ეკრანი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
         <source>Menu</source>
         <translation>მენიუ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="267"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
         <source>Tooltip</source>
         <translation>მინიშნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="268"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="81"/>
         <source>Notification</source>
         <translation>შეტყობინება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
         <source>Dock / panel</source>
         <translation>დოკი / პანელი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="274"/>
         <source>On-screen display</source>
         <translation>ეკრანული ჩვენება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="275"/>
         <source>Popup</source>
         <translation>მხტუნარა ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="276"/>
         <source>Plasma applet popup</source>
         <translation>Plasma-ის აპლეტის ამომხტომი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="303"/>
         <source>Landscape</source>
         <translation>თარაზული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="301"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="304"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
         <source>Portrait</source>
         <translation>შვეული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
         <source>Light</source>
         <translation>ღია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
         <source>Dark</source>
         <translation>მუქი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="378"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
         <source>End of stack</source>
         <translation>დასტის ბოლოს</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="384"/>
         <source>After focused window</source>
         <translation>ფოკუსირებული ფანჯრის შემდეგ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="384"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="387"/>
         <source>As master</source>
         <translation>მთავრად</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="389"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="392"/>
         <source>Float overflow windows</source>
         <translation>გადავსების ფანჯრების მოტივტივება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="392"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="395"/>
         <source>Unlimited (no cap)</source>
         <translation>შეუზღუდავი (ლიმიტის გარეშე)</translation>
     </message>
@@ -3827,7 +3827,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3844,7 +3844,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="432"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="652"/>
@@ -3863,7 +3863,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/TriggerLabels.qml.cpp" line="53"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="190"/>
@@ -3883,7 +3883,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="444"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3935,19 +3935,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="487"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Match the screen shape</source>
         <translation>ეკრანის ფორმის მიხედვით</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Side to side</source>
         <translation>მარცხნიდან მარჯვნივ</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="496"/>
         <source>Top to bottom</source>
         <translation>ზემოდან ქვემოთ</translation>
     </message>
@@ -4046,7 +4046,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
         <source>Restore only</source>
         <translation>მხოლოდ აღდგენა</translation>
     </message>
@@ -4072,7 +4072,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="400"/>
         <source>Float on drag</source>
         <translation>გადათრევისას მოტივტივება</translation>
     </message>
@@ -4093,19 +4093,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="405"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
         <source>Never</source>
         <translation>არასდროს</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
         <source>Always</source>
         <translation>ყოველთვის</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="192"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="414"/>
         <source>On overflow</source>
         <translation>გადავსებისას</translation>
     </message>
@@ -4160,55 +4160,55 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Right of the focused column</source>
         <translation>ფოკუსირებული სვეტის მარჯვნივ</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
         <source>Left of the focused column</source>
         <translation>ფოკუსირებული სვეტის მარცხნივ</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
         <source>Start of the strip</source>
         <translation>ზოლის დასაწყისი</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
         <source>End of the strip</source>
         <translation>ზოლის ბოლო</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="220"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="469"/>
         <source>Into the focused column</source>
         <translation>ფოკუსირებულ სვეტში</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="416"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
         <source>Normal</source>
         <translation>ჩვეულებრივი</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="225"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="422"/>
         <source>Tabbed</source>
         <translation>ჩანართებიანი</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Titled chips</source>
         <translation>დასათაურებული ჩიპები</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="230"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="430"/>
         <source>Segment bar</source>
         <translation>სეგმენტების ზოლი</translation>
     </message>
@@ -4239,42 +4239,42 @@
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="400"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="403"/>
         <source>Reorder in stack</source>
         <translation>დასტაში გადალაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="446"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
         <source>New column</source>
         <translation>ახალი სვეტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="452"/>
         <source>Consume into focused column</source>
         <translation>ფოკუსირებულ სვეტში ჩამატება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
         <source>Treat as normal windows</source>
         <translation>ჩვეულებრივ ფანჯრებად მოპყრობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="482"/>
         <source>Ignore entirely</source>
         <translation>სრულად იგნორირება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="501"/>
         <source>Above other windows</source>
         <translation>სხვა ფანჯრების ზემოთ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="501"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="504"/>
         <source>Normal stacking</source>
         <translation>ჩვეულებრივი დაწყობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="504"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="507"/>
         <source>Below other windows</source>
         <translation>სხვა ფანჯრების ქვემოთ</translation>
     </message>
@@ -4294,12 +4294,12 @@
         <translation>ზონის ნომრების დამალვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="724"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="731"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
         <translation>რეგულარული გამოსახულება, მაგ. ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="727"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="734"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
         <translation>ემთხვევა შებრუნებული DNS-ის სეგმენტებით, ასე რომ „firefox“ ემთხვევა „org.mozilla.firefox“-საც.</translation>
     </message>
@@ -4348,8 +4348,8 @@
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="464"/>
         <source>On</source>
         <translation>ჩართ.</translation>
     </message>
@@ -4361,8 +4361,8 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="148"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="464"/>
         <source>Off</source>
         <translation>გამორთულია</translation>
     </message>
@@ -5296,7 +5296,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="229"/>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="589"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="599"/>
         <source>Everywhere</source>
         <translation>ყველგან</translation>
     </message>
@@ -5365,7 +5365,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="61"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="631"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="583"/>
         <source>Window type</source>
         <translation>ფანჯრის ტიპი</translation>
     </message>
@@ -5400,7 +5400,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="77"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="562"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation>აქტივობა</translation>
@@ -5582,6 +5582,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="708"/>
         <source>Zone</source>
         <translation>ზონა</translation>
     </message>
@@ -5597,13 +5598,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="125"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="709"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="617"/>
         <source>Screen orientation</source>
         <translation>ეკრანის ორიენტაცია</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="127"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="782"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="657"/>
         <source>Active layout</source>
         <translation>აქტიური განლაგება</translation>
     </message>
@@ -10143,7 +10144,7 @@
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="105"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="155"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="162"/>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="61"/>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
@@ -10151,7 +10152,17 @@
         <translation>ზონა %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="151"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="44"/>
+        <source>Unnamed layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="47"/>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="64"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -10288,7 +10299,7 @@
         <translation>თანაფარდობის განახლება ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="348"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="351"/>
         <source>Template: %1</source>
         <translation>ნიმუში: %1</translation>
     </message>
@@ -14555,79 +14566,90 @@
         <translation>დასახურად დააჭირეთ ? ან Escape</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="124"/>
         <source>Pick Window Class from Running Windows</source>
         <translation>აირჩიეთ ფანჯრის კლასი გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="114"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="127"/>
         <source>Pick Desktop File from Running Windows</source>
         <translation>აირჩიეთ დესკტოპის ფაილი გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="130"/>
         <source>Pick Window Title from Running Windows</source>
         <translation>აირჩიეთ ფანჯრის სათაური გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="132"/>
         <source>Pick Application from Running Windows</source>
         <translation>აირჩიეთ აპლიკაცია გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="177"/>
         <source>Refresh</source>
         <translation>განახლება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="200"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="216"/>
         <source>Filter…</source>
         <translation>ფილტრი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="217"/>
         <source>Filter running windows</source>
         <translation>გაშვებული ფანჯრების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No response from KWin effect</source>
         <translation>KWin ეფექტისგან პასუხი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No windows found</source>
         <translation>ფანჯრები აღმოჩენილი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No matching windows</source>
         <translation>შესაბამისი ფანჯრები არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>The KWin effect did not respond. Make sure the PlasmaZones daemon is running, then click Refresh.</source>
         <translation>KWin ეფექტმა არ უპასუხა. დარწმუნდით, რომ PlasmaZones დემონი გაშვებულია, შემდეგ დააწკაპუნეთ განახლებაზე.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>Make sure the PlasmaZones daemon and KWin effect are running</source>
         <translation>დარწმუნდით, რომ PlasmaZones დემონი და KWin ეფექტი გაშვებულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>Try a different search term</source>
         <translation>სცადეთ სხვა საძიებო სიტყვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="292"/>
         <source>(no desktop file)</source>
         <translation>(დესკტოპის ფაილის გარეშე)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="271"/>
-        <source>(no title)</source>
-        <translation>(სათაურის გარეშე)</translation>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="292"/>
+        <source>(no window class, match it by title)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="293"/>
+        <source>(no window class)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="302"/>
+        <source>%1, %2</source>
+        <comment>accessible name: a window picker row&apos;s primary text, then its secondary text</comment>
+        <translation type="unfinished">%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimatedBoxTrack.qml.cpp" line="23"/>
@@ -17596,29 +17618,29 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="531"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
         <source>Primary</source>
         <translation>ძირითადი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="531"/>
         <source>%1 · %2</source>
         <comment>monitor name, then the primary-monitor marker</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="590"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="547"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="540"/>
         <source>Choose a monitor…</source>
         <translation>აირჩიეთ მონიტორი…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="634"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="500"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="505"/>
         <source>Choose a desktop…</source>
         <translation>აირჩიეთ სამუშაო მაგიდა…</translation>
     </message>
@@ -17656,7 +17678,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="420"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="210"/>
         <source>Choose…</source>
         <translation>აირჩიეთ…</translation>
     </message>
@@ -17781,110 +17803,120 @@
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>ALL of</source>
         <comment>Match-tree group where every child must match</comment>
         <translation>ყველა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>ANY of</source>
         <comment>Match-tree group where at least one child must match</comment>
         <translation>ერთ-ერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>NONE of</source>
         <comment>Match-tree group where no child may match</comment>
         <translation>არცერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="148"/>
         <source>Pick from running applications</source>
         <translation>არჩევა გაშვებული აპლიკაციებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="151"/>
         <source>Pick desktop file from running windows</source>
         <translation>Desktop-ფაილის არჩევა გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="154"/>
         <source>Pick title from running windows</source>
         <translation>სათაურის არჩევა გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="153"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="156"/>
         <source>Pick from running windows</source>
         <translation>არჩევა გაშვებული ფანჯრებიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="208"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="211"/>
         <source>Match field</source>
         <translation>შესატყვისობის ველი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="265"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="267"/>
         <source>Match operator</source>
         <translation>შესატყვისობის ოპერატორი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="344"/>
         <source>Remove condition</source>
         <translation>პირობის მოცილება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="346"/>
         <source>Remove this condition</source>
         <translation>ამ პირობის მოცილება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="368"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="425"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="435"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="459"/>
         <source>Match value</source>
         <translation>შესატყვისობის მნიშვნელობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="370"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="375"/>
         <source>Value</source>
         <translation>მნიშვნელობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="582"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="561"/>
         <source>Choose an activity…</source>
         <translation>აირჩიეთ აქტივობა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="628"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="582"/>
         <source>Choose a window type…</source>
         <translation>აირჩიეთ ფანჯრის ტიპი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="670"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="600"/>
         <source>Choose a mode…</source>
         <translation>აირჩიეთ რეჟიმი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="601"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
         <translation>განთავსების რეჟიმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="706"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="616"/>
         <source>Choose an orientation…</source>
         <translation>აირჩიეთ ორიენტაცია…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="742"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="632"/>
         <source>Choose a scheme…</source>
         <translation>აირჩიეთ სქემა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="781"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="656"/>
         <source>Choose a layout…</source>
         <translation>აირჩიეთ განლაგება…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="703"/>
+        <source>Choose a zone…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="703"/>
+        <source>No zones in your layouts</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="152"/>
@@ -21839,7 +21871,7 @@
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="31"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="47"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="745"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="633"/>
         <source>Color scheme</source>
         <translation>ფერთა სქემა</translation>
     </message>
@@ -22524,7 +22556,7 @@
         <translation>გადაუფერადებს დაგდების ინდიკატორის საზღვარს, სანამ შესაბამის ფანჯარას გადაათრევენ.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="236"/>
+        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="251"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="248"/>
         <source>%1 · %2</source>
         <comment>animation section, then the event inside it</comment>
@@ -22573,7 +22605,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="418"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="618"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="492"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
         <translation>%1: %2</translation>

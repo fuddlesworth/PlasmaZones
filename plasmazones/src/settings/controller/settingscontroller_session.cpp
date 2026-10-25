@@ -30,6 +30,7 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
+#include "settings/rules/rulepickeroptions.h"
 #include "settings/utils/dbusutils.h"
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -177,9 +178,9 @@ namespace {
 /// unassigned case does NOT warn: a successful reply for an empty slot still
 /// carries one (empty) argument, so it returns through the first branch.
 ///
-/// Anonymous namespace keeps this TU-local, the same convention
-/// parseRunningWindowsJson below follows so unity-build batching cannot
-/// produce a duplicate-symbol surprise.
+/// Anonymous namespace keeps this TU-local, the same convention the
+/// settingscontroller_ordering.cpp helpers follow, so unity-build batching
+/// cannot produce a duplicate-symbol surprise.
 QString quickSlotFromReply(const QDBusMessage& reply, const char* what, int slotNumber)
 {
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
@@ -540,54 +541,6 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 
 namespace {
 
-// Parses the daemon's running-windows JSON payload into a QVariantList of
-// {windowClass, appName, caption, desktopFile} maps ready for QML consumption. The
-// synchronous getRunningWindows() predecessor was removed in Phase 6 of
-// refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
-// Anonymous namespace keeps this TU-local — same convention as the
-// settingscontroller_ordering.cpp helpers so unity-build batching can't
-// produce a duplicate-symbol surprise.
-QVariantList parseRunningWindowsJson(const QString& json)
-{
-    if (json.isEmpty()) {
-        return {};
-    }
-    // A signal payload rather than a method reply, so DaemonDBus::replyJsonArray
-    // does not fit — but it warns for the same reason: the caller sees an empty
-    // list either way, and without a log line "no windows are open" and "the
-    // effect sent something unreadable" are the same state.
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcCore) << "parseRunningWindowsJson: payload is not valid JSON:" << parseError.errorString();
-        return {};
-    }
-    if (!doc.isArray()) {
-        qCWarning(lcCore) << "parseRunningWindowsJson: payload JSON is not an array";
-        return {};
-    }
-
-    QVariantList result;
-    const QJsonArray array = doc.array();
-    result.reserve(array.size());
-    for (const QJsonValue& value : array) {
-        if (!value.isObject()) {
-            continue;
-        }
-        const QJsonObject obj = value.toObject();
-        QVariantMap item;
-        item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
-        item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
-        item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
-        // `desktopFile` is forwarded verbatim — older effect builds that
-        // don't include the field will produce an empty string, which the
-        // WindowPickerDialog hides from its DesktopFile mode.
-        item[QStringLiteral("desktopFile")] = obj[QLatin1String("desktopFile")].toString();
-        result.append(item);
-    }
-    return result;
-}
-
 // The most tabs a strip preview will draw pills for. The daemon is a
 // same-user peer rather than a hostile one, so this is version-skew and
 // daemon-bug insurance, not a security boundary — but it is the only bound on
@@ -659,7 +612,7 @@ void SettingsController::onRunningWindowsAvailable(const QString& json)
     // Reply arrived — stop the timeout timer so a stale runningWindowsTimedOut()
     // doesn't fire after we've already served fresh data.
     m_runningWindowsTimeout.stop();
-    m_cachedRunningWindows = parseRunningWindowsJson(json);
+    m_cachedRunningWindows = RulePickerOptions::runningWindows(json);
     Q_EMIT runningWindowsAvailable(m_cachedRunningWindows);
 }
 

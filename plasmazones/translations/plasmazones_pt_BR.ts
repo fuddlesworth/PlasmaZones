@@ -688,8 +688,8 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="299"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="368"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="137"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="166"/>
@@ -2031,8 +2031,8 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="362"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="298"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
@@ -2206,37 +2206,32 @@
         <translation>Se a janela está encaixada em uma zona (modo de zonas manuais, em que janelas ladrilhadas não ficam encaixadas).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
-        <source>The zone the window is snapped into (manual-zone mode only).</source>
-        <translation>A zona em que a janela está encaixada (somente no modo de zonas manuais).</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="184"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
         <source>The monitor the window is on.</source>
         <translation>O monitor em que a janela está.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="186"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="189"/>
         <source>The virtual desktop the window is on.</source>
         <translation>A área de trabalho virtual em que a janela está.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="188"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="191"/>
         <source>The KDE Activity the window is on.</source>
         <translation>A atividade do KDE em que a janela está.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="192"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="195"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>Quantas janelas estão ladrilhadas neste monitor e nesta área de trabalho. Permite que uma regra troque o algoritmo de ladrilhamento conforme as janelas abrem e fecham, como um layout de janela única centralizada que dá lugar a outro assim que uma segunda janela abre.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
         <translation>O layout ativo no monitor no momento, ou o modelo de rolagem em uso ali. Permite que uma regra altere espaçamentos, a sobreposição ou o bloqueio da tela que mostra determinado layout ou modelo. Ela não pode alterar qual layout está atribuído, pois isso seria circular.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="209"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
         <translation>Se o esquema de cores do sistema é claro ou escuro. Permite que uma regra escolha espaçamentos, cores de sobreposição ou layouts diferentes quando a área de trabalho alterna entre os temas de dia e de noite. As regras são reaplicadas assim que o tema muda.</translation>
     </message>
@@ -2435,17 +2430,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="73"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="548"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="541"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
         <translation>Monitor</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="506"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
         <translation>Área de trabalho</translation>
@@ -2472,8 +2467,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="356"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="297"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="359"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="56"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="29"/>
@@ -2494,12 +2489,12 @@
         <translation>Ladrilhamento automático</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="370"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="373"/>
         <source>Zone rectangles</source>
         <translation>Retângulos das zonas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="373"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="376"/>
         <source>Layout preview</source>
         <translation>Visualização do layout</translation>
     </message>
@@ -2529,12 +2524,17 @@
         <translation>Se a janela é gerenciada pelo mecanismo de ladrilhamento.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="190"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
+        <source>The zone the window is snapped into, in snapping mode. A window spanning several zones counts as being in the first of them. It suits rules about how a window looks or stacks while it sits in a zone, not rules about where a window opens.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="193"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
         <translation>O modo do mecanismo que posiciona a janela (encaixe, ladrilhamento ou rolagem).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="197"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="200"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
         <translation>Se o monitor está na orientação retrato ou paisagem. Permite que uma regra escolha outro layout ou algoritmo em uma tela girada.</translation>
     </message>
@@ -3548,155 +3548,155 @@
         <translation>Indicador de abas ao lado da coluna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="221"/>
         <source>is</source>
         <translation>é</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="220"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="223"/>
         <source>contains</source>
         <translation>contém</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="222"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="225"/>
         <source>starts with</source>
         <translation>começa com</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="224"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="227"/>
         <source>ends with</source>
         <translation>termina com</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="226"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="229"/>
         <source>matches regex</source>
         <translation>corresponde à expressão regular</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="228"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="231"/>
         <source>matches app-id</source>
         <translation>corresponde ao app-id</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="230"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="233"/>
         <source>greater than</source>
         <translation>maior que</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="232"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="235"/>
         <source>less than</source>
         <translation>menor que</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="260"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="263"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="289"/>
         <source>Unknown</source>
         <translation>Desconhecido</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="261"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="264"/>
         <source>Normal window</source>
         <translation>Janela normal</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="262"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="265"/>
         <source>Dialog</source>
         <translation>Diálogo</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="263"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
         <source>Utility</source>
         <translation>Utilitário</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="264"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="267"/>
         <source>Toolbar</source>
         <translation>Barra de ferramentas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="268"/>
         <source>Splash screen</source>
         <translation>Tela de abertura</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="267"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
         <source>Tooltip</source>
         <translation>Dica</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="268"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="81"/>
         <source>Notification</source>
         <translation>Notificação</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
         <source>Dock / panel</source>
         <translation>Dock / painel</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="274"/>
         <source>On-screen display</source>
         <translation>Aviso na tela</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="275"/>
         <source>Popup</source>
         <translation>Janela instantânea</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="276"/>
         <source>Plasma applet popup</source>
         <translation>Janela instantânea de miniaplicativo do Plasma</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="303"/>
         <source>Landscape</source>
         <translation>Paisagem</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="301"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="304"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
         <source>Portrait</source>
         <translation>Retrato</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
         <source>Light</source>
         <translation>Claro</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
         <source>Dark</source>
         <translation>Escuro</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="378"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
         <source>End of stack</source>
         <translation>Fim da pilha</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="384"/>
         <source>After focused window</source>
         <translation>Depois da janela focalizada</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="384"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="387"/>
         <source>As master</source>
         <translation>Como mestre</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="389"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="392"/>
         <source>Float overflow windows</source>
         <translation>Fazer flutuar as janelas excedentes</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="392"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="395"/>
         <source>Unlimited (no cap)</source>
         <translation>Ilimitado (sem limite)</translation>
     </message>
@@ -3827,7 +3827,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3844,7 +3844,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="432"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="652"/>
@@ -3863,7 +3863,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/TriggerLabels.qml.cpp" line="53"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="190"/>
@@ -3883,7 +3883,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="444"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3935,19 +3935,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="487"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Match the screen shape</source>
         <translation>Acompanhar o formato da tela</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Side to side</source>
         <translation>De lado a lado</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="496"/>
         <source>Top to bottom</source>
         <translation>De cima para baixo</translation>
     </message>
@@ -4046,7 +4046,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
         <source>Restore only</source>
         <translation>Somente restaurar</translation>
     </message>
@@ -4072,7 +4072,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="400"/>
         <source>Float on drag</source>
         <translation>Flutuar ao arrastar</translation>
     </message>
@@ -4093,19 +4093,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="405"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
         <source>Never</source>
         <translation>Nunca</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
         <source>Always</source>
         <translation>Sempre</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="192"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="414"/>
         <source>On overflow</source>
         <translation>Ao transbordar</translation>
     </message>
@@ -4160,55 +4160,55 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Right of the focused column</source>
         <translation>À direita da coluna focalizada</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
         <source>Left of the focused column</source>
         <translation>À esquerda da coluna focalizada</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
         <source>Start of the strip</source>
         <translation>Início da faixa</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
         <source>End of the strip</source>
         <translation>Fim da faixa</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="220"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="469"/>
         <source>Into the focused column</source>
         <translation>Dentro da coluna focalizada</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="416"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
         <source>Normal</source>
         <translation>Normal</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="225"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="422"/>
         <source>Tabbed</source>
         <translation>Em abas</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Titled chips</source>
         <translation>Etiquetas com título</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="230"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="430"/>
         <source>Segment bar</source>
         <translation>Barra segmentada</translation>
     </message>
@@ -4239,42 +4239,42 @@
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="400"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="403"/>
         <source>Reorder in stack</source>
         <translation>Reordenar na pilha</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="446"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
         <source>New column</source>
         <translation>Nova coluna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="452"/>
         <source>Consume into focused column</source>
         <translation>Absorver na coluna focalizada</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
         <source>Treat as normal windows</source>
         <translation>Tratar como janelas normais</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="482"/>
         <source>Ignore entirely</source>
         <translation>Ignorar por completo</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="501"/>
         <source>Above other windows</source>
         <translation>Acima das outras janelas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="501"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="504"/>
         <source>Normal stacking</source>
         <translation>Empilhamento normal</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="504"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="507"/>
         <source>Below other windows</source>
         <translation>Abaixo das outras janelas</translation>
     </message>
@@ -4294,12 +4294,12 @@
         <translation>Ocultar os números das zonas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="724"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="731"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
         <translation>Expressão regular, por exemplo ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="727"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="734"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
         <translation>Corresponde por segmentos de DNS invertido, então “firefox” também corresponde a “org.mozilla.firefox”.</translation>
     </message>
@@ -4348,8 +4348,8 @@
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="464"/>
         <source>On</source>
         <translation>Ligado</translation>
     </message>
@@ -4361,8 +4361,8 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="148"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="464"/>
         <source>Off</source>
         <translation>Desligado</translation>
     </message>
@@ -5296,7 +5296,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="229"/>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="589"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="599"/>
         <source>Everywhere</source>
         <translation>Em todo lugar</translation>
     </message>
@@ -5365,7 +5365,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="61"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="631"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="583"/>
         <source>Window type</source>
         <translation>Tipo de janela</translation>
     </message>
@@ -5400,7 +5400,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="77"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="562"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation>Atividade</translation>
@@ -5582,6 +5582,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="708"/>
         <source>Zone</source>
         <translation>Zona</translation>
     </message>
@@ -5597,13 +5598,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="125"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="709"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="617"/>
         <source>Screen orientation</source>
         <translation>Orientação da tela</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="127"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="782"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="657"/>
         <source>Active layout</source>
         <translation>Layout ativo</translation>
     </message>
@@ -10143,7 +10144,7 @@
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="105"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="155"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="162"/>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="61"/>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
@@ -10151,7 +10152,17 @@
         <translation>Zona %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="151"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="44"/>
+        <source>Unnamed layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="47"/>
+        <source>%1 (%2)</source>
+        <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="64"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -10288,7 +10299,7 @@
         <translation>Falha ao atualizar a proporção de tela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="348"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="351"/>
         <source>Template: %1</source>
         <translation>Modelo: %1</translation>
     </message>
@@ -14554,79 +14565,90 @@
         <translation>Pressione ? ou Esc para fechar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="124"/>
         <source>Pick Window Class from Running Windows</source>
         <translation>Escolher a classe da janela entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="114"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="127"/>
         <source>Pick Desktop File from Running Windows</source>
         <translation>Escolher o arquivo desktop entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="130"/>
         <source>Pick Window Title from Running Windows</source>
         <translation>Escolher o título da janela entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="132"/>
         <source>Pick Application from Running Windows</source>
         <translation>Escolher o aplicativo entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="177"/>
         <source>Refresh</source>
         <translation>Atualizar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="200"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="216"/>
         <source>Filter…</source>
         <translation>Filtrar…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="217"/>
         <source>Filter running windows</source>
         <translation>Filtrar as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No response from KWin effect</source>
         <translation>Nenhuma resposta do efeito do KWin</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No windows found</source>
         <translation>Nenhuma janela encontrada</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="264"/>
         <source>No matching windows</source>
         <translation>Nenhuma janela correspondente</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>The KWin effect did not respond. Make sure the PlasmaZones daemon is running, then click Refresh.</source>
         <translation>O efeito do KWin não respondeu. Verifique se o serviço do PlasmaZones está em execução e clique em Atualizar.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>Make sure the PlasmaZones daemon and KWin effect are running</source>
         <translation>Verifique se o serviço do PlasmaZones e o efeito do KWin estão em execução</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="265"/>
         <source>Try a different search term</source>
         <translation>Tente outro termo de pesquisa</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="292"/>
         <source>(no desktop file)</source>
         <translation>(sem arquivo desktop)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="271"/>
-        <source>(no title)</source>
-        <translation>(sem título)</translation>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="292"/>
+        <source>(no window class, match it by title)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="293"/>
+        <source>(no window class)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/WindowPickerDialog.qml.cpp" line="302"/>
+        <source>%1, %2</source>
+        <comment>accessible name: a window picker row&apos;s primary text, then its secondary text</comment>
+        <translation type="unfinished">%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimatedBoxTrack.qml.cpp" line="23"/>
@@ -17595,29 +17617,29 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="531"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
         <source>Primary</source>
         <translation>Principal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="531"/>
         <source>%1 · %2</source>
         <comment>monitor name, then the primary-monitor marker</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="590"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="547"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="540"/>
         <source>Choose a monitor…</source>
         <translation>Escolha um monitor…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="634"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="500"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="505"/>
         <source>Choose a desktop…</source>
         <translation>Escolha uma área de trabalho…</translation>
     </message>
@@ -17655,7 +17677,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="420"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="210"/>
         <source>Choose…</source>
         <translation>Escolher…</translation>
     </message>
@@ -17780,110 +17802,120 @@
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>ALL of</source>
         <comment>Match-tree group where every child must match</comment>
         <translation>TODAS de</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>ANY of</source>
         <comment>Match-tree group where at least one child must match</comment>
         <translation>QUALQUER uma de</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="552"/>
         <source>NONE of</source>
         <comment>Match-tree group where no child may match</comment>
         <translation>NENHUMA de</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="148"/>
         <source>Pick from running applications</source>
         <translation>Escolher entre os aplicativos abertos</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="151"/>
         <source>Pick desktop file from running windows</source>
         <translation>Escolher o arquivo desktop entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="154"/>
         <source>Pick title from running windows</source>
         <translation>Escolher o título entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="153"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="156"/>
         <source>Pick from running windows</source>
         <translation>Escolher entre as janelas abertas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="208"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="211"/>
         <source>Match field</source>
         <translation>Campo da correspondência</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="265"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="267"/>
         <source>Match operator</source>
         <translation>Operador da correspondência</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="344"/>
         <source>Remove condition</source>
         <translation>Remover a condição</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="346"/>
         <source>Remove this condition</source>
         <translation>Remover esta condição</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="368"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="425"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="435"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="459"/>
         <source>Match value</source>
         <translation>Valor da correspondência</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="370"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="375"/>
         <source>Value</source>
         <translation>Valor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="582"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="561"/>
         <source>Choose an activity…</source>
         <translation>Escolha uma atividade…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="628"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="582"/>
         <source>Choose a window type…</source>
         <translation>Escolha um tipo de janela…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="670"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="600"/>
         <source>Choose a mode…</source>
         <translation>Escolha um modo…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="601"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
         <translation>Modo de posicionamento</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="706"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="616"/>
         <source>Choose an orientation…</source>
         <translation>Escolha uma orientação…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="742"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="632"/>
         <source>Choose a scheme…</source>
         <translation>Escolha um esquema…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="781"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="656"/>
         <source>Choose a layout…</source>
         <translation>Escolha um layout…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="703"/>
+        <source>Choose a zone…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="703"/>
+        <source>No zones in your layouts</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="152"/>
@@ -21838,7 +21870,7 @@
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="31"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="47"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="745"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="633"/>
         <source>Color scheme</source>
         <translation>Esquema de cores</translation>
     </message>
@@ -22523,7 +22555,7 @@
         <translation>Recolore a borda do indicador de soltura enquanto uma janela correspondente está sendo arrastada.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="236"/>
+        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="251"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="248"/>
         <source>%1 · %2</source>
         <comment>animation section, then the event inside it</comment>
@@ -22572,7 +22604,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="418"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="618"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="492"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
         <translation>%1: %2</translation>

@@ -38,9 +38,10 @@ namespace PlasmaZones {
  *      re-fetch leaves the page dirty rather than silently dropping the edits.
  *
  * Dirty-tracking + revert/commit mirror `AnimationsPageController`'s
- * pending-changes contract: `SettingsController` connects `dirtyChanged` to
- * `setNeedsSave`, drives `apply()` (which dispatches `asyncCommit`) from
- * `save()`, and `revert()` from `load()`.
+ * pending-changes contract: `SettingsController` reconciles its dirty state
+ * value-based off `dirtyChanged` (reattributeRuleDirty), the framework's
+ * StagingDomain drives `apply()` (which dispatches `asyncCommit`) and
+ * `discard()`, and `SettingsController`'s load path drives `revert()`.
  *
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
@@ -89,25 +90,25 @@ public:
     void apply() override;
     void discard() override;
 
-    /// Wire the screen-id / activity-uuid / layout-id → display-name lookups
-    /// used by the model's `matchSummary` and by the controller's own
-    /// `monitorOverview` summary. The lookups capture the SettingsController
-    /// snapshot lists by reference, so they resolve against the live snapshot
-    /// every call. Install-once: when the underlying snapshot lists update,
-    /// the parent calls `RuleModel::refreshLabels()` on the model to
-    /// invalidate the cached label cells — re-installing the lookups would
-    /// just churn the closures without changing behaviour.
+    /// Wire the id → display-name lookups used by the model's `matchSummary`
+    /// / `actionSummary` and by the controller's own `monitorOverview`
+    /// summary. The lookups SettingsController installs capture `this` and
+    /// read its live state every call. Install-once: when that state changes,
+    /// the parent calls `RuleModel::refreshLabels()` on the model to re-emit
+    /// the label roles — re-installing the lookups would just churn the
+    /// closures without changing behaviour.
     ///
     /// All lookups (screen, activity, zone, virtualDesktop, snappingLayout,
-    /// tilingAlgorithm, shaderEffect, overlayShader, decorationPack, curve) must
-    /// be wired for the model to render rich
-    /// `matchSummary` / `actionSummary` cells — a missing lookup falls
-    /// back to printing the raw id/UUID. SettingsController is the
-    /// single intended caller and installs all of them during page
-    /// registration via the typed snappingLayout/tilingAlgorithm pair.
+    /// tilingAlgorithm, shaderEffect, animationEvent, overlayShader,
+    /// decorationPack, curve) must be wired for the model to render rich
+    /// `matchSummary` / `actionSummary` cells — a missing lookup falls back
+    /// to printing the raw id/UUID. SettingsController installs every one but
+    /// the curve resolver from its constructor (installRuleLabelLookups);
+    /// the rules page installs the curve resolver from QML
+    /// (setCurveLabelResolver).
     void setScreenLookup(RuleModel::LabelLookup fn);
     void setActivityLookup(RuleModel::LabelLookup fn);
-    /// zone UUID → zone-name resolver for `Zone` match-leaf labels.
+    /// zone UUID → "<layout> — <zone>" resolver for `Zone` match-leaf labels.
     void setZoneLookup(RuleModel::LabelLookup fn);
     /// desktop number → name resolver for `VirtualDesktop` match-leaf labels.
     void setVirtualDesktopLookup(RuleModel::LabelLookup fn);
@@ -126,6 +127,10 @@ public:
     /// distinctly. SettingsController wires this from the animations page
     /// controller's event taxonomy.
     void setAnimationEventLookup(RuleModel::LabelLookup fn);
+    /// Surface-pack id → display name resolver for OverrideDecorationChain
+    /// actions. SettingsController wires this from the surface shader
+    /// registry (the source the decoration pages' pack picker reads), so the
+    /// list renders "Frosted Glass" rather than the raw id.
     void setDecorationPackLookup(RuleModel::LabelLookup fn);
     /// Overlay shader id → display name resolver for OverrideOverlayShader
     /// actions. SettingsController wires this from the overlay/snapping shader
@@ -146,9 +151,11 @@ public:
     /// zoneMatchOptionsChanged only when it differs, and `{}` clears it before
     /// the captured registry is destroyed.
     void setZoneMatchOptionsProvider(std::function<QVariantList()> provider);
-    /// Re-read both zone providers and publish whichever result changed. Cheap
-    /// when nothing changed (one list compare each), so the parent may call it
-    /// on every registry reload without an equality guard of its own.
+    /// Re-read each installed zone provider and publish whichever result
+    /// changed; a cleared provider keeps its last list. Each provider walks
+    /// every layout, but the controller emits only on a real change, so the
+    /// parent may call this on every registry reload without an equality
+    /// guard of its own.
     void refreshZoneLists();
     QStringList zoneNames() const
     {
@@ -358,7 +365,7 @@ public:
     ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
     ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme"|"zone" }`. The screen /
     /// activity / virtualDesktop / layout / zone kinds drive dedicated pickers; the
-    /// closed-vocab kinds (windowType / mode / orientation) also carry an
+    /// closed-vocab kinds (windowType / mode / orientation / colorScheme) also carry an
     /// `options` list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
@@ -386,9 +393,10 @@ public:
     /// `{ key, kind, label, hint? }` (`hint` is the input hint shown under
     /// free-text editors, absent when the kind needs none). `kind` is one of
     /// the descriptor kinds the ActionRow editor dispatches on (enum, number,
-    /// percent, bool, color, zoneOrdinals, zoneNames, screenId, virtualDesktop,
-    /// snappingLayout, scrollingTemplate, tilingAlgorithm, animationEvent,
-    /// shaderEffect, overlayShader, decorationChain, curveEditor). Optional
+    /// percent, bool, color, string, zoneOrdinals, zoneNames, screenId,
+    /// virtualDesktop, snappingLayout, scrollingTemplate, tilingAlgorithm,
+    /// animationEvent, shaderEffect, shaderPreset, overlayShader,
+    /// overlayLayout, decorationChain, curveEditor). Optional
     /// fields are carried whenever the schema declares them: `options` (a list
     /// of `{ value: QString (wire token), label }` maps, for `enum`),
     /// `min`/`max`/`scale`/`defaultDisplay` (display-unit bounds and seed; the
@@ -444,9 +452,8 @@ public:
     /// True iff the @p matchJson sub-tree references only context fields — i.e.
     /// it is compatible with every action's domain. "Context field" is whatever
     /// `PhosphorRules::fieldIsContext` reports, which is every
-    /// `FieldSource::Context` row of the field table: today ScreenId,
-    /// VirtualDesktop, Activity, Mode, TiledWindowCount, ScreenOrientation and
-    /// ActiveLayout. The picker uses this to flag context-domain
+    /// `FieldSource::Context` row of the field table (ScreenId, VirtualDesktop,
+    /// Activity, Mode and the other context rows there). The picker uses this to flag context-domain
     /// action types as incompatible when the current match has a
     /// window-property leaf. An empty / catch-all match counts as
     /// context-only.
@@ -603,6 +610,12 @@ private:
     /// answer, cached and compared for the same reasons as the name list.
     std::function<QVariantList()> m_zoneMatchOptionsProvider;
     QVariantList m_zoneMatchOptions;
+
+    /// Re-read one zone provider and publish its list if it changed; a
+    /// cleared provider is skipped. refreshZoneLists() runs both, each setter
+    /// only its own.
+    void refreshZoneNames();
+    void refreshZoneMatchOptions();
 };
 
 } // namespace PlasmaZones
