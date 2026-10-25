@@ -1029,12 +1029,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // is a tablet tool's while a pen is in use, and cursorShapeChanged follows
     // the mouse alone. This signal fires on a switch between the two and on
     // every change to the current one's image, which is what KWin's screencast
-    // keys its own cursor copy on.
-    if (KWin::Cursors* const cursors = KWin::Cursors::self()) {
-        connect(cursors, &KWin::Cursors::currentCursorChanged, this, [this]() {
-            m_pointerPass.cursorChanged();
-        });
-    }
+    // keys its own cursor copy on. Cursors::self() creates the singleton on
+    // first use and never clears it, so it is never null here.
+    connect(KWin::Cursors::self(), &KWin::Cursors::currentCursorChanged, this, [this]() {
+        m_pointerPass.cursorChanged();
+    });
 
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
