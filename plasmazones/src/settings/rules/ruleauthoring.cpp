@@ -90,6 +90,9 @@ PickerCategory fieldCategory(Field f)
     case Field::Mode:
     case Field::TiledWindowCount:
     case Field::ScreenOrientation:
+    case Field::ScreenWidth:
+    case Field::ScreenHeight:
+    case Field::ScreenAspectRatio:
     case Field::ActiveLayout:
     case Field::ColorScheme:
         return {PhosphorI18n::tr("Context"), 0};
@@ -200,6 +203,18 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr(
             "Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or "
             "algorithm on a rotated screen.");
+    case Field::ScreenWidth:
+        return PhosphorI18n::tr(
+            "The monitor's width in pixels, the resolution its display settings show. Lets a rule pick a different "
+            "layout when the same monitor runs at another resolution.");
+    case Field::ScreenHeight:
+        return PhosphorI18n::tr(
+            "The monitor's height in pixels, the resolution its display settings show. Lets a rule pick a different "
+            "layout when the same monitor runs at another resolution.");
+    case Field::ScreenAspectRatio:
+        return PhosphorI18n::tr(
+            "The monitor's shape, rounded to the nearest common ratio such as 16:9 or 32:9. Lets a rule pick a "
+            "different layout when a monitor changes shape, for example when a KVM switch gives it half its width.");
     case Field::ActiveLayout:
         return PhosphorI18n::tr(
             "The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change "
@@ -619,6 +634,21 @@ QVariantList matchFields()
                 options.append(option);
             }
             entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ScreenAspectRatio) {
+            // Closed vocabulary like orientation, read straight from the rules
+            // library's own token table so the picker can never offer a ratio
+            // the daemon and effect do not stamp. The token is its own label
+            // ("16:9" reads the same in every language).
+            kind = QStringLiteral("aspectRatio");
+            QVariantList options;
+            for (const PhosphorRules::AspectRatioToken& ratio : PhosphorRules::kAspectRatioTokens) {
+                QVariantMap option;
+                option[QStringLiteral("value")] = QString(ratio.token);
+                option[QStringLiteral("wire")] = QString(ratio.token);
+                option[QStringLiteral("label")] = QString(ratio.token);
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
         } else if (f == Field::ColorScheme) {
             // Closed light/dark vocabulary — a dropdown of the friendly
             // tokens, same shape as Mode and ScreenOrientation. The value IS
@@ -674,10 +704,10 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout
-        || field == Field::Zone || field == Field::ColorScheme) {
+    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ScreenAspectRatio
+        || field == Field::ActiveLayout || field == Field::Zone || field == Field::ColorScheme) {
         // These are string-valued but their vocabulary is closed or opaque
-        // (placement mode, portrait/landscape, light/dark, a concrete layout
+        // (placement mode, portrait/landscape, an aspect ratio, light/dark, a concrete layout
         // id, a zone UUID) — only an exact-token Equals is meaningful. A substring or
         // regex against a closed token set, a layout UUID, or a zone UUID is a
         // footgun the picker cannot author sensibly. Mirrors the WindowType

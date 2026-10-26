@@ -149,16 +149,17 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // steady) keep hitting the cache.
     const std::optional<int> tiledCount =
         m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
-    // Both the tiled count and the screen orientation are non-rule-set inputs the
-    // stamped query depends on, so both must ride the cache KEY (the assignment
-    // resolver stamps orientation but not activeLayout, so no "al:" component here).
-    const QString orientationToken = screenOrientationToken(screenId);
+    // Both the tiled count and the screen shape (orientation and device-pixel
+    // size) are non-rule-set inputs the stamped query depends on, so both must
+    // ride the cache KEY (the assignment resolver stamps the shape but not
+    // activeLayout, so no "al:" component here).
+    const ScreenShape shape = screenShape(screenId);
     // The colour scheme rides the key for the same non-rule-set reason as the
     // orientation, and is stamped below — scheme-driven assignments (a
     // different layout for a dark desk setup) are legitimate, and the token
     // is palette-derived so there is no recursion hazard.
     const QString schemeToken = colorSchemeToken();
-    const QString countCacheKey = assignmentCacheKeyToken(tiledCount, orientationToken, schemeToken);
+    const QString countCacheKey = assignmentCacheKeyToken(tiledCount, shape, schemeToken);
 
     const std::optional<RuleSlotResolution> rules = resolveCachedContext(
         m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, countCacheKey,
@@ -176,12 +177,13 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // gapping, locking or restyling all of them. Same polarity trap as
             // Mode and ActiveLayout, same structural fix.
             query.tiledWindowCount = tiledCount;
-            // Orientation is layout-independent, so it is stamped on EVERY context
-            // query (unlike tiledWindowCount / activeLayout) — an orientation rule
-            // can drive the assignment itself (portrait monitor → different layout).
-            // Reuse the token already captured for the cache key (mirrors the
+            // The screen shape is layout-independent, so it is stamped on EVERY
+            // context query (unlike tiledWindowCount / activeLayout) — an
+            // orientation or screen-size rule can drive the assignment itself
+            // (portrait monitor, or a KVM half-width mode → different layout).
+            // Reuse the shape already read for the cache key (mirrors the
             // gap/lock/overlay lambdas) rather than re-reading the provider.
-            query.screenOrientation = orientationToken;
+            applyScreenShape(query, shape);
             // Colour scheme: layout-independent like orientation, so it is
             // stamped on every context query including this cascade.
             query.colorScheme = schemeToken;
@@ -331,13 +333,13 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // and in every sibling resolver — as resolveAssignmentEntry, the busiest
     // resolver in this file, already did.
 
-    // The active layout AND the screen orientation are folded into the cache key
-    // (see contextCacheKeyToken) so a Field::ActiveLayout / Field::ScreenOrientation
-    // gap rule refreshes when either changes; both are stamped onto the query below.
+    // The active layout AND the screen shape are folded into the cache key
+    // (see contextCacheKeyToken) so a Field::ActiveLayout or screen-shape (orientation,
+    // width, height, aspect ratio) gap rule refreshes when either changes; both are stamped onto the query below.
     // Safe from recursion: rulesVisibleActiveLayoutId routes through resolveAssignmentEntry,
     // which never calls back into the gap resolver.
     const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
+    const ScreenShape shape = screenShape(screenId);
     const QString schemeToken = colorSchemeToken();
 
     // Hot-path cache via the shared revision-invalidated memoizer: the geometry
@@ -345,13 +347,13 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // and N× inside a multi-zone snap, all with identical arguments.
     return resolveCachedContext(
         m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(mode, activeLayoutId, orientationToken, schemeToken), [&]() -> ContextGapOverride {
+        contextCacheKeyToken(mode, activeLayoutId, shape, schemeToken), [&]() -> ContextGapOverride {
             ContextGapOverride gaps;
             // Thread the placement mode into the query so a per-mode `Mode
             // Equals "snapping"/"tiling"/"scrolling"` gap rule resolves for
             // the asking engine and stays inert for the others.
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
-            query.screenOrientation = orientationToken;
+            applyScreenShape(query, shape);
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
 
@@ -512,11 +514,11 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // LockContext action; we report its boolean value. No engine-mode gate —
     // a lock-only context rule is a first-class overlay.
 
-    // Active layout + orientation folded into the cache key + stamped onto the
-    // query, so a Field::ActiveLayout / ScreenOrientation lock rule works and
+    // Active layout + screen shape folded into the cache key + stamped onto the
+    // query, so a Field::ActiveLayout or screen-shape lock rule works and
     // refreshes when either changes.
     const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
+    const ScreenShape shape = screenShape(screenId);
     const QString schemeToken = colorSchemeToken();
 
     // Hot-path cache via the shared revision-invalidated memoizer: the lock
@@ -524,9 +526,9 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // layout-switch attempt.
     return resolveCachedContext(
         m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken), [&]() -> bool {
+        contextCacheKeyToken(QString(), activeLayoutId, shape, schemeToken), [&]() -> bool {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken;
+            applyScreenShape(query, shape);
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
             // Filtered highestPriorityMatch, not the unfiltered
@@ -586,16 +588,16 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
     // overlay. std::nullopt means "no override rule" — the caller follows the
     // global setting.
 
-    // Orientation folded into the cache key so a Field::ScreenOrientation
-    // default-assignment rule refreshes on rotation (activeLayout is deliberately
+    // Screen shape folded into the cache key so an orientation or screen-size
+    // default-assignment rule refreshes on rotation or a mode change (activeLayout is deliberately
     // NOT stamped/folded here — see the recursion note in the lambda below).
-    const QString orientationToken = screenOrientationToken(screenId);
+    const ScreenShape shape = screenShape(screenId);
     const QString schemeToken = colorSchemeToken();
     return resolveCachedContext(
         m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), QString(), orientationToken, schemeToken), [&]() -> std::optional<bool> {
+        contextCacheKeyToken(QString(), QString(), shape, schemeToken), [&]() -> std::optional<bool> {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken; // reuse the cache-key token
+            applyScreenShape(query, shape); // reuse the cache-key reading
             query.colorScheme = schemeToken;
             // Field::ActiveLayout NOT stamped here: this resolver is part of the
             // assignment cascade (assignmentIdForScreen reaches it via
@@ -659,13 +661,13 @@ std::optional<bool> LayoutRegistry::resolveContextBoolSlot(QHash<ContextResolveK
     // assignment cascade, so there is no recursion hazard, and a rule
     // scoping on the active layout is legitimate.
     const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
+    const ScreenShape shape = screenShape(screenId);
     const QString schemeToken = colorSchemeToken();
     return resolveCachedContext(
         cache, cacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken), [&]() -> std::optional<bool> {
+        contextCacheKeyToken(QString(), activeLayoutId, shape, schemeToken), [&]() -> std::optional<bool> {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken;
+            applyScreenShape(query, shape);
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
             // Same structural exclusions as resolveContextLocked: Mode and
@@ -746,20 +748,19 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
     // each populated field overrides the active layout's own value at the overlay
     // build site. No engine-mode gate — an overlay-only context rule is first-class.
 
-    // Active layout + orientation folded into the cache key + stamped onto the
-    // query, so a Field::ActiveLayout / ScreenOrientation overlay rule works and
+    // Active layout + screen shape folded into the cache key + stamped onto the
+    // query, so a Field::ActiveLayout or screen-shape overlay rule works and
     // refreshes when either changes.
     const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
+    const ScreenShape shape = screenShape(screenId);
     const QString schemeToken = colorSchemeToken();
 
     return resolveCachedContext(
         m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken),
-        [&]() -> ContextOverlayOverride {
+        contextCacheKeyToken(QString(), activeLayoutId, shape, schemeToken), [&]() -> ContextOverlayOverride {
             ContextOverlayOverride overlay;
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken;
+            applyScreenShape(query, shape);
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
             // The slots this resolver reads: nine fixed ones plus the

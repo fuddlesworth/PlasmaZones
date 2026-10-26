@@ -267,29 +267,26 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w, c
     // rules out of the evaluator entirely (TilingHandler::activeLayoutsSeeded).
     // A gate here could not help — the field resolves engaged either way.
     query.activeLayout = m_tilingHandler->activeLayoutForScreen(screenId);
-    // Stamp the screen orientation from the resolved screen id. ruleQueryFor
-    // leaves the field to us whenever it is handed an id: its own derivation
-    // is centre-based, which answers for the wrong monitor (or not at all) for
-    // a scroll strip's windows parked off-screen beside their column. The id
-    // is authoritative for those — it comes from the engine's own per-window
-    // screen override. An id that resolves to no output (a screen that just
-    // disconnected) falls back to the centre-derived answer.
-    QString orientation;
-    if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
-        if (const QRect g = output->geometry(); g.isValid()) {
-            orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
-        }
+    // Stamp the screen shape (orientation, size, aspect ratio) from the resolved
+    // screen id. ruleQueryFor leaves the fields to us whenever it is handed an
+    // id: its own derivation is centre-based, which answers for the wrong
+    // monitor (or not at all) for a scroll strip's windows parked off-screen
+    // beside their column. The id is authoritative for those — it comes from
+    // the engine's own per-window screen override. An id that resolves to no
+    // output (a screen that just disconnected) falls back to the centre-derived
+    // answer.
+    const KWin::LogicalOutput* shapeOutput = outputForScreenId(screenId);
+    if (shapeOutput && !shapeOutput->geometry().isValid()) {
+        shapeOutput = nullptr;
     }
     // The centre-derived fallback is skipped when ruleQueryFor already stamped
-    // one: it takes that branch for exactly the empty-screenId case, from the
-    // same helper on the same frame, so re-running it would recompute a value
-    // that is already in the query (a screenAt walk per rule query).
-    if (orientation.isEmpty() && query.screenOrientation.isEmpty()) {
-        orientation = centreScreenOrientation(w);
+    // the shape: it takes that branch for exactly the empty-screenId case, from
+    // the same helper on the same frame, so re-running it would recompute values
+    // that are already in the query (a screenAt walk per rule query).
+    if (!shapeOutput && query.screenOrientation.isEmpty()) {
+        shapeOutput = centreScreenOutput(w);
     }
-    if (!orientation.isEmpty()) {
-        query.screenOrientation = orientation;
-    }
+    stampScreenShape(query, shapeOutput);
     applyOwnLayerFlags(query, windowId);
     return query;
 }

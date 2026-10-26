@@ -67,7 +67,7 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
     // screen / layout changes via the daemon's updateEngineScreens, not the hot
     // per-cursor path. Being uncached lets us stamp the active layout AND the
-    // screen orientation onto the query without folding either into a cache key
+    // screen shape onto the query without folding either into a cache key
     // (no cached entry to go stale). Safe from recursion: rulesVisibleActiveLayoutId
     // routes through resolveAssignmentEntry, which never calls this resolver.
     // Mode IS stamped (same rationale as resolveContextScrollingParams): the
@@ -75,7 +75,7 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // `Mode Equals "tiling"` alongside a tiling-param action would silently
     // never fire against an unstamped query.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Tiling));
-    stampScreenOrientation(query, screenId);
+    stampScreenShape(query, screenId);
     stampColorScheme(query);
     query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     // Filtered resolve, but with NO managed catch-all exclusion (unlike
@@ -198,7 +198,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
 {
     // Per-slot read, uncached for the same reasons resolveContextTilingParams is:
     // it runs on screen / layout changes rather than the hot per-cursor path, which
-    // lets the query carry the active layout and the screen orientation without
+    // lets the query carry the active layout and the screen shape without
     // folding either into a cache key.
     // Field::Mode IS stamped: this resolver only runs for screens the
     // cascade already put in Scrolling mode, so the stamp costs nothing —
@@ -206,7 +206,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // scroll-param action (a redundant-but-legal spelling) would silently
     // never fire against an unstamped query.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Scrolling));
-    stampScreenOrientation(query, screenId);
+    stampScreenShape(query, screenId);
     stampColorScheme(query);
     query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     // Filtered resolve with no managed catch-all exclusion: same baseline-slot

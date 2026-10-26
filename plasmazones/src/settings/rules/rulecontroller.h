@@ -364,9 +364,9 @@ public:
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
     ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
-    ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme"|"zone" }`. The screen /
+    ///    "screen"|"activity"|"mode"|"orientation"|"aspectRatio"|"layout"|"colorScheme"|"zone" }`. The screen /
     /// activity / virtualDesktop / layout / zone kinds drive dedicated pickers; the
-    /// closed-vocab kinds (windowType / mode / orientation / colorScheme) also carry an
+    /// closed-vocab kinds (windowType / mode / orientation / aspectRatio / colorScheme) also carry an
     /// `options` list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;

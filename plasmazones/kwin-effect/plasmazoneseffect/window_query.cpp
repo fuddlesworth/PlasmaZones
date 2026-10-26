@@ -6,6 +6,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <virtualdesktops.h>
 #include <window.h>
@@ -89,24 +90,37 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-QString centreScreenOrientation(KWin::EffectWindow* w)
+const KWin::LogicalOutput* centreScreenOutput(KWin::EffectWindow* w)
 {
     if (!w) {
-        return {};
+        return nullptr;
     }
     // Position-resolved output (screenAt on the frame centre), NOT w->screen():
     // KWin can assign a window the wrong one of two identical-model outputs
     // (discussion #724).
     const QPointF centreF = w->frameGeometry().center();
-    const auto* output = KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())));
+    return KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())));
+}
+
+void stampScreenShape(PhosphorRules::WindowQuery& query, const KWin::LogicalOutput* output)
+{
     if (!output) {
-        return {};
+        return;
     }
     const QRect g = output->geometry();
     if (!g.isValid()) {
-        return {};
+        return;
     }
-    return g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    const qreal scale = output->scale();
+    if (scale <= 0.0) {
+        return;
+    }
+    const int width = qRound(g.width() * scale);
+    const int height = qRound(g.height() * scale);
+    query.screenWidth = width;
+    query.screenHeight = height;
+    query.screenAspectRatio = PhosphorRules::aspectRatioTokenFor(width, height);
 }
 
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
@@ -152,17 +166,15 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // virtualDesktop / activity are derived here, mirroring the daemon-side
     // setWindowMetadata derivation in window_identity.cpp (0 / "" = all/unknown).
     query.screenId = screenId;
-    // Orientation of the window's screen ("portrait" when taller than wide), so a
-    // window rule can match ScreenOrientation the same way a context rule does.
+    // The shape of the window's screen (orientation, size, aspect ratio), so a
+    // window rule can match those fields the same way a context rule does.
     // Only derived from the frame centre when the caller has no screen id to
     // offer: a centre-resolved output is wrong for a scroll strip's off-screen
     // parked windows, so a caller that HAS an id (the effect's ruleQuery()
-    // funnel) derives the field from that id instead and only falls back to
-    // this helper when the id resolves to no output.
+    // funnel) derives the fields from that id instead and only falls back to
+    // the centre when the id resolves to no output.
     if (screenId.isEmpty()) {
-        if (const QString orientation = centreScreenOrientation(w); !orientation.isEmpty()) {
-            query.screenOrientation = orientation;
-        }
+        stampScreenShape(query, centreScreenOutput(w));
     }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
     // makes a predicate over it inert (returns false). Engaging it with an

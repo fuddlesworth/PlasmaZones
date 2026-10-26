@@ -55,9 +55,8 @@ inline const QSet<PhosphorRules::Field>& neverStampedFields()
 inline const QSet<PhosphorRules::Field>& screenDerivedContextFields()
 {
     static const QSet<PhosphorRules::Field> fields = {
-        PhosphorRules::Field::ScreenId,
-        PhosphorRules::Field::ActiveLayout,
-        PhosphorRules::Field::ScreenOrientation,
+        PhosphorRules::Field::ScreenId,    PhosphorRules::Field::ActiveLayout, PhosphorRules::Field::ScreenOrientation,
+        PhosphorRules::Field::ScreenWidth, PhosphorRules::Field::ScreenHeight, PhosphorRules::Field::ScreenAspectRatio,
     };
     return fields;
 }

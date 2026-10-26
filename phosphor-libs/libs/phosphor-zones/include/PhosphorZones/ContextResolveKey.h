@@ -22,14 +22,17 @@ struct ContextResolveKey
     // share the ContextResolveKey type but never the same cache container. It
     // folds in every non-rule-set input the resolved value depends on, so a
     // change in one yields a fresh entry rather than a stale hit:
-    //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
+    //   - gap cascade: contextCacheKeyToken(mode, activeLayout, shape, scheme) —
     //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
-    //     placement mode, active layout, and screen orientation.
+    //     placement mode, active layout, screen shape (orientation and
+    //     device-pixel size) and colour scheme.
     //   - lock / default-assignment / overlay: contextCacheKeyToken with an
     //     empty mode (they are mode-agnostic) plus activeLayout (except
-    //     default-assignment, which omits it to avoid recursion) and orientation.
-    //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
-    //     the screen orientation (it does not read the active layout).
+    //     default-assignment, which omits it to avoid recursion), the screen
+    //     shape and the colour scheme.
+    //   - assignment resolver: "twc:N|or:<token>|sz:WxH|cs:<token>" — the
+    //     tiled-window count, the screen shape and the colour scheme (it does
+    //     not read the active layout).
     // Each resolver owns its own cache hash, so the token vocabularies never
     // collide.
     QString mode;

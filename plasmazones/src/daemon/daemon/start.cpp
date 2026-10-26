@@ -277,6 +277,16 @@ void Daemon::connectScreenSignals()
                 }
                 m_geometryUpdatePending = true;
                 m_geometryUpdateTimer.start();
+                // A rotation or a resolution change moves the screen-shape
+                // context fields (orientation, width, height, aspect ratio)
+                // with no rule-set revision bump. The registry's cached
+                // resolvers self-heal through their key, but the geometry pass
+                // above only recomputes zones: it never diffs the assignment,
+                // so a shape-keyed layout rule would leave the engine mode, the
+                // published active layout and the snapped windows on the old
+                // verdict. Re-drive both, as a colour-scheme flip does.
+                scheduleReconcileActiveAssignments();
+                scheduleContextOverlayRefresh();
             });
 
     // Connect to available geometry changes (panels added/removed/resized)
@@ -306,6 +316,13 @@ void Daemon::connectScreenSignals()
                 if (!m_layoutManager || !m_screenManager) {
                     return;
                 }
+                // The screen width and height context fields count device
+                // pixels, so a scale change at an unchanged logical size moves
+                // them, and with them any size-keyed rule verdict. Re-driven
+                // ahead of the device-pixel-layout gate below, which concerns
+                // zone geometry only.
+                scheduleReconcileActiveAssignments();
+                scheduleContextOverlayRefresh();
                 QList<PhosphorZones::Layout*> devicePixelLayouts;
                 for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
                     if (layout->fixedGeometryInDevicePixels()) {

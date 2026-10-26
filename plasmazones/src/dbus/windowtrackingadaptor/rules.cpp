@@ -409,8 +409,9 @@ void WindowTrackingAdaptor::stampScreenContext(PhosphorRules::WindowQuery& query
     // actions, so it never sees an open-path rule at all. The open-path actions
     // are resolved here and nowhere else — a rule pairing one of them with a
     // ScreenOrientation leaf matched nothing, and (the field being a
-    // non-optional context field) a negated leaf matched everything.
-    m_layoutManager->stampScreenOrientation(query, screenId);
+    // non-optional context field) a negated leaf matched everything. The
+    // screen width, height and aspect ratio ride the same stamp.
+    m_layoutManager->stampScreenShape(query, screenId);
 }
 
 void WindowTrackingAdaptor::stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId,

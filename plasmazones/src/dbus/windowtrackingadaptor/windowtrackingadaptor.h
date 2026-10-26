@@ -1125,7 +1125,8 @@ public:
     /// ActiveLayout resolved for that screen's CURRENT desktop and activity
     /// (the same id the windowless context cascade stamps and the daemon
     /// publishes to the KWin effect, so the leaf means one thing everywhere),
-    /// and ScreenOrientation. An empty @p screenId stamps nothing. Called by
+    /// and the screen shape (ScreenOrientation, ScreenWidth, ScreenHeight,
+    /// ScreenAspectRatio). An empty @p screenId stamps nothing. Called by
     /// every resolver that pins a screen, cached and uncached alike, so the
     /// shared evaluator memo is always seeded with the full trio.
     void stampScreenContext(PhosphorRules::WindowQuery& query, const QString& screenId) const;

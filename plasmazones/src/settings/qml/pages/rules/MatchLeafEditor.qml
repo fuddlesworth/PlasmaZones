@@ -309,6 +309,9 @@ RowLayout {
             if (leaf._valueKind === "orientation")
                 return orientationValueEditor;
 
+            if (leaf._valueKind === "aspectRatio")
+                return aspectRatioValueEditor;
+
             if (leaf._valueKind === "colorScheme")
                 return colorSchemeValueEditor;
 
@@ -616,6 +619,24 @@ RowLayout {
             value: leaf.node.value
             placeholderText: i18n("Choose an orientation…")
             Accessible.name: i18n("Screen orientation")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: aspectRatioValueEditor
+
+        MatchValueCombo {
+            // The value IS the wire token ("16:9", "32:9"), and the options
+            // come straight from the rules library's ratio table.
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+            textRole: "label"
+            valueRole: "value"
+            value: leaf.node.value
+            placeholderText: i18n("Choose an aspect ratio…")
+            Accessible.name: i18n("Aspect ratio")
             onPicked: function (value) {
                 leaf._emit(leaf.node.field, leaf.node.op, value);
             }

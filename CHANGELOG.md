@@ -13,12 +13,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+- **Rules can tell a monitor's resolution apart**: rules gain Screen width, Screen height and Aspect ratio conditions, so one monitor can get a different layout at a different resolution. A super-ultrawide that a KVM switch drops to half its width can keep one layout for each mode. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
 
 ### Fixed
 
 - **Windows without a window class show up in the window picker**: an app that names no window class, as Gamescope can, was left out of the rule editor's window picker even though PlasmaZones places it. It is now listed by its title and can be picked for a Title condition. The modes that need a window class show it greyed out with a hint to match it by title. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 - **A window class picked from the window picker matches the window**: the picker offered only the last part of a window's class, such as "org.kde.konsole", while a Window Class condition compares the whole class KWin reports, such as "konsole org.kde.konsole", so a picked class set to equal never matched. The picker now offers the whole class. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 - **The Echo pointer trail no longer leaves a black box over some apps**: moving the pointer over an app that supplies its own cursor image, as Steam and VLC do, turned the whole area around the Echo trail black with the echoes drawn inside it. The trail now draws over those apps the same way it does everywhere else. ([#1164](https://github.com/fuddlesworth/PlasmaZones/pull/1164))
+- **Layout rules follow a monitor that rotates or changes resolution**: a layout chosen by a rule about the monitor's orientation stayed on the old layout after the monitor was rotated, until something unrelated changed. It now switches as soon as the monitor does, and the same goes for the new resolution and aspect ratio conditions. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
 
 ## [3.5.3] - 2026-10-24
 

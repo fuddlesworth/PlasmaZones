@@ -123,6 +123,12 @@ QString RuleModel::fieldLabel(PhosphorRules::Field field)
         return PhosphorI18n::tr("Tiled window count");
     case Field::ScreenOrientation:
         return PhosphorI18n::tr("Screen orientation");
+    case Field::ScreenWidth:
+        return PhosphorI18n::tr("Screen width");
+    case Field::ScreenHeight:
+        return PhosphorI18n::tr("Screen height");
+    case Field::ScreenAspectRatio:
+        return PhosphorI18n::tr("Aspect ratio");
     case Field::ActiveLayout:
         return PhosphorI18n::tr("Active layout");
     case Field::ColorScheme:

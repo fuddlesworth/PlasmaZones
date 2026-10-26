@@ -785,6 +785,28 @@ private:
     void reconcileActiveAssignments();
 
     /**
+     * @brief Queue @ref reconcileActiveAssignments for the next event-loop pass.
+     *
+     * Compressed under @ref m_reconcileAssignmentsPending, so a burst of
+     * triggers in one turn reconciles once, and gated on m_shuttingDown. The
+     * one entry point for every input that moves an assignment verdict without
+     * an explicit assignment write: a rule-set change, a colour-scheme flip,
+     * and a screen whose shape (orientation, resolution, scale) changed.
+     */
+    void scheduleReconcileActiveAssignments();
+
+    /**
+     * @brief Queue a refresh of the overlay's context-rule state (lock state and
+     *        shown overlay properties) for the next event-loop pass.
+     *
+     * For a non-rule-set input that moves context verdicts the overlay has
+     * already applied. Deferred because the refresh can reload overlay shader
+     * items, and the triggers (a palette-change event, a screen-geometry
+     * change) are still being delivered when they fire.
+     */
+    void scheduleContextOverlayRefresh();
+
+    /**
      * @brief Recompute each effective screen's active assignment id, publish the
      *        result, and return the screens whose id changed.
      *
@@ -1560,13 +1582,14 @@ private:
     // edits diff empty and only external rule edits apply.
     bool m_reconcileAssignmentsPending = false;
 
-    // Compression latch for the deferred colour-scheme overlay refresh
-    // (init_engines.cpp). Separate from m_reconcileAssignmentsPending on purpose: the
-    // two coalesce independent work off different signals, and sharing one flag let
-    // whichever fired first in an event-loop turn swallow the other's pass. The refresh is deferred rather than run
-    // inline because it can recreate QQuickWindows while the palette-change event that triggered it is still being
-    // delivered.
-    bool m_colorSchemeRefreshPending = false;
+    // Compression latch for the deferred context overlay refresh
+    // (scheduleContextOverlayRefresh, fed by the colour-scheme flip and screen-shape
+    // changes). Separate from m_reconcileAssignmentsPending on purpose: the two
+    // coalesce independent work, and sharing one flag let whichever fired first in an
+    // event-loop turn swallow the other's pass. The refresh is deferred rather than run
+    // inline because it can recreate QQuickWindows while the event that triggered it is
+    // still being delivered.
+    bool m_contextOverlayRefreshPending = false;
 
     // Raised (RAII, via QScopedValueRollback) around autotile.cpp's bulk assignment
     // writes so reconcileActiveAssignments early-returns instead of running a full

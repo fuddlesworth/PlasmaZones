@@ -473,22 +473,7 @@ void Daemon::initEnginesAndWiring()
     // edits (D-Bus setAllRules / file reload) still move windows. The
     // pending flag compresses a mutation burst (KCM batch) into one pass.
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
-        if (m_reconcileAssignmentsPending) {
-            return;
-        }
-        m_reconcileAssignmentsPending = true;
-        QTimer::singleShot(0, this, [this]() {
-            m_reconcileAssignmentsPending = false;
-            // A rule edit landing in the same event-loop turn as stop()
-            // leaves this single-shot queued past teardown; without the gate
-            // a non-empty diff would drive a full assignment-apply pass on a
-            // stopped daemon (m_layoutAdaptor is Qt-parented and outlives
-            // the per-sender connection sweep).
-            if (m_shuttingDown) {
-                return;
-            }
-            reconcileActiveAssignments();
-        });
+        scheduleReconcileActiveAssignments();
     });
 
     // A system colour-scheme flip changes Field::ColorScheme rule verdicts
@@ -533,28 +518,8 @@ void Daemon::initEnginesAndWiring()
             // Its OWN latch rather than the reconcile's: sharing that flag would
             // let a rule edit landing in the same turn swallow the scheme flip's
             // refresh entirely and leave a visible overlay on the old palette.
-            if (!m_colorSchemeRefreshPending) {
-                m_colorSchemeRefreshPending = true;
-                QTimer::singleShot(0, this, [this]() {
-                    m_colorSchemeRefreshPending = false;
-                    if (m_shuttingDown) {
-                        return;
-                    }
-                    m_overlayService->refreshContextLockState();
-                    m_overlayService->refreshOverlayPropertiesIfShown();
-                });
-            }
-            if (m_reconcileAssignmentsPending) {
-                return;
-            }
-            m_reconcileAssignmentsPending = true;
-            QTimer::singleShot(0, this, [this]() {
-                m_reconcileAssignmentsPending = false;
-                if (m_shuttingDown) {
-                    return;
-                }
-                reconcileActiveAssignments();
-            });
+            scheduleContextOverlayRefresh();
+            scheduleReconcileActiveAssignments();
         }));
 
     // Deleting a layout moves resolved assignments without touching a single
