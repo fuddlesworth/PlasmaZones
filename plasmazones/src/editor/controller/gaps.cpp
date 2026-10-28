@@ -100,8 +100,7 @@ void EditorController::setUseFullScreenGeometryDirect(bool enabled)
     m_useFullScreenGeometry = enabled;
     // The area zones occupy grows or shrinks by the panels, and the
     // reference fixed zones are drawn against is that area, so it moves with
-    // it, the bounds override included.
-    refreshFixedBoundsOverride(currentLayoutJson());
+    // it.
     markUnsaved();
     Q_EMIT useFullScreenGeometryChanged();
     republishTargetScreenSize(previous);
@@ -131,16 +130,8 @@ void EditorController::setFixedGeometryInDevicePixelsDirect(bool enabled)
         ensureTargetScreenScale();
     }
     // The fixed zones keep their numbers and change unit, so the reference
-    // they are drawn against moves: the device-pixel scaling below, and the
-    // bounds override, which was measured in the old unit and can come or go
-    // (a device-pixel layout that fills a scaled screen overflows it read as
-    // logical pixels). The override is re-derived from the zones as they
-    // stand, not restored from before the toggle, on undo and redo alike: it
-    // is a function of the zones, the unit and the screen, and the zones may
-    // have been edited since. So toggling twice returns the unit but can pin
-    // a different override than the layout had, which matches what a save
-    // and reload of those zones would show.
-    refreshFixedBoundsOverride(currentLayoutJson());
+    // they are drawn against moves by the device-pixel scaling, and the
+    // zones with it.
     markUnsaved();
     Q_EMIT fixedGeometryInDevicePixelsChanged();
     republishTargetScreenSize(previous);
@@ -235,13 +226,12 @@ QSize EditorController::targetLogicalScreenSize() const
 
 QSizeF EditorController::targetLogicalScreenSizeF() const
 {
-    // A layout whose fixed zones overflow the area below pins the reference
-    // to that overflow (refreshFixedBoundsOverride), so the canvas shows every
-    // fixed zone instead of squashing the ones past the edge. A layout that
-    // fits is drawn against the live area, whatever size it was authored for.
-    if (m_layoutBoundsOverride.isValid()) {
-        return m_layoutBoundsOverride;
-    }
+    // Always the live area, whatever size the layout was authored for, so a
+    // canvas pixel is a screen pixel in fullscreen editing and the windowed
+    // canvas is that same picture scaled. Fixed zones that overflow the area
+    // draw past the canvas edge, where the daemon clips them at the screen
+    // edge, rather than the whole layout being shrunk to fit a canvas that
+    // then no longer matches the screen (issue #1167).
     const QSize full = targetFullLogicalScreenSize();
     // Zones occupy the usable area unless the layout covers the full screen,
     // which is the area the canvas shows and the daemon lays fixed zones out
@@ -288,12 +278,8 @@ void EditorController::setInsets(int left, int top, int right, int bottom)
     // zones are drawn against unless the layout covers the full screen. They
     // land asynchronously from refreshUsableAreaInsets(), after a screen
     // switch, a change to the target screen's geometry or a panel moving on
-    // it, so this is where that reference, and the bounds override measured
-    // against it, catch up.
+    // it, so this is where that reference catches up.
     if (!m_useFullScreenGeometry) {
-        if (m_editorMode == ModeLayout) {
-            refreshFixedBoundsOverride(currentLayoutJson());
-        }
         republishTargetScreenSize(previous);
     }
 }
