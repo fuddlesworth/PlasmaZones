@@ -272,11 +272,12 @@ public:
     bool useFullScreenGeometry() const;
     bool fixedGeometryInDevicePixels() const;
     int aspectRatioClass() const;
-    /// The reference size fixed-zone numbers are drawn against: the fixed-zone
-    /// bounds override when one is pinned, else the area zones occupy on the
-    /// target screen (its usable area unless the layout covers the full
-    /// screen). Logical pixels, scaled to the output's device pixels when the
-    /// layout counts fixed geometry in device pixels.
+    /// The reference size fixed-zone numbers are drawn against: the area zones
+    /// occupy on the target screen (its usable area unless the layout covers
+    /// the full screen), never the layout's own extent, so fixed zones that
+    /// overflow it draw past the canvas edge. Logical pixels, scaled to the
+    /// output's device pixels when the layout counts fixed geometry in device
+    /// pixels.
     QSize targetScreenSize() const;
     int insetLeft() const;
     int insetTop() const;
@@ -836,16 +837,12 @@ private:
     /// The target's whole logical rect size, before insets and the override:
     /// the virtual screen's, else the physical monitor's.
     QSize targetFullLogicalScreenSize() const;
-    /// targetScreenSize() before the device-pixel scaling: the fixed-zone
-    /// bounds override, else the occupied area of the virtual screen, else
-    /// of the physical one.
+    /// targetScreenSize() before the device-pixel scaling: the occupied area
+    /// of the virtual screen, else of the physical one.
     QSize targetLogicalScreenSize() const;
-    /// targetLogicalScreenSize() unrounded, so the device-pixel scaling of a
-    /// fractional override rounds once.
+    /// targetLogicalScreenSize() unrounded, so the device-pixel scaling
+    /// rounds once.
     QSizeF targetLogicalScreenSizeF() const;
-    /// Re-derive m_layoutBoundsOverride for @p layoutObj against the target
-    /// screen (see the load path's note), in logical units.
-    void refreshFixedBoundsOverride(const QJsonObject& layoutObj);
     /// The layout as saveLayout() sends it, built from the editor's state.
     QJsonObject currentLayoutJson() const;
     /// Publish targetScreenSize() after anything it depends on changed:
@@ -1117,16 +1114,6 @@ private:
     /// Cached VS geometry, positioned relative to its physical monitor's
     /// origin (valid when m_targetScreen is virtual).
     QRect m_virtualScreenRect;
-    /// Fixed-zone bounds override, in logical pixels. Pinned only when the
-    /// layout's fixed zones overflow the area they would occupy on the target
-    /// screen (see refreshFixedBoundsOverride), and then it takes precedence
-    /// over that area in targetLogicalScreenSize(). Invalid otherwise, which
-    /// is every relative-only layout and every fixed layout that fits.
-    /// Re-derived from the current zones when one of its inputs changes (a
-    /// load, the target's geometry or insets, the full-screen or unit
-    /// setting), and left pinned between those, so a zone dragged past the
-    /// edge does not resize the canvas under the drag.
-    QSizeF m_layoutBoundsOverride;
     int m_insetLeft = 0;
     int m_insetTop = 0;
     int m_insetRight = 0;

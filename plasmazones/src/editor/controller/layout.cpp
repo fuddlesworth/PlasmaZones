@@ -17,7 +17,6 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "phosphor_i18n.h"
-#include <memory>
 #include <utility>
 #include <QDBusMessage>
 #include <QGuiApplication>
@@ -212,19 +211,15 @@ void EditorController::applyTargetScreen(const QString& screenName, bool forceLa
     // one if the incoming layout counts device pixels.
     m_targetScreenScale = 0.0;
     m_targetScreenPixelSize = QSize();
-    // Clear the per-layout override — the previous layout's bbox doesn't
-    // apply to the new screen. loadLayout below pins it again if the incoming
-    // layout's fixed zones overflow this screen; createNewLayout never does.
-    m_layoutBoundsOverride = QSizeF();
 
     Q_EMIT targetScreenChanged();
     refreshUsableAreaInsets();
 
     // Defer targetScreenSizeChanged + setReferenceScreenSize to
     // loadLayout/createNewLayout, which know the final reference size
-    // (fixed-zone bounding box for fixed layouts; physical/VS size
-    // otherwise). Emitting here would make QML react with the old
-    // zones against the new size before the layout swap completes.
+    // (the incoming layout's area and fixed-geometry unit decide it).
+    // Emitting here would make QML react with the old zones against the
+    // new size before the layout swap completes.
     if (!screenName.isEmpty() && m_layoutService) {
         QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
         qCDebug(lcEditor) << "applyTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
@@ -352,17 +347,12 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
     // Restore the screen context a failed load stranded: the switch ran
     // before the load (the load needs the target screen for per-screen
     // geometry), so on failure the still-loaded previous session gets its
-    // screen, bounds override and reference size back.
-    const auto restoreScreenOnFailure = [this](const QString& prevScreen, const QSizeF& prevBounds) {
+    // screen and, through setTargetScreenDirect, its reference size back.
+    const auto restoreScreenOnFailure = [this](const QString& prevScreen) {
         if (m_targetScreen == prevScreen) {
             return;
         }
         setTargetScreenDirect(prevScreen);
-        if (prevBounds.isValid() && prevBounds != m_layoutBoundsOverride) {
-            const QSize previous = targetScreenSize();
-            m_layoutBoundsOverride = prevBounds;
-            republishTargetScreenSize(previous);
-        }
     };
 
     if (launch.newTemplate) {
@@ -375,7 +365,6 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // Preview drops only once the template actually loaded, matching
         // the layoutId branch's failed-load-leaves-the-session contract.
         const QString prevScreen = m_targetScreen;
-        const QSizeF prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         if (loadScrollingTemplate(launch.templateId)) {
             setPreviewMode(false);
@@ -390,7 +379,7 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
             } else {
                 // A live session survives the failed load; put its screen
                 // context back.
-                restoreScreenOnFailure(prevScreen, prevBounds);
+                restoreScreenOnFailure(prevScreen);
             }
         }
     } else if (launch.createNew) {
@@ -409,12 +398,11 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // deleted or malformed layout leaves the current session's mode,
         // preview and — via the restore — screen context untouched.
         const QString prevScreen = m_targetScreen;
-        const QSizeF prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         if (loadLayout(launch.layoutId)) {
             setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
         } else {
-            restoreScreenOnFailure(prevScreen, prevBounds);
+            restoreScreenOnFailure(prevScreen);
         }
     } else {
         // Plain screen shape edits that screen's assigned LAYOUT. The mode
@@ -644,7 +632,6 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     if (m_fixedGeometryInDevicePixels) {
         ensureTargetScreenScale();
     }
-    m_layoutBoundsOverride = QSizeF();
 
     Q_EMIT targetScreenChanged();
     refreshUsableAreaInsets();
@@ -659,12 +646,6 @@ void EditorController::refreshTargetScreenGeometry()
     m_targetScreenPixelSize = QSize();
     if (m_fixedGeometryInDevicePixels) {
         ensureTargetScreenScale();
-    }
-    // The override was measured against the old geometry. Template mode
-    // holds none (beginTemplateSession dropped it) and must not grow one
-    // from the layout session it keeps loaded underneath.
-    if (m_editorMode == ModeLayout) {
-        refreshFixedBoundsOverride(currentLayoutJson());
     }
     // Async: setInsets republishes again when the replies land.
     refreshUsableAreaInsets();
@@ -682,8 +663,7 @@ void EditorController::onDaemonAvailableGeometryChanged(const QString& screenId)
 {
     if (!m_targetScreen.isEmpty() && screenId == m_targetScreen) {
         // Async; the replies reach setInsets, which republishes the
-        // reference and re-derives the bounds override only when the insets
-        // really moved.
+        // reference only when the insets really moved.
         refreshUsableAreaInsets();
     }
 }
@@ -727,12 +707,9 @@ void EditorController::createNewLayout()
         m_undoController->clear();
     }
 
-    // A fresh layout has no fixed-zone bounding box to reference. Drop any
-    // override from the previous layout so QML normalizes against the
-    // screen geometry that setTargetScreen already cached — no D-Bus
-    // round-trip needed.
+    // QML normalizes against the screen geometry setTargetScreen already
+    // cached, so no D-Bus round-trip is needed.
     const QSize prevSize = targetScreenSize();
-    m_layoutBoundsOverride = QSizeF();
 
     m_layoutId = QUuid::createUuid().toString();
     m_layoutName = PhosphorI18n::tr("New Layout");
@@ -753,10 +730,9 @@ void EditorController::createNewLayout()
     m_aspectRatioClass = 0;
 
     // Publish the screen-derived reference size if it moved: the previous
-    // layout had overridden it to a fixed-zone bounding box, or counted its
-    // fixed sizes in device pixels (or covered the full screen), each of
-    // which the reset above undoes, or setTargetScreen deferred the
-    // emission to us.
+    // layout counted its fixed sizes in device pixels or covered the full
+    // screen, either of which the reset above undoes, or setTargetScreen
+    // deferred the emission to us.
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
         Q_EMIT targetScreenSizeChanged();
@@ -858,14 +834,12 @@ bool EditorController::loadLayout(const QString& layoutId)
     // screen — a 16:9 layout whose fixed zones only reach 2560px wide yields
     // a 2560x2160 bbox and renders 1.5x too wide (discussion #593).
     //
-    // refreshFixedBoundsOverride clears the override first so
-    // targetLogicalScreenSize() reports the live screen/VS area, then re-pins
-    // only when the layout's fixed zones genuinely exceed it (e.g. a
-    // 3840x2160 layout on a 3840x2126 panel-reduced screen).
-    // fixedZoneReferenceGeometry() encodes exactly this "use the recalc
-    // geometry unless the bbox overflows it" rule, the same helper the
-    // preview path uses, seeded by recalculating a throwaway Layout against
-    // the live area first.
+    // That holds when the zones overflow the area too: the reference stays
+    // the live area, and the overflowing zones draw past the canvas edge just
+    // as the daemon clips them at the screen edge. Pinning the reference to
+    // the overflow instead shrank the whole layout to fit the canvas, which
+    // showed a layout the daemon never produces and broke the 1:1 canvas of
+    // fullscreen editing (issue #1167).
     const QSize prevSize = targetScreenSize();
     // The unit of the fixed numbers and the area they are laid out in go
     // first, since the reference is measured in them. Their change signals
@@ -879,7 +853,6 @@ bool EditorController::loadLayout(const QString& layoutId)
     const bool oldUseFullScreen = m_useFullScreenGeometry;
     m_useFullScreenGeometry =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
-    refreshFixedBoundsOverride(layoutObj);
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
         // Publish the new reference size *before* setZones below so the
@@ -1200,33 +1173,6 @@ QJsonObject EditorController::currentLayoutJson() const
     PhosphorZones::LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
                                                     m_allowedActivities);
     return layoutObj;
-}
-
-void EditorController::refreshFixedBoundsOverride(const QJsonObject& layoutObj)
-{
-    // Clear the override first so the size below is the live screen's (or the
-    // virtual screen's), then re-pin only when the layout's fixed zones
-    // genuinely exceed it — see the load path's note. Logical units
-    // throughout: the throwaway layout is recalculated at the target output's
-    // scale, so a layout counting device pixels has its zones divided by it
-    // before they are measured against the logical screen.
-    m_layoutBoundsOverride = QSizeF();
-    const QSizeF screenSize = targetLogicalScreenSizeF();
-    std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-    if (tmp && !screenSize.isEmpty()) {
-        tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize), m_targetScreenScale);
-        const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
-        // Pinned on overflow only, and only on the overflowing axis: a
-        // layout wider than the screen but no taller keeps the screen's
-        // height, or the canvas (which fills the screen's area) would
-        // stretch its zones vertically by the bbox's shortfall. Compared in
-        // whole pixels so a sub-pixel overflow (a device-pixel extent divided
-        // by a fractional scale) does not pin anything.
-        const QSizeF bounds = refGeo.size().expandedTo(screenSize);
-        if (!refGeo.isEmpty() && bounds.toSize() != screenSize.toSize()) {
-            m_layoutBoundsOverride = bounds;
-        }
-    }
 }
 
 void EditorController::republishTargetScreenSize(const QSize& previous)

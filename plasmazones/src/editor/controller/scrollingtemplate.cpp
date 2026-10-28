@@ -92,19 +92,15 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
     // Same rationale as the setter's own clear, applied per session.
     dropPendingTargetScreen();
 
-    // A template has no fixed-zone reference, so the layout bounding box a
-    // previous FIXED-geometry layout left behind is never the right basis for
-    // it. targetScreenSize() prefers that override, and templatePreviewVertical
-    // resolves the Auto axis from whatever it returns, so a template launched
-    // for the SAME screen an editing session already targeted would take its
-    // strip direction from the old layout's bounding box instead of the
-    // monitor. Neither clearer on the launch path runs in that case, because
+    // A template counts nothing in pixels, so the device-pixel unit a previous
+    // fixed-geometry layout left behind goes. It scales targetScreenSize(),
+    // and templatePreviewVertical resolves the Auto axis from whatever that
+    // returns. The launch path does not clear it when a template is launched
+    // for the SAME screen an editing session already targeted, because
     // applyLaunch's screen switch early-returns when the target is unchanged.
-    // The device-pixel unit goes for the same reason: it scales
-    // targetScreenSize() too, and a template counts nothing in pixels. Each
-    // route back into layout mode reads both again from the layout it loads.
+    // Each route back into layout mode reads it again from the layout it
+    // loads.
     const QSize previousSize = targetScreenSize();
-    m_layoutBoundsOverride = QSizeF();
     const bool oldFixedUnit = std::exchange(m_fixedGeometryInDevicePixels, false);
     if (oldFixedUnit) {
         Q_EMIT fixedGeometryInDevicePixelsChanged();

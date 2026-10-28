@@ -163,7 +163,7 @@ EditorController::EditorController(QObject* parent)
     subscribe(iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
 
     // The target screen's geometry is cached at switch time (virtual screen
-    // rect, scale, insets, and the bounds override measured against them), so
+    // rect, scale and insets), so
     // a change under an unchanged target has to reach it some other way. The
     // daemon announces resolution, scale and subdivision changes, the only
     // source for a virtual screen or a fractional scale.
