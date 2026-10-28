@@ -100,8 +100,8 @@ Item {
     property bool locked: false
     /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
     /// clicks during the hide-animation fade-out window (the shell stays
-    /// mapped and briefly input-accepting while shaders or animations
-    /// are enabled — effects-gated keepMappedOnHide) can fire
+    /// mapped and briefly input-accepting until the slot's hide leg
+    /// completes) can fire
     /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
     /// lands at the QWindow level. Without this, C++ re-runs the dismiss
     /// path (hideLayoutPicker) for an already-dismissed picker per

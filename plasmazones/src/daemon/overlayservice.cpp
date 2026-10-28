@@ -473,7 +473,7 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.windowProperties = std::move(params.windowProperties);
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
-    cfg.keepMappedOnHide = params.keepMappedOnHide;
+    cfg.animateRoot = params.animateRoot;
     // SurfaceConfig::initialSize uses isEmpty() as the "unset" sentinel -
     // forwarding the param verbatim preserves that contract (empty here →
     // empty there → fall back to screen geometry inside surface.cpp).
@@ -532,39 +532,37 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         }
     }
 
-    // keepMappedOnHide is gated on whether any visual effect is enabled.
-    // The keep-mapped lifecycle exists so shader / animation transitions
-    // do not pay the wl_surface unmap + RHI swapchain teardown cost on
-    // every dismiss; with both shaders and animations disabled there is
-    // no transition to amortize, and keeping the shell mapped means a
-    // fullscreen layer surface is composited above every normal toplevel for
-    // the daemon's lifetime, which is a cost an idle daemon should not pay
-    // when it is drawing nothing. That is the whole rationale for the gate.
-    // It is deliberately NOT a claim about masking the compositor's own
-    // translucency-while-moving effect - the PassiveShell role note explains
-    // why that mechanism was never real. Effects-on path
-    // keeps the warm cache; effects-off path lets the next
-    // syncSurfaceState !anyVisible transition unmap the wl_surface.
+    // The shell unmaps whenever no slot is visible (keepMappedOnHide left at
+    // its false default). syncPassiveShellSurfaceState only drives the hide
+    // once the LAST slot's own hide leg has completed, so no fade-out is cut
+    // short; what an unmap costs is a remap and swapchain rebuild on the next
+    // show.
     //
-    // CREATION-TIME ONLY: the gate is evaluated once here and baked into the
-    // surface's config for its whole life. Toggling shaders or animations at
-    // runtime does not re-configure live shells — a shell created with
-    // effects on keeps its mapped fullscreen surface after both are turned
-    // off, and one created with effects off pays the unmap/teardown cost on
-    // transitions until it is next recreated (hot-plug, VS reconfig). No
-    // toggle handler re-creates shells today; a toggle takes effect on the
-    // next natural shell creation.
-    const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
-    const bool animationsOn = m_settings && m_settings->animationsEnabled();
-    const bool keepMapped = shadersOn || animationsOn;
-
+    // It must not stay mapped while idle. The shell is a transparent,
+    // output-sized surface on the wlr Overlay layer, above every toplevel,
+    // fullscreen ones included. KWin's direct-scanout candidate walk starts
+    // at the top of the stack, finds a visible non-opaque item covering the
+    // whole output, and gives up on scanout for everything beneath it. A
+    // mapped idle shell therefore forced composition of fullscreen games and
+    // video on every output for the daemon's whole lifetime (Discussion
+    // #1169), on top of compositing an empty surface over every frame.
+    //
+    // This used to be gated on shaders or animations being enabled, but the
+    // shader half of that gate (ShaderRegistry::shadersEnabled) is constant
+    // true, so the shell was in practice always kept mapped.
+    //
+    // animateRoot is off because every visible transition belongs to a slot,
+    // each animated through m_surfaceAnimator under its own per-content role.
+    // The shell's role has no config of its own, so a root leg would run the
+    // animator's default fade on the whole window, multiplying each slot's
+    // configured show by a second fade-in nobody asked for.
     auto* surface = createLayerSurface({.qmlUrl = qmlUrl,
                                         .screen = physScreen,
                                         .role = role,
                                         .windowType = windowType,
                                         .anchorsOverride = anchorsOverride,
                                         .marginsOverride = marginsOverride,
-                                        .keepMappedOnHide = keepMapped,
+                                        .animateRoot = false,
                                         .initialSize = initialSize});
     if (!surface) {
         return nullptr;

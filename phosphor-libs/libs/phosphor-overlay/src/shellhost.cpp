@@ -213,11 +213,15 @@ void ShellHost::syncSurfaceState(const QString& screenId, const SurfaceStateWant
     //             stop being composited every frame when idle opt
     //             into the latter at creation time.
     //
-    // The shell surface's role typically has no registered animator
-    // Config, so the animator's cancel / beginHide calls inside
-    // Surface::hide() collapse to no-ops on this surface. Per-slot
-    // tracking lives on slot animator targets (different keys), so
-    // hiding the shell surface does not interfere with slot state.
+    // A shell whose slots carry every visible transition should also set
+    // SurfaceConfig::animateRoot=false, or Surface::show()/hide() run the
+    // animator's root leg on the whole window on top of the slots' own.
+    // Surface still dispatches ISurfaceAnimator::cancel on both edges,
+    // and that retires every animation keyed on the surface, slot tracks
+    // included. It disturbs nothing here only because of when the edges
+    // fire: show() runs on the first slot to appear and hide() after the
+    // last slot's hide leg has completed, so no slot track is in flight
+    // at either point.
     //
     // The Qt::WindowTransparentForInput toggle below is independent
     // of show/hide and flips directly on every input-grab transition

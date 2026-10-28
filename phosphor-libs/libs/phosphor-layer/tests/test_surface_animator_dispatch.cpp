@@ -15,6 +15,8 @@
  *   - cancel fires on supersession (show-while-hiding, hide-while-showing)
  *   - keepMappedOnHide preserves QQuickWindow visibility across hide
  *   - SurfaceConfig.keepMappedOnHide=false (default) calls window->hide()
+ *   - animateRoot=false skips the root legs and the unmap warning but
+ *     still dispatches cancel
  */
 
 #include <PhosphorLayer/PhosphorLayer.h>
@@ -25,6 +27,7 @@
 
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -84,13 +87,14 @@ Q_SIGNALS:
     void fire();
 };
 
-SurfaceConfig buildConfig(QScreen* screen, bool keepMapped = false)
+SurfaceConfig buildConfig(QScreen* screen, bool keepMapped = false, bool animateRoot = true)
 {
     SurfaceConfig cfg;
     cfg.role = Testing::makeModalRole();
     cfg.contentItem = std::make_unique<QQuickItem>();
     cfg.screen = screen;
     cfg.keepMappedOnHide = keepMapped;
+    cfg.animateRoot = animateRoot;
     cfg.debugName = QStringLiteral("animator-dispatch-test");
     return cfg;
 }
@@ -362,6 +366,87 @@ private Q_SLOTS:
             }
         }
         QVERIFY(sawCancel);
+    }
+
+    /// animateRoot=false: show and hide never reach beginShow / beginHide,
+    /// so the root item is left alone, while the window still maps and
+    /// unmaps and cancel still fires on each transition (it retires the
+    /// consumer's own per-item animations keyed on the surface).
+    void animateRootOff_skips_root_legs_but_still_cancels()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
+        surface->show();
+        QVERIFY(surface->window()->isVisible());
+        QCOMPARE(surface->window()->contentItem()->opacity(), 1.0);
+        surface->hide();
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+        QVERIFY(!surface->window()->isVisible());
+        surface->show();
+        QVERIFY(surface->window()->isVisible());
+
+        int cancels = 0;
+        for (const auto& call : anim.m_calls) {
+            QVERIFY2(call.kind == RecordingAnimator::Call::Kind::Cancel,
+                     "animateRoot=false must not dispatch a root show or hide leg");
+            ++cancels;
+        }
+        // One per transition: show, hide, show.
+        QCOMPARE(cancels, 3);
+    }
+
+    /// animateRoot=false with the unmapping lifecycle has no root fade for
+    /// the unmap to cut short, so the hide warning must stay silent.
+    void animateRootOff_unmapping_hide_does_not_warn()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("dispatched beginHide on an animator")));
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
+        surface->show();
+        surface->hide();
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+    }
+
+    /// Control for the test above: the default root-animated config still
+    /// warns on the same sequence, so the silence there is the flag's doing.
+    void animateRootOn_unmapping_hide_warns()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dispatched beginHide on an animator")));
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false));
+        surface->show();
+        surface->hide();
+    }
+
+    /// animateRoot=false must not weaken teardown: destruction still
+    /// cancels every animation keyed on the surface.
+    void animateRootOff_destruction_still_cancels()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        Surface* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
+        surface->show();
+        anim.m_calls.clear();
+
+        delete surface;
+
+        QCOMPARE(anim.m_calls.size(), std::size_t(1));
+        QCOMPARE(anim.m_calls.front().kind, RecordingAnimator::Call::Kind::Cancel);
     }
 };
 

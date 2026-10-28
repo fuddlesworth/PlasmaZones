@@ -170,7 +170,7 @@ struct LayerSurfaceParams
         std::nullopt; ///< Overrides the role's anchors (virtual-screen positioning).
     std::optional<QMargins> marginsOverride =
         std::nullopt; ///< Overrides the role's margins (virtual-screen positioning).
-    bool keepMappedOnHide = false; ///< See SurfaceConfig::keepMappedOnHide.
+    bool animateRoot = true; ///< See SurfaceConfig::animateRoot.
     /// Initial swapchain size committed during warm-up. Empty (default)
     /// → screen geometry, which guarantees a non-zero buffer for every
     /// anchor configuration but allocates a full-screen Vulkan swapchain

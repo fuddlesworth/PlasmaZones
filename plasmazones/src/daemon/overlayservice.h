@@ -542,12 +542,10 @@ private:
      * This helper does a sacrificial show+hide on the surface so the
      * compositor maps the wl_surface, Vulkan initialises the swapchain,
      * the QSGLayer renders at least one frame, and the surface lands
-     * back in State::Hidden. The post-hide mapped guarantee is
-     * conditional: SurfaceConfig::keepMappedOnHide is effects-gated
-     * (createWarmedOsdSurface), so the wl_surface stays alive across
-     * the prime's hide only while shaders or animations are enabled;
-     * with both off the prime still warms the pipelines but the
-     * wl_surface unmaps after the hide.
+     * back in State::Hidden. The prime's hide unmaps the wl_surface
+     * (the passive shell does not keep mapped on hide, see
+     * createWarmedOsdSurface), so what survives it is the QML scene and
+     * its scene-graph resources, not the swapchain.
      *
      * Surfaces are tracked in m_primingSurfaces so a user-triggered show
      * landing during the prime window can cancel the queued hide via
@@ -708,9 +706,8 @@ public Q_SLOTS:
     // slot.visible=false and re-syncs surface state. The C++ slot never
     // destroys the QQuickWindow - that would re-introduce the blocking
     // ~QQuickWindow Vulkan teardown the warm-surface design avoids.
-    // keepMappedOnHide is conditional (createWarmedOsdSurface): mapped
-    // across hides only while shaders or animations are enabled; with
-    // effects off the next syncSurfaceState unmaps the wl_surface.
+    // Once no slot is visible the next syncSurfaceState unmaps the
+    // wl_surface (see createWarmedOsdSurface).
     void hideLayoutPicker() override;
 
     // Shader error reporting from QML
@@ -724,8 +721,8 @@ private Q_SLOTS:
     /// finds the matching m_screenStates entry, and runs an animated
     /// slot-hide via SurfaceAnimator::beginHide on (shellSurface,
     /// osdSlotItem) - only the OSD slot Item's opacity animates to 0;
-    /// the shell wl_surface itself stays mapped across the hide while
-    /// shaders or animations are enabled (effects-gated keepMappedOnHide).
+    /// the shell wl_surface stays mapped for the hide and unmaps after
+    /// it only if no other slot is visible.
     void onOsdDismissRequested();
 
     /// Receiver for the shell's `snapAssistDismissRequested` QML signal
@@ -1404,9 +1401,8 @@ private:
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot
-    /// visibility. The shell's keepMappedOnHide is effects-gated
-    /// (createWarmedOsdSurface): the window is kept mapped on hide only
-    /// while shaders or animations are enabled. Surface::show()/hide()
+    /// visibility: mapped while any slot is visible, unmapped once none
+    /// is (see createWarmedOsdSurface). Surface::show()/hide()
     /// flip Qt::WindowTransparentForInput. The flip only happens
     /// through Surface's state machine, not through slot-level
     /// animator hides - without this helper the shell never re-enters
@@ -1543,10 +1539,9 @@ private:
      * Common pattern for ensurePassiveShellFor, its only caller today:
      * (1) caller builds a per-instance
      * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
-     * (2) this helper calls createLayerSurface with keepMappedOnHide
-     * gated on effects (kept mapped only while shaders or animations
-     * are enabled; with both off the next syncSurfaceState unmaps the
-     * wl_surface). Dismiss wiring is NOT done here: per-content
+     * (2) this helper calls createLayerSurface without keepMappedOnHide,
+     * so the next syncSurfaceState with no slot visible unmaps the
+     * wl_surface. Dismiss wiring is NOT done here: per-content
      * auto-dismiss flows through the shell window's per-slot signals
      * (`osdDismissRequested` et al.), which wirePassiveShellSlots
      * connects to the matching OverlayService slot (e.g.
