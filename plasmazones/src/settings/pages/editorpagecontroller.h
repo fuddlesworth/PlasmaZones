@@ -54,6 +54,10 @@ class EditorPageController : public PhosphorControl::PageController
     Q_PROPERTY(
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
 
+    // Editor canvas veil
+    Q_PROPERTY(
+        qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
+
 public:
     /// Reference parameter, not pointer: the Settings instance is required
     /// for every method on this controller and must not be null. Taking it
@@ -83,6 +87,7 @@ public:
     int snapOverrideModifier() const;
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
+    qreal backgroundOpacity() const;
 
     void setDuplicateShortcut(const QString& shortcut);
     void setSplitHorizontalShortcut(const QString& shortcut);
@@ -95,6 +100,7 @@ public:
     void setSnapOverrideModifier(int mod);
     void setFillOnDropEnabled(bool enabled);
     void setFillOnDropModifier(int mod);
+    void setBackgroundOpacity(qreal opacity);
 
     /// Restore every editor-page property to its ConfigDefaults value.
     Q_INVOKABLE void resetDefaults();
@@ -111,6 +117,7 @@ Q_SIGNALS:
     void snapOverrideModifierChanged();
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
+    void backgroundOpacityChanged();
 
     /// Generic "something changed" — SettingsController hooks this to its
     /// dirty-tracking slot. Emitted alongside every per-property NOTIFY.

@@ -2116,6 +2116,8 @@ public:
     void setFillOnDropEnabled(bool enabled) override;
     int fillOnDropModifier() const override;
     void setFillOnDropModifier(int mod) override;
+    qreal editorBackgroundOpacity() const override;
+    void setEditorBackgroundOpacity(qreal opacity) override;
 
     // Persistence
     void load() override;

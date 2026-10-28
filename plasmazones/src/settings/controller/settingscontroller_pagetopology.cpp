@@ -628,6 +628,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::editorSnappingGroup(), CD::overrideModifierKey()},
              {CD::editorFillOnDropGroup(), CD::enabledKey()},
              {CD::editorFillOnDropGroup(), CD::modifierKey()},
+             {CD::editorBackgroundGroup(), CD::opacityKey()},
          }},
     };
     return manifest;

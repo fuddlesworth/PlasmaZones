@@ -350,6 +350,8 @@ public:
     virtual void setFillOnDropEnabled(bool enabled) = 0;
     virtual int fillOnDropModifier() const = 0;
     virtual void setFillOnDropModifier(int mod) = 0;
+    virtual qreal editorBackgroundOpacity() const = 0;
+    virtual void setEditorBackgroundOpacity(qreal opacity) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
@@ -904,6 +906,7 @@ Q_SIGNALS:
     void editorSnapOverrideModifierChanged();
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
+    void editorBackgroundOpacityChanged();
     // Shader effects
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();

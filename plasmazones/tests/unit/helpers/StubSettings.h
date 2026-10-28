@@ -2672,6 +2672,21 @@ public:
         Q_EMIT fillOnDropModifierChanged();
         Q_EMIT settingsChanged();
     }
+    qreal editorBackgroundOpacity() const override
+    {
+        return m_editorBackgroundOpacity;
+    }
+    void setEditorBackgroundOpacity(qreal v) override
+    {
+        // Mirror the schema's clampDouble, as the real store would.
+        const qreal clamped =
+            qBound(ConfigDefaults::editorBackgroundOpacityMin(), v, ConfigDefaults::editorBackgroundOpacityMax());
+        if (qFuzzyCompare(1.0 + m_editorBackgroundOpacity, 1.0 + clamped))
+            return;
+        m_editorBackgroundOpacity = clamped;
+        Q_EMIT editorBackgroundOpacityChanged();
+        Q_EMIT settingsChanged();
+    }
     QStringList lockedScreens() const override
     {
         return m_lockedScreens;
@@ -3286,6 +3301,7 @@ private:
     int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
+    qreal m_editorBackgroundOpacity = ConfigDefaults::editorBackgroundOpacity();
     // Gaps — config-backed defaults routed through ConfigDefaults.
     int m_innerGap = ConfigDefaults::innerGap();
     int m_outerGap = ConfigDefaults::outerGap();

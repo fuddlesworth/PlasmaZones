@@ -273,6 +273,47 @@ SettingsFlickable {
                 }
             }
         }
+
+        // =================================================================
+        // APPEARANCE CARD
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: appearanceCard.implicitHeight
+
+            SettingsCard {
+                id: appearanceCard
+
+                anchors.fill: parent
+                headerText: i18n("Appearance")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Background opacity")
+                        description: i18n("Lower values let more of the desktop show through behind the editor")
+
+                        SettingsSlider {
+                            id: backgroundOpacitySlider
+
+                            accessibleName: i18n("Background opacity")
+                            from: 0
+                            to: 1
+                            stepSize: 0.01
+                            value: root.settingsBridge.backgroundOpacity
+                            formatValue: function (v) {
+                                return Math.round(v * 100) + "%";
+                            }
+                            onMoved: value => {
+                                return root.settingsBridge.backgroundOpacity = value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Keep inputs in sync with editorPage sub-controller properties
@@ -305,6 +346,11 @@ SettingsFlickable {
         function onSnapIntervalYChanged() {
             if (!snapIntervalYSlider.slider.pressed)
                 snapIntervalYSlider.value = root.settingsBridge.snapIntervalY;
+        }
+
+        function onBackgroundOpacityChanged() {
+            if (!backgroundOpacitySlider.slider.pressed)
+                backgroundOpacitySlider.value = root.settingsBridge.backgroundOpacity;
         }
 
         target: root.settingsBridge

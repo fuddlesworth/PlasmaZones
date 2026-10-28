@@ -474,6 +474,66 @@ ToolBar {
             }
         }
 
+        Kirigami.Separator {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // BACKGROUND OPACITY - a view preference, so unlike the sections
+        // above it stays available in preview and template mode
+        // ═══════════════════════════════════════════════════════════════
+        RowLayout {
+            id: backgroundSection
+
+            spacing: Kirigami.Units.smallSpacing
+            enabled: editorController !== null && editorController !== undefined
+
+            Kirigami.Icon {
+                source: "contrast"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                Accessible.ignored: true
+            }
+
+            Slider {
+                id: backgroundOpacitySlider
+
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                from: 0
+                to: 1
+                stepSize: 0.01
+                value: editorController ? editorController.backgroundOpacity : 0.7
+                Accessible.name: i18nc("@label", "Background opacity")
+                Accessible.description: i18nc("@info", "How much of the desktop shows through behind the editor")
+                ToolTip.visible: hovered
+                ToolTip.text: i18nc("@tooltip", "Background opacity. Lower it to see more of the desktop behind the editor.")
+                onMoved: {
+                    if (editorController)
+                        editorController.backgroundOpacity = value;
+                }
+
+                // Update when backgroundOpacity changes externally (a drag
+                // severs the declarative value binding)
+                Connections {
+                    function onBackgroundOpacityChanged() {
+                        if (!backgroundOpacitySlider.pressed)
+                            backgroundOpacitySlider.value = editorController.backgroundOpacity;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
+                }
+            }
+
+            Label {
+                text: i18nc("@info background opacity percentage", "%1%", Math.round(backgroundOpacitySlider.value * 100))
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                horizontalAlignment: Text.AlignRight
+                Accessible.name: i18nc("@info", "Background opacity: %1%", Math.round(backgroundOpacitySlider.value * 100))
+            }
+        }
+
         Item {
             Layout.fillWidth: true
         }

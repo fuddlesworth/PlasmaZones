@@ -753,6 +753,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
                         "keyboard-modifier value."),
          modifierOr(CD::fillOnDropModifier())},
     };
+
+    schema.groups[CD::editorBackgroundGroup()] = {
+        {CD::opacityKey(), CD::editorBackgroundOpacity(), QMetaType::Double,
+         QStringLiteral("How opaque the layout editor's background is. Lower values let more of the desktop and "
+                        "its windows show through behind the zones."),
+         clampDouble(CD::editorBackgroundOpacityMin(), CD::editorBackgroundOpacityMax())},
+    };
 }
 
 // ─── Exclusions + Animation + Decoration Window Filtering ───────────────────

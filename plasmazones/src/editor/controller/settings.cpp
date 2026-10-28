@@ -181,9 +181,21 @@ void EditorController::loadEditorSettings()
             labels->readBool(ConfigDefaults::fontStrikeoutKey(), ConfigDefaults::labelFontStrikeout());
     }
 
+    applyEditorOwnedSettings(*backend);
+
+    // Strip axis, read ONLY (the editor never writes a scrolling setting).
+    // Snapshotted from the same backend, and RE-snapshotted while the editor
+    // runs: reloadLiveConfig below is wired to the daemon's settingsChanged
+    // signal, so an axis authored in the settings app while the editor is
+    // open reaches the preview without a restart.
+    refreshScrollingStripAxisSnapshot(*backend);
+}
+
+void EditorController::applyEditorOwnedSettings(PhosphorConfig::IBackend& backend)
+{
     // Load editor snapping settings
     {
-        auto editorSnapping = backend->group(ConfigDefaults::editorSnappingGroup());
+        auto editorSnapping = backend.group(ConfigDefaults::editorSnappingGroup());
         bool gridEnabled =
             editorSnapping->readBool(ConfigDefaults::gridEnabledKey(), ConfigDefaults::editorGridSnappingEnabled());
         bool edgeEnabled =
@@ -213,7 +225,7 @@ void EditorController::loadEditorSettings()
 
     // Load app-specific keyboard shortcuts
     {
-        auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
+        auto shortcuts = backend.group(ConfigDefaults::editorShortcutsGroup());
         loadShortcutSetting(*shortcuts, ConfigDefaults::duplicateKey(), ConfigDefaults::editorDuplicateShortcut(),
                             m_editorDuplicateShortcut, [this]() {
                                 Q_EMIT editorDuplicateShortcutChanged();
@@ -237,7 +249,7 @@ void EditorController::loadEditorSettings()
 
     // Load fill-on-drop settings
     {
-        auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
+        auto fillOnDrop = backend.group(ConfigDefaults::editorFillOnDropGroup());
         bool fillOnDropEn = fillOnDrop->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::fillOnDropEnabled());
         if (m_fillOnDropEnabled != fillOnDropEn) {
             m_fillOnDropEnabled = fillOnDropEn;
@@ -251,12 +263,19 @@ void EditorController::loadEditorSettings()
         }
     }
 
-    // Strip axis, read ONLY (the editor never writes a scrolling setting).
-    // Snapshotted from the same backend, and RE-snapshotted while the editor
-    // runs: reloadScrollingStripAxis below is wired to the daemon's
-    // settingsChanged signal, so an axis authored in the settings app while
-    // the editor is open reaches the preview without a restart.
-    refreshScrollingStripAxisSnapshot(*backend);
+    // Load the canvas veil opacity. Clamped here because this backend reads
+    // the raw document, not through the schema's coercion.
+    {
+        auto background = backend.group(ConfigDefaults::editorBackgroundGroup());
+        const qreal opacity =
+            qBound(ConfigDefaults::editorBackgroundOpacityMin(),
+                   background->readDouble(ConfigDefaults::opacityKey(), ConfigDefaults::editorBackgroundOpacity()),
+                   ConfigDefaults::editorBackgroundOpacityMax());
+        if (!qFuzzyCompare(1.0 + m_backgroundOpacity, 1.0 + opacity)) {
+            m_backgroundOpacity = opacity;
+            Q_EMIT backgroundOpacityChanged();
+        }
+    }
 }
 
 void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend)
@@ -307,13 +326,25 @@ void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBacken
         refreshTemplatePreviewVertical();
 }
 
-void EditorController::reloadScrollingStripAxis()
+void EditorController::reloadLiveConfig()
 {
     // The debounced settingsChanged arm: re-read from a fresh backend (the
-    // daemon just rewrote the file) and let the snapshot's own change gates
+    // daemon just rewrote the file) and let each snapshot's own change gates
     // decide whether anything is announced.
     auto backend = PlasmaZones::createDefaultConfigBackend();
     refreshScrollingStripAxisSnapshot(*backend);
+    // The Editor.* groups too, so a change made on the settings app's Editor
+    // page while the editor is open shows up here, and the editor's next save
+    // does not write its stale copy back over it. Skipped while a local edit
+    // is still queued: the file then holds an older value than this process
+    // (a slider mid-drag, or the reload of our own previous write), and
+    // reading it back would undo the edit before the save lands. The queued
+    // save writes the editor's values and the daemon's reload of that write
+    // comes back through here once it is done. A settings-app change that
+    // lands inside that window loses to the queued save: last writer wins.
+    if (!m_editorSettingsSaveTimer.isActive()) {
+        applyEditorOwnedSettings(*backend);
+    }
 }
 
 void EditorController::refreshTemplatePreviewVertical()
@@ -463,6 +494,12 @@ bool EditorController::writeEditorSettingsToDisk()
         auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
         fillOnDrop->writeBool(ConfigDefaults::enabledKey(), m_fillOnDropEnabled);
         fillOnDrop->writeInt(ConfigDefaults::modifierKey(), m_fillOnDropModifier);
+    }
+
+    // Save the canvas veil opacity
+    {
+        auto background = backend->group(ConfigDefaults::editorBackgroundGroup());
+        background->writeDouble(ConfigDefaults::opacityKey(), m_backgroundOpacity);
     }
 
     if (!backend->sync()) {

@@ -171,4 +171,8 @@ P_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
 P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
 P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
+
+// Editor canvas veil.
+P_STORE_GET(qreal, editorBackgroundOpacity, editorBackgroundGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setEditorBackgroundOpacity, editorBackgroundGroup, opacityKey, editorBackgroundOpacityChanged)
 } // namespace PlasmaZones

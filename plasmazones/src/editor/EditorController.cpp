@@ -142,16 +142,16 @@ EditorController::EditorController(QObject* parent)
         subscribe(iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
 
-    // Strip-axis inputs follow the live config: the daemon's settingsChanged
-    // fires once per key group on a settings-app Save, so debounce the burst
-    // into one config re-read. Without this, a per-screen axis authored
-    // while the editor is open never reached the template preview until a
-    // restart (loadEditorSettings runs only from this constructor).
-    m_stripAxisReloadTimer.setSingleShot(true);
-    m_stripAxisReloadTimer.setInterval(250);
-    connect(&m_stripAxisReloadTimer, &QTimer::timeout, this, &EditorController::reloadScrollingStripAxis);
+    // The strip-axis inputs and the Editor.* groups follow the live config:
+    // the daemon's settingsChanged fires once per key group on a settings-app
+    // Save, so debounce the burst into one config re-read. Without this, what
+    // the settings app changed while the editor was open never reached it
+    // until a restart (loadEditorSettings runs only from this constructor).
+    m_configReloadTimer.setSingleShot(true);
+    m_configReloadTimer.setInterval(250);
+    connect(&m_configReloadTimer, &QTimer::timeout, this, &EditorController::reloadLiveConfig);
     subscribe(QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
-              &m_stripAxisReloadTimer, SLOT(start()));
+              &m_configReloadTimer, SLOT(start()));
 
     // Local read view of the scrolling templates, the template sibling of
     // m_localLayoutManager: instant template opens without the daemon, plus
@@ -459,6 +459,10 @@ int EditorController::fillOnDropModifier() const
 {
     return m_fillOnDropModifier;
 }
+qreal EditorController::backgroundOpacity() const
+{
+    return m_backgroundOpacity;
+}
 QString EditorController::targetScreen() const
 {
     return m_targetScreen;
@@ -609,6 +613,19 @@ void EditorController::setFillOnDropModifier(int modifier)
     if (m_fillOnDropModifier != modifier) {
         m_fillOnDropModifier = modifier;
         Q_EMIT fillOnDropModifierChanged();
+        saveEditorSettings();
+    }
+}
+
+void EditorController::setBackgroundOpacity(qreal opacity)
+{
+    // Same range the schema clamps the stored value to, so what the canvas
+    // shows is what reads back after the save.
+    const qreal clamped =
+        qBound(ConfigDefaults::editorBackgroundOpacityMin(), opacity, ConfigDefaults::editorBackgroundOpacityMax());
+    if (!qFuzzyCompare(1.0 + m_backgroundOpacity, 1.0 + clamped)) {
+        m_backgroundOpacity = clamped;
+        Q_EMIT backgroundOpacityChanged();
         saveEditorSettings();
     }
 }
