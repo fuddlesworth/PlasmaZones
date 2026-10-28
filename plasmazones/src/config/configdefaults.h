@@ -837,6 +837,20 @@ public:
     {
         return static_cast<int>(Qt::ControlModifier);
     }
+    /// Opacity of the theme-coloured veil the layout editor draws behind its
+    /// canvas. Lower lets more of the desktop show through.
+    static double editorBackgroundOpacity()
+    {
+        return 0.7;
+    }
+    static constexpr double editorBackgroundOpacityMin()
+    {
+        return 0.0;
+    }
+    static constexpr double editorBackgroundOpacityMax()
+    {
+        return 1.0;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts

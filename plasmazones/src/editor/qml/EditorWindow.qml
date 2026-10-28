@@ -264,7 +264,7 @@ Window {
             });
     }
 
-    // Semi-transparent background — replaces the old Window.color alpha=0.7.
+    // Semi-transparent background at the user's Editor.Background opacity.
     // A child Rectangle lets the window surface be fully transparent while
     // popup menus (xdg_popup) get their own opaque surfaces from the style.
     Rectangle {
@@ -272,7 +272,7 @@ Window {
 
         anchors.fill: parent
         z: -1
-        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.7)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, editorWindow._editorController ? editorWindow._editorController.backgroundOpacity : 0.7)
     }
 
     ZoneOperations {

@@ -38,8 +38,9 @@ class ScrollingTemplateStore;
 }
 
 namespace PhosphorConfig {
-// Forward-declared for refreshScrollingStripAxisSnapshot's reference
-// parameter; the .cpp includes the backend headers directly.
+// Forward-declared for the reference parameter of
+// refreshScrollingStripAxisSnapshot and applyEditorOwnedSettings; the .cpp
+// includes the backend headers directly.
 class IBackend;
 }
 
@@ -114,6 +115,10 @@ class EditorController : public QObject
     Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
     Q_PROPERTY(
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
+
+    // Opacity of the veil drawn behind the canvas (Editor.Background)
+    Q_PROPERTY(
+        qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
 
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
@@ -260,6 +265,7 @@ public:
     int snapOverrideModifier() const;
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
+    qreal backgroundOpacity() const;
     QString targetScreen() const;
     bool templatePreviewVertical() const;
     EditorGapsModel* gaps() const
@@ -377,6 +383,7 @@ public:
     void setSnapOverrideModifier(int modifier);
     void setFillOnDropEnabled(bool enabled);
     void setFillOnDropModifier(int modifier);
+    void setBackgroundOpacity(qreal opacity);
     /**
      * @brief Request a switch to @p screenName, loading that screen's layout.
      *
@@ -485,11 +492,11 @@ public Q_SLOTS:
     // Daemon scrollingTemplatesChanged subscriber: the store watches
     // nothing, so this reload is how other-process writes reach us.
     void reloadLocalTemplates();
-    /// Daemon settingsChanged subscriber (debounced by
-    /// m_stripAxisReloadTimer): re-snapshots the strip-axis inputs so an
-    /// axis authored in the settings app while the editor is open reaches
-    /// the template preview without a restart.
-    void reloadScrollingStripAxis();
+    /// Daemon settingsChanged subscriber (debounced by m_configReloadTimer):
+    /// re-snapshots the strip-axis inputs and the Editor.* groups, so what
+    /// the settings app changes while the editor is open reaches it without
+    /// a restart.
+    void reloadLiveConfig();
     /// Persist the current layout. False = the save did not land
     /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
     /// caller chaining a layout-replacing action (screen switch, close)
@@ -734,6 +741,7 @@ Q_SIGNALS:
     void snapOverrideModifierChanged();
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
+    void backgroundOpacityChanged();
     void targetScreenChanged();
     void templatePreviewVerticalChanged();
 
@@ -1016,8 +1024,13 @@ private:
     /// the burst into one write once the value settles.
     QTimer m_editorSettingsSaveTimer;
     /// Debounces settingsChanged bursts (a settings-app Save emits per key
-    /// group) into one reloadScrollingStripAxis() re-read.
-    QTimer m_stripAxisReloadTimer;
+    /// group) into one reloadLiveConfig() re-read.
+    QTimer m_configReloadTimer;
+
+    /// Read the Editor.* groups (snapping, shortcuts, fill on drop, canvas
+    /// background) from @p backend into the editor's state, announcing only
+    /// what changed. Writes nothing back, so a reload cannot queue a save.
+    void applyEditorOwnedSettings(PhosphorConfig::IBackend& backend);
 
     /// The one snapshot writer for the strip-axis inputs (global value +
     /// per-screen overrides), shared by loadEditorSettings and the
@@ -1045,6 +1058,9 @@ private:
     // Fill on drop settings
     bool m_fillOnDropEnabled = true; // Enabled by default
     int m_fillOnDropModifier = 0x04000000; // Qt::ControlModifier (different from snap override)
+
+    // Canvas veil opacity; loadEditorSettings replaces it before QML reads it
+    qreal m_backgroundOpacity = 0.7;
 
     // Screen
     QString m_targetScreen;

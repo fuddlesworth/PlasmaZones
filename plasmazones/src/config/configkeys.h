@@ -205,6 +205,7 @@ public:
     P_CONFIG_GROUP(editorShortcutsGroup, "Editor.Shortcuts")
     P_CONFIG_GROUP(editorSnappingGroup, "Editor.Snapping")
     P_CONFIG_GROUP(editorFillOnDropGroup, "Editor.FillOnDrop")
+    P_CONFIG_GROUP(editorBackgroundGroup, "Editor.Background")
 
     // Unmanaged groups (not purged by save(), written independently)
     P_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")

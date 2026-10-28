@@ -13,10 +13,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+- **Adjustable editor background**: the layout editor's background no longer has to cover the desktop at a fixed 70%. A slider in the editor's bottom bar and another under Settings → Editor → Appearance set how much of the desktop and its windows show through behind the zones, down to fully clear. ([#1161](https://github.com/fuddlesworth/PlasmaZones/issues/1161))
 
 ### Fixed
 
 - **Windows without a window class show up in the window picker**: an app that names no window class, as Gamescope can, was left out of the rule editor's window picker even though PlasmaZones places it. It is now listed by its title and can be picked for a Title condition. The modes that need a window class show it greyed out with a hint to match it by title. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+- **Editor settings changed in the Settings app reach an open editor**: snapping, shortcuts and fill on drop changed on the Editor page while the layout editor was open did not reach it until it was restarted, and a later change made in the editor could write the old values back. The editor now picks them up as soon as they are saved. ([#1161](https://github.com/fuddlesworth/PlasmaZones/issues/1161))
 - **A window class picked from the window picker matches the window**: the picker offered only the last part of a window's class, such as "org.kde.konsole", while a Window Class condition compares the whole class KWin reports, such as "konsole org.kde.konsole", so a picked class set to equal never matched. The picker now offers the whole class. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 - **The Echo pointer trail no longer leaves a black box over some apps**: moving the pointer over an app that supplies its own cursor image, as Steam and VLC do, turned the whole area around the Echo trail black with the echoes drawn inside it. The trail now draws over those apps the same way it does everywhere else. ([#1164](https://github.com/fuddlesworth/PlasmaZones/pull/1164))
 

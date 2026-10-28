@@ -682,6 +682,63 @@ private Q_SLOTS:
     }
 
     /**
+     * The Editor.* settings have no Q_PROPERTY on Settings, so load()'s
+     * property snapshot cannot see them. A reload that changes only an editor
+     * setting must still announce it, with its own signal and the aggregate
+     * settingsChanged: the daemon relays that to the open editor, which is
+     * how a change saved from the settings app's Editor page reaches it
+     * (issue #1161). Two instances on one config stand in for the settings
+     * app (writer) and the daemon (reloader).
+     */
+    void testLoad_announcesEditorOnlyChange()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings daemon;
+        QCOMPARE(daemon.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacity());
+
+        {
+            Settings settingsApp;
+            settingsApp.setEditorBackgroundOpacity(0.25);
+            settingsApp.setEditorGridSnappingEnabled(!ConfigDefaults::editorGridSnappingEnabled());
+            QVERIFY(settingsApp.save());
+        }
+
+        QSignalSpy aggregateSpy(&daemon, &Settings::settingsChanged);
+        QSignalSpy opacitySpy(&daemon, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy gridSpy(&daemon, &Settings::editorGridSnappingEnabledChanged);
+        QVERIFY(aggregateSpy.isValid() && opacitySpy.isValid() && gridSpy.isValid());
+
+        daemon.load();
+
+        QCOMPARE(daemon.editorBackgroundOpacity(), 0.25);
+        QCOMPARE(daemon.editorGridSnappingEnabled(), !ConfigDefaults::editorGridSnappingEnabled());
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(gridSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 1);
+
+        // A second reload of the same file changes nothing and stays silent.
+        daemon.load();
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 1);
+    }
+
+    /**
+     * The canvas veil opacity is clamped to 0–1 by the schema, on the write
+     * and on the read.
+     */
+    void testEditorBackgroundOpacity_clamped()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setEditorBackgroundOpacity(1.5);
+        QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMax());
+        settings.setEditorBackgroundOpacity(-0.5);
+        QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMin());
+    }
+
+    /**
      * LabelFontWeight default must be 700 (CSS Bold), not 75 (Qt5 QFont::Bold).
      * Regression guard for the CSS vs QFont weight confusion.
      */

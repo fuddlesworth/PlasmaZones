@@ -53,6 +53,73 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
     ConfigMigration::ensureJsonConfig();
     return createDefaultConfigBackend();
 }
+
+/// The Editor.* settings, which Settings deliberately leaves without a
+/// Q_PROPERTY (EditorPageController is their property surface, see there),
+/// so load()'s NOTIFY snapshot does not cover them. Each entry pairs a read
+/// with the signal that announces it. A setting added to the Editor groups
+/// belongs here too, or a reload that changes only it stays silent and an
+/// open editor never hears about a change made in the settings app.
+struct EditorSettingEntry
+{
+    QVariant (*read)(const Settings&);
+    void (ISettings::*changed)();
+};
+
+const QVector<EditorSettingEntry>& editorSettingEntries()
+{
+    static const QVector<EditorSettingEntry> entries = {
+        {[](const Settings& s) {
+             return QVariant(s.editorDuplicateShortcut());
+         },
+         &ISettings::editorDuplicateShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSplitHorizontalShortcut());
+         },
+         &ISettings::editorSplitHorizontalShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSplitVerticalShortcut());
+         },
+         &ISettings::editorSplitVerticalShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorFillShortcut());
+         },
+         &ISettings::editorFillShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorGridSnappingEnabled());
+         },
+         &ISettings::editorGridSnappingEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorEdgeSnappingEnabled());
+         },
+         &ISettings::editorEdgeSnappingEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapIntervalX());
+         },
+         &ISettings::editorSnapIntervalXChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapIntervalY());
+         },
+         &ISettings::editorSnapIntervalYChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapOverrideModifier());
+         },
+         &ISettings::editorSnapOverrideModifierChanged},
+        {[](const Settings& s) {
+             return QVariant(s.fillOnDropEnabled());
+         },
+         &ISettings::fillOnDropEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.fillOnDropModifier());
+         },
+         &ISettings::fillOnDropModifierChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorBackgroundOpacity());
+         },
+         &ISettings::editorBackgroundOpacityChanged},
+    };
+    return entries;
+}
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
@@ -179,6 +246,15 @@ void Settings::load()
     // so a reload that changes it without saying so leaves the layer wrong for
     // the life of the process. See animationProfileState.
     const AnimationProfileState animProfileSnapshot = animationProfileState();
+
+    // The Editor.* settings have no Q_PROPERTY either (see
+    // editorSettingEntries), so the snapshot above misses them. Without this
+    // one, the settings app's Save of an editor-only change reloaded here
+    // without a settingsChanged, and the open editor kept its stale copy.
+    QVector<QVariant> editorSettingsBefore;
+    for (const EditorSettingEntry& entry : editorSettingEntries()) {
+        editorSettingsBefore.append(entry.read(*this));
+    }
 
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
@@ -321,7 +397,16 @@ void Settings::load()
     if (perScreenGapChanged)
         Q_EMIT perScreenSnappingSettingsChanged();
 
-    if (anyChanged || anyDisableChanged || perScreenChanged)
+    bool anyEditorChanged = false;
+    const QVector<EditorSettingEntry>& editorEntries = editorSettingEntries();
+    for (qsizetype i = 0; i < editorEntries.size(); ++i) {
+        if (editorEntries.at(i).read(*this) != editorSettingsBefore.at(i)) {
+            Q_EMIT(this->*editorEntries.at(i).changed)();
+            anyEditorChanged = true;
+        }
+    }
+
+    if (anyChanged || anyDisableChanged || perScreenChanged || anyEditorChanged)
         Q_EMIT settingsChanged();
 
     // The store now mirrors disk — refresh the committed baseline that

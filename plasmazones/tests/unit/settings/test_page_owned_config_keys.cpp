@@ -197,13 +197,19 @@ private Q_SLOTS:
         // only ones of the four outside this sweep, so deleting any of their
         // ownership entries would have dropped the key out of per-page dirty
         // tracking, Reset and Discard with nothing failing.
+        // The four Editor.* groups joined with Editor.Background (issue
+        // #1161): a key missing from the editor page's manifest leaves the
+        // page clean after an edit, so Save never appears and the change
+        // never reaches the daemon or the open editor.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
               ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
               ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup(),
               ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
-              ConfigDefaults::tilingBehaviorGroup()}) {
+              ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::editorShortcutsGroup(),
+              ConfigDefaults::editorSnappingGroup(), ConfigDefaults::editorFillOnDropGroup(),
+              ConfigDefaults::editorBackgroundGroup()}) {
             const auto it = schema.groups.constFind(group);
             if (it == schema.groups.constEnd()) {
                 // Collect-then-assert, like the rest of this file: an abort
