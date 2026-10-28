@@ -128,10 +128,9 @@ void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface*
     // race this real show - see primeSurfaceRenderPipeline.
     cancelSurfacePrime(surface);
     // Only the slot's opacity animates. Map the wl_surface via
-    // Surface::show() (idempotent on subsequent shows; keepMappedOnHide
-    // is effects-gated - see createWarmedOsdSurface - so the wl_surface
-    // stays mapped between slot animations while shaders or animations
-    // are enabled, and unmaps between shows otherwise).
+    // Surface::show() (idempotent while another slot holds it mapped; the
+    // shell unmaps whenever no slot is visible - see
+    // createWarmedOsdSurface).
     if (!surface->isLogicallyShown()) {
         surface->show();
     }
@@ -557,10 +556,8 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 //     → ShellHost::hideSlot runs an animator-driven slot-hide
 //     → onOsdSlotHideCompleted flips slot.visible=false and re-syncs
 //       surface state.
-// keepMappedOnHide is conditional (createWarmedOsdSurface): the shell
-// window stays mapped across hides only while shaders or animations are
-// enabled, keeping the warmed Vulkan swapchain alive; with effects off
-// the next syncSurfaceState unmaps the wl_surface. Pre-warmed by
+// Once no slot is visible the next syncSurfaceState unmaps the shell's
+// wl_surface (see createWarmedOsdSurface). Pre-warmed by
 // warmUpNotifications and reused for the daemon's lifetime;
 // destroyPassiveShell only fires on screen-removal / shutdown.
 
@@ -758,10 +755,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // The passive shell, window, surface and slot all came from
     // prepareLayoutOsdWindow above; finishOsdShow below is what hides any
-    // fading zone selector on this screen. The shell is kept mapped across hides
-    // while shaders or animations are enabled (effects-gated
-    // keepMappedOnHide); per-show the SurfaceAnimator's beginShow replays
-    // the fade-in and restartDismissTimer extends the auto-hide.
+    // fading zone selector on this screen. Per-show the SurfaceAnimator's
+    // beginShow replays the fade-in and restartDismissTimer extends the
+    // auto-hide.
 
     // Process reason field - for rotation, extract the window count.
     // Format: "clockwise:N" or "counterclockwise:N" where N is window count.

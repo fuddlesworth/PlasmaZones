@@ -207,9 +207,9 @@ void OverlayService::hide()
     // on every re-show, which would make each show visually identical
     // (cycle-restart) rather than continuing the animation in place.
 
-    // Post-shell-migration: the shell wl_surface stays mapped across
-    // hide/show cycles (its lifecycle is managed by destroyPassiveShell,
-    // not per-overlay-toggle). Drive the main-overlay slot's
+    // Post-shell-migration: the shell wl_surface outlives this hide (it
+    // is destroyed only by destroyPassiveShell, not per-overlay-toggle,
+    // and unmaps only once no slot is visible). Drive the main-overlay slot's
     // configured hide leg via the SurfaceAnimator so the slot fades
     // out cleanly and the next show() can fade-in. dismissOverlayWindow
     // also clears the per-screen "main overlay active" sentinel

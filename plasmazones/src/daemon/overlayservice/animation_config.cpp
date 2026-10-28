@@ -290,8 +290,9 @@ PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree&
         .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupCheatsheetHide, 1.0 - kHideScaleTo)};
 }
 
-/// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
-/// hide animation actually paints.
+/// ZoneSelector: opacity-only show/hide. The hide animation paints
+/// because the shared shell only unmaps once the last slot's hide leg
+/// has completed.
 ///
 /// **Popup surface family - dedicated path partition.** Every leg
 /// resolves under `popup.zoneSelector.*`, NOT under the shared
@@ -325,11 +326,11 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
 /// owned its own wl_surface and tore it down on hide (~Surface
 /// synchronously cancelling any in-flight beginHide), so the hide leg
 /// never painted and `popup.snapAssist.hide` was intentionally absent
-/// from the taxonomy. After the unified-shell migration the surface
-/// stays mapped (keepMappedOnHide=true on the shared shell wl_surface)
-/// and snap-assist's hide runs a normal SurfaceAnimator::beginHide on
-/// the slot - so the hide leg paints frames and a per-event shader
-/// assignment is now meaningful.
+/// from the taxonomy. After the unified-shell migration snap-assist's
+/// hide runs a normal SurfaceAnimator::beginHide on its slot, and the
+/// shared shell wl_surface only unmaps after that leg completes - so
+/// the hide leg paints frames and a per-event shader assignment is now
+/// meaningful.
 ///
 /// **Inheritance.** ShaderProfileTree::resolve walks parent paths, so
 /// within the popup family a user setting `popup` to dissolve cascades

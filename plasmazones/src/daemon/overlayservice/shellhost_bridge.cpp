@@ -40,10 +40,9 @@ namespace PlasmaZones {
 // the OSD path is ready by the time the user fires their first
 // hot-plug-induced shortcut. The m_notificationsWarmed flag gates
 // whether new screens get a per-screen passive overlay shell after
-// the initial warm-up; the effects-enabled predicate (shaders ||
-// animations) applies the same lazy-create rule as the warm-up
-// sweep, so hot-plug never proactively creates an always-on overlay
-// surface when no transition needs the warm cache.
+// the initial warm-up. As with the sweep, the shell is unmapped again
+// once its prime frame lands, so this never leaves an idle surface on
+// the new output.
 void OverlayService::ensureOsdScreenAddedConnected()
 {
     if (m_screenAddedConnected) {
@@ -51,11 +50,6 @@ void OverlayService::ensureOsdScreenAddedConnected()
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
         if (!m_notificationsWarmed) {
-            return;
-        }
-        const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
-        const bool animationsOn = m_settings && m_settings->animationsEnabled();
-        if (!shadersOn && !animationsOn) {
             return;
         }
         auto* mgr2 = m_screenManager;
@@ -207,9 +201,10 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     // pointer handlers, so input-transparency holds by construction on the
     // QML side too.
 
-    // Prime the wl_surface map + Vulkan swapchain init + first-frame
-    // render so the very first user-triggered slot show doesn't race
-    // the FBO capture used by shader-exclusive transitions.
+    // Render one frame through the freshly built shell, then unmap it.
+    // The QML scene and its scene-graph resources persist across the
+    // unmap, so the first user-triggered slot show pays only the remap
+    // and swapchain rebuild rather than the whole first-frame setup.
     primeSurfaceRenderPipeline(shellState.shellSurface());
 }
 
@@ -217,45 +212,29 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
 // screen the manager knows about, then mark notifications warmed and
 // ensure the screenAdded hot-plug hook is installed.
 //
-// Effects-enabled gate: the sole purpose of the prewarm is to prime
-// the wl_surface map + RHI swapchain so the first user-triggered slot
-// show does not race the FBO capture used by shader-exclusive
-// transitions. When both shaders and animations are disabled there is
-// no transition to race, so the prewarm sweep is skipped (the
-// screenAdded hot-plug hook follows the same rule). Each slot
-// consumer (snapassist / selector / osd / overlay) calls
-// ensurePassiveShellFor on its show path, so the shell is still
-// created lazily on first use - it just isn't sitting on the wlr
-// OVERLAY layer composited over every frame when no slot is up.
+// Each shell is primed (one frame mapped) and then unmapped, so the
+// sweep leaves no surface on the wlr Overlay layer while idle. Slot
+// consumers (snapassist / selector / osd / overlay) still call
+// ensurePassiveShellFor on their show paths, which covers a shell
+// whose creation failed here.
 void OverlayService::warmUpNotifications()
 {
-    const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
-    const bool animationsOn = m_settings && m_settings->animationsEnabled();
-    const bool effectsEnabled = shadersOn || animationsOn;
-
     const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
     int createdCount = 0;
-    if (effectsEnabled) {
-        for (const QString& sid : effectiveIds) {
-            // effectiveIds is empty unless m_screenManager is non-null, so the
-            // loop body only runs when it is.
-            QScreen* physScreen = m_screenManager->physicalScreenFor(sid).qscreen;
-            if (physScreen) {
-                auto* state = ensurePassiveShellFor(sid, physScreen);
-                if (state && state->shell && state->shell->shellSurface()) {
-                    ++createdCount;
-                }
+    for (const QString& sid : effectiveIds) {
+        // effectiveIds is empty unless m_screenManager is non-null, so the
+        // loop body only runs when it is.
+        QScreen* physScreen = m_screenManager->physicalScreenFor(sid).qscreen;
+        if (physScreen) {
+            auto* state = ensurePassiveShellFor(sid, physScreen);
+            if (state && state->shell && state->shell->shellSurface()) {
+                ++createdCount;
             }
         }
     }
     m_notificationsWarmed = true;
-    if (effectsEnabled) {
-        qCInfo(lcOverlay) << "Pre-warmed passive overlay shell windows for" << createdCount << "of"
-                          << effectiveIds.size() << "effective screens";
-    } else {
-        qCInfo(lcOverlay) << "Skipping passive overlay shell prewarm: shaders and animations both disabled"
-                          << "(" << effectiveIds.size() << "effective screens; lazy-create on first slot show)";
-    }
+    qCInfo(lcOverlay) << "Pre-warmed passive overlay shell windows for" << createdCount << "of" << effectiveIds.size()
+                      << "effective screens";
     ensureOsdScreenAddedConnected();
 }
 
