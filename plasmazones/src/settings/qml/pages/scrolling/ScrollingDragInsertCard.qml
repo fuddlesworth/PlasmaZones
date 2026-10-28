@@ -31,7 +31,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Always re-insert on drag")
             searchAnchor: "scrollingAlwaysReinsertOnDrag"
-            description: i18n("Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button")
+            description: i18n("Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button. The trigger below then leaves a window floating instead.")
 
             SettingsSwitch {
                 id: alwaysReinsertSwitch
@@ -44,15 +44,16 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: !alwaysReinsertSwitch.checked
-        }
+        SettingsSeparator {}
 
+        // Dual purpose, like the snapping activation triggers (#249): with
+        // "Always re-insert on drag" on, the same triggers keep a drag OUT of
+        // the strip so the window drops as a floating one (discussion #1162).
+        // The Toggle mode row below inverts with it.
         SettingsRow {
-            title: i18n("Hold to re-insert into strip")
+            title: alwaysReinsertSwitch.checked ? i18n("Hold to keep floating") : i18n("Hold to re-insert into strip")
             searchAnchor: "scrollingHoldToReinsert"
-            description: i18n("Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.")
-            enabled: !alwaysReinsertSwitch.checked
+            description: alwaysReinsertSwitch.checked ? i18n("Hold a modifier or mouse button while dragging a window to leave it floating instead of re-inserting it into the strip.") : i18n("Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.")
 
             ModifierAndMouseCheckBoxes {
                 width: TriggerLabels.editorPreferredWidth
@@ -70,15 +71,12 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: !alwaysReinsertSwitch.checked
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Toggle mode")
             searchAnchor: "scrollingTriggersToggleMode"
-            description: i18n("Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.")
-            enabled: !alwaysReinsertSwitch.checked
+            description: alwaysReinsertSwitch.checked ? i18n("Tap the trigger once to leave the dragged window floating. Tap it again to re-insert it.") : i18n("Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.")
 
             SettingsSwitch {
                 id: insertToggleSwitch
@@ -91,6 +89,9 @@ SettingsCard {
             }
         }
 
+        // Plain hold mode only: toggle mode has no release to extend, and with
+        // "Always re-insert on drag" the trigger keeps the drag out while held,
+        // where a grace would prolong the suppression.
         SettingsSeparator {
             enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
         }

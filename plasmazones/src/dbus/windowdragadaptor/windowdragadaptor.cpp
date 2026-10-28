@@ -658,8 +658,8 @@ void WindowDragAdaptor::cancelSnap()
     m_dragInsertToggled = false;
     m_prevDragInsertHeld = true;
     // Clearing the toggle is still not enough: under "always re-insert" the
-    // AlwaysActive sentinel reads as held on every tick, and a hold-mode
-    // trigger still down reads the same way, so the next tick would begin the
+    // preview is on by default with no trigger held, and a hold-mode trigger
+    // still down keeps it on the same way, so the next tick would begin the
     // preview again and the drop would commit it. This latch keeps the
     // re-insert dismissed until a real trigger re-press (dragMoved), and the
     // policy-flip re-latch honours it so a screen crossing cannot re-arm

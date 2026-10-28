@@ -12,6 +12,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Keep a window floating while "Always re-insert on drag" is on**: with always re-insert turned on for scrolling or tiling, every drag put the window back into the strip or stack, so a floating window could not be moved without being taken in again. The re-insert trigger now works the other way round while always re-insert is on. Hold it, or tap it in toggle mode, and the dragged window stays floating. If you move windows with the same key as the trigger, such as Alt, pick a different trigger. ([#1162](https://github.com/fuddlesworth/PlasmaZones/discussions/1162))
 - **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 
 ### Fixed
