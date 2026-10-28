@@ -323,7 +323,9 @@ private:
                         // cancelled in ~Impl, so the lambda only fires
                         // while this Surface is alive — no capture needed.
                         m_window->setFlag(Qt::WindowTransparentForInput, true);
-                        animator().beginHide(m_q, animatorTarget(), []() { });
+                        if (m_config.animateRoot) {
+                            animator().beginHide(m_q, animatorTarget(), []() { });
+                        }
                     } else {
                         // Pre-Phase-5 lifecycle: animator runs the visual
                         // fade in parallel (synchronously for the no-op
@@ -339,8 +341,11 @@ private:
                         // before the animation is perceptible. Kept as
                         // the default for callers that never opt in to
                         // an animator. The per-surface footgun warning
-                        // surfaces the mismatch in the journal.
-                        if (m_deps.animator && !m_hideFootgunWarned) {
+                        // surfaces the mismatch in the journal. A surface
+                        // with animateRoot=false is the exception to both
+                        // the dispatch and the warning: it has no root
+                        // fade for the unmap to cut short.
+                        if (m_config.animateRoot && m_deps.animator && !m_hideFootgunWarned) {
                             m_hideFootgunWarned = true;
                             qCWarning(lcPhosphorLayer)
                                 << "Surface" << m_config.effectiveDebugName()
@@ -354,7 +359,9 @@ private:
                         // No capture needed — the animator's per-Surface
                         // state is cancelled in ~Impl, so the lambda only
                         // fires while this Surface is alive.
-                        animator().beginHide(m_q, animatorTarget(), []() { });
+                        if (m_config.animateRoot) {
+                            animator().beginHide(m_q, animatorTarget(), []() { });
+                        }
                         m_window->hide();
                     }
                     transitionTo(State::Hidden);
@@ -460,11 +467,15 @@ private:
             // fully-opaque OSD prior to the fade-in. Always dispatch
             // beginShow — the Shown→Shown path replays the visual fade so
             // OSD-style consumers that re-show on every user trigger see
-            // the same animation each time.
+            // the same animation each time. Skipped entirely under
+            // animateRoot=false, where the consumer owns every opacity
+            // inside the window and the root stays at its own value.
             // No capture needed — the animator's per-Surface state is
             // cancelled in ~Impl, so the lambda only fires while this
             // Surface is alive.
-            animator().beginShow(m_q, animatorTarget(), []() { });
+            if (m_config.animateRoot) {
+                animator().beginShow(m_q, animatorTarget(), []() { });
+            }
 
             if (m_state == State::Hidden) {
                 if (m_config.keepMappedOnHide) {

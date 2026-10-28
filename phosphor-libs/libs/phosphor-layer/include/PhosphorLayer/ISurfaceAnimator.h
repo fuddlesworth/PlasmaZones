@@ -66,6 +66,9 @@ public:
      * animation. Invoke @p onComplete when the transition finishes; the
      * library uses this as a no-op today but a future version may defer
      * compositor sync until the completion signal arrives.
+     *
+     * Not dispatched for a surface whose SurfaceConfig::animateRoot is
+     * false. cancel() still is.
      */
     virtual void beginShow(Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete) = 0;
 
@@ -77,6 +80,9 @@ public:
      * not delay `window->hide()` waiting for this — the current contract
      * is "animate for visual polish, but the surface is considered hidden
      * the moment hide() is called".
+     *
+     * Not dispatched for a surface whose SurfaceConfig::animateRoot is
+     * false.
      */
     virtual void beginHide(Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete) = 0;
 

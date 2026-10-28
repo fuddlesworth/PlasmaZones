@@ -135,6 +135,22 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     /// Logged in state transitions. Defaults to Role::scopePrefix when empty.
     QString debugName;
 
+    /// When false, the surface's own show/hide never dispatches
+    /// ISurfaceAnimator::beginShow / beginHide on its root item, so the
+    /// root's opacity and scale are left alone. For a surface that hosts
+    /// several independently animated items (a shell with per-content
+    /// slots) and drives each one through the animator itself, where a
+    /// root-level fade would multiply every item's own transition.
+    ///
+    /// ISurfaceAnimator::cancel is still dispatched on show, hide and
+    /// destruction, because it retires every animation keyed on this
+    /// surface, the consumer's per-item ones included. The
+    /// keepMappedOnHide=false hide warning is skipped too, since there is
+    /// no root fade for the unmap to cut short.
+    ///
+    /// Default `true` keeps the root-animated lifecycle.
+    bool animateRoot = true;
+
     // ── Resolution helpers ──────────────────────────────────────────────
 
     [[nodiscard]] Layer effectiveLayer() const noexcept
