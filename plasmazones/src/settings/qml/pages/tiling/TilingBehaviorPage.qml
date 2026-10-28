@@ -37,7 +37,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Always re-insert on drag")
                     searchAnchor: "alwaysReinsertOnDrag"
-                    description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button")
+                    description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button. The trigger below then leaves a window floating instead.")
 
                     SettingsSwitch {
                         id: alwaysReinsertSwitch
@@ -50,15 +50,16 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {
-                    enabled: !alwaysReinsertSwitch.checked
-                }
+                SettingsSeparator {}
 
+                // Dual purpose, like the scrolling twin and the snapping
+                // activation triggers (#249): with "Always re-insert on drag"
+                // on, the same triggers keep a drag OUT of the stack so the
+                // window drops as a floating one (discussion #1162).
                 SettingsRow {
-                    title: i18n("Hold to re-insert into stack")
+                    title: alwaysReinsertSwitch.checked ? i18n("Hold to keep floating") : i18n("Hold to re-insert into stack")
                     searchAnchor: "holdToReinsert"
-                    description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
-                    enabled: !alwaysReinsertSwitch.checked
+                    description: alwaysReinsertSwitch.checked ? i18n("Hold a modifier or mouse button while dragging a window to leave it floating instead of inserting it into the autotile stack.") : i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
 
                     ModifierAndMouseCheckBoxes {
                         width: TriggerLabels.editorPreferredWidth
@@ -75,15 +76,12 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {
-                    enabled: !alwaysReinsertSwitch.checked
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Toggle mode")
                     searchAnchor: "triggersToggleMode"
-                    description: i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
-                    enabled: !alwaysReinsertSwitch.checked
+                    description: alwaysReinsertSwitch.checked ? i18n("Tap the trigger once to leave the dragged window floating. Tap it again to insert it.") : i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
 
                     SettingsSwitch {
                         id: insertToggleSwitch
@@ -96,6 +94,7 @@ SettingsFlickable {
                     }
                 }
 
+                // Plain hold mode only, as on the scrolling twin.
                 SettingsSeparator {
                     enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
                 }

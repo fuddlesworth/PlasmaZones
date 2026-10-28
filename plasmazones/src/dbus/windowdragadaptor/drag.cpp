@@ -537,7 +537,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // pressed again on an engine screen. The AlwaysActive sentinel is left out
         // of that test because it matches every tick, so under "always re-insert"
         // it would begin the preview again on the very next tick and the drop
-        // would commit the re-insert Escape dismissed.
+        // would commit the re-insert Escape dismissed. Under always re-insert the
+        // re-pressed trigger then keeps the drag out for as long as it is held,
+        // so the preview comes back once it is let go.
         if (m_dragInsertCancelled && insertEngine) {
             if (!anyTriggerHeld(insertTriggers, mods, mouseButtons, /*excludeSentinel=*/true)) {
                 m_dragInsertReleasedAfterCancel = true;
@@ -546,33 +548,33 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 m_dragInsertReleasedAfterCancel = false;
             }
         }
-        const bool rawInsertHeld =
-            insertEngine && !m_dragInsertCancelled && anyTriggerHeld(insertTriggers, mods, mouseButtons);
-
-        // Toggle mode: detect rising edge (release→press) to flip insert-active state.
-        // Not under "always re-insert" (the bare AlwaysActive sentinel in the
-        // list): the sentinel reads as held on every tick, so it never makes
-        // the rising edge a toggle needs, and a toggle setting left on from
-        // before the switch to always-on would hold the re-insert off for
-        // every window the reorder latch does not cover (a floating or
-        // arriving one). Always-on has nothing to toggle.
-        bool insertHeld;
+        // "Always re-insert" is the bare AlwaysActive sentinel in the list. It
+        // turns the user's own triggers around (#1162, the drag-insert twin of
+        // the activation inversion #249): the preview is on by default, and a
+        // held or toggled trigger keeps the drag OUT, so a window can still be
+        // dragged as a floating one. The sentinel matches every tick, so under
+        // always-on the trigger read leaves it out.
         const bool insertAlwaysOn =
             insertEngine && std::any_of(insertTriggers.cbegin(), insertTriggers.cend(), [](const ParsedTrigger& pt) {
                 return pt.modifier == static_cast<int>(DragModifier::AlwaysActive) && pt.mouseButton == 0;
             });
-        const bool toggleMode = insertEngine && !insertAlwaysOn
+        const bool rawInsertHeld = insertEngine && !m_dragInsertCancelled
+            && anyTriggerHeld(insertTriggers, mods, mouseButtons, /*excludeSentinel=*/insertAlwaysOn);
+        const bool toggleMode = insertEngine
             && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
         // Hold-mode release grace, the drag-insert twin of the activation
         // grace above, on the grace setting of the engine owning the cursor
-        // screen. Off any engine screen the stamp is dropped rather than
-        // kept: rawInsertHeld is false there by construction, and a return
-        // to an engine screen inside the window must not read as held
+        // screen. Plain hold mode only, as for activation: toggle mode has no
+        // release to extend, and under always-on the trigger keeps the drag
+        // out while held, where a grace would prolong the suppression the
+        // user just ended. Off any engine screen the stamp is dropped rather
+        // than kept: rawInsertHeld is false there by construction, and a
+        // return to an engine screen inside the window must not read as held
         // without a physical press (the leave already cancelled the preview).
         if (!insertEngine) {
             m_dragInsertLastHeldMs = -1;
         }
-        const int insertGraceMs = (insertEngine && !toggleMode)
+        const int insertGraceMs = (insertEngine && !toggleMode && !insertAlwaysOn)
             ? (onScrollingScreen ? m_settings->scrollingDragInsertGraceMs() : m_settings->autotileDragInsertGraceMs())
             : 0;
         const HoldGraceDecision insertGrace =
@@ -581,36 +583,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         if (insertGrace.held && !rawInsertHeld) {
             armGraceExpiry(insertGrace.remainingMs);
         }
-        if (toggleMode) {
-            if (rawInsertHeld && !m_prevDragInsertHeld) {
-                m_dragInsertToggled = !m_dragInsertToggled;
-            }
-            insertHeld = m_dragInsertToggled;
-        } else {
-            insertHeld = insertGrace.held;
-        }
-        // The shared rising-edge latch follows the raw state on EVERY
-        // engine-screen tick, not only in toggle mode: the toggle SETTING is
-        // per engine, so a hold-mode autotile stretch that never wrote prev
-        // used to hand a stale value to a toggle-mode scrolling screen at
-        // the crossing (missed rising edge, or a phantom one on the way
-        // back). Off any engine screen the latch deliberately holds, so
-        // returning with the key still down is not a fresh press.
-        if (insertEngine) {
-            m_prevDragInsertHeld = rawInsertHeld;
-        }
 
-        // Reorder-mode override: drag-insert as the default behavior on the
-        // engine-owned screen (Krohnkite drag-to-swap for autotile, the
-        // AlwaysActive sentinel for scrolling), no modifier required. Gated
-        // on the beginDrag-time snapshot m_dragReorderActive so we don't
-        // re-query settings + engine tiled-state per cursor tick. Also
-        // scoped to the engine-owned screen — if the cursor leaves it
-        // mid-drag, the normal cross-screen cancel logic below should run,
-        // not the force-held override.
-        if (m_dragReorderActive && insertEngine) {
-            insertHeld = true;
-        }
+        // Hold, toggle, the always-on inversion, Escape's dismissal and the
+        // reorder latch (Krohnkite drag-to-swap for autotile, the sentinel for
+        // scrolling, which keeps a tiled window's preview on from drag start)
+        // resolve together; see resolveDragInsertActive. The reorder latch is
+        // the beginDrag-time snapshot, so nothing re-queries settings or the
+        // engine's tiled state per tick, and it applies only on an engine
+        // screen, so leaving one mid-drag runs the cross-screen cancel below.
+        const DragInsertDecision insertDecision = resolveDragInsertActive(
+            insertEngine != nullptr, m_dragInsertCancelled, insertAlwaysOn, toggleMode, rawInsertHeld, insertGrace.held,
+            m_prevDragInsertHeld, m_dragInsertToggled, m_dragReorderActive);
+        m_prevDragInsertHeld = insertDecision.nextPrevTriggerHeld;
+        m_dragInsertToggled = insertDecision.nextToggled;
+        const bool insertHeld = insertDecision.active;
 
         // Journal diagnostic, AFTER the override so it reports what the
         // block actually acts on. One line on the first tick (the block's
@@ -624,6 +610,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             qCInfo(lcDbusWindow) << "drag-insert tick:" << windowId << "screen=" << insertScreenId
                                  << "engine=" << (insertEngine ? insertEngine->engineId() : QStringLiteral("none"))
                                  << "rawHeld=" << rawInsertHeld << "effectiveHeld=" << insertHeld
+                                 << "keptOut=" << insertDecision.suppressedByTrigger
                                  << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
         }
 

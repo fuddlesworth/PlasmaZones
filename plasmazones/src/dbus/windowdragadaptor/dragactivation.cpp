@@ -41,6 +41,36 @@ ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode, bo
     return out;
 }
 
+DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn, bool toggleMode,
+                                           bool rawTriggerHeld, bool graceHeld, bool prevTriggerHeld, bool toggled,
+                                           bool reorderActive)
+{
+    DragInsertDecision out;
+    out.nextPrevTriggerHeld = prevTriggerHeld;
+    out.nextToggled = toggled;
+    if (!onEngineScreen) {
+        return out;
+    }
+
+    // Toggle mode reads the raw state, since the grace never applies there;
+    // hold mode reads the state the grace extended.
+    const ActivationDecision decision = resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode,
+                                                                alwaysOn, prevTriggerHeld, toggled);
+    out.nextToggled = decision.nextActivationToggled;
+    // The edge latch follows the RAW state on every engine-screen tick, not
+    // the grace-extended one: the toggle setting is per engine, so a hold
+    // stretch on one engine's screen hands this latch to a toggle-mode screen
+    // at the crossing, and a stale grace value there would swallow a press.
+    out.nextPrevTriggerHeld = rawTriggerHeld;
+
+    if (cancelled) {
+        return out;
+    }
+    out.suppressedByTrigger = alwaysOn && !decision.active;
+    out.active = decision.active || (reorderActive && !out.suppressedByTrigger);
+    return out;
+}
+
 HoldGraceDecision resolveHoldGrace(bool rawHeld, qint64 nowMs, qint64 lastHeldMs, int graceMs)
 {
     HoldGraceDecision out;

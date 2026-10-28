@@ -47,6 +47,56 @@ PLASMAZONES_EXPORT ActivationDecision resolveActivationActive(bool triggerHeld, 
                                                               bool alwaysActiveOnDrag, bool prevTriggerHeld,
                                                               bool activationToggled);
 
+/// @brief Outcome of one per-tick drag re-insert evaluation.
+/// See @c resolveDragInsertActive below.
+struct DragInsertDecision
+{
+    bool active = false; ///< Whether the re-insert preview should be on this tick.
+    /// "Always re-insert" is on and the trigger is keeping this drag out of
+    /// the strip or stack, so the drop floats the window.
+    bool suppressedByTrigger = false;
+    bool nextPrevTriggerHeld = false; ///< Feedback for next tick's edge detection.
+    bool nextToggled = false; ///< Feedback for the toggle latch.
+};
+
+/**
+ * @brief Pure resolver for the per-tick "should the drag re-insert preview be
+ * on" decision, for the engine (autotile or scrolling) owning the cursor's
+ * screen.
+ *
+ * The re-insert trigger list gets the same dual purpose the activation list
+ * has (#249, discussion #1162). Without "always re-insert" a held trigger
+ * (or a toggled one) turns the preview on. With it, the preview is on by
+ * default and the same triggers turn it OFF, while held or toggled, so a
+ * window can still be dragged as a floating one. The inversion itself is
+ * @c resolveActivationActive's.
+ *
+ * @param onEngineScreen  The cursor is over a screen an engine owns. Off one,
+ *                        nothing is active and both latches are left as they
+ *                        were, so coming back with the trigger still down is
+ *                        not a fresh press.
+ * @param cancelled       Escape dismissed the re-insert for this drag. Wins
+ *                        over everything, the inversion included, or a
+ *                        dismissed always-on drag would come straight back.
+ * @param alwaysOn        The bare AlwaysActive sentinel is in the list.
+ * @param toggleMode      The engine's toggle setting.
+ * @param rawTriggerHeld  A trigger is physically held this tick. Under
+ *                        @p alwaysOn it MUST come from the non-sentinel
+ *                        entries only, since the sentinel matches every tick.
+ * @param graceHeld       @p rawTriggerHeld extended by the hold-mode release
+ *                        grace. The caller applies the grace only in plain
+ *                        hold mode, so elsewhere it equals the raw state.
+ * @param prevTriggerHeld Last engine-screen tick's raw state.
+ * @param toggled         The toggle latch.
+ * @param reorderActive   The drag-start reorder latch, which keeps the
+ *                        preview on for a tiled window (Krohnkite reorder, or
+ *                        scrolling's always re-insert). It yields to the
+ *                        trigger while the trigger is suppressing.
+ */
+PLASMAZONES_EXPORT DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn,
+                                                              bool toggleMode, bool rawTriggerHeld, bool graceHeld,
+                                                              bool prevTriggerHeld, bool toggled, bool reorderActive);
+
 /// @brief Outcome of one hold-mode release-grace evaluation.
 /// See @c resolveHoldGrace below for the contract that produces it.
 struct HoldGraceDecision
