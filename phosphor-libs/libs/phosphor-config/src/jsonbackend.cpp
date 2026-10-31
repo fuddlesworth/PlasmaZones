@@ -121,6 +121,53 @@ QString jsonValueToString(const QJsonValue& val, const QString& defaultValue)
     return val.toString(defaultValue);
 }
 
+/// @p over laid onto @p base: objects merge key by key at every depth, and
+/// any other value in @p over replaces whatever @p base holds there. This is
+/// the one definition of what an overlay means; the group-level lookup below
+/// and the enumeration in @c groupList both reduce to it.
+QJsonObject mergedOver(QJsonObject base, const QJsonObject& over)
+{
+    for (auto it = over.constBegin(); it != over.constEnd(); ++it) {
+        const QJsonValue existing = base.value(it.key());
+        if (it.value().isObject() && existing.isObject()) {
+            base.insert(it.key(), mergedOver(existing.toObject(), it.value().toObject()));
+        } else {
+            base.insert(it.key(), it.value());
+        }
+    }
+    return base;
+}
+
+/// The object at @p segments in `mergedOver(root, overlay)`, computed without
+/// merging the whole document on every read. Walks both trees in step: while
+/// the overlay has objects along the path the two merge at the leaf; where the
+/// overlay has nothing the file's object is returned untouched; and a non-object
+/// overlay value along the path replaces the group, exactly as the full merge
+/// would, so the group reads as empty.
+QJsonObject overlaidGroupObject(const QJsonObject& root, const QJsonObject& overlay, const QStringList& segments)
+{
+    if (segments.isEmpty()) {
+        return {};
+    }
+    if (overlay.isEmpty()) {
+        return navigatePath(root, segments);
+    }
+    QJsonObject file = root;
+    QJsonObject over = overlay;
+    for (qsizetype i = 0; i < segments.size(); ++i) {
+        const QJsonValue overValue = over.value(segments[i]);
+        if (overValue.isUndefined()) {
+            return navigatePath(file, segments.mid(i));
+        }
+        if (!overValue.isObject()) {
+            return {};
+        }
+        over = overValue.toObject();
+        file = file.value(segments[i]).toObject();
+    }
+    return mergedOver(file, over);
+}
+
 void removeAtPath(QJsonObject& root, const QStringList& segments)
 {
     if (segments.isEmpty()) {
@@ -159,6 +206,9 @@ struct JsonBackend::Data
 {
     QString filePath;
     QJsonObject root;
+    /// Read-only layer over @c root (see @c setOverlay). Kept apart from it so
+    /// nothing that writes, syncs or snapshots @c root can ever carry it.
+    QJsonObject overlay;
     bool dirty = false;
     int activeGroupCount = 0;
     std::shared_ptr<IGroupPathResolver> resolver;
@@ -214,10 +264,11 @@ QStringList resolvePath(const std::shared_ptr<IGroupPathResolver>& resolver, con
 
 // ─── JsonGroup ──────────────────────────────────────────────────────────────
 
-JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend)
+JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend, View view)
     : m_root(root)
     , m_groupName(std::move(groupName))
     , m_backend(backend)
+    , m_view(view)
 {
     const int count = m_backend->activeGroupCount();
     if (count != 0) {
@@ -263,7 +314,18 @@ bool JsonGroup::refuseWrite(const char* op) const
 
 QJsonObject JsonGroup::groupObject() const
 {
+    if (m_view == View::Persisted) {
+        return storedGroupObject();
+    }
+    // Resolved against the backend's CURRENT overlay on every read, never
+    // cached, so a setOverlay() while this view is alive is seen at once.
     const auto segments = resolvePath(m_backend->d->resolver, m_groupName, "JsonGroup::groupObject");
+    return overlaidGroupObject(m_root, m_backend->d->overlay, segments);
+}
+
+QJsonObject JsonGroup::storedGroupObject() const
+{
+    const auto segments = resolvePath(m_backend->d->resolver, m_groupName, "JsonGroup::storedGroupObject");
     return navigatePath(m_root, segments);
 }
 
@@ -428,7 +490,7 @@ void JsonGroup::writeString(const QString& key, const QString& value)
     if (refuseWrite("writeString")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value;
     setGroupObject(obj);
 }
@@ -442,7 +504,7 @@ void JsonGroup::writeJson(const QString& key, const QJsonValue& value)
     // structure-preserving storage (e.g. @c Store::write for QVariantList /
     // QVariantMap, trigger lists, per-algorithm settings) reach through here
     // instead of relying on data-dependent shape inference in writeString.
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value;
     setGroupObject(obj);
 }
@@ -462,7 +524,7 @@ void JsonGroup::writeInt(const QString& key, int value)
     if (refuseWrite("writeInt")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value;
     setGroupObject(obj);
 }
@@ -472,7 +534,7 @@ void JsonGroup::writeBool(const QString& key, bool value)
     if (refuseWrite("writeBool")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value;
     setGroupObject(obj);
 }
@@ -482,7 +544,7 @@ void JsonGroup::writeDouble(const QString& key, double value)
     if (refuseWrite("writeDouble")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value;
     setGroupObject(obj);
 }
@@ -492,7 +554,7 @@ void JsonGroup::writeColor(const QString& key, const QColor& value)
     if (refuseWrite("writeColor")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     obj[key] = value.name(QColor::HexArgb);
     setGroupObject(obj);
 }
@@ -516,7 +578,7 @@ void JsonGroup::deleteKey(const QString& key)
     if (refuseWrite("deleteKey")) {
         return;
     }
-    QJsonObject obj = groupObject();
+    QJsonObject obj = storedGroupObject();
     if (!obj.contains(key)) {
         return;
     }
@@ -658,6 +720,21 @@ std::unique_ptr<IGroup> JsonBackend::group(const QString& name)
     return std::make_unique<JsonGroup>(d->root, name, this);
 }
 
+std::unique_ptr<IGroup> JsonBackend::persistedGroup(const QString& name)
+{
+    return std::make_unique<JsonGroup>(d->root, name, this, JsonGroup::View::Persisted);
+}
+
+void JsonBackend::setOverlay(const QJsonObject& overlay)
+{
+    d->overlay = overlay;
+}
+
+QJsonObject JsonBackend::overlay() const
+{
+    return d->overlay;
+}
+
 void JsonBackend::reparseConfiguration()
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::reparseConfiguration",
@@ -673,6 +750,8 @@ void JsonBackend::reparseConfiguration()
             d->activeGroupCount);
         return;
     }
+    // Replaces the file's document only. The overlay is not file state, so it
+    // is kept and laid over the reloaded values.
     loadFromDisk();
     d->dirty = false;
 }
@@ -863,7 +942,7 @@ void JsonBackend::deleteGroup(const QString& name)
 
 QString JsonBackend::readRootString(const QString& key, const QString& defaultValue) const
 {
-    const QJsonObject general = d->root.value(d->rootGroupName).toObject();
+    const QJsonObject general = overlaidGroupObject(d->root, d->overlay, QStringList{d->rootGroupName});
     if (!general.contains(key)) {
         return defaultValue;
     }
@@ -971,11 +1050,14 @@ QStringList JsonBackend::groupList() const
         }
     }
 
-    enumerateDotPathGroups(d->root, QString(), 0, skipRoots, groups);
+    // A group the overlay alone supplies is as readable as one on disk, so it
+    // is enumerated too, merged in exactly as every read sees it.
+    const QJsonObject root = d->overlay.isEmpty() ? d->root : mergedOver(d->root, d->overlay);
+    enumerateDotPathGroups(root, QString(), 0, skipRoots, groups);
 
     // Resolver-owned group names.
     if (d->resolver) {
-        groups.append(d->resolver->enumerate(d->root));
+        groups.append(d->resolver->enumerate(root));
     }
 
     return groups;

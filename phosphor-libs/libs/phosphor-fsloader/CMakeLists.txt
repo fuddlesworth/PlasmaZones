@@ -119,13 +119,16 @@ else()
 endif()
 
 set(phosphorfsloader_SRCS
+    src/containedfilereader.cpp
     src/directoryloader.cpp
     src/metadatapackscanstrategy.cpp
     src/schemavalidator.cpp
     src/watcheddirectoryset.cpp
+    src/watchedfileset.cpp
 )
 
 set(phosphorfsloader_public_HDRS
+    include/PhosphorFsLoader/ContainedFileReader.h
     include/PhosphorFsLoader/DirectoryLoader.h
     include/PhosphorFsLoader/FileLimits.h
     include/PhosphorFsLoader/IDirectoryLoaderSink.h
@@ -136,6 +139,7 @@ set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/ParsedEntry.h
     include/PhosphorFsLoader/SchemaValidator.h
     include/PhosphorFsLoader/WatchedDirectorySet.h
+    include/PhosphorFsLoader/WatchedFileSet.h
 )
 
 add_library(PhosphorFsLoader SHARED
