@@ -53,6 +53,7 @@ hand-rolling.
 | Type | Purpose |
 |------|---------|
 | `PhosphorFsLoader::WatchedDirectorySet`           | Base mechanism: watcher, debounce, parent-watch, race guard |
+| `PhosphorFsLoader::WatchedFileSet`                | Watches an explicit list of files, some possibly missing, and reports only the ones whose fingerprint (inode, size, mtime ns) changed |
 | `PhosphorFsLoader::IScanStrategy`                 | Pluggable enumerate / parse / commit policy |
 | `PhosphorFsLoader::DirectoryLoader`               | Flat `*.json` specialisation (sink-driven) |
 | `PhosphorFsLoader::IDirectoryLoaderSink`          | Per-schema strategy: `parseFile()` + `commitBatch()` |
@@ -60,6 +61,7 @@ hand-rolling.
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
 | `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
 | `PhosphorFsLoader::resolveWithinDirectory`        | Containment guard: resolves a declared path against a directory and refuses anything landing outside it |
+| `PhosphorFsLoader::readFileWithinDirectory`       | Bounded read of a declared path that validates the OPENED descriptor: regular file, size cap, real path inside the directory, so a symlink or FIFO swapped in after the check is refused |
 | `PhosphorFsLoader::AbsolutePathPolicy`            | Whether an already-absolute declared path is refused (pack-declared) or trusted (user-chosen at runtime) |
 | `PhosphorFsLoader::SchemaValidator`               | JSON-Schema gate applied to a pack's `metadata.json` before it is parsed |
 
@@ -129,6 +131,33 @@ registry.setUserPath(userDir);
 registry.refresh();
 ```
 
+Watching a config file and the theme file it names, either of which may not
+exist yet:
+
+```cpp
+#include <PhosphorFsLoader/WatchedFileSet.h>
+
+auto* files = new PhosphorFsLoader::WatchedFileSet(this);
+connect(files, &PhosphorFsLoader::WatchedFileSet::filesChanged, this,
+        [this](const QStringList& changed) { reload(changed); });
+files->setPaths({configPath, themePath});   // reconciles; call again when the theme changes
+```
+
+Reading an asset a pack declares, without letting it escape the pack:
+
+```cpp
+#include <PhosphorFsLoader/ContainedFileReader.h>
+
+QString error;
+const auto mesh = PhosphorFsLoader::readFileWithinDirectory(
+    declared, packDir, PhosphorFsLoader::AbsolutePathPolicy::Reject, 32 * 1024 * 1024, &error);
+if (!mesh) {
+    return error;
+}
+watch(mesh->path);
+parse(mesh->bytes);
+```
+
 ## Design notes
 
 - **Watcher is opt-in.** `LiveReload::On` installs a
@@ -146,6 +175,17 @@ registry.refresh();
   yet, which is the ordinary live-reload case. The guard canonicalises the
   deepest EXISTING ancestor and re-appends the missing tail, so the two domains
   are never mixed, and it fails closed when nothing on the chain exists.
+- **Single files report by fingerprint.** `WatchedFileSet` watches each file
+  and its nearest existing ancestor directory, so creation, deletion and
+  rename-replacement are seen, and re-resolves both after every event. A
+  directory event alone proves nothing, so after the debounce each path is
+  `stat()`ed and only those whose identity or content stamp moved are
+  reported. An unrelated write beside a watched file emits nothing.
+- **Containment of what was opened, not what was named.**
+  `readFileWithinDirectory` runs `resolveWithinDirectory` first, then opens
+  with `O_NONBLOCK`, `fstat()`s the descriptor and checks its
+  `/proc/self/fd` real path against the directory. A path checked before
+  opening can be swapped between check and open; the descriptor cannot.
 - **`commitBatch` is the one mutation point.** The sink only touches
   its target registry inside `commitBatch`, so bulk signals (e.g. a
   QML `reloadAll`) coalesce to one emit per scan.
