@@ -28,10 +28,24 @@ class JsonBackend;
 /// Only one group view is permitted per backend at a time. Debug builds
 /// assert; release builds warn. The backend advances its dirty flag on any
 /// write-to-storage through this view.
+///
+/// Reads (every @c read*, @c readJson, @c hasKey, @c keyList) see the
+/// backend's overlay laid over the file (see @c JsonBackend::setOverlay)
+/// unless the view was opened as @c View::Persisted. Writes and @c deleteKey
+/// always act on the file's values alone, so an overlay value is never
+/// written back, and deleting a key the overlay supplies leaves it readable.
 class PHOSPHORCONFIG_EXPORT JsonGroup : public IGroup
 {
 public:
-    JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend);
+    /// What the view's reads observe.
+    enum class View {
+        /// The overlay over the file: what @c JsonBackend::group() hands out.
+        Effective,
+        /// The file alone: what @c JsonBackend::persistedGroup() hands out.
+        Persisted,
+    };
+
+    JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend, View view = View::Effective);
     ~JsonGroup() override;
 
     QString readString(const QString& key, const QString& defaultValue = {}) const override;
@@ -53,7 +67,12 @@ public:
     QStringList keyList() const override;
 
 private:
+    /// The object reads observe: the overlaid one for an Effective view, the
+    /// stored one for a Persisted view.
     QJsonObject groupObject() const;
+    /// The file's own object for this group. Every write starts from this,
+    /// never from @c groupObject().
+    QJsonObject storedGroupObject() const;
     void setGroupObject(const QJsonObject& obj);
     /// Returns true when writes through this group must be silently dropped
     /// because another JsonGroup on the same backend was already alive at
@@ -63,6 +82,7 @@ private:
     QJsonObject& m_root;
     QString m_groupName;
     JsonBackend* m_backend;
+    View m_view;
     /// Set in the constructor when the single-active-group invariant is
     /// violated. Disabled groups still allow reads (they share the backend's
     /// root in-memory state) but reject writes so the concurrent live group
@@ -84,6 +104,9 @@ private:
 /// The "root group" (see @c rootGroupName) holds ungrouped keys written via
 /// @c writeRootString. Defaults to "General" for compatibility with
 /// QSettings INI behaviour.
+///
+/// An optional in-memory overlay (see @c setOverlay) supplies values that win
+/// over the file's for every read but are never written to it.
 class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
 {
 public:
@@ -95,16 +118,51 @@ public:
 
     // IBackend interface
     std::unique_ptr<IGroup> group(const QString& name) override;
+    /// A @c JsonGroup opened as @c JsonGroup::View::Persisted: the file's
+    /// values without the overlay.
+    std::unique_ptr<IGroup> persistedGroup(const QString& name) override;
+    /// Reloads the file. The overlay is kept and keeps winning over the
+    /// reloaded values.
     void reparseConfiguration() override;
     bool sync() override;
     /// Bypasses the Deferred sync policy's debounce so the return value is a
     /// real commit result under every policy. Equivalent to @c flushPending().
     bool commit() override;
     void deleteGroup(const QString& name) override;
+    /// Sees the overlay's root-group values over the file's.
     QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
     void writeRootString(const QString& key, const QString& value) override;
     void removeRootKey(const QString& key) override;
+    /// Enumerates the file's groups and the overlay's together, as one
+    /// document with the overlay merged in.
     QStringList groupList() const override;
+
+    /// Lay @p overlay over the file for every read, without ever writing it.
+    ///
+    /// @p overlay has the same shape as the file's document: group objects
+    /// keyed by name (nested for dot-path groups, under @c rootGroupName for
+    /// root keys, wherever an installed @c IGroupPathResolver maps a group),
+    /// holding keys and values. Reads behave as if @p overlay had been merged
+    /// into the document, objects merging key by key at every depth (an
+    /// object-valued key included) and any other overlay value replacing the
+    /// file's outright. That covers every read: the @c JsonGroup readers,
+    /// @c hasKey and @c keyList, @c readRootString, @c groupList, and so
+    /// everything @c Store reads through them.
+    ///
+    /// Nothing else sees it. Writes, @c deleteKey, @c deleteGroup and the root
+    /// key mutators act on the file's values alone, so writing one key of a
+    /// group never carries the group's overlay values to disk with it.
+    /// @c sync, @c commit, @c jsonRootSnapshot, @c replaceRoot and
+    /// @c applyMigration work on the file alone, so the overlay must already
+    /// be in the current schema's shape. It is not dirtying: setting it
+    /// schedules no write. It survives @c reparseConfiguration and lasts until
+    /// replaced; an empty object removes it.
+    ///
+    /// Safe to call while a group view is alive: views resolve the overlay
+    /// on every read rather than caching it.
+    void setOverlay(const QJsonObject& overlay);
+    /// The overlay last set, or an empty object.
+    QJsonObject overlay() const;
 
     /// Attach a custom path resolver. Passing @c nullptr removes it.
     /// Safe to call at any time; the resolver is consulted on every group
@@ -154,7 +212,8 @@ public:
     static bool writeJsonAtomically(const QString& filePath, const QJsonObject& root);
 
     /// Read-only access to the in-memory document. Implicitly shared (COW),
-    /// so the copy is cheap and isolated from future mutations.
+    /// so the copy is cheap and isolated from future mutations. This is the
+    /// file's document only; the overlay is not merged in.
     QJsonObject jsonRootSnapshot() const;
 
     /// Backing file path (useful for migration-chain callers that need
