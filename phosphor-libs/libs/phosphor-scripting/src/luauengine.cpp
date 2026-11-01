@@ -359,8 +359,17 @@ LuauEngine::CallOutcome LuauEngine::callModule(int moduleHandle, const QString& 
         return out;
     }
 
-    out.result = Marshal::toVariant(m_L, -1);
+    bool tooLarge = false;
+    out.result = Marshal::toVariant(m_L, -1, 0, &tooLarge);
     lua_pop(m_L, 1);
+    if (tooLarge) {
+        // Dropping the value would read as "returned nil", and a caller that
+        // acts on the result could not tell the difference.
+        out.result = QVariant();
+        out.status = CallStatus::Error;
+        out.message = QStringLiteral("result too large (more than %1 values)").arg(Marshal::MaxNodes);
+        return out;
+    }
     out.status = CallStatus::Ok;
     return out;
 }

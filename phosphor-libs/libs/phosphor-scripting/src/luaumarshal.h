@@ -42,8 +42,9 @@ void pushVariant(lua_State* L, const QVariant& v, int depth = 0);
 /// A table that contains itself (directly or through a descendant) converts
 /// the inner reference to an invalid QVariant, as a function value does. A
 /// value that needs more than MaxNodes conversions returns an invalid QVariant
-/// as a whole, never a truncated table.
-QVariant toVariant(lua_State* L, int idx, int depth = 0);
+/// as a whole, never a truncated table, and sets @p tooLarge when given, so a
+/// caller can tell it apart from a nil.
+QVariant toVariant(lua_State* L, int idx, int depth = 0, bool* tooLarge = nullptr);
 
 } // namespace Marshal
 } // namespace PhosphorScripting

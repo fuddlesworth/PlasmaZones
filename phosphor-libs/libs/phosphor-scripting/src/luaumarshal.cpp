@@ -209,10 +209,13 @@ QVariant convert(lua_State* L, int idx, int depth, Walk& walk)
 
 } // namespace
 
-QVariant toVariant(lua_State* L, int idx, int depth)
+QVariant toVariant(lua_State* L, int idx, int depth, bool* tooLarge)
 {
     Walk walk;
     QVariant value = convert(L, idx, depth, walk);
+    if (tooLarge) {
+        *tooLarge = walk.exhausted;
+    }
     return walk.exhausted ? QVariant() : value;
 }
 
