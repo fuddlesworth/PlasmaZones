@@ -213,9 +213,11 @@ void TestLuauEngine::marshalBoundsSharedSubtableFanOut()
     QElapsedTimer timer;
     timer.start();
     const auto out = engine.callModule(handle, QStringLiteral("run"), {}, 200);
-    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
-    // Over the node budget: dropped as a whole, not truncated.
+    // Over the node budget: an error, never a truncated table or a nil that
+    // reads as a valid empty answer.
+    QCOMPARE(out.status, LuauEngine::CallStatus::Error);
     QVERIFY(!out.result.isValid());
+    QVERIFY2(out.message.contains(QStringLiteral("too large")), qPrintable(out.message));
     QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
     engine.releaseModule(handle);
 }
