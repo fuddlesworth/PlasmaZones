@@ -13,8 +13,15 @@ struct lua_State;
 namespace PhosphorScripting {
 namespace Marshal {
 
-/// Recursion guard for deeply nested / cyclic tables.
+/// Recursion guard for deeply nested tables.
 inline constexpr int MaxDepth = 32;
+
+/// Upper bound on the values one toVariant() call converts, counting every
+/// table, element and scalar. Depth alone does not bound the work: a table
+/// that references the same subtable twice per level doubles the walk at each
+/// of the MaxDepth levels. toVariant() runs after the protected call returns,
+/// so the watchdog and heap cap no longer apply and nothing else stops it.
+inline constexpr int MaxNodes = 1 << 18;
 
 /// Push @p v onto the Lua stack. Bool/number/string map to primitives;
 /// QVariantList → array table; QVariantMap → string-keyed table; everything
@@ -31,6 +38,11 @@ void pushVariant(lua_State* L, const QVariant& v, int depth = 0);
 /// marshalled as the list and its non-sequence keys are intentionally dropped.
 /// Callers that need both parts must return a pure map (no `[1..n]` keys). Keys
 /// that cannot coerce to a string (table/function/boolean keys) are skipped.
+///
+/// A table that contains itself (directly or through a descendant) converts
+/// the inner reference to an invalid QVariant, as a function value does. A
+/// value that needs more than MaxNodes conversions returns an invalid QVariant
+/// as a whole, never a truncated table.
 QVariant toVariant(lua_State* L, int idx, int depth = 0);
 
 } // namespace Marshal
