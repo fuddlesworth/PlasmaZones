@@ -10,7 +10,6 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
-#include <QTextStream>
 
 namespace PhosphorShaders {
 
@@ -32,11 +31,25 @@ QString tryReadFile(const QString& path, QString* outError)
         }
         return QString();
     }
-    // Return a guaranteed non-null result on success (readAll() yields a null
-    // QString for an empty file), so the caller distinguishes a genuine
-    // open-failure (null) from a valid empty include (empty, non-null) WITHOUT
-    // depending on whether an error sink was supplied.
-    const QString content = QTextStream(&file).readAll();
+    // Read one byte past the limit rather than trusting size(): the file can
+    // grow between the stat and the read.
+    const QByteArray bytes = file.read(ShaderIncludeResolver::MaxIncludeBytes + 1);
+    if (bytes.size() > ShaderIncludeResolver::MaxIncludeBytes) {
+        if (outError) {
+            *outError = QStringLiteral("Include too large: %1 (max %2 bytes)")
+                            .arg(path)
+                            .arg(ShaderIncludeResolver::MaxIncludeBytes);
+        }
+        return QString();
+    }
+    // Return a guaranteed non-null result on success (an empty file decodes to
+    // a null QString), so the caller distinguishes a genuine open-failure
+    // (null) from a valid empty include (empty, non-null) WITHOUT depending on
+    // whether an error sink was supplied.
+    QString content = QString::fromUtf8(bytes);
+    if (content.startsWith(QChar(0xFEFF))) {
+        content.remove(0, 1); // a UTF-8 byte-order mark is an encoding marker, not GLSL
+    }
     return content.isNull() ? QStringLiteral("") : content;
 }
 
@@ -105,6 +118,13 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
         if (QFileInfo(includeName).fileName() == QLatin1String(ShaderIncludeResolver::GeneratedPreambleInclude)) {
             result += QLatin1String("// [include skipped: generated preamble] ") + line + QLatin1Char('\n');
             continue;
+        }
+
+        if (QDir::isAbsolutePath(includeName)) {
+            if (outError) {
+                *outError = QStringLiteral("Absolute include path not allowed: ") + includeName;
+            }
+            return QString();
         }
 
         QStringList searchDirs;
@@ -199,6 +219,13 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
         if (!expanded.endsWith(QLatin1Char('\n')))
             result += QLatin1Char('\n');
         result += PhosphorShaders::lineDirective(li + 2 + lineOffset, thisSourceIndex);
+        if (result.size() > ShaderIncludeResolver::MaxExpandedSize) {
+            if (outError) {
+                *outError = QStringLiteral("Expanded shader too large (max %1 characters)")
+                                .arg(ShaderIncludeResolver::MaxExpandedSize);
+            }
+            return QString();
+        }
     }
 
     return result;
