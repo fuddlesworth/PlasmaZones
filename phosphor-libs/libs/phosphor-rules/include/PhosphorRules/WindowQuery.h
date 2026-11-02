@@ -30,8 +30,8 @@ namespace PhosphorRules {
  *
  * Context attributes are present even for a windowless context query, with
  * three exceptions: `tiledWindowCount`, `screenWidth` and `screenHeight` are
- * optional and absent when unknown. `virtualDesktop == 0` means "all desktops" (a sticky window); empty
- * `activity` means "all activities".
+ * optional and absent when unknown. `virtualDesktop == 0` means "all desktops"
+ * (a sticky window); empty `activity` means "all activities".
  */
 struct WindowQuery
 {
@@ -71,7 +71,7 @@ struct WindowQuery
     std::optional<bool> isTiled; ///< managed by a tiling-family engine — autotile or scrolling (distinct from
                                  ///< isSnapped)
 
-    // ── Context attributes — always present (except the optional tiledWindowCount) ──
+    // ── Context attributes — always present (except the three optionals below) ──
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
@@ -82,16 +82,6 @@ struct WindowQuery
     QString activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>" / "scrolling:"); empty
                           ///< where unpopulated
     QString colorScheme; ///< "light" / "dark" system colour scheme; empty = unknown (no provider)
-    QString screenAspectRatio; ///< nearest common aspect ratio of the resolving screen ("16:9", "32:9", …);
-                               ///< empty = unknown (no size provider)
-
-    /// The resolving screen's size in DEVICE pixels (its mode, not the scaled
-    /// logical size). Optional for the same reason as tiledWindowCount: there is
-    /// no width that means "unknown", so each is engaged only where a size
-    /// provider answered and absent otherwise, which keeps a size predicate
-    /// inert wherever the size is unknown.
-    std::optional<int> screenWidth;
-    std::optional<int> screenHeight;
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled
@@ -99,6 +89,20 @@ struct WindowQuery
     /// engine supplies it for an actively-tiling context), absent otherwise so
     /// a count predicate is inert wherever the count is unknown.
     std::optional<int> tiledWindowCount;
+
+    // The screen-shape members follow tiledWindowCount because this header is
+    // installed and new members are appended.
+    QString screenAspectRatio; ///< nearest common aspect ratio of the resolving screen ("16:9", "32:9", …);
+                               ///< empty = unknown (no size provider)
+
+    /// The resolving screen's size in DEVICE pixels (its mode, not the scaled
+    /// logical size). Optional for the same reason as tiledWindowCount: there is
+    /// no width that means "unknown", so each is engaged only where a size
+    /// provider answered and absent otherwise. Absence makes a POSITIVE size
+    /// leaf false; a negated one inverts and matches, which is why the context
+    /// resolvers refuse a rule negating a size field while the size is unknown.
+    std::optional<int> screenWidth;
+    std::optional<int> screenHeight;
 
     /// True if any window attribute is set — i.e. this is a per-window query
     /// rather than a windowless context query.
@@ -116,8 +120,9 @@ struct WindowQuery
      * @brief Resolve @p field to its current value.
      *
      * Returns an engaged QVariant for present attributes; an empty
-     * `std::optional` for an absent window attribute (which a predicate
-     * treats as a non-match). Context fields always resolve.
+     * `std::optional` for an absent attribute (which a predicate treats as a
+     * non-match). Context fields always resolve, except the three optional
+     * ones (tiledWindowCount, screenWidth, screenHeight) while disengaged.
      *
      * Bool flags resolve to `bool`, numeric fields to `int`, the window
      * type to its underlying `int` (so `Equals` comparisons are uniform),

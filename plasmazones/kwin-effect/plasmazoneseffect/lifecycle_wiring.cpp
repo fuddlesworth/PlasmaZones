@@ -1055,15 +1055,13 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
         clearScreenIdCache();
         m_lastEffectiveScreenId.clear();
-        // A rotation or mode change keeps the same connector and EDID id, so
-        // no per-window outputChanged fires — yet ScreenOrientation and the
-        // screen width, height and aspect ratio are matchable rule fields
-        // stamped live from the output geometry and scale, and every verdict
-        // cache keys on (windowId, ruleSet revision) only. Drop the caches and
-        // sweep the borders so screen-shape rules re-resolve, mirroring the
-        // daemon-ready re-seed pattern.
-        invalidateAllRuleCaches();
-        scheduleBorderSweep();
+        // No rule-cache drop here. The screen-shape rule fields derive from
+        // each output's pixel size, and the union is the wrong edge for it: a
+        // mode change at a constant logical size keeps the union, and an
+        // arrangement change moves it without touching any size. Each output's
+        // currentModeChanged and transformChanged drive
+        // flushOutputPixelSizes instead (onScreenAdded), which drops the
+        // verdicts once per burst.
     });
 
     // Decorations.Performance.SuppressWhileFullscreen — keep the set of outputs

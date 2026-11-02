@@ -6,6 +6,8 @@
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorRules/WindowQuery.h>
 
+#include <QSize>
+
 namespace KWin {
 class EffectWindow;
 class LogicalOutput;
@@ -76,6 +78,16 @@ bool windowIsBareOverrideRedirect(KWin::EffectWindow* w);
 ///     query carrying a populated context only ENABLES context-pinned
 ///     window-domain rules to match — it does not affect the windowless
 ///     context cascade, which routes through `ContextRuleBridge`.
+///   - **Screen shape** `screenOrientation` / `screenWidth` / `screenHeight` /
+///     `screenAspectRatio`: stamped HERE only when @p screenId is empty, from
+///     the output nearest the frame centre (@ref centreScreenOutput). A caller
+///     that passes an id stamps them itself (the effect's ruleQuery funnel,
+///     through @ref stampScreenShape), because the centre answers the wrong
+///     monitor for a scroll strip's parked windows. An unknown shape engages
+///     unevenly: width and height stay disengaged optionals, while orientation
+///     and aspect ratio are plain strings and resolve as ENGAGED empty values,
+///     so a negated leaf on either matches a window whose screen shape is
+///     unknown.
 ///
 /// PlasmaZones placement state (@p isFloating / @p isSnapped / @p zoneId) is
 /// supplied by the caller because it lives in the effect's runtime caches
@@ -90,7 +102,9 @@ bool windowIsBareOverrideRedirect(KWin::EffectWindow* w);
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
                                         bool isTiled, const QString& zoneId);
 
-/// The output containing @p w's frame centre, or null when no output does.
+/// The output at @p w's frame centre. KWin's screenAt answers the NEAREST
+/// output for a point outside them all, so this is null only for a null
+/// window or when there are no outputs at all.
 ///
 /// This is the position-derived FALLBACK for the screen-shape fields: it is
 /// wrong for a scroll strip's off-screen parked windows (their centre lies
@@ -99,12 +113,24 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
 /// when the id resolves to no output.
 const KWin::LogicalOutput* centreScreenOutput(KWin::EffectWindow* w);
 
-/// Stamp @p output's shape onto @p query: the orientation ("portrait" when
-/// taller than wide, a square screen counting as landscape), the size in
-/// device pixels (logical geometry times scale) and the aspect-ratio token
-/// derived from it. The same derivations as the daemon's providers, so a
-/// window rule and a context rule read a screen alike. A no-op for a null
-/// output or one with no valid geometry, which leaves the fields unknown.
-void stampScreenShape(PhosphorRules::WindowQuery& query, const KWin::LogicalOutput* output);
+/// @p output's current mode in device pixels, already rotated by its
+/// transform (KWin's LogicalOutput::pixelSize), or an empty size for a null
+/// output or KWin's placeholder output. The placeholder stands in while no
+/// physical output exists (every monitor off), and its mode describes no
+/// screen a rule could mean.
+QSize outputPixelSize(const KWin::LogicalOutput* output);
+
+/// Stamp the shape of a @p pixelSize screen onto @p query: the orientation
+/// ("portrait" when taller than wide, a square screen counting as landscape),
+/// the width and height, and the aspect-ratio token derived from them. A no-op
+/// for an empty size, which leaves all four fields unknown.
+///
+/// The size is what this effect reports to the daemon for each output
+/// (pushOutputPixelSizes), and a virtual screen's is its region's share of it
+/// (virtualScreenPixelSize). The daemon stamps context rules from that same
+/// report with the same derivations, so a window rule and a context rule read a
+/// screen alike once the report has landed. Before it lands the daemon answers
+/// from the size it saved for that monitor last session, when it has one.
+void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize);
 
 } // namespace PlasmaZones

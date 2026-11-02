@@ -15,7 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getScreenInfo">
-            <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.). It includes pixelSize, the screen's size in device pixels as {width, height}. That is derived as the logical size times the scale, rounded, so it lands on the output's mode or within a pixel of it, and a virtual screen's covers its own region. An empty id, or one that does not resolve, an unknown virtual screen included, answers an empty string."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.). It includes pixelSize, the screen's size in device pixels as {width, height}, which for a virtual screen covers its own region. That is the output's mode as the compositor reported it through setPixelSizeFromKWin, or until the first report the size last reported for that monitor in an earlier session. With neither it is estimated as the logical size times the scale, rounded, which lands on the mode or within a pixel of it. pixelSizeReported is true only when the size is the compositor's report. An empty id, or one that does not resolve, an unknown virtual screen included, answers an empty string."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based like Dell:U2722D:115107, or virtual like Dell:U2722D:115107/vs:0)."/>
             </arg>
@@ -62,6 +62,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Work-area height."/>
             </arg>
         </method>
+        <method name="setPixelSizeFromKWin">
+            <annotation name="org.gtk.GDBus.DocString" value="Record an output's exact size in device pixels as reported by the KWin effect, which reads the output's current mode with rotation already applied. A Wayland client cannot read an output's mode, so this is the size getScreenInfo reports as pixelSize. A 0x0 size clears the record, which the effect sends when the output goes away. A negative size, a size with only one side zero, or one larger than 65535 on either side is ignored and leaves the record as it was. Called by the KWin effect. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Connector name (e.g. DP-1)."/>
+            </arg>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Output width in device pixels."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Output height in device pixels."/>
+            </arg>
+        </method>
         <method name="getAvailableGeometry">
             <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Handles virtual screen IDs (e.g. physId/vs:0). Uses layer-shell sensor data when available, falls back to Qt's availableGeometry. An empty id answers for the primary screen. An id that does not resolve, an unknown virtual screen included, answers an empty rect."/>
             <arg name="screenId" type="s" direction="in">
@@ -95,7 +107,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="screenGeometryChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution, position or scale changes."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution, position or scale changes, or when the size in device pixels that getScreenInfo reports for it does."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier whose geometry changed."/>
             </arg>

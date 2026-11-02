@@ -21,11 +21,13 @@
 #include <QPoint>
 #include <QScreen>
 #include <QSet>
+#include <QSize>
 #include <QSizeF>
 #include <QTimer>
 
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace PhosphorScreens {
 
@@ -41,6 +43,7 @@ constexpr QLatin1String kKeyGeometry{"geometry"};
 constexpr QLatin1String kKeyPhysicalSize{"physicalSize"};
 constexpr QLatin1String kKeyDevicePixelRatio{"devicePixelRatio"};
 constexpr QLatin1String kKeyPixelSize{"pixelSize"};
+constexpr QLatin1String kKeyPixelSizeReported{"pixelSizeReported"};
 constexpr QLatin1String kKeyRefreshRate{"refreshRate"};
 constexpr QLatin1String kKeyDepth{"depth"};
 constexpr QLatin1String kKeyScreenId{"screenId"};
@@ -57,6 +60,10 @@ constexpr QLatin1String kKeyY{"y"};
 constexpr QLatin1String kKeyWidth{"width"};
 constexpr QLatin1String kKeyHeight{"height"};
 constexpr QLatin1String kKeyId{"id"};
+
+// The largest side setPixelSizeFromKWin accepts. Past any real output's mode,
+// and inside the int range every pixel-size reader multiplies through.
+constexpr int kMaxReportedPixelExtent = 65535;
 } // namespace
 
 DBusScreenAdaptor::DBusScreenAdaptor(ScreenManager* manager, IConfigStore* store, QObject* parent)
@@ -259,6 +266,26 @@ void DBusScreenAdaptor::connectScreenManagerSignals(ScreenManager* mgr)
             Q_EMIT availableGeometryChanged(id);
         });
     });
+    // getScreenInfo's cached JSON carries the size in device pixels, which
+    // the compositor reports after start-up and on every mode change or
+    // rotation, none of them a QScreen geometry event. Drop the blobs and
+    // announce it the way the scale settle above does. A connector the
+    // manager does not track yet has no effective id to announce, and its
+    // own screenAdded follows.
+    connect(mgr, &ScreenManager::compositorPixelSizeChanged, this, [this](const QString& connectorName) {
+        invalidateScreenInfoCache();
+        if (!m_screenManager) {
+            return;
+        }
+        const PhysicalScreen screen = m_screenManager->physicalScreenFor(connectorName);
+        if (!screen.isValid()) {
+            return;
+        }
+        const QString physId = screen.identifier.isEmpty() ? screen.name : screen.identifier;
+        emitForEffectiveScreens(physId, [this](const QString& id) {
+            Q_EMIT screenGeometryChanged(id);
+        });
+    });
 }
 
 void DBusScreenAdaptor::handleScreenIdentifierChanged(const QString& oldId, const QString& newId)
@@ -446,19 +473,25 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
     const qreal scale = m_screenManager ? m_screenManager->logicalScale(screen) : screen->devicePixelRatio();
     info[kKeyDevicePixelRatio] = scale;
     // The screen's size in device pixels, for a reader converting a
-    // device-pixel unit (a layout's fixed zones). DERIVED, not read: a
-    // Wayland client never sees the output's mode, because wl_output's mode
-    // event stays inside the QPA plugin and QScreen::geometry() is the
-    // logical rect. So this is the logical size times the scale above,
-    // rounded. The compositor made the logical size by dividing the mode by
-    // that scale, so the product lands on the mode's size or within a pixel
-    // of it where the compositor rounded the logical size. A virtual screen
-    // answers the same product over its own logical rect, which is its
-    // region's share of the output's pixels. It is only as good as the
-    // scale: before the output's sensor maps, the coarse fallback makes it
-    // wrong, and screenGeometryChanged announces the corrected value.
-    info[kKeyPixelSize] =
-        QJsonObject{{kKeyWidth, qRound(geom.width() * scale)}, {kKeyHeight, qRound(geom.height() * scale)}};
+    // device-pixel unit (a layout's fixed zones) or matching a size rule.
+    // The manager's answer is the one the daemon's own readers use: the
+    // compositor's report of the output's mode (a Wayland client never sees
+    // the mode itself, because wl_output's mode event stays inside the QPA
+    // plugin), or until it arrives the host's last-session seed, with a
+    // virtual screen answering its region's share. With neither, this is
+    // estimated as the logical size times the scale above, rounded, which
+    // keeps the layout editor working before the first report and without a
+    // manager. The compositor made the logical size by dividing the mode by
+    // that scale, so the estimate lands on the mode or within a pixel of it,
+    // but only once the scale is the real one: before the output's sensor
+    // maps, the coarse fallback makes it wrong. screenGeometryChanged
+    // announces each later answer. pixelSizeReported says whether the size
+    // is the compositor's report.
+    const std::optional<QSize> knownPixelSize =
+        m_screenManager ? m_screenManager->pixelSize(screenId) : std::optional<QSize>();
+    const QSize pixelSize = knownPixelSize.value_or(QSize(qRound(geom.width() * scale), qRound(geom.height() * scale)));
+    info[kKeyPixelSize] = QJsonObject{{kKeyWidth, pixelSize.width()}, {kKeyHeight, pixelSize.height()}};
+    info[kKeyPixelSizeReported] = m_screenManager && m_screenManager->isPixelSizeReported(screenId);
     info[kKeyRefreshRate] = screen->refreshRate();
     info[kKeyDepth] = screen->depth();
     info[kKeyScreenId] = screenId;
@@ -801,6 +834,29 @@ QString DBusScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId,
     const QString reason = VirtualScreenSwapper::reasonString(result);
     qCDebug(lcPhosphorScreens) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->" << reason;
     return reason;
+}
+
+void DBusScreenAdaptor::setPixelSizeFromKWin(const QString& screenName, int width, int height)
+{
+    if (m_compositorReportGate && !m_compositorReportGate(QLatin1StringView(__func__))) {
+        return;
+    }
+    if (!m_screenManager) {
+        return;
+    }
+    // 0x0 is the effect's clear, sent when an output goes away. Anything else
+    // has to be a real mode. A malformed report is dropped rather than
+    // treated as a clear, so a bad payload cannot erase a good size.
+    if (width == 0 && height == 0) {
+        m_screenManager->setCompositorPixelSize(screenName, QSize());
+        return;
+    }
+    if (width <= 0 || height <= 0 || width > kMaxReportedPixelExtent || height > kMaxReportedPixelExtent) {
+        qCWarning(lcPhosphorScreens) << "setPixelSizeFromKWin: ignoring implausible size" << width << "x" << height
+                                     << "for" << screenName;
+        return;
+    }
+    m_screenManager->setCompositorPixelSize(screenName, QSize(width, height));
 }
 
 } // namespace PhosphorScreens

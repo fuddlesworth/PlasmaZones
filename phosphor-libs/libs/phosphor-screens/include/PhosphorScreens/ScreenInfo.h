@@ -28,6 +28,7 @@
 //   downstream producers, so the existing convention is locked in.
 
 #include <QList>
+#include <QSize>
 #include <QString>
 #include <QVariantList>
 
@@ -70,6 +71,20 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
     int virtualIndex = -1;
     /** User-facing name for virtual screens (e.g. "Left"). */
     QString virtualDisplayName;
+    /**
+     * The screen's size in device pixels (a virtual screen's own region
+     * share), as the producer's getScreenInfo reply carries it under
+     * `pixelSize`. width/height above are logical and this is not. An
+     * invalid QSize when the producer reported none. Not emitted by
+     * screenInfoListToVariantList().
+     */
+    QSize pixelSize;
+    /**
+     * True when @ref pixelSize is the compositor's own report of the output's
+     * mode (`pixelSizeReported` in the getScreenInfo reply), false when it is
+     * the producer's estimate or absent.
+     */
+    bool pixelSizeReported = false;
 };
 
 /**

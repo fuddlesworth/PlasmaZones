@@ -946,6 +946,13 @@ private:
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
     /// The KWin output carrying a (physical or virtual) screen id, else nullptr. Counterpart to outputScreenId.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
+    /// The device-pixel size of screen @p screenId, whose output @p output is
+    /// (outputForScreenId's answer): the output's own size for a physical id,
+    /// and for a virtual id its region's share of that size, taken from the
+    /// m_virtualScreenDefs entry carrying the id. Empty, which leaves the
+    /// screen-shape rule fields unknown, for a null or placeholder output and
+    /// for a virtual id with no definition here.
+    QSize screenPixelSize(const QString& screenId, const KWin::LogicalOutput* output) const;
     /// The output a scroll-strip window is managed by, or nullptr when the
     /// window is not a strip column (or is exempt: user move/resize, floating,
     /// deleted — a close-grabbed column counts as exempt for its whole close
@@ -2466,8 +2473,8 @@ private:
     /// Called from every exit of the endDrag reply handling (outcome applied,
     /// D-Bus error, rejected payload, daemon timeout) so a drag that carried a
     /// window across screens always ends with its per-screen match inputs
-    /// (ScreenId, ScreenOrientation, ActiveLayout) re-resolved. Empties the set,
-    /// so the second call in a turn does nothing.
+    /// (ScreenId, the screen-shape fields, ActiveLayout) re-resolved. Empties
+    /// the set, so the second call in a turn does nothing.
     void drainDragSuppressedRuleInvalidations();
 
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
@@ -2734,6 +2741,25 @@ private:
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
+    /// Collapse the pixel-size edges of one event-loop turn (an output added,
+    /// and each output's currentModeChanged and transformChanged) onto a single
+    /// queued flushOutputPixelSizes.
+    void scheduleOutputPixelSizeFlush();
+    /// Read every output's LogicalOutput::pixelSize, report each to the daemon
+    /// (reportOutputPixelSize) and, when any differs from m_outputPixelSizes,
+    /// record it and drop the rule verdicts once: the screen-shape rule fields
+    /// derive from that size (stampScreenShape) and no verdict cache key moves
+    /// with it. Placeholder outputs are skipped.
+    void flushOutputPixelSizes();
+    /// Send @p size for connector @p connectorName to the daemon
+    /// (setPixelSizeFromKWin), unless the bridge is down or the daemon already
+    /// holds that value from this bridge (m_reportedPixelSizes). An empty size
+    /// sends the 0x0 clear, and only for a connector this bridge reported.
+    void reportOutputPixelSize(const QString& connectorName, const QSize& size);
+    /// Report every non-placeholder output's pixel size. continueDaemonReadySetup
+    /// runs it once the bridge is registered: the outputs were added before
+    /// that (onScreenAdded runs at load), and a restarted daemon holds none.
+    void pushOutputPixelSizes();
     /// Per-effect curve registry. Replaces the prior per-process
     /// CurveRegistry::instance() singleton — composition roots own
     /// their own. Declared BEFORE m_windowAnimator so a future
@@ -3831,6 +3857,16 @@ private:
     // Per-screen current virtual desktop last reported to the daemon (physical
     // screenId → 1-based desktop), for dedup of KWin's per-output desktopChanged.
     QHash<QString, int> m_lastScreenDesktop;
+    // Each output's device pixel size as flushOutputPixelSizes last read it
+    // (connector name → LogicalOutput::pixelSize), so a refresh-rate-only
+    // currentModeChanged does not drop every rule verdict.
+    QHash<QString, QSize> m_outputPixelSizes;
+    // The size this bridge last sent the daemon per connector
+    // (reportOutputPixelSize). Cleared when the daemon goes away, so the next
+    // bridge's pushOutputPixelSizes sends every output again.
+    QHash<QString, QSize> m_reportedPixelSizes;
+    // A flushOutputPixelSizes is queued for the end of this event-loop turn.
+    bool m_outputPixelSizeFlushQueued = false;
 
     // Last effective screen ID reported to daemon (physical or virtual).
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual

@@ -102,22 +102,25 @@ const KWin::LogicalOutput* centreScreenOutput(KWin::EffectWindow* w)
     return KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())));
 }
 
-void stampScreenShape(PhosphorRules::WindowQuery& query, const KWin::LogicalOutput* output)
+QSize outputPixelSize(const KWin::LogicalOutput* output)
 {
-    if (!output) {
+    if (!output || output->isPlaceholder()) {
+        return QSize();
+    }
+    return output->pixelSize();
+}
+
+void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize)
+{
+    if (pixelSize.isEmpty()) {
         return;
     }
-    const QRect g = output->geometry();
-    if (!g.isValid()) {
-        return;
-    }
-    query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
-    const qreal scale = output->scale();
-    if (scale <= 0.0) {
-        return;
-    }
-    const int width = qRound(g.width() * scale);
-    const int height = qRound(g.height() * scale);
+    // The exact mode, not the logical geometry times the scale: a fractional
+    // scale over a logical size KWin has rounded to whole pixels lands a pixel
+    // off (2560x1440 at 150% read back as 2561 wide).
+    const int width = pixelSize.width();
+    const int height = pixelSize.height();
+    query.screenOrientation = height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
     query.screenWidth = width;
     query.screenHeight = height;
     query.screenAspectRatio = PhosphorRules::aspectRatioTokenFor(width, height);
@@ -174,7 +177,7 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // funnel) derives the fields from that id instead and only falls back to
     // the centre when the id resolves to no output.
     if (screenId.isEmpty()) {
-        stampScreenShape(query, centreScreenOutput(w));
+        stampScreenShape(query, outputPixelSize(centreScreenOutput(w)));
     }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
     // makes a predicate over it inert (returns false). Engaging it with an

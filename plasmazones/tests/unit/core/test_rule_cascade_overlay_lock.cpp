@@ -915,7 +915,7 @@ private Q_SLOTS:
         shader.type = QString(PWR::ActionType::OverrideOverlayShader);
         shader.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("night-glow"));
         // A dark-scoped SNAPPING LAYOUT rule, so the assignment cache (whose
-        // key carries the scheme token in its own "twc:|or:|cs:" composite
+        // key carries the scheme token in its own "twc:|or:|sz:|cs:" composite
         // rather than through contextCacheKeyToken) is exercised too.
         PWR::RuleAction darkLayout;
         darkLayout.type = QString(PWR::ActionType::SetSnappingLayout);

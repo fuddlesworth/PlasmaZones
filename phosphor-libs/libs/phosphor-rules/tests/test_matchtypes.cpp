@@ -3,6 +3,8 @@
 
 #include <PhosphorRules/MatchTypes.h>
 
+#include <QSet>
+#include <QStringList>
 #include <QTest>
 
 using namespace PhosphorRules;
@@ -138,8 +140,8 @@ private Q_SLOTS:
         QVERIFY(fieldIsNumeric(Field::ScreenHeight));
         QVERIFY(fieldIsString(Field::ScreenAspectRatio));
 
-        // The capability fields added alongside them are window properties, not
-        // context, so a rule keying on them is a per-window match.
+        // Everything else is a window property, the move / maximize capability
+        // flags included, so a rule keying on one is a per-window match.
         QVERIFY(!fieldIsContext(Field::IsMovable));
         QVERIFY(!fieldIsContext(Field::IsMaximizable));
         QVERIFY(!fieldIsContext(Field::AppId));
@@ -216,7 +218,7 @@ private Q_SLOTS:
         // monitor is sold as. The ultrawide family is not exactly 21:9, and
         // all of it must still land there rather than on 16:9 or 32:10.
         QTest::addRow("5120x1440 super-ultrawide") << 5120 << 1440 << QStringLiteral("32:9");
-        QTest::addRow("2560x1440 its KVM half") << 2560 << 1440 << QStringLiteral("16:9");
+        QTest::addRow("2560x1440 its split-mode half") << 2560 << 1440 << QStringLiteral("16:9");
         QTest::addRow("1920x1080") << 1920 << 1080 << QStringLiteral("16:9");
         QTest::addRow("1366x768 off by a pixel") << 1366 << 768 << QStringLiteral("16:9");
         QTest::addRow("3440x1440 ultrawide") << 3440 << 1440 << QStringLiteral("21:9");
@@ -257,6 +259,60 @@ private Q_SLOTS:
             ratios.insert(entry.ratio);
             // Each token names a ratio it maps back to.
             QCOMPARE(aspectRatioTokenFor(qRound(entry.ratio * 1000.0), 1000), QString(entry.token));
+        }
+    }
+
+    void testAspectRatioVocabularyWireTokens()
+    {
+        // The vocabulary is a WIRE contract like the Mode tokens: saved rules
+        // carry these strings and nothing validates an aspect leaf's value at
+        // load, so a renamed or reordered entry would just stop matching. Spell
+        // every token out literally, in the documented order (landscape first,
+        // then the portrait forms), so a change has to come through here.
+        const QStringList expected = {
+            QStringLiteral("1:1"),   QStringLiteral("5:4"),  QStringLiteral("4:3"),  QStringLiteral("3:2"),
+            QStringLiteral("16:10"), QStringLiteral("16:9"), QStringLiteral("21:9"), QStringLiteral("32:10"),
+            QStringLiteral("32:9"),  QStringLiteral("4:5"),  QStringLiteral("3:4"),  QStringLiteral("2:3"),
+            QStringLiteral("10:16"), QStringLiteral("9:16"), QStringLiteral("9:21"), QStringLiteral("10:32"),
+            QStringLiteral("9:32"),
+        };
+        QStringList actual;
+        for (const AspectRatioToken& entry : kAspectRatioTokens) {
+            actual.append(QString(entry.token));
+        }
+        QCOMPARE(actual, expected);
+    }
+
+    void testAspectRatioVocabularyIsMirrorSymmetric()
+    {
+        // A rotated monitor reports its landscape twin's shape turned on end,
+        // so every entry's mirror ("a:b" -> "b:a") must be in the vocabulary
+        // too, and the nearest-match derivation must hand a rotated screen
+        // exactly the mirror of its unrotated token. "1:1" is its own mirror.
+        const auto mirror = [](const QString& token) {
+            const QStringList parts = token.split(QLatin1Char(':'));
+            return parts.size() == 2 ? parts.at(1) + QLatin1Char(':') + parts.at(0) : QString();
+        };
+        QSet<QString> tokens;
+        for (const AspectRatioToken& entry : kAspectRatioTokens) {
+            tokens.insert(QString(entry.token));
+        }
+        for (const AspectRatioToken& entry : kAspectRatioTokens) {
+            const QString token(entry.token);
+            const QString mirrored = mirror(token);
+            QVERIFY2(tokens.contains(mirrored), qPrintable(token));
+            const int longSide = qRound(entry.ratio * 1000.0);
+            QCOMPARE(aspectRatioTokenFor(longSide, 1000), token);
+            QCOMPARE(aspectRatioTokenFor(1000, longSide), mirrored);
+        }
+        // And for screens that sit between two entries, not only on them: the
+        // log-scale distance is symmetric, so the rotated reading must always
+        // be the mirror of the unrotated one, ties included.
+        for (int width = 200; width <= 8000; width += 7) {
+            for (const int height : {480, 768, 900, 1080, 1200, 1440, 1600, 2160}) {
+                const QString landscape = aspectRatioTokenFor(width, height);
+                QCOMPARE(aspectRatioTokenFor(height, width), mirror(landscape));
+            }
         }
     }
 

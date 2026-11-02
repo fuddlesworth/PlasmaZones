@@ -26,10 +26,10 @@ struct ContextResolveKey
     //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
     //     placement mode, active layout, screen shape (orientation and
     //     device-pixel size) and colour scheme.
-    //   - lock / default-assignment / overlay: contextCacheKeyToken with an
-    //     empty mode (they are mode-agnostic) plus activeLayout (except
-    //     default-assignment, which omits it to avoid recursion), the screen
-    //     shape and the colour scheme.
+    //   - lock / default-assignment / OSD / drag-selector / overlay:
+    //     contextCacheKeyToken with an empty mode (they are mode-agnostic) plus
+    //     activeLayout (except default-assignment, which omits it to avoid
+    //     recursion), the screen shape and the colour scheme.
     //   - assignment resolver: "twc:N|or:<token>|sz:WxH|cs:<token>" — the
     //     tiled-window count, the screen shape and the colour scheme (it does
     //     not read the active layout).

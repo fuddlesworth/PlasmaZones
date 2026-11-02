@@ -325,7 +325,9 @@ public:
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
-     * @c ScreenManager::screenGeometry. Same threading contract as
+     * @c ScreenManager::screenGeometry. Consulted only while the
+     * @ref setScreenPixelSizeProvider answer is unknown: a known size decides
+     * the orientation itself (see @ref screenShape). Same threading contract as
      * @ref setTiledWindowCountProvider.
      */
     void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
@@ -351,16 +353,19 @@ public:
     /**
      * @brief Inject a callback that returns a screen's size in DEVICE pixels
      * (its mode, as the display settings report it), or std::nullopt when the
-     * size is unknown (so the screen-size predicates stay inert).
+     * size is unknown. A returned size with a non-positive width or height is
+     * unknown too.
      *
      * Feeds @c Field::ScreenWidth, @c Field::ScreenHeight and
      * @c Field::ScreenAspectRatio on every windowless context query this
-     * registry builds, and folds into every cached resolver's key alongside
-     * the orientation (see @ref ScreenShape), so one monitor can resolve a
-     * different layout at a different resolution. Geometry-derived and
-     * layout-independent, so it carries no recursion risk. The daemon wires
-     * it to the screen manager's geometry and scale. Same threading contract
-     * as @ref setScreenOrientationProvider.
+     * registry builds, and folds into every cached resolver's key (see
+     * @ref ScreenShape), so one monitor can resolve a different layout at a
+     * different resolution. A known size also decides the orientation (see
+     * @ref screenShape). While the size is unknown a positive size or aspect
+     * leaf is false, and every resolver refuses a rule that negates one.
+     * Geometry-derived and layout-independent, so it carries no recursion
+     * risk. The daemon wires it to the screen manager's pixel-size accessor.
+     * Same threading contract as @ref setScreenOrientationProvider.
      */
     void setScreenPixelSizeProvider(std::function<std::optional<QSize>(const QString& screenId)> provider);
 
@@ -560,7 +565,7 @@ public:
     /// (screen, desktop, activity) context by evaluating a windowless
     /// WindowQuery and reading the `ActionSlot::OsdEnabled` slot. Per-slot
     /// read (mirrors @ref resolveContextLocked, including the activeLayout +
-    /// orientation stamping — OSD resolution never runs inside the assignment
+    /// screen-shape stamping — OSD resolution never runs inside the assignment
     /// cascade, so there is no recursion hazard): returns the winning
     /// `SetOsdEnabled` action's boolean `value` (true = force OSDs on past
     /// the per-trigger toggles, false = suppress them), or @c std::nullopt
@@ -575,7 +580,7 @@ public:
     /// the (screen, desktop, activity) context by evaluating a windowless
     /// WindowQuery and reading the `ActionSlot::DragSelectorEnabled` slot.
     /// Per-slot read, the exact twin of @ref resolveContextOsdEnabled
-    /// (including the activeLayout + orientation stamping, and the same
+    /// (including the activeLayout + screen-shape stamping, and the same
     /// absence of a recursion hazard). One deliberate asymmetry: this one is
     /// an IZoneLayoutRegistry virtual (its consumer, the drag adaptor via
     /// OverlayService, holds the interface) while the OSD twin is
@@ -622,55 +627,123 @@ public:
     ContextScrollingParams resolveContextScrollingParams(const QString& screenId, int virtualDesktop,
                                                          const QString& activity) const;
 
+    /// The rule-derived slot resolution of the assignment cascade, as
+    /// @ref resolveRuleSlots produces it and @ref resolveAssignmentEntry caches
+    /// it. Holds ONLY what the rule set produced for each of the four
+    /// independent slots. Given a fixed cache key the value is a pure function
+    /// of the rule set (the cache's revision-invalidation contract). The live
+    /// tiled-window count, the screen shape and the colour scheme are the
+    /// non-rule-set inputs that affect the result; rather than break that
+    /// contract they participate in the cache KEY (the "twc:N",
+    /// "|or:<token>|sz:WxH" and "|cs:<token>" components), so each combination
+    /// resolves its own entry. The global default — an external provider, not
+    /// part of the rule set and not revision-tracked — is folded in AFTER the
+    /// cache returns, so a default-setting change is reflected immediately
+    /// without a rule-set revision bump (a settings edit produces none).
+    /// @c modeEntry is engaged when an engine-mode rule won (it carries that
+    /// rule's mode plus its own payload tokens); when disengaged the caller
+    /// bases the entry on the live global default for the context.
+    /// @c snappingLayout / @c tilingAlgorithm / @c scrollingTemplate are engaged
+    /// when a payload rule filled that slot, and override the base's field.
+    struct RuleSlotResolution
+    {
+        std::optional<AssignmentEntry> modeEntry;
+        std::optional<QString> snappingLayout;
+        std::optional<QString> tilingAlgorithm;
+        std::optional<QString> scrollingTemplate;
+    };
+
+    /// The assignment cascade's rule walk for one windowless context @p query:
+    /// the highest-priority admitted rule per slot (engine mode, snapping
+    /// layout, tiling algorithm, scrolling template), ties by list order, or
+    /// nullopt when no admitted rule fills any slot. Admission refuses a rule
+    /// that references @c Field::ActiveLayout or @c Field::Mode (the cascade
+    /// stamps neither), one that negates a window-sourced field, and one that
+    /// negates a screen-shape field @p query leaves unknown. @p query must
+    /// already carry everything the cascade stamps (context, tiled-window
+    /// count, screen shape, colour scheme). The one implementation:
+    /// @ref resolveAssignmentEntry calls it on a cache miss, and the settings
+    /// process calls it to show what a context resolves to under staged rules.
+    static std::optional<RuleSlotResolution> resolveRuleSlots(const PhosphorRules::RuleEvaluator& evaluator,
+                                                              const PhosphorRules::WindowQuery& query);
+
+    /// The lock resolver's rule walk for one windowless context @p query: the
+    /// highest-priority admitted rule carrying a LockContext action, or nullptr.
+    /// Admission refuses a rule that references @c Field::Mode or
+    /// @c Field::TiledWindowCount (neither is stamped), one that negates a
+    /// window-sourced field, and one that negates a screen-shape field @p query
+    /// leaves unknown. The one implementation: @ref resolveContextLocked calls
+    /// it on a cache miss and reads the winner's value. The returned pointer
+    /// aliases the evaluator's rule set and is valid until its next mutation.
+    static const PhosphorRules::Rule* resolveLockRule(const PhosphorRules::RuleEvaluator& evaluator,
+                                                      const PhosphorRules::WindowQuery& query);
+
     /// The geometry-derived context facts of one screen: its orientation token
-    /// ("portrait" / "landscape", from @ref m_screenOrientationProvider), its
-    /// size in device pixels (from @ref m_screenPixelSizeProvider) and the
-    /// aspect-ratio token derived from that size. Each part is empty / absent
-    /// when its provider is unset or returns nullopt.
+    /// ("portrait" / "landscape") and its size in device pixels (from
+    /// @ref m_screenPixelSizeProvider). @c pixelSize is engaged only for a size
+    /// with a positive width and height, and @c orientation is empty only when
+    /// neither the size nor @ref m_screenOrientationProvider answered. The
+    /// aspect-ratio token is not carried: it is a pure function of the size,
+    /// derived where a query is stamped (@ref applyScreenShape), so a cache hit
+    /// never pays for it.
     struct ScreenShape
     {
         QString orientation;
         std::optional<QSize> pixelSize;
-        QString aspectRatio;
     };
 
     /// Read @p screenId's @ref ScreenShape from the providers, once. Shared by
     /// @ref stampScreenShape (the query values) and the cache-key fold (see
     /// @ref contextCacheKeyToken) so both describe the same reading.
+    ///
+    /// A known size decides the orientation (portrait iff taller than wide, the
+    /// same tokens the daemon's orientation provider returns), so a rotation
+    /// reaches the rules as one change and the orientation provider is not
+    /// consulted at all. That provider answers only while the size is unknown.
     ScreenShape screenShape(const QString& screenId) const
     {
         ScreenShape shape;
+        if (m_screenPixelSizeProvider) {
+            if (const auto size = m_screenPixelSizeProvider(screenId); size && !size->isEmpty()) {
+                shape.pixelSize = *size;
+                shape.orientation =
+                    size->height() > size->width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+                return shape;
+            }
+        }
         if (m_screenOrientationProvider) {
             if (const auto token = m_screenOrientationProvider(screenId)) {
                 shape.orientation = *token;
             }
         }
-        if (m_screenPixelSizeProvider) {
-            if (const auto size = m_screenPixelSizeProvider(screenId); size && !size->isEmpty()) {
-                shape.pixelSize = *size;
-                shape.aspectRatio = PhosphorRules::aspectRatioTokenFor(size->width(), size->height());
-            }
-        }
         return shape;
     }
 
-    /// Write @p shape into @p query's screen-shape context fields. The cached
-    /// resolvers call this with the shape they already folded into their key,
-    /// because re-reading the providers could hand the query a shape the key
-    /// does not describe.
+    /// Write @p shape into @p query's screen-shape context fields, deriving the
+    /// aspect-ratio token from the size here (empty while the size is unknown).
+    /// The cached resolvers call this with the shape they already folded into
+    /// their key, because re-reading the providers could hand the query a shape
+    /// the key does not describe.
     static void applyScreenShape(PhosphorRules::WindowQuery& query, const ScreenShape& shape)
     {
         query.screenOrientation = shape.orientation;
-        query.screenAspectRatio = shape.aspectRatio;
-        query.screenWidth = shape.pixelSize ? std::optional<int>(shape.pixelSize->width()) : std::nullopt;
-        query.screenHeight = shape.pixelSize ? std::optional<int>(shape.pixelSize->height()) : std::nullopt;
+        if (shape.pixelSize) {
+            query.screenWidth = shape.pixelSize->width();
+            query.screenHeight = shape.pixelSize->height();
+            query.screenAspectRatio =
+                PhosphorRules::aspectRatioTokenFor(shape.pixelSize->width(), shape.pixelSize->height());
+        } else {
+            query.screenWidth.reset();
+            query.screenHeight.reset();
+            query.screenAspectRatio.clear();
+        }
     }
 
-    /// Read @p screenId's shape and stamp it onto @p query. Used by the two
-    /// UNCACHED param resolvers (tiling-params, scrolling-params) and by the
-    /// daemon's per-window rule query; the seven cached resolvers (assignment,
-    /// gap, lock, default-assignment, osd, drag-selector, overlay) read
-    /// @ref screenShape once and pass it to @ref applyScreenShape. Either way
+    /// Read @p screenId's shape and stamp it onto @p query. Used by the
+    /// daemon's per-window rule query; every context resolver in this registry
+    /// (the seven cached ones and the two uncached param resolvers) reads
+    /// @ref screenShape once and passes it to @ref applyScreenShape, because it
+    /// needs the same reading for its key or its active-layout resolve. Either way
     /// every windowless-context query carries the shape, so a
     /// @c Field::ScreenOrientation, @c Field::ScreenWidth, @c Field::ScreenHeight
     /// or @c Field::ScreenAspectRatio predicate matches regardless of which
@@ -685,7 +758,7 @@ public:
     /// The colour-scheme token from @ref m_colorSchemeProvider ("light" /
     /// "dark"), or an empty string when the provider is unset or returns
     /// nullopt. Shared by the query stamp and the cache-key fold, the same
-    /// one-read discipline as @ref screenOrientationToken.
+    /// one-read discipline as @ref screenShape.
     ///
     /// PROVIDER-DEPENDENT, and only the daemon wires one: in the settings and
     /// editor processes this reads back EMPTY, so a `ColorScheme Equals "dark"`
@@ -707,7 +780,7 @@ public:
     /// @ref m_colorSchemeProvider (a no-op when unset). Used by the two
     /// UNCACHED param resolvers; the cached resolvers assign
     /// @ref colorSchemeToken directly for the same key-vs-query consistency
-    /// reason @ref stampScreenOrientation documents. Palette-derived and
+    /// reason @ref applyScreenShape documents. Palette-derived and
     /// layout-independent, so safe from the assignment cascade.
     void stampColorScheme(PhosphorRules::WindowQuery& query) const
     {
@@ -732,10 +805,11 @@ public:
             + screenShapeKeyToken(shape) + QLatin1String("|cs:") + escapeKeyComponent(colorSchemeToken);
     }
 
-    /// The screen-shape component of both cache-key formats: the orientation and
-    /// the device-pixel size. The aspect-ratio token is a pure function of the
-    /// size, so it adds nothing a key needs. An unknown size contributes an
-    /// empty "sz:" component, which is the "size unknown" key.
+    /// The screen-shape component of both cache-key formats, "|or:<token>|sz:WxH":
+    /// the orientation and the device-pixel size. The aspect-ratio token is a
+    /// pure function of the size, so it adds nothing a key needs. An unknown
+    /// size contributes an empty "sz:" component, which is the "size unknown"
+    /// key.
     static QString screenShapeKeyToken(const ScreenShape& shape)
     {
         return QLatin1String("|or:") + escapeKeyComponent(shape.orientation) + QLatin1String("|sz:")
@@ -1191,13 +1265,19 @@ private:
     /// routes to the gated default. @p screenId is taken verbatim — connector / VS fallback is
     /// the caller's (layoutForScreen) retry loop.
     ///
+    /// @p shape is the screen shape the query is stamped with, read ONCE by the
+    /// public entry point for the screen it was asked about. A fallback retry
+    /// passes the same shape for the physical id, so a shape condition always
+    /// describes the screen being resolved (a virtual screen's own share), never
+    /// the physical panel the retry borrows assignments from.
+    ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
     /// by (screenId, virtualDesktop, activity) plus a
-    /// "twc:N|or:<token>|cs:<token>" composite of the tiled-window-count,
-    /// screen-orientation and colour-scheme tokens (each
-    /// empty when unknown), so a count, rotation or palette change yields a fresh entry
-    /// rather than a stale hit while steady callers keep hitting the
-    /// cache. The cache is invalidated
+    /// "twc:N|or:<token>|sz:WxH|cs:<token>" composite of the tiled-window
+    /// count, the screen shape (orientation and device-pixel size) and the
+    /// colour scheme (each empty when unknown), so a count, rotation, mode or
+    /// palette change yields a fresh entry rather than a stale hit while steady
+    /// callers keep hitting the cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
     /// @c RuleSet::revision() against the snapshot taken on the last
     /// insert — a mismatch clears the whole map before falling through to the
@@ -1217,7 +1297,18 @@ private:
     /// called on the registry's owner thread (typically the main Qt thread).
     /// The cache itself takes no lock; concurrent calls are not supported.
     std::optional<AssignmentEntry> resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
-                                                          const QString& activity) const;
+                                                          const QString& activity, const ScreenShape& shape) const;
+
+    /// @ref assignmentIdForScreen, @ref scrollingTemplateForContext and
+    /// @ref rulesVisibleActiveLayoutId with the screen shape already read, so a
+    /// resolver that folds the shape into its own key resolves the active layout
+    /// against that same reading. The public forms read the shape and delegate.
+    QString assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const ScreenShape& shape) const;
+    ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity,
+                                                  const ScreenShape& shape) const;
+    QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity,
+                                       const ScreenShape& shape) const;
 
     /// True if a rule whose match is exactly the context shape
     /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
@@ -1262,7 +1353,7 @@ private:
     /// tail, and collapsing "settled empty" into "miss" would make an
     /// explicit Snapping pin report the default tier's autotile id.
     std::optional<QString> resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
-                                                     const QString& activity) const;
+                                                     const QString& activity, const ScreenShape& shape) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
@@ -1339,8 +1430,15 @@ private:
     /// @ref resolveDefaultAssignmentEntry (follow the global setting). This is
     /// the single cascade-miss tail every per-context resolver routes through so
     /// the override and the global gate can never drift between call sites.
+    /// @p shape is the caller's single reading (see @ref resolveAssignmentEntry).
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
-                                                            const QString& activity) const;
+                                                            const QString& activity, const ScreenShape& shape) const;
+
+    /// @ref resolveContextDefaultAssignment with the screen shape already read,
+    /// for the cascade-miss tail above. The public form reads the shape and
+    /// delegates here.
+    std::optional<bool> resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
+                                                        const QString& activity, const ScreenShape& shape) const;
 
     /// True iff ANY enabled assignment-family rule matches the (screen,
     /// desktop, activity) context — an engine-mode rule, a layout-only
@@ -1396,31 +1494,6 @@ private:
         return value;
     }
 
-    /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
-    /// Holds ONLY what the rule set produced for each of the four independent
-    /// slots. Given a fixed cache key the value is a pure function of the rule
-    /// set (the cache's revision-invalidation contract). The live tiled-window
-    /// count, the screen orientation and the colour scheme are the non-rule-set
-    /// inputs that affect
-    /// the result; rather than break that contract they participate in the cache
-    /// KEY (the "twc:N", "|or:<token>" and "|cs:<token>" components), so each combination resolves
-    /// its own entry. The global default — an external
-    /// provider, not part of the rule set and not revision-tracked — is folded
-    /// in AFTER the cache returns, so a default-setting change is reflected
-    /// immediately without a rule-set revision bump (a settings edit produces
-    /// none). @c modeEntry is engaged when an engine-mode rule won (it carries
-    /// that rule's mode plus its own payload tokens); when disengaged the caller
-    /// bases the entry on the live global default for the context.
-    /// @c snappingLayout / @c tilingAlgorithm / @c scrollingTemplate are engaged
-    /// when a payload rule filled that slot, and override the base's field.
-    struct RuleSlotResolution
-    {
-        std::optional<AssignmentEntry> modeEntry;
-        std::optional<QString> snappingLayout;
-        std::optional<QString> tilingAlgorithm;
-        std::optional<QString> scrollingTemplate;
-    };
-
     /// Cache of @ref resolveAssignmentEntry's rule-derived resolution keyed by
     /// context tuple. A @c nullopt value caches a genuine cascade miss (no rule
     /// filled any slot) — so a missed lookup pays the linear walk exactly once
@@ -1462,7 +1535,7 @@ private:
     /// Shared body of the single-slot boolean resolvers (OSD, drag selector):
     /// the highest-priority matching context rule carrying @p actionType fills
     /// the slot, with the lock resolver's structural exclusions and the
-    /// activeLayout / orientation / colour-scheme stamping.
+    /// activeLayout / screen-shape / colour-scheme stamping.
     /// Impl in layoutregistry_contextresolve.cpp. Declared HERE, inside the
     /// member run, on purpose: it sits beside the two cache/revision pairs
     /// it is handed, which is the ownership the file-order convention
@@ -1512,9 +1585,9 @@ private:
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
         m_tiledWindowCountProvider;
     /// Empty = provider unset. Returns a screen's orientation token
-    /// ("portrait" / "landscape"), or nullopt when geometry is unknown. Stamped
-    /// onto every windowless context query so a Field::ScreenOrientation predicate
-    /// can match. See @ref setScreenOrientationProvider.
+    /// ("portrait" / "landscape"), or nullopt when geometry is unknown. Read
+    /// through @ref screenShape, only while the pixel size is unknown. See
+    /// @ref setScreenOrientationProvider.
     std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
     /// Session-wide "light" / "dark" provider — see @ref setColorSchemeProvider.
     std::function<std::optional<QString>()> m_colorSchemeProvider;

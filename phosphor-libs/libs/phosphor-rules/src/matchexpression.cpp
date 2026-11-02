@@ -257,8 +257,48 @@ bool MatchExpression::isValid() const
     // truncated by `subject.toInt()` to 12 — a Pid 12.7 leaf would match pid
     // 12. Reject the leaf rather than accepting a value the user almost
     // certainly did not intend.
+    //
+    // And it must be a NUMBER at all. Evaluation reads it through
+    // `value.toInt()`, which answers 0 for anything it cannot convert, so a
+    // `"abc"`, `""`, `true` or `null` value would compare as 0 and
+    // `ScreenWidth GreaterThan "abc"` would match every screen. The accepted
+    // shapes are the integral and double variants and a string that parses
+    // as an int in full (a hand-written `"2560"` keeps working).
     if (fieldIsNumeric(field)) {
         const int valueTypeId = m_predicate.value.metaType().id();
+        const auto rejectNonNumeric = [this]() {
+            qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with non-numeric value" << m_predicate.value
+                              << "— numeric fields require an integer.";
+            return false;
+        };
+        switch (valueTypeId) {
+        case QMetaType::Int:
+        case QMetaType::Double:
+            break;
+        case QMetaType::LongLong: {
+            const qlonglong v = m_predicate.value.toLongLong();
+            if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+                return rejectNonNumeric();
+            }
+            break;
+        }
+        case QMetaType::UInt:
+        case QMetaType::ULongLong:
+            if (m_predicate.value.toULongLong() > static_cast<qulonglong>(std::numeric_limits<int>::max())) {
+                return rejectNonNumeric();
+            }
+            break;
+        case QMetaType::QString: {
+            bool ok = false;
+            m_predicate.value.toString().toInt(&ok);
+            if (!ok) {
+                return rejectNonNumeric();
+            }
+            break;
+        }
+        default:
+            return rejectNonNumeric();
+        }
         if (valueTypeId == QMetaType::Double) {
             const double d = m_predicate.value.toDouble();
             // Numeric leaves evaluate via subject.toInt() / value.toInt() (int),
@@ -342,7 +382,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         return subject.toBool() == value.toBool();
     }
 
-    // ── Numeric fields (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount) ──
+    // ── Numeric fields (every FieldType::Int field) ──
     // KNOWN LIMITATION (VD-1): VirtualDesktop is compared as a plain int with no
     // awareness of the `0 = all desktops / sticky` sentinel (WindowQuery.h). A
     // sticky window (virtualDesktop == 0) matches only a literal

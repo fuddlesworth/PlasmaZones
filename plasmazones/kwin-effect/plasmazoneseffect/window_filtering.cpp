@@ -270,23 +270,20 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w, c
     // Stamp the screen shape (orientation, size, aspect ratio) from the resolved
     // screen id. ruleQueryFor leaves the fields to us whenever it is handed an
     // id: its own derivation is centre-based, which answers for the wrong
-    // monitor (or not at all) for a scroll strip's windows parked off-screen
-    // beside their column. The id is authoritative for those — it comes from
-    // the engine's own per-window screen override. An id that resolves to no
-    // output (a screen that just disconnected) falls back to the centre-derived
-    // answer.
-    const KWin::LogicalOutput* shapeOutput = outputForScreenId(screenId);
-    if (shapeOutput && !shapeOutput->geometry().isValid()) {
-        shapeOutput = nullptr;
+    // monitor for a scroll strip's windows parked off-screen beside their
+    // column. The id is authoritative for those — it comes from the engine's
+    // own per-window screen override. A virtual id stamps its own share of the
+    // output, as the daemon does, and stays unknown when its definition is
+    // gone. An id that resolves to no output (a screen that just disconnected)
+    // falls back to the centre-derived answer. An empty id needs nothing here:
+    // ruleQueryFor took its centre branch for exactly that case.
+    if (!screenId.isEmpty()) {
+        if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
+            stampScreenShape(query, screenPixelSize(screenId, output));
+        } else {
+            stampScreenShape(query, outputPixelSize(centreScreenOutput(w)));
+        }
     }
-    // The centre-derived fallback is skipped when ruleQueryFor already stamped
-    // the shape: it takes that branch for exactly the empty-screenId case, from
-    // the same helper on the same frame, so re-running it would recompute values
-    // that are already in the query (a screenAt walk per rule query).
-    if (!shapeOutput && query.screenOrientation.isEmpty()) {
-        shapeOutput = centreScreenOutput(w);
-    }
-    stampScreenShape(query, shapeOutput);
     applyOwnLayerFlags(query, windowId);
     return query;
 }

@@ -14,14 +14,17 @@
 #include <PhosphorScreens/InMemoryConfigStore.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/NoOpPanelSource.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QList>
 #include <QScreen>
 #include <QSignalSpy>
+#include <QSize>
 #include <QString>
 #include <QTest>
 
@@ -83,6 +86,23 @@ QString buildStripeJson(int count)
     QJsonObject root;
     root[QStringLiteral("screens")] = screens;
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+/// The `pixelSize` a getScreenInfo reply carries, or an invalid size.
+QSize pixelSizeOf(const QString& screenInfoJson)
+{
+    const QJsonObject size =
+        QJsonDocument::fromJson(screenInfoJson.toUtf8()).object().value(QLatin1String("pixelSize")).toObject();
+    if (size.isEmpty()) {
+        return QSize();
+    }
+    return QSize(size.value(QLatin1String("width")).toInt(), size.value(QLatin1String("height")).toInt());
+}
+
+/// The `pixelSizeReported` flag a getScreenInfo reply carries.
+bool pixelSizeReportedOf(const QString& screenInfoJson)
+{
+    return QJsonDocument::fromJson(screenInfoJson.toUtf8()).object().value(QLatin1String("pixelSizeReported")).toBool();
 }
 
 } // namespace
@@ -378,6 +398,105 @@ private Q_SLOTS:
         QVERIFY(!bare.getScreenGeometry(unknownVirtual).isValid());
         QVERIFY(!bare.getAvailableGeometry(unknownVirtual).isValid());
         QVERIFY(bare.getScreenInfo(unknownVirtual).isEmpty());
+    }
+
+    // The compositor's report becomes getScreenInfo's pixelSize, replacing
+    // the logical-times-scale estimate, and is announced as a geometry change
+    // so a client that cached the reply reads it again. A 0x0 report clears
+    // it and the estimate comes back.
+    void testPixelSizeFromKWinFeedsScreenInfo()
+    {
+        // The identifier, not the connector: the store is fed by connector
+        // and announces under the screen's identifier.
+        QScreen* const primary = QGuiApplication::primaryScreen();
+        const QString physId = primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+        InMemoryConfigStore store;
+        NoOpPanelSource panelSrc;
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &panelSrc,
+                                              .configStore = &store,
+                                              .useGeometrySensors = false,
+                                              .maxVirtualScreensPerPhysical = 8});
+        mgr.start();
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
+
+        const QSize estimate(qRound(primary->geometry().width() * mgr.logicalScale(primary)),
+                             qRound(primary->geometry().height() * mgr.logicalScale(primary)));
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), estimate);
+        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), false);
+
+        QSignalSpy geometrySpy(&adaptor, SIGNAL(screenGeometryChanged(QString)));
+        const QSize mode(3841, 2161);
+        adaptor.setPixelSizeFromKWin(primary->name(), mode.width(), mode.height());
+        QCOMPARE(geometrySpy.count(), 1);
+        QCOMPARE(geometrySpy.at(0).at(0).toString(), physId);
+        // Read after the earlier read cached the estimate: the report must
+        // have dropped that cache.
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), mode);
+        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), true);
+
+        // A repeat changes nothing and announces nothing.
+        adaptor.setPixelSizeFromKWin(primary->name(), mode.width(), mode.height());
+        QCOMPARE(geometrySpy.count(), 1);
+
+        adaptor.setPixelSizeFromKWin(primary->name(), 0, 0);
+        QCOMPARE(geometrySpy.count(), 2);
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), estimate);
+        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), false);
+    }
+
+    // The slot is a compositor report: a refused caller changes nothing. A
+    // malformed size is dropped rather than read as a clear, so it cannot
+    // erase a good report.
+    void testPixelSizeFromKWinGateAndValidation()
+    {
+        // The identifier, not the connector: the store is fed by connector
+        // and announces under the screen's identifier.
+        QScreen* const primary = QGuiApplication::primaryScreen();
+        const QString physId = primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+        InMemoryConfigStore store;
+        NoOpPanelSource panelSrc;
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &panelSrc,
+                                              .configStore = &store,
+                                              .useGeometrySensors = false,
+                                              .maxVirtualScreensPerPhysical = 8});
+        mgr.start();
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
+
+        const QString connector = primary->name();
+        adaptor.setPixelSizeFromKWin(connector, 2560, 1440);
+        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(2560, 1440));
+
+        QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        const QList<QSize> malformed{QSize(-1, 1440), QSize(2560, -1),    QSize(0, 1440),
+                                     QSize(2560, 0),  QSize(65536, 1440), QSize(2560, 65536)};
+        for (const QSize& size : malformed) {
+            adaptor.setPixelSizeFromKWin(connector, size.width(), size.height());
+        }
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(2560, 1440));
+
+        // The upper bound itself is a size like any other.
+        adaptor.setPixelSizeFromKWin(connector, 65535, 1440);
+        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(65535, 1440));
+
+        QString askedFor;
+        adaptor.setCompositorReportGate([&askedFor](QLatin1StringView member) {
+            askedFor = QString(member);
+            return false;
+        });
+        adaptor.setPixelSizeFromKWin(connector, 3840, 2160);
+        QCOMPARE(askedFor, QStringLiteral("setPixelSizeFromKWin"));
+        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(65535, 1440));
+        adaptor.setPixelSizeFromKWin(connector, 0, 0);
+        QVERIFY(mgr.isPixelSizeReported(physId));
     }
 };
 

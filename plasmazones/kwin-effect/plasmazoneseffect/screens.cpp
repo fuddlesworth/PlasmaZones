@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 #include "virtualscreengeometry.h"
+#include "window_query.h"
 
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -30,6 +31,7 @@
 #include <QSet>
 #include <QStringList>
 
+#include <algorithm>
 #include <climits>
 
 #include "tilinghandler/tilinghandler.h"
@@ -269,6 +271,32 @@ KWin::LogicalOutput* PlasmaZonesEffect::outputForScreenId(const QString& screenI
         }
     }
     return nullptr;
+}
+
+QSize PlasmaZonesEffect::screenPixelSize(const QString& screenId, const KWin::LogicalOutput* output) const
+{
+    const QSize physical = outputPixelSize(output);
+    if (physical.isEmpty() || !PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return physical;
+    }
+    // The share comes from the region, never from def.geometry: that rect is
+    // in logical compositor coordinates, and the onScreenAdded geometryChanged
+    // handler rewrites it in place. A mode change at a constant logical size
+    // moves the pixel size and neither the region nor the rect, which is why
+    // the output's pixel-size flush, not the VS-config re-fetch, is what drops
+    // the verdicts for it.
+    const auto defs = m_virtualScreenDefs.constFind(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    if (defs != m_virtualScreenDefs.constEnd()) {
+        for (const EffectVirtualScreenDef& def : *defs) {
+            if (def.id == screenId) {
+                return virtualScreenPixelSize(def.region, physical);
+            }
+        }
+    }
+    // A virtual id whose definition is gone (its split was just removed, and
+    // the window has not re-resolved yet) has no share to report, and the
+    // physical size would be the wrong screen's shape.
+    return QSize();
 }
 
 const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
@@ -566,9 +594,10 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     // generation 0 — so the invalidate+sweep that batch path
                     // performs would otherwise not happen for the case it was
                     // written for. The screen-id keyspace has just changed
-                    // shape, so cached ScreenId / ScreenOrientation /
-                    // ActiveLayout verdicts resolved against the old shape are
-                    // stale. Note only scheduleBorderSweep coalesces (via
+                    // shape, so cached ScreenId / screen-shape / ActiveLayout
+                    // verdicts resolved against the old keyspace are stale (a
+                    // virtual screen's shape is its region's share of the
+                    // output). Note only scheduleBorderSweep coalesces (via
                     // m_borderSweepPending); invalidateAllRuleCaches runs its
                     // layer reconcile per call, so a reconfigure touching N
                     // physical screens pays that N times. Wasteful, not wrong,
@@ -687,9 +716,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     // subdivisions (a screen-change burst re-triggering the fetch, a
                     // reconfigure that only touched another monitor) leaves the
                     // screen-id keyspace exactly as it was, so no cached ScreenId /
-                    // ScreenOrientation / ActiveLayout verdict can resolve
-                    // differently and the invalidate + full decoration re-fold
-                    // restoreReadyIfLive would run is pure waste.
+                    // screen-shape / ActiveLayout verdict can resolve differently
+                    // and the invalidate + full decoration re-fold
+                    // restoreReadyIfLive would run is pure waste. The comparison
+                    // covers the regions the virtual shapes derive from; the
+                    // rect it also compares is rewritten in place on an output
+                    // move, so a move alone never reads as a change here, and a
+                    // pixel-size change is flushOutputPixelSizes' to drop.
                     const auto existing = self->m_virtualScreenDefs.constFind(physicalScreenId);
                     defsMutated = existing == self->m_virtualScreenDefs.constEnd() || existing.value() != defs;
                     self->m_virtualScreenDefs.insert(physicalScreenId, defs);
@@ -878,6 +911,10 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
     // The windows KWin returns to it wait for the settle's verdict.
     m_screenChangeHandler->noteOutputAdded(output);
+    // Its pixel size is news to the rule fields and to the daemon. Outside the
+    // once-per-output guard below because a duplicate add costs nothing here:
+    // the flush is queued and deduplicated per connector.
+    scheduleOutputPixelSizeFlush();
     // The desktop it shows. KWin picks it with no desktop change, so nothing
     // else reports it and the engines would lay the output out under the
     // desktop they started on (F700). Sent as a seed, which the daemon takes
@@ -925,6 +962,15 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
         }
         m_screenChangeHandler->slotOutputGeometryChanged();
     });
+    // The two edges that move LogicalOutput::pixelSize, which is the current
+    // mode oriented by the transform. A rotation keeps the connector and the
+    // EDID id, so no per-window outputChanged follows it, and a mode change at
+    // a constant logical size (the scale moving with it) does not even move
+    // the union virtualScreenGeometryChanged watches. Not geometryChanged: the
+    // logical geometry also moves on a scale or arrangement change that leaves
+    // the pixel size alone, and the orientation is derived from the pixel size.
+    connect(output, &KWin::LogicalOutput::currentModeChanged, this, &PlasmaZonesEffect::scheduleOutputPixelSizeFlush);
+    connect(output, &KWin::LogicalOutput::transformChanged, this, &PlasmaZonesEffect::scheduleOutputPixelSizeFlush);
     // The painter's per-output state was dropped with the old output, and
     // noteScrollTabOutputRemoved dropped that screen's payload with it, so
     // for a plain re-plug this re-seeds nothing until the daemon's next
@@ -933,6 +979,98 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // handler's fetch replies are not tied to the output object), and it
     // re-rasters every other screen's model, which is harmless.
     m_tilingHandler->rebuildAllScrollTabIndicators();
+}
+
+void PlasmaZonesEffect::scheduleOutputPixelSizeFlush()
+{
+    if (m_outputPixelSizeFlushQueued) {
+        return;
+    }
+    m_outputPixelSizeFlushQueued = true;
+    // Queued, not timed, like ScreenChangeHandler::scheduleClientAreaReport: a
+    // mode set that also rotates emits both edges, and a reconfigure emits them
+    // for every output it touches, all in one turn, so they collapse here onto
+    // one flush that reads the settled sizes.
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_outputPixelSizeFlushQueued = false;
+            flushOutputPixelSizes();
+        },
+        Qt::QueuedConnection);
+}
+
+void PlasmaZonesEffect::flushOutputPixelSizes()
+{
+    bool changed = false;
+    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
+        if (!output || output->isPlaceholder()) {
+            continue;
+        }
+        const QString connector = output->name();
+        const QSize size = output->pixelSize();
+        // Reported whether or not the size moved: the report keeps its own
+        // record, and a size seen while the bridge was down is still owed.
+        reportOutputPixelSize(connector, size);
+        // A refresh-rate change emits currentModeChanged too, and moves
+        // nothing a rule reads.
+        const auto seen = m_outputPixelSizes.constFind(connector);
+        if (seen != m_outputPixelSizes.constEnd() && *seen == size) {
+            continue;
+        }
+        m_outputPixelSizes.insert(connector, size);
+        changed = true;
+    }
+    if (!changed) {
+        return;
+    }
+    // The screen-shape rule fields are read live from the output at resolve
+    // time, but every verdict cache is keyed on (windowId, rule-set revision),
+    // and neither moves here. Drop them once for the burst and sweep the
+    // decorations so the appearance slots re-fold.
+    invalidateAllRuleCaches();
+    scheduleBorderSweep();
+    // Same bookend as the other bulk invalidations (TilingHandler's
+    // setActiveLayouts and setScrollingScreens): a SetOpacity rule scoped on the
+    // screen shape resolves in the paint path, and the sweep re-folds
+    // decorations, not the alpha of a static window that nothing damages.
+    if (m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+void PlasmaZonesEffect::reportOutputPixelSize(const QString& connectorName, const QSize& size)
+{
+    if (!m_daemonGate.serviceRegistered || connectorName.isEmpty()) {
+        return;
+    }
+    if (size.isEmpty()) {
+        // A clear is owed only for a size this bridge sent.
+        if (m_reportedPixelSizes.remove(connectorName) == 0) {
+            return;
+        }
+    } else {
+        const auto reported = m_reportedPixelSizes.constFind(connectorName);
+        if (reported != m_reportedPixelSizes.constEnd() && *reported == size) {
+            return;
+        }
+        m_reportedPixelSizes.insert(connectorName, size);
+    }
+    const int width = size.isEmpty() ? 0 : size.width();
+    const int height = size.isEmpty() ? 0 : size.height();
+    qCDebug(lcEffect) << "Reporting pixel size for" << connectorName << "=" << width << "x" << height;
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::Screen, QStringLiteral("setPixelSizeFromKWin"),
+        {connectorName, width, height}, QStringLiteral("setPixelSizeFromKWin"));
+}
+
+void PlasmaZonesEffect::pushOutputPixelSizes()
+{
+    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
+        if (output && !output->isPlaceholder()) {
+            reportOutputPixelSize(output->name(), output->pixelSize());
+        }
+    }
 }
 
 void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
@@ -1016,6 +1154,26 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // remove-by-id reaches ONE spelling and this map can hold two for the same monitor. It drops
     // the departing screen either way, since the rebuild loop excludes it.
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
+
+    // Forget the output's pixel size and clear the one the daemon holds for its
+    // connector: the effect is the size's only writer, so nothing else retires
+    // it. Before the motion-clock early-return, like the drops above. A
+    // connector a live output still carries (a monitor swapped on the same
+    // port, whose add KWin emits before this removal) keeps its daemon entry
+    // and is re-read by a flush instead, so the clear cannot land after that
+    // output's report and wipe it.
+    const QString connector = output->name();
+    m_outputPixelSizes.remove(connector);
+    const auto liveOutputs = KWin::effects->screens();
+    const bool connectorLive =
+        std::any_of(liveOutputs.cbegin(), liveOutputs.cend(), [&](const KWin::LogicalOutput* other) {
+            return other && other != output && other->name() == connector;
+        });
+    if (connectorLive) {
+        scheduleOutputPixelSizeFlush();
+    } else {
+        reportOutputPixelSize(connector, QSize());
+    }
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:
