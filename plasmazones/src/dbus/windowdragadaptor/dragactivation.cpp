@@ -43,20 +43,29 @@ ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode, bo
 
 DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn, bool toggleMode,
                                            bool rawTriggerHeld, bool graceHeld, bool prevTriggerHeld, bool toggled,
-                                           bool reorderActive)
+                                           bool toggledAlwaysOn, bool reorderActive)
 {
     DragInsertDecision out;
     out.nextPrevTriggerHeld = prevTriggerHeld;
     out.nextToggled = toggled;
+    out.nextToggledAlwaysOn = toggledAlwaysOn;
     if (!onEngineScreen) {
         return out;
     }
 
+    // A latch set under the other inversion is cleared on a toggle-mode
+    // screen (see the header). A hold-mode screen never reads the latch, so it
+    // passes through untouched along with the inversion it was set under.
+    const bool latchMeaningChanged = toggleMode && toggled && toggledAlwaysOn != alwaysOn;
+    const bool latch = toggled && !latchMeaningChanged;
     // Toggle mode reads the raw state, since the grace never applies there;
     // hold mode reads the state the grace extended.
-    const ActivationDecision decision = resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode,
-                                                                alwaysOn, prevTriggerHeld, toggled);
+    const ActivationDecision decision =
+        resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode, alwaysOn, prevTriggerHeld, latch);
     out.nextToggled = decision.nextActivationToggled;
+    if (toggleMode) {
+        out.nextToggledAlwaysOn = alwaysOn;
+    }
     // The edge latch follows the RAW state on every engine-screen tick, not
     // the grace-extended one: the toggle setting is per engine, so a hold
     // stretch on one engine's screen hands this latch to a toggle-mode screen

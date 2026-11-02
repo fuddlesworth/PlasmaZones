@@ -14,12 +14,14 @@
  *        selector edge hover's minimum-size floor, and, with the second
  *        output turned into an autotile screen, the drag re-insert's
  *        activation (its always-on entry included), minimum-size refusal,
- *        Escape dismissal and indifference to a stale toggle setting. With
+ *        Escape dismissal, a toggle setting under always re-insert, and the
+ *        keep-out trigger that inverts it (#1162). With
  *        the second output turned into a scrolling screen instead, it covers
  *        the same refusal for the strip and the client size an arriving
  *        window hands it.
  */
 
+#include <QCoreApplication>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
@@ -38,6 +40,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTiles/TilingState.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -170,6 +173,30 @@ private:
             scrolling = std::make_unique<RecordingScrollEngine>(nullptr, screenMgr.get());
             scrolling->setActiveScreens({other});
             adaptor->setScrollEngine(scrolling.get());
+        }
+        /// Three windows tiled on the autotile screen (tileTheOtherScreen
+        /// first), with zones forced so a drag-insert target resolves.
+        void tileThreeOnTheOtherScreen()
+        {
+            for (const char* id : {"t|A", "t|B", "t|C"}) {
+                tiling->windowOpened(QLatin1String(id), other);
+            }
+            QCoreApplication::processEvents();
+            if (PhosphorTiles::TilingState* state = tiling->tilingStateForScreen(other)) {
+                const int x = otherGeometry.x();
+                state->setCalculatedZones(
+                    {QRect(x, 0, 640, 1080), QRect(x + 640, 0, 640, 1080), QRect(x + 1280, 0, 640, 1080)});
+            }
+        }
+        /// The tiling screen's re-insert list under "always re-insert", with
+        /// Alt as the keep-out trigger beside the always-on entry (#1162).
+        void alwaysOnWithAltKeepOut()
+        {
+            settings.setAutotileDragInsertTriggers(
+                {QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::Alt)},
+                             {ConfigDefaults::triggerMouseButtonField(), 0}},
+                 QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::AlwaysActive)},
+                             {ConfigDefaults::triggerMouseButtonField(), 0}}});
         }
         bool snapHoldsOn(const QString& w, const QString& screen) const
         {
@@ -678,11 +705,10 @@ private Q_SLOTS:
         }
     }
 
-    // A toggle setting left on from before the switch to "always re-insert"
-    // has nothing to toggle: the always-on entry never makes the rising edge
-    // a toggle waits for, so the re-insert stayed off for every window the
-    // reorder latch does not cover.
-    void activeDrag_alwaysOnReInsertIgnoresAStaleToggleSetting()
+    // Toggle mode under "always re-insert" toggles the keep-out, and its
+    // latch starts every drag cleared, so a toggle setting left on does not
+    // hold a drag out until the trigger is tapped.
+    void activeDrag_alwaysOnReInsertWithToggleModeStartsReinserting()
     {
         Fixture f;
         f.tileTheOtherScreen();
@@ -698,6 +724,169 @@ private Q_SLOTS:
         f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), 0, 0);
 
         QVERIFY(f.tiling->hasDragInsertPreview());
+    }
+
+    // The Reorder drag behaviour arms the reorder latch at beginDrag for a
+    // tile, and the first tick begins the preview. beginDrag carries no
+    // modifiers, so it leaves the begin to that tick, which can see a
+    // keep-out trigger (#1162). A drop no tick reached puts the tile back
+    // rather than floating the window the user only clicked.
+    void activeDrag_reorderBeginsOnTheFirstTickAndAClickPutsTheTileBack()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.tileThreeOnTheOtherScreen();
+        f.settings.setAutotileDragBehavior(AutotileDragBehavior::Reorder);
+        const QString w = QStringLiteral("t|B");
+        QVERIFY2(f.tiling->isWindowTiled(w), "precondition: the window is a tile");
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 640, 0, 640, 1080, f.other, 0);
+        QVERIFY2(!f.tiling->hasDragInsertPreview(), "beginDrag must leave the preview's begin to the first tick");
+        const PhosphorProtocol::DragOutcome click =
+            f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), 0, 0, false);
+        QCOMPARE(click.action, PhosphorProtocol::DragOutcome::NoOp);
+        QVERIFY(f.tiling->isWindowTiled(w));
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 640, 0, 640, 1080, f.other, 0);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), 0, 0);
+        QVERIFY2(f.tiling->hasDragInsertPreview(), "the first tick begins the reorder preview");
+        const PhosphorProtocol::DragOutcome drop = f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), 0, 0, false);
+        QCOMPARE(drop.action, PhosphorProtocol::DragOutcome::NoOp);
+    }
+
+    // A tile dragged under "always re-insert" with the keep-out trigger held
+    // from the drag's start is never detached: no preview begins at
+    // beginDrag or on the tick, so the neighbours do not reflow twice, and
+    // the drop floats it.
+    void activeDrag_alwaysOnKeepOutFromTheStartNeverDetachesATile()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.tileThreeOnTheOtherScreen();
+        f.alwaysOnWithAltKeepOut();
+        f.settings.setAutotileDragBehavior(AutotileDragBehavior::Reorder);
+        const QString w = QStringLiteral("t|B");
+        const int alt = static_cast<int>(Qt::AltModifier);
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 640, 0, 640, 1080, f.other, 0);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), alt, 0);
+        QVERIFY2(!f.tiling->hasDragInsertPreview(), "the held keep-out trigger must keep the tile from detaching");
+
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), alt, 0, false);
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::ApplyFloat);
+    }
+
+    // Under "always re-insert" the re-insert trigger keeps a drag out
+    // (#1162): held over the tiling screen, no preview runs, and the drop
+    // floats the window. Letting go brings the preview back once the release
+    // grace has run out (none here).
+    void activeDrag_alwaysOnKeepOutTriggerFloatsTheDrop()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.alwaysOnWithAltKeepOut();
+        f.settings.setAutotileDragInsertGraceMs(0);
+        const QString w = QStringLiteral("app|keep-out");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        const int alt = static_cast<int>(Qt::AltModifier);
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), 0);
+        f.adaptor->updateDragCursor(w, f.inFirst().x(), f.inFirst().y(), static_cast<int>(Qt::ControlModifier), 0);
+
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), alt, 0);
+        QVERIFY2(!f.tiling->hasDragInsertPreview(), "the held keep-out trigger must keep the drag out");
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 10, f.inOther().y(), 0, 0);
+        QVERIFY2(f.tiling->hasDragInsertPreview(), "letting go of the keep-out trigger brings the re-insert back");
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 20, f.inOther().y(), alt, 0);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
+
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x() + 20, f.inOther().y(), alt, 0, false);
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::ApplyFloat);
+    }
+
+    // The release grace extends the keep-out under "always re-insert": a
+    // trigger let go a tick before the button must not re-insert the window
+    // it was held to keep out.
+    void activeDrag_alwaysOnKeepOutOutlastsItsReleaseByTheGrace()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.alwaysOnWithAltKeepOut();
+        f.settings.setAutotileDragInsertGraceMs(1000);
+        const QString w = QStringLiteral("app|keep-out-grace");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        const int alt = static_cast<int>(Qt::AltModifier);
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), 0);
+        f.adaptor->updateDragCursor(w, f.inFirst().x(), f.inFirst().y(), static_cast<int>(Qt::ControlModifier), 0);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), alt, 0);
+
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 10, f.inOther().y(), 0, 0);
+        QVERIFY2(!f.tiling->hasDragInsertPreview(), "the grace must hold the keep-out past the release");
+
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x() + 10, f.inOther().y(), 0, 0, false);
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::ApplyFloat);
+    }
+
+    // Under "always re-insert" an entry pairing the always-on sentinel with a
+    // button reads as that button, as it does without always re-insert, so
+    // it keeps a drag out while the button is held. Only the bare sentinel is
+    // the always-on bit the keep-out read leaves out.
+    void activeDrag_alwaysOnButtonPairedSentinelKeepsTheDragOut()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.settings.setAutotileDragInsertTriggers(
+            {QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::AlwaysActive)},
+                         {ConfigDefaults::triggerMouseButtonField(), static_cast<int>(Qt::RightButton)}},
+             QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::AlwaysActive)},
+                         {ConfigDefaults::triggerMouseButtonField(), 0}}});
+        f.settings.setAutotileDragInsertGraceMs(0);
+        const QString w = QStringLiteral("app|paired-sentinel");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        const int left = static_cast<int>(Qt::LeftButton);
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), left);
+        f.adaptor->updateDragCursor(w, f.inFirst().x(), f.inFirst().y(), static_cast<int>(Qt::ControlModifier), left);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), 0, left);
+        QVERIFY2(f.tiling->hasDragInsertPreview(), "precondition: always-on previews the re-insert");
+
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 10, f.inOther().y(), 0,
+                                    left | static_cast<int>(Qt::RightButton));
+        QVERIFY2(!f.tiling->hasDragInsertPreview(), "the button-paired entry must keep the drag out");
+    }
+
+    // Under "always re-insert" in toggle mode Escape leaves the drag out,
+    // which is what a tap does, so the press that lifts Escape's dismissal
+    // brings the re-insert straight back. Read as a tap as well, it toggled
+    // the drag back out and the re-insert took a second tap to return.
+    void activeDrag_alwaysOnToggleEscapeComesBackOnOneTap()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.alwaysOnWithAltKeepOut();
+        f.settings.setAutotileDragInsertToggle(true);
+        const QString w = QStringLiteral("app|escape-toggle");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        const int alt = static_cast<int>(Qt::AltModifier);
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), 0);
+        f.adaptor->updateDragCursor(w, f.inFirst().x(), f.inFirst().y(), static_cast<int>(Qt::ControlModifier), 0);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), 0, 0);
+        QVERIFY2(f.tiling->hasDragInsertPreview(), "precondition: always-on previews the re-insert");
+
+        f.adaptor->cancelSnap();
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 10, f.inOther().y(), 0, 0);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
+
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 20, f.inOther().y(), alt, 0);
+        QVERIFY2(f.tiling->hasDragInsertPreview(), "one tap after Escape must bring the re-insert back");
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 30, f.inOther().y(), 0, 0);
+        QVERIFY(f.tiling->hasDragInsertPreview());
+
+        // The next tap is an ordinary one again and keeps the drag out.
+        f.adaptor->updateDragCursor(w, f.inOther().x() + 40, f.inOther().y(), alt, 0);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
     }
 };
 

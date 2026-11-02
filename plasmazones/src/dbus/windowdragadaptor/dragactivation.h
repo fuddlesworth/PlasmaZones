@@ -28,7 +28,7 @@ namespace PlasmaZones {
  * in normal mode now deactivate it (hold mode → trigger held hides overlay;
  * toggle mode → tap to toggle off the implicitly-on overlay). @p triggerHeld
  * MUST be computed from the non-sentinel entries only (see
- * @c WindowDragAdaptor::anyTriggerHeld with @c excludeSentinel = true) —
+ * @c WindowDragAdaptor::anyTriggerHeld with @c SentinelMatch::SkipAll) —
  * the sentinel matches every tick by definition, which would otherwise make
  * inversion read as "always held" and the overlay never show.
  */
@@ -57,6 +57,8 @@ struct DragInsertDecision
     bool suppressedByTrigger = false;
     bool nextPrevTriggerHeld = false; ///< Feedback for next tick's edge detection.
     bool nextToggled = false; ///< Feedback for the toggle latch.
+    /// Feedback for the inversion the toggle latch was last read under.
+    bool nextToggledAlwaysOn = false;
 };
 
 /**
@@ -84,10 +86,22 @@ struct DragInsertDecision
  *                        @p alwaysOn it MUST come from the non-sentinel
  *                        entries only, since the sentinel matches every tick.
  * @param graceHeld       @p rawTriggerHeld extended by the hold-mode release
- *                        grace. The caller applies the grace only in plain
- *                        hold mode, so elsewhere it equals the raw state.
+ *                        grace. The caller applies the grace in hold mode
+ *                        only, so in toggle mode it equals the raw state.
+ *                        Under @p alwaysOn the grace extends the keep-out.
  * @param prevTriggerHeld Last engine-screen tick's raw state.
- * @param toggled         The toggle latch.
+ * @param toggled         The toggle latch. It is shared across engines and
+ *                        means "diverges from this screen's default": insert
+ *                        on without @p alwaysOn, kept out with it.
+ * @param toggledAlwaysOn The @p alwaysOn the latch was last read under on a
+ *                        toggle-mode screen. A set latch crossing onto a
+ *                        toggle-mode screen with the other inversion is
+ *                        cleared rather than read, since read as-is it would
+ *                        turn the user's last tap into its opposite. Cleared
+ *                        is right both ways: a tap that turned the insert on
+ *                        lands on a screen whose default is already on, and a
+ *                        tap that kept the drag out lands on one whose default
+ *                        is already off.
  * @param reorderActive   The drag-start reorder latch, which keeps the
  *                        preview on for a tiled window (Krohnkite reorder, or
  *                        scrolling's always re-insert). It yields to the
@@ -95,7 +109,8 @@ struct DragInsertDecision
  */
 PLASMAZONES_EXPORT DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn,
                                                               bool toggleMode, bool rawTriggerHeld, bool graceHeld,
-                                                              bool prevTriggerHeld, bool toggled, bool reorderActive);
+                                                              bool prevTriggerHeld, bool toggled, bool toggledAlwaysOn,
+                                                              bool reorderActive);
 
 /// @brief Outcome of one hold-mode release-grace evaluation.
 /// See @c resolveHoldGrace below for the contract that produces it.
@@ -125,11 +140,14 @@ struct HoldGraceDecision
  * there is nothing to extend. A @p graceMs of zero disables the grace and
  * the effective state is the raw one.
  *
- * Only hold mode uses this. Toggle mode has no release to extend, and the
- * always-active inversion (#249) turns hold into deactivate-while-held,
- * where stretching the release would prolong the suppression the user just
- * ended. The caller applies the grace on the raw held state before the
- * toggle / inversion resolver runs, and only in plain hold mode.
+ * Only hold mode uses this, since toggle mode has no release to extend. The
+ * two inversions differ. Snapping's always-active inversion (#249) turns
+ * hold into deactivate-while-held and leaves the grace off there. The drag
+ * re-insert inversion (#1162) keeps it, because there the held trigger
+ * decides what the drop does (the window floats instead of re-inserting),
+ * and a trigger let go just before the button is the same race the grace
+ * exists for. The caller applies the grace on the raw held state before the
+ * toggle / inversion resolver runs.
  */
 PLASMAZONES_EXPORT HoldGraceDecision resolveHoldGrace(bool rawHeld, qint64 nowMs, qint64 lastHeldMs, int graceMs);
 

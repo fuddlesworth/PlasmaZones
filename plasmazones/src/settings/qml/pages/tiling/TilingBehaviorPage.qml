@@ -37,7 +37,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Always re-insert on drag")
                     searchAnchor: "alwaysReinsertOnDrag"
-                    description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button. The trigger below then leaves a window floating instead.")
+                    description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button. The trigger below then floats the window instead.")
 
                     SettingsSwitch {
                         id: alwaysReinsertSwitch
@@ -57,9 +57,9 @@ SettingsFlickable {
                 // on, the same triggers keep a drag OUT of the stack so the
                 // window drops as a floating one (discussion #1162).
                 SettingsRow {
-                    title: alwaysReinsertSwitch.checked ? i18n("Hold to keep floating") : i18n("Hold to re-insert into stack")
+                    title: alwaysReinsertSwitch.checked ? i18n("Hold to float instead") : i18n("Hold to re-insert into stack")
                     searchAnchor: "holdToReinsert"
-                    description: alwaysReinsertSwitch.checked ? i18n("Hold a modifier or mouse button while dragging a window to leave it floating instead of inserting it into the autotile stack.") : i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
+                    description: alwaysReinsertSwitch.checked ? i18n("Hold a modifier or mouse button while dragging a window to float it instead of inserting it into the autotile stack.") : i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
 
                     ModifierAndMouseCheckBoxes {
                         width: TriggerLabels.editorPreferredWidth
@@ -81,30 +81,31 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Toggle mode")
                     searchAnchor: "triggersToggleMode"
-                    description: alwaysReinsertSwitch.checked ? i18n("Tap the trigger once to leave the dragged window floating. Tap it again to insert it.") : i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
+                    description: alwaysReinsertSwitch.checked ? i18n("Tap the trigger once to float the dragged window instead. Tap it again to insert it.") : i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
 
                     SettingsSwitch {
                         id: insertToggleSwitch
 
                         checked: appSettings.autotileDragInsertToggle
-                        accessibleName: i18n("Toggle mode for re-insert into stack")
+                        accessibleName: alwaysReinsertSwitch.checked ? i18n("Toggle mode for floating instead of inserting") : i18n("Toggle mode for re-insert into stack")
                         onToggled: function (newValue) {
                             appSettings.autotileDragInsertToggle = newValue;
                         }
                     }
                 }
 
-                // Plain hold mode only, as on the scrolling twin.
+                // Hold mode only, inverting with always re-insert, as on the
+                // scrolling twin.
                 SettingsSeparator {
-                    enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+                    enabled: !insertToggleSwitch.checked
                 }
 
                 TriggerGraceRow {
                     title: i18n("Release grace period")
                     searchAnchor: "releaseGracePeriod"
-                    description: i18n("How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
-                    accessibleName: i18n("Release grace period for re-insert into stack")
-                    enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+                    description: alwaysReinsertSwitch.checked ? i18n("How long a window stays out of the stack after the trigger is released, so a window dropped just after letting go of the trigger still floats. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.") : i18n("How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    accessibleName: alwaysReinsertSwitch.checked ? i18n("Release grace period for floating instead of inserting") : i18n("Release grace period for re-insert into stack")
+                    enabled: !insertToggleSwitch.checked
                     minMs: root.settingsBridge.triggerGraceMsMin
                     maxMs: root.settingsBridge.triggerGraceMsMax
                     graceMs: appSettings.autotileDragInsertGraceMs

@@ -218,8 +218,9 @@ public Q_SLOTS:
      * resets the shared drag state, records m_draggedWindowId and its start
      * frame, and on an engine-owned screen in reorder mode (autotile's
      * Reorder drag behaviour, or scrolling's always-on re-insert, see
-     * effectiveDragReorderModeFor) begins the drag-insert preview at once
-     * for a window that engine tiles.
+     * effectiveDragReorderModeFor) arms the reorder latch for a window that
+     * engine tiles, so the first dragMoved tick begins the drag-insert
+     * preview.
      */
     PhosphorProtocol::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth,
                                            int frameHeight, const QString& startScreenId, int mouseButtons);
@@ -467,14 +468,27 @@ private:
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
     // Check if any trigger in a list matches current modifiers/mouse buttons
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
-    // Overload using pre-parsed triggers (hot path during drag). Pass
-    // @p excludeSentinel = true to skip entries whose modifier is the
-    // AlwaysActive sentinel — those match every tick by definition, so they
-    // are useless as a per-tick "user is holding the trigger" signal.
-    // dragMoved uses this so the activation cache can carry both the master
-    // always-active bit and user-configurable hold/toggle entries (#249).
+    /// Which entries holding the AlwaysActive sentinel a per-tick trigger read
+    /// skips. The bare sentinel matches every tick by definition, so it is
+    /// useless as a "user is holding the trigger" signal, and a list that
+    /// carries it as its always-on bit reads its remaining entries without it.
+    enum class SentinelMatch {
+        Include, ///< Every entry counts.
+        /// Skip every entry holding the sentinel, the bare one and any
+        /// paired with a button. The activation and zone-span reads (#249).
+        SkipAll,
+        /// Skip only the bare sentinel. A sentinel paired with a button still
+        /// reads as that button, as it does with Include, which is how the
+        /// drag re-insert list treats it (only the bare one means "always",
+        /// see effectiveDragReorderModeFor), so it can keep a drag out under
+        /// always re-insert (#1162) and lift Escape's dismissal.
+        SkipBare,
+    };
+    // Overload using pre-parsed triggers (hot path during drag). dragMoved
+    // uses @p sentinels so a cache can carry both the always-on bit and the
+    // user-configurable hold/toggle entries (#249, #1162).
     bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons,
-                        bool excludeSentinel = false) const;
+                        SentinelMatch sentinels = SentinelMatch::Include) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
@@ -542,8 +556,11 @@ public:
      *        cascade, scrolling = the bare AlwaysActive sentinel in its
      *        trigger list). Resolved by the caller because the static can't
      *        reach the registry or the per-drag trigger caches. True on an
-     *        engine-owned screen clears immediateFloatOnStart — the reorder
-     *        pipeline, not a float, owns the drop.
+     *        engine-owned screen clears immediateFloatOnStart, since the
+     *        reorder pipeline owns the drop. Under scrolling's always
+     *        re-insert a held keep-out trigger can still make that drop a
+     *        float (#1162), and the window then takes its float size only at
+     *        the drop, because the policy does not follow the trigger.
      * @param activeLayoutSuppressed Whether the screen's context has NO active
      *        zone layout because the default assignment is suppressed
      *        (LayoutRegistry::isContextActiveLayoutSuppressed — resolved by the
@@ -817,6 +834,16 @@ private:
     // screen at a time; the trigger LIST and toggle SETTING are selected per
     // tick by the engine owning the cursor screen).
     bool m_dragInsertToggled = false; // Current toggle state for drag-insert
+    // The always re-insert state m_dragInsertToggled was last read under on a
+    // toggle-mode screen. The latch means "insert on" without always re-insert
+    // and "kept out" with it, so resolveDragInsertActive clears it when it
+    // crosses onto a screen with the other meaning.
+    bool m_dragInsertToggledAlwaysOn = false;
+    // The last drag-insert tick's keep-out under always re-insert
+    // (DragInsertDecision::suppressedByTrigger). endDrag reads it to tell a
+    // drop that no tick reached, which puts a reorder tile back, from one the
+    // trigger kept out, which floats it. Reset by beginDrag and resetDragState.
+    bool m_dragInsertKeptOut = false;
     bool m_prevDragInsertHeld = false; // Previous frame's drag-insert trigger state
     // Escape dismissed the re-insert for this drag (cancelSnap). While set,
     // dragMoved reads the drag-insert trigger as released and the policy-flip
@@ -870,10 +897,11 @@ private:
     // endDrag, clearPendingSnapDragState, cancelSnap, handleWindowClosed,
     // and the shared resetDragState teardown.
     bool m_dragReorderActive = false;
-    // beginDrag's reorder fallback (preview begin refused → float-on-start
-    // restored) is a PER-DRAG decision: while set, the policy-flip re-latch
-    // must not re-arm reorder for this drag, or the fallback survives
-    // exactly one tick. Cleared at beginDrag and in resetDragState.
+    // A preview begin the reorder latch asked for and the engine refused
+    // (dragMoved) abandons reorder as a PER-DRAG decision: while set, the
+    // policy-flip re-latch must not re-arm reorder for this drag, or dragMoved
+    // retries the refused begin every tick. Cleared at beginDrag and in
+    // resetDragState.
     bool m_dragReorderAbandoned = false;
     // The dragged window matches an Exclude / ExcludePlacement rule.
     // Evaluated at the drag's start (beginDrag's bypass and pending twins),
@@ -979,7 +1007,7 @@ private:
     QPoint m_lastDragCursorPos;
     /// The drag the timer was armed for. A tick is at most 16 ms from
     /// firing when a drag ends, which is long enough for the next drag's
-    /// eager preview to begin — and that tick would then nudge the NEW
+    /// first tick to begin its preview — and that tick would then nudge the NEW
     /// strip with the OLD drag's parked cursor.
     QString m_dragScrollWindowId;
     void ensureDragScrollTimerRunning(const QString& windowId);
