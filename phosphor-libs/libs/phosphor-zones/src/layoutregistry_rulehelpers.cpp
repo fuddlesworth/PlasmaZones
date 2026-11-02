@@ -31,6 +31,29 @@ PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, c
     return query;
 }
 
+QSet<PWR::Field> unknownScreenShapeFields(const PWR::WindowQuery& query)
+{
+    QSet<PWR::Field> unknown;
+    if (query.screenOrientation.isEmpty()) {
+        unknown.insert(PWR::Field::ScreenOrientation);
+    }
+    if (!query.screenWidth) {
+        unknown.insert(PWR::Field::ScreenWidth);
+    }
+    if (!query.screenHeight) {
+        unknown.insert(PWR::Field::ScreenHeight);
+    }
+    if (query.screenAspectRatio.isEmpty()) {
+        unknown.insert(PWR::Field::ScreenAspectRatio);
+    }
+    return unknown;
+}
+
+bool negatesUnknownScreenShape(const PWR::MatchExpression& match, const QSet<PWR::Field>& unknown)
+{
+    return !unknown.isEmpty() && match.negatesAnyField(unknown);
+}
+
 QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
 {
     // Single formula lives in ContextRuleBridge — this private helper stays as

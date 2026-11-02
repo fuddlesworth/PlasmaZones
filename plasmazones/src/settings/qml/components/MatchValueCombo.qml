@@ -8,7 +8,7 @@ import "../js/MatchWireValue.js" as MatchWireValue
 /**
  * @brief The dropdown a rule condition uses when its value is picked from a
  *        list: a monitor, an activity, a desktop, a layout, a window type, a
- *        placement mode, an orientation or a colour scheme.
+ *        placement mode, an orientation, an aspect ratio or a colour scheme.
  *
  * The host passes the list as `model` (an array of JS objects), names the
  * label and value keys with `textRole` / `valueRole`, and binds `value` to the

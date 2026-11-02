@@ -140,16 +140,16 @@ QStringList validatedShaderSearchPaths(const QJsonArray& arr)
 /// leaf failed, and the rule fires for EVERY window. Dropping rules that
 /// reference an unstamped field closes both polarities.
 ///
-/// ScreenOrientation is deliberately NOT in this set, but the reason is
-/// narrower than "always stamped": ruleQuery (window_filtering.cpp) stamps it
-/// whenever the window's screen id resolves to an output, and falls back to a
-/// centre-derived answer otherwise. A window whose screen resolves to neither
-/// (an output that just disconnected, before the screen-change handling
-/// catches up) keeps the engaged-empty stamp, so a negated orientation leaf
-/// over-matches exactly those windows for that interval. That residual is
-/// known and accepted: it is bounded by a real screen-topology transition
-/// rather than by every session's bring-up, and holding orientation rules out
-/// of the evaluator over it would cost more than it saves.
+/// The screen-shape fields (ScreenOrientation, ScreenWidth, ScreenHeight,
+/// ScreenAspectRatio) are deliberately NOT in this set: ruleQuery
+/// (window_filtering.cpp) stamps them from the pixel size of the window's
+/// screen, from the output nearest its centre when the id names no output.
+/// They stay unknown only where no size describes the screen: KWin's
+/// placeholder output (every monitor off) and a virtual id whose definition is
+/// gone. Width and height are optionals and inert then; orientation and aspect
+/// ratio read as engaged empty strings, so a negated leaf on either matches
+/// those windows until they re-resolve. Holding the shape rules out of the
+/// evaluator for that would disarm them for every window, every session.
 ///
 /// TiledWindowCount is the one context-cascade field with no effect-side
 /// source at all.

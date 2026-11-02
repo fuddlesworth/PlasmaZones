@@ -231,10 +231,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // set + evaluator but, without this, could only build an appId-only
         // query, so rules on window class / title / size and the minimum-size
         // thresholds were silently ignored on snap. This is
-        // buildContextualRuleQuery's only caller: it stamps the screen trio,
-        // Mode and the live frame for the screen the engine passes (the open
-        // path's landing screen, the screen a navigation verb acts on), and the
-        // admission below skips rules on fields left unstamped (F881).
+        // buildContextualRuleQuery's only caller: it stamps the screen-derived
+        // fields, Mode and the live frame for the screen the engine passes (the
+        // open path's landing screen, the screen a navigation verb acts on), and
+        // the admission below skips rules on fields left unstamped (F881) and
+        // rules negating a shape field the screen cannot answer yet.
         snap->setExclusionQueryProvider(
             [this](const QString& windowId, const QString& screenHint) -> std::optional<PhosphorRules::WindowQuery> {
                 return buildContextualRuleQuery(windowId, screenHint);

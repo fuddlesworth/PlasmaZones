@@ -911,9 +911,10 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
         return;
     }
-    // ScreenId, ScreenOrientation and the screen's active layout are all
-    // per-screen rule inputs, and the verdict cache is keyed on (windowId,
-    // rule-set revision), neither of which moves here. Mid-drag the
+    // ScreenId, the screen-shape fields (orientation, width, height, aspect
+    // ratio) and the screen's active layout are all per-screen rule inputs,
+    // and the verdict cache is keyed on (windowId, rule-set revision), neither
+    // of which moves here. Mid-drag the
     // invalidation waits for callEndDrag, which drains it once the daemon's
     // outcome has landed: nothing at drag end could rediscover the crossing,
     // because the tracked screen already names the new one.

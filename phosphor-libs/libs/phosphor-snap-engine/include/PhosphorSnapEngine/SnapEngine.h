@@ -948,9 +948,10 @@ public:
 
     /// Provider that builds the full WindowQuery for a live windowId. Its only
     /// producer is the daemon's buildContextualRuleQuery, which stamps the
-    /// window's attributes, ScreenId / ActiveLayout / ScreenOrientation / Mode
-    /// for @p screenHint (or the screen the daemon tracks the window on) and the
-    /// live frame, which the minimum-window-size thresholds are checked against.
+    /// window's attributes, ScreenId / ActiveLayout / Mode and the screen shape
+    /// (orientation, width, height, aspect ratio) for @p screenHint (or the
+    /// screen the daemon tracks the window on) and the live frame, which the
+    /// minimum-window-size thresholds are checked against.
     /// Every caller passes the screen it asks about: the open path the one the
     /// window lands on, the navigation verbs the one they act on, the drag
     /// selector the source screen or none. Unset, or an empty optional (no

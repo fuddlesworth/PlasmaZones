@@ -22,6 +22,7 @@
 #include <PhosphorRules/WindowQuery.h>
 
 #include <QList>
+#include <QSet>
 #include <QString>
 
 namespace PhosphorRules {
@@ -69,6 +70,22 @@ inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
 // a negated `None{Mode Equals …}` leaf matches.
 PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const QString& mode = QString());
+
+// The screen-shape fields @p query cannot answer: ScreenOrientation while its
+// token is empty, ScreenWidth / ScreenHeight while disengaged, and
+// ScreenAspectRatio while its token is empty. Read once per resolve, then
+// handed to negatesUnknownScreenShape for every candidate rule.
+QSet<PWR::Field> unknownScreenShapeFields(const PWR::WindowQuery& query);
+
+// True if @p match negates one of the @p unknown screen-shape fields. Every
+// context resolver refuses such a rule. An unknown size reads back absent and
+// an unknown token reads back empty, and either makes a positive leaf false,
+// which is the documented inert outcome. Under a `none{}` the same leaf
+// inverts, so `none{ScreenAspectRatio Equals "32:9"}` would match every
+// context whose size the daemon has not learned yet. Same polarity trap the
+// window-field guard closes, scoped to the moment the field is unknown: once
+// the size is known, a negated size rule is legitimate and admitted.
+bool negatesUnknownScreenShape(const PWR::MatchExpression& match, const QSet<PWR::Field>& unknown);
 
 // Human-readable label for a context assignment rule's (screen, desktop,
 // activity) tuple — the single place the " · Desktop N" / " · Activity"

@@ -88,7 +88,7 @@ ColumnLayout {
 
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
     /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
-    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation,
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, aspectRatio,
     /// colorScheme, layout, zone) or "string" for unknown fields — the safest default
     /// since `String(value)` is what a plain-string render would do anyway.
     function _valueKind(wire) {
@@ -107,8 +107,9 @@ ColumnLayout {
     ///   - windowType → the enum option's label from the field entry
     ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
     ///   - zone → `controller.zoneMatchOptions` displayName for the matching id
-    ///   - mode / orientation / colorScheme → the token's option label from the field entry
-    ///   - everything else (string, number) → `String(value)`
+    ///   - mode / orientation / aspectRatio / colorScheme → the token's option label from the field entry
+    ///   - number → the locale-grouped number, with a pixel unit on the screen size fields (a Pid stays plain)
+    ///   - everything else (string) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
     /// the editor's dangling-pin fallback.
@@ -192,12 +193,13 @@ ColumnLayout {
                 break;
             }
         }
-        // Closed string-token dropdowns (Mode, Screen orientation, Color scheme)
-        // — resolve the token to its friendly label from the field entry's
-        // options, the same way windowType does, so the tree shows "Portrait"
-        // not the raw "portrait". Every closed-vocabulary kind belongs in this
+        // Closed string-token dropdowns (Mode, Screen orientation, Screen aspect
+        // ratio, Color scheme) — resolve the token to its friendly label from
+        // the field entry's options, the same way windowType does, so the tree
+        // shows "Portrait" not the raw "portrait", and an aspect ratio carries
+        // its portrait marker. Every closed-vocabulary kind belongs in this
         // list: a kind missing here renders its untranslated wire token.
-        if (kind === "mode" || kind === "orientation" || kind === "colorScheme") {
+        if (kind === "mode" || kind === "orientation" || kind === "aspectRatio" || kind === "colorScheme") {
             for (var m = 0; m < root.matchFieldOptions.length; ++m) {
                 var modeEntry = root.matchFieldOptions[m];
                 if (modeEntry.wire !== fieldWire)
@@ -221,6 +223,21 @@ ColumnLayout {
             var idx = parseInt(value, 10) - 1;
             if (idx >= 0 && idx < names.length && names[idx])
                 return names[idx];
+        }
+        // A number reads as the collapsed summary shows it
+        // (RuleAuthoring::numericMatchValueLabel): the locale's digit
+        // grouping, and a pixel unit on the two screen size fields. A Pid is
+        // an identifier, so it keeps plain digits, and so does a value that
+        // is not a number (a hand-edited rule).
+        if (fieldWire === "pid")
+            return String(value);
+
+        if ((kind === "number" || kind === "virtualDesktop") && value !== "" && isFinite(Number(value))) {
+            var number = Number(value).toLocaleString(Qt.locale(), "f", 0);
+            if (fieldWire === "screenWidth" || fieldWire === "screenHeight")
+                return i18nc("a screen size in pixels, such as 2,560 px", "%1 px", number);
+
+            return number;
         }
         return String(value);
     }

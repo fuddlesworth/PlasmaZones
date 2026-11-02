@@ -55,6 +55,24 @@ void Daemon::connectScreenSignals()
     // Start screen manager
     m_screenManager->start();
 
+    // Every output present at start-up answers its size from the last
+    // session's seed, or not at all, until a compositor report is accepted
+    // for it. That first report is the screen settling, so whatever it
+    // changes applies without an OSD (onCompositorPixelSizeChanged). The
+    // screen adaptor takes reports from the moment init() builds it, and they
+    // wait in ScreenManager as pending, unread, because this handler is not
+    // connected until now. So a report that came in already is evaluated here
+    // like one arriving with a screen add: accepted when it agrees with the
+    // screen, otherwise parked and awaited. Before the output's scale sensor
+    // maps it parks unchecked, and the map (logicalScaleSensorMapped below)
+    // evaluates it again.
+    for (const PhosphorScreens::PhysicalScreen& screen : m_screenManager->screens()) {
+        m_reshapeTracker.screenAdded(screen.name);
+        admitPixelSizeReport(screen.name);
+    }
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::compositorPixelSizeChanged, this,
+            &Daemon::onCompositorPixelSizeChanged);
+
     // Warn about identical monitors producing duplicate screen IDs — both at
     // startup for the already-connected set and on every subsequent hotplug.
     // The startup call covers the common case; wiring it to screenAdded
@@ -100,6 +118,11 @@ void Daemon::connectScreenSignals()
     // construct a manager without Settings don't crash.
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenIdentifierChanged, this,
             [this](const QString& oldId, const QString& newId) {
+                // The persisted pixel sizes are keyed the same way and follow
+                // the same flip (the manager has re-keyed its seeds already).
+                if (m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->renameScreenPixelSize(oldId, newId);
+                }
                 if (!m_settings) {
                     return;
                 }
@@ -146,6 +169,19 @@ void Daemon::connectScreenSignals()
                             PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), sid));
                     }
                 }
+                // Until a compositor report is accepted for the output it
+                // answers the last size recorded for the monitor, or none (the
+                // manager dropped the connector's accepted report with the
+                // screen that left). The report that replaces it settles the
+                // screen and applies without an OSD, the same as at start-up.
+                // A report pending on the connector is evaluated against this
+                // screen now: one that came in ahead of the add and agrees
+                // with it is accepted and has settled the screen, while one
+                // that does not (the previous monitor's, still standing, or
+                // one checked against a scale that has not settled) stays
+                // pending and parked, and the screen stays awaited.
+                m_reshapeTracker.screenAdded(screen.name);
+                admitPixelSizeReport(screen.name);
                 // Re-admit the output to the tiling engines now (F765): its
                 // returning windows are classified against its mode, and the
                 // effect's seed only pins its desktop (applyScreenDesktopSeed).
@@ -176,6 +212,14 @@ void Daemon::connectScreenSignals()
                 // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
                 const QString removedName = screen.name;
                 const QString removedScreenId = screen.identifier;
+                // A connector that comes back is awaited again by its own add,
+                // which also evaluates afresh any report it holds by then.
+                m_reshapeTracker.screenRemoved(removedName);
+                // The removed output's reshape records go with it: nothing is
+                // left there to apply them to.
+                m_reshapeTracker.dropRecordsWhere([&removedScreenId](const QString& screenId) {
+                    return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
+                });
 
                 // Drop the removed output's per-output virtual-desktop entries (#648)
                 // so the maps don't retain stale desktops across monitor hot-plug.
@@ -277,6 +321,45 @@ void Daemon::connectScreenSignals()
                 }
                 m_geometryUpdatePending = true;
                 m_geometryUpdateTimer.start();
+                // A pixel-size report that arrived ahead of this change was
+                // parked because it disagreed with the old logical geometry.
+                // Now that the geometry has caught up it may agree, and then
+                // it is accepted and reconciled here
+                // (onCompositorPixelSizeChanged).
+                if (m_reshapeTracker.isParked(screen.name)) {
+                    onCompositorPixelSizeChanged(screen.name);
+                }
+                // The logical geometry feeds the screen shape only through the
+                // orientation provider, which the registry consults while the
+                // screen has no accepted or seeded pixel size. Once it has one,
+                // a rotation or a resolution change reaches the rules once,
+                // through the report's accept in onCompositorPixelSizeChanged,
+                // and a move or a scale change reaches them not at all. So the
+                // reconcile runs only for a screen whose shape this change
+                // actually moved, which keeps its forced retile off every
+                // reposition. The geometry pass above only recomputes zones
+                // and never diffs the assignment, so a shape that did move is
+                // re-driven here, as a colour-scheme flip is. A report still
+                // parked after this change is pending and reads nowhere, so it
+                // neither causes nor masks a reshape here: the shape compared
+                // is the one every rule reads.
+                if (screen.identifier.isEmpty()) {
+                    return;
+                }
+                const QStringList screenIds = m_screenManager->virtualScreenIdsFor(screen.identifier);
+                const QStringList reshaped = m_reshapeTracker.noteReshaped(screenIds);
+                if (!reshaped.isEmpty()) {
+                    // A screen still awaiting its first report has no
+                    // accepted size, so a shape this change moved is the
+                    // logical geometry standing in for that report. The move
+                    // is the screen settling, as the report that follows will
+                    // be, and gets no OSD either.
+                    if (m_reshapeTracker.isAwaitingFirstReport(screen.name)) {
+                        m_reshapeTracker.markSilent(reshaped);
+                    }
+                    scheduleReconcileActiveAssignments();
+                    scheduleContextOverlayRefresh();
+                }
             });
 
     // Connect to available geometry changes (panels added/removed/resized)
@@ -287,12 +370,29 @@ void Daemon::connectScreenSignals()
         m_geometryUpdateTimer.start();
     });
 
+    // A pixel-size report evaluated before the output's scale sensor mapped
+    // was parked unchecked, because the coarse fallback scale until then can
+    // pass a different monitor's mode. The map brings the compositor's own
+    // scale, on an integer output as well, where logicalScaleChanged may
+    // never fire, so a parked report is evaluated again here
+    // (onCompositorPixelSizeChanged).
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::logicalScaleSensorMapped, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
+                if (m_reshapeTracker.isParked(screen.name)) {
+                    onCompositorPixelSizeChanged(screen.name);
+                }
+            });
+
     // A scale change moves every zone of a layout whose fixed geometry counts
-    // device pixels, at an unchanged logical rect, and nothing else. It fires
-    // when an output's real scale differs from the one known before (at
-    // startup that is a fractional scale, once the output's sensor maps and
-    // the coarse integer one gives way to it), so a session with no such
-    // layout has nothing to redo.
+    // device pixels, at an unchanged logical rect. It moves nothing a rule
+    // reads: the screen-shape fields come from the compositor's report of the
+    // output's mode (onCompositorPixelSizeChanged), not from the logical size
+    // times the scale. The scale only decides whether a parked report agrees
+    // with the screen, so a parked one is evaluated again. It fires when an
+    // output's real scale differs from the one known before (at startup that
+    // is a fractional scale, once the output's sensor maps and the coarse
+    // integer one gives way to it), so a session with no such layout has
+    // nothing to redo.
     //
     // A device-pixel layout shown on the output takes the debounced geometry
     // pass: the recalculation it requests carries the new scale, and the
@@ -305,6 +405,12 @@ void Daemon::connectScreenSignals()
             [this](const PhosphorScreens::PhysicalScreen& screen) {
                 if (!m_layoutManager || !m_screenManager) {
                     return;
+                }
+                // A parked pixel-size report may agree with the new scale,
+                // and then it is accepted and applies here
+                // (onCompositorPixelSizeChanged).
+                if (m_reshapeTracker.isParked(screen.name)) {
+                    onCompositorPixelSizeChanged(screen.name);
                 }
                 QList<PhosphorZones::Layout*> devicePixelLayouts;
                 for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
@@ -357,6 +463,78 @@ void Daemon::connectScreenSignals()
     // which also avoids the overlay flashing during login.
     qCInfo(lcDaemon) << "Overlay service: ready," << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";
+}
+
+ScreenReshapeTracker::ReportVerdict Daemon::admitPixelSizeReport(const QString& connectorName)
+{
+    if (!m_screenManager) {
+        return {};
+    }
+    // The adaptor merges, so a monitor unplugged now keeps the size it last
+    // had in the session state.
+    return PlasmaZones::admitPixelSizeReport(m_reshapeTracker, *m_screenManager, connectorName,
+                                             [this](const QString& screenIdentifier, const QSize& pixelSize) {
+                                                 if (m_windowTrackingAdaptor) {
+                                                     m_windowTrackingAdaptor->recordScreenPixelSizes(
+                                                         QHash<QString, QSize>{{screenIdentifier, pixelSize}});
+                                                 }
+                                             });
+}
+
+void Daemon::onCompositorPixelSizeChanged(const QString& connectorName)
+{
+    const ScreenReshapeTracker::ReportVerdict verdict = admitPixelSizeReport(connectorName);
+    if (verdict.action == ScreenReshapeTracker::ReportAction::Ignore || m_shuttingDown) {
+        return;
+    }
+    const QString physId = m_screenManager->physicalScreenFor(connectorName).identifier;
+    const QStringList screenIds = m_screenManager->virtualScreenIdsFor(physId);
+    if (verdict.action == ScreenReshapeTracker::ReportAction::Park) {
+        // A parked report is still pending and moves no shape itself, but the
+        // change that brought it here may have: a seed that moved the answer
+        // for a screen with no accepted report reaches this handler the same
+        // way. noteReshaped records only a shape that actually differs from
+        // the one the snapshot was resolved under, and such a move waits a
+        // turn like a logical geometry change's. While the screen awaits its
+        // first report the move is one stand-in replacing another, so it is
+        // silent as the screenGeometryChanged handler's is.
+        const QStringList reshaped = m_reshapeTracker.noteReshaped(screenIds);
+        if (!reshaped.isEmpty()) {
+            if (m_reshapeTracker.isAwaitingFirstReport(connectorName)) {
+                m_reshapeTracker.markSilent(reshaped);
+            }
+            scheduleReconcileActiveAssignments();
+            scheduleContextOverlayRefresh();
+        }
+        return;
+    }
+    m_reshapeTracker.noteReshaped(screenIds);
+    // Every screen of the output with a pending record: the ones this call
+    // just noted, and any a logical geometry change noted before the
+    // deferred reconcile it queued has run.
+    QStringList pending;
+    for (const QString& screenId : screenIds) {
+        if (m_reshapeTracker.hasRecord(screenId)) {
+            pending.append(screenId);
+        }
+    }
+    if (pending.isEmpty()) {
+        // The size confirmed what the snapshot was resolved under (the seed
+        // was right), or moved nothing a rule reads.
+        return;
+    }
+    if (verdict.silent) {
+        m_reshapeTracker.markSilent(pending);
+    }
+    // Same cancel-before-context-change rule as the screenGeometryChanged
+    // handler: the reconcile below can re-derive the output's engine and
+    // reshape the strip a live drag-insert preview was detached into.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(physId);
+    }
+    // Synchronous: see the declaration for the announce this has to beat.
+    reconcileActiveAssignments();
+    scheduleContextOverlayRefresh();
 }
 
 void Daemon::connectDesktopActivity()
@@ -498,6 +676,13 @@ void Daemon::connectDesktopActivity()
                 // refresh the active-assignment snapshot without applying —
                 // otherwise the next rule edit would diff the new-context
                 // assignment against the old and falsely re-resnap this screen.
+                // A reshape recorded for this output compared against the
+                // desktop just left, so it would read the new desktop's verdict
+                // as a change and apply it a second time: the switch above has
+                // laid the output out under the current shape, so drop it.
+                m_reshapeTracker.dropRecordsWhere([&screenId](const QString& recordedScreenId) {
+                    return PhosphorIdentity::VirtualScreenId::samePhysical(recordedScreenId, screenId);
+                });
                 diffActiveAssignments();
             });
 
@@ -656,7 +841,9 @@ void Daemon::connectDesktopActivity()
                     // Refresh the active-assignment snapshot for the new activity
                     // context (no apply — the switch handles its own windows) so a
                     // later rule edit doesn't falsely re-resnap. Mirrors the
-                    // per-screen desktop-switch handler above.
+                    // per-screen desktop-switch handler above, the dropped
+                    // reshape records included, for every screen at once.
+                    m_reshapeTracker.clearRecords();
                     diffActiveAssignments();
                 });
     }
@@ -870,6 +1057,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // load); guard those uses individually.
     const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
+    // The screens the snapshot knew before the change, so the diff below can
+    // tell a surviving screen whose verdict moved from a new one.
+    const QList<QString> snapshotKeys = m_activeAssignmentByScreen.keys();
+    const QSet<QString> knownBefore(snapshotKeys.cbegin(), snapshotKeys.cend());
+
     // Cancel any live drag-insert preview on this output BEFORE the screen id
     // set is re-derived, the same ordering rule the four sibling
     // context-change handlers document (screenRemoved, screenDesktopChanged,
@@ -942,6 +1134,31 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // consume the preserved snap-ZONE half, so emit it here.
     flushPendingSnapZoneRestores();
 
+    // Re-prime the active-assignment snapshot for the NEW virtual screen id
+    // set — same rationale as the screenAdded / screenRemoved tails: a VS
+    // reconfigure replaces the physical id with vs:N children (or back) in
+    // effectiveScreenIds, and an un-primed id always diffs as changed, so
+    // the next unrelated rule edit would spuriously resnap every new VS.
+    // The refresh also republishes the active-layout map under the new id
+    // keyspace, or the effect's ActiveLayout cache keeps matching on screen
+    // ids that no longer exist.
+    //
+    // A virtual screen that SURVIVES the change can come out of it with a
+    // different shape (a count change resizes the survivors' regions, and
+    // their shape is their share of the output), so a shape-keyed rule can
+    // move its verdict. Those screens, and any other screen whose verdict a
+    // pending change moved, are applied here: the stored-zone resnap below
+    // would otherwise put their windows back on the old layout's zones, and
+    // this diff would leave nothing for a later reconcile to find. Applied
+    // ahead of that resnap, which then re-states the zones the apply chose.
+    // The engine sets were re-derived above with the new verdicts already.
+    // A survivor's reshape can also move the overlay's context verdicts with
+    // no assignment change.
+    if (!m_reshapeTracker.noteReshaped(affectedScreenIds).isEmpty()) {
+        scheduleContextOverlayRefresh();
+    }
+    applyChangedAssignments(diffSurvivingAssignments(knownBefore));
+
     // Resnap windows on this physical screen and any of its virtual children
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which
     // is NOT gated on keepWindowsInZonesOnResolutionChange — VS reconfiguration
@@ -952,6 +1169,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     if (m_snapAdaptor) {
         m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
+    // A survivor's new shape can also move a shape-keyed gap rule's verdict. The
+    // resnap above just placed this output's windows under the current gaps, so
+    // its screens are only recorded. Any other screen whose verdict moved is
+    // restated.
+    restateSnapGapChanges(QSet<QString>(affectedScreenIds.cbegin(), affectedScreenIds.cend()));
 
     // Trigger debounced geometry recalculation for the rest of the system
     // (overlays, panel requery, autotile retile). Reuse the same debounced
@@ -961,16 +1183,6 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }
-
-    // Re-prime the active-assignment snapshot for the NEW virtual screen id
-    // set — same rationale as the screenAdded / screenRemoved tails: a VS
-    // reconfigure replaces the physical id with vs:N children (or back) in
-    // effectiveScreenIds, and an un-primed id always diffs as changed, so
-    // the next unrelated rule edit would spuriously resnap every new VS.
-    // The refresh also republishes the active-layout map under the new id
-    // keyspace, or the effect's ActiveLayout cache keeps matching on screen
-    // ids that no longer exist.
-    diffActiveAssignments();
 }
 
 void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
@@ -1002,9 +1214,39 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->service()->clearResnapBuffer();
     }
+    // A boundary resize changes each virtual screen's shape (its share of the
+    // output), and a shape-keyed rule can move its verdict with it. The id set
+    // is unchanged, so every screen is a survivor: the ones whose verdict
+    // moved are re-derived into the engines and applied before the resnap
+    // below, which would otherwise put their windows back on the old layout's
+    // zones and leave the new verdict to surprise the user at an unrelated
+    // later reconcile. When no verdict moved, the single-retile property
+    // described above holds. A reshape can also move the overlay's context
+    // verdicts with no assignment change.
+    const bool reshaped = !m_reshapeTracker.noteReshaped(affectedScreenIds).isEmpty();
+    const QList<QString> snapshotKeys = m_activeAssignmentByScreen.keys();
+    const QSet<QString> moved = diffSurvivingAssignments(QSet<QString>(snapshotKeys.cbegin(), snapshotKeys.cend()));
+    if (!moved.isEmpty()) {
+        // Same cancel-before-context-change rule as the topology handler
+        // above: the re-derive below can move the output's screens between
+        // engines under a live drag-insert preview.
+        if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(physicalScreenId);
+        }
+        updateEngineScreens();
+        flushPendingSnapZoneRestores();
+        applyChangedAssignments(moved);
+    }
+    if (reshaped) {
+        scheduleContextOverlayRefresh();
+    }
     if (m_snapAdaptor) {
         m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
+    // Same gap pass as the topology handler: this output's windows were just
+    // placed under the current gaps, so only another screen's moved verdict is
+    // restated.
+    restateSnapGapChanges(QSet<QString>(affectedScreenIds.cbegin(), affectedScreenIds.cend()));
     // The scroll engine subscribes to no ScreenManager signal of its own
     // (unlike autotile's virtualScreenRegionsChanged handler), so its
     // affected strips must be retiled here or their columns keep stale
