@@ -41,6 +41,44 @@ ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode, bo
     return out;
 }
 
+DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn, bool toggleMode,
+                                           bool rawTriggerHeld, bool graceHeld, bool prevTriggerHeld, bool toggled,
+                                           bool toggledInsert, bool reorderActive)
+{
+    DragInsertDecision out;
+    out.nextPrevTriggerHeld = prevTriggerHeld;
+    out.nextToggled = toggled;
+    out.nextToggledInsert = toggledInsert;
+    if (!onEngineScreen) {
+        return out;
+    }
+
+    // The stored pair is the user's last explicit choice (see the header),
+    // read here as "diverges from this screen's default". A hold-mode screen
+    // never flips it, so it passes through untouched.
+    const bool latch = toggled && toggledInsert != alwaysOn;
+    // Toggle mode reads the raw state, since the grace never applies there;
+    // hold mode reads the state the grace extended.
+    const ActivationDecision decision =
+        resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode, alwaysOn, prevTriggerHeld, latch);
+    if (decision.nextActivationToggled != latch) {
+        out.nextToggled = true;
+        out.nextToggledInsert = decision.nextActivationToggled != alwaysOn;
+    }
+    // The edge latch follows the RAW state on every engine-screen tick, not
+    // the grace-extended one: the toggle setting is per engine, so a hold
+    // stretch on one engine's screen hands this latch to a toggle-mode screen
+    // at the crossing, and a stale grace value there would swallow a press.
+    out.nextPrevTriggerHeld = rawTriggerHeld;
+
+    if (cancelled) {
+        return out;
+    }
+    out.suppressedByTrigger = alwaysOn && !decision.active;
+    out.active = decision.active || (reorderActive && !out.suppressedByTrigger);
+    return out;
+}
+
 HoldGraceDecision resolveHoldGrace(bool rawHeld, qint64 nowMs, qint64 lastHeldMs, int graceMs)
 {
     HoldGraceDecision out;
