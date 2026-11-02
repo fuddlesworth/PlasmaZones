@@ -12,6 +12,7 @@
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../config/configdefaults.h"
+#include "../../common/daemonscreenscale.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -194,21 +195,17 @@ QSize EditorController::targetScreenSize() const
     // Device pixels per logical pixel on each axis. The daemon's pixelSize
     // for the target's full rect fixes the ratio so the full area maps onto
     // exactly that many device pixels. It is used only when it agrees with
-    // the scale to within a couple of device pixels over the full rect, which
-    // rejects a size measured over a different rect (a virtual screen whose
-    // own geometry the daemon could not give, so the full size below is the
-    // whole monitor). Without it, or from a daemon older than the key, the
-    // ratio is the scale itself.
+    // the scale over the full rect by the daemon's own test
+    // (pixelSizeMatchesLogicalSize), which rejects a size measured over a
+    // different rect (a virtual screen whose own geometry the daemon could
+    // not give, so the full size below is the whole monitor). Without it, or
+    // from a daemon older than the key, the ratio is the scale itself.
     qreal ratioX = m_targetScreenScale;
     qreal ratioY = m_targetScreenScale;
     const QSize full = targetFullLogicalScreenSize();
-    if (m_targetScreenPixelSize.isValid() && !full.isEmpty()) {
-        const qreal tolerance = m_targetScreenScale + 1.0;
-        if (qAbs(m_targetScreenPixelSize.width() - full.width() * m_targetScreenScale) <= tolerance
-            && qAbs(m_targetScreenPixelSize.height() - full.height() * m_targetScreenScale) <= tolerance) {
-            ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
-            ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
-        }
+    if (pixelSizeMatchesLogicalSize(m_targetScreenPixelSize, full, m_targetScreenScale)) {
+        ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
+        ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
     }
     // The device pixels the logical size covers on the target output,
     // rounded once from the unrounded logical size.

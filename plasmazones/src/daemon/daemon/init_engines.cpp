@@ -855,8 +855,9 @@ void Daemon::initEnginesAndWiring()
         m_lastTiledCountByScreen.insert(screenId, owned);
         // getScreenStates publishes the count, and a count that moves no
         // assignment reaches no diff (diffActiveAssignments queues the check
-        // for every other field).
-        if (m_layoutAdaptor) {
+        // for every other field). Not once stop() has begun, which cancels a
+        // queued one.
+        if (m_layoutAdaptor && !m_shuttingDown) {
             m_layoutAdaptor->scheduleScreenStatesCheck();
         }
         updateEngineScreens();

@@ -6,16 +6,27 @@
 // pixel-size report must pass before it applies, the parked / awaited state per
 // connector across the orders a report and its QScreen change can arrive in,
 // and the reshape records that keep a verdict from being absorbed or applied
-// twice. Each case drives the repeat its fix exists for.
+// twice. Each case drives the repeat its fix exists for. The last cases run the
+// tracker over a real ScreenManager, whose pending reports are what keeps a
+// parked connector out of another connector's apply.
 
 #include <QHash>
 #include <QObject>
+#include <QRect>
 #include <QSet>
 #include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTest>
 
+#include "FakePhysicalScreenSource.h"
+
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/PhysicalScreen.h>
+
+#include <functional>
+
+#include "common/daemonscreenscale.h"
 #include "daemon/daemon/screenreshapetracker.h"
 
 using namespace PlasmaZones;
@@ -26,19 +37,30 @@ namespace {
 
 const QString Dp1 = QStringLiteral("DP-1");
 
+/// 2560x1440 at 150 % is a 1707x960 logical screen.
 Facts consistentReport()
 {
-    return Facts{.tracked = true, .reported = true, .consistent = true};
+    return Facts{.tracked = true,
+                 .pendingSize = QSize(2560, 1440),
+                 .logicalSize = QSize(1707, 960),
+                 .logicalScale = 1.5,
+                 .scaleSensor = true};
 }
 
+/// The same report against the coarse integer scale a sensor not mapped yet
+/// leaves in force.
 Facts inconsistentReport()
 {
-    return Facts{.tracked = true, .reported = true, .consistent = false};
+    Facts facts = consistentReport();
+    facts.logicalScale = 2.0;
+    return facts;
 }
 
 Facts clearedReport()
 {
-    return Facts{.tracked = true, .reported = false, .consistent = false};
+    Facts facts = consistentReport();
+    facts.pendingSize = QSize();
+    return facts;
 }
 
 } // namespace
@@ -53,7 +75,9 @@ private:
     QHash<QString, ScreenReshapeTracker::SnapshotEntry> m_snapshot;
     QHash<QString, QString> m_shape;
 
-    ScreenReshapeTracker makeTracker()
+    /// A tracker over @ref m_snapshot, reading the current shape from
+    /// @p shapeToken, or from @ref m_shape when none is given.
+    ScreenReshapeTracker makeTracker(std::function<QString(const QString& screenId)> shapeToken = {})
     {
         ScreenReshapeTracker::Lookups lookups;
         lookups.snapshot = [this](const QString& screenId) -> std::optional<ScreenReshapeTracker::SnapshotEntry> {
@@ -63,9 +87,13 @@ private:
             }
             return *it;
         };
-        lookups.shapeToken = [this](const QString& screenId) {
-            return m_shape.value(screenId);
-        };
+        if (shapeToken) {
+            lookups.shapeToken = std::move(shapeToken);
+        } else {
+            lookups.shapeToken = [this](const QString& screenId) {
+                return m_shape.value(screenId);
+            };
+        }
         return ScreenReshapeTracker(std::move(lookups));
     }
 
@@ -89,28 +117,49 @@ private Q_SLOTS:
     // The mode of the output whose logical size the daemon tracks agrees. A
     // coarse integer scale, a rotation the geometry has not followed, another
     // monitor's size, and the old geometry of a KVM mode change do not.
-    void reportMatchesLogicalSize_acceptsOnlyTheTrackedScreensMode()
+    void pixelSizeMatchesLogicalSize_acceptsOnlyTheTrackedScreensMode()
     {
         // 2560x1440 at 150 % is a 1707x960 logical screen.
-        QVERIFY(ScreenReshapeTracker::reportMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 1.5));
+        QVERIFY(pixelSizeMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 1.5));
         // Before the sensor maps, the scale is the integer ceiling.
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 2.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 2.0));
         // Rotated report, unrotated geometry.
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1440, 2560), QSize(1707, 960), 1.5));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(1440, 2560), QSize(1707, 960), 1.5));
         // Another monitor on the same connector.
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1920, 1080), QSize(1707, 960), 1.5));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(1920, 1080), QSize(1707, 960), 1.5));
         // A split mode halves a 5120x1440 panel: the report lands before the
         // geometry follows, then agrees with the new geometry.
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(2560, 1440), QSize(3413, 960), 1.5));
-        QVERIFY(ScreenReshapeTracker::reportMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 1.5));
-        // The tolerance is scale + 1 device pixels per side.
-        QVERIFY(ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1002, 1000), QSize(1000, 1000), 1.0));
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1003, 1000), QSize(1000, 1000), 1.0));
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1000, 1003), QSize(1000, 1000), 1.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(2560, 1440), QSize(3413, 960), 1.5));
+        QVERIFY(pixelSizeMatchesLogicalSize(QSize(2560, 1440), QSize(1707, 960), 1.5));
+        // The tolerance is scale + 1 device pixels per side, plus one per 240
+        // logical pixels of the side, rounded up: 1 + 1 + 1 for a 200 px side.
+        QVERIFY(pixelSizeMatchesLogicalSize(QSize(203, 200), QSize(200, 200), 1.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(204, 200), QSize(200, 200), 1.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(200, 204), QSize(200, 200), 1.0));
         // Nothing to compare.
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1920, 1080), QSize(1920, 1080), 0.0));
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(), QSize(1920, 1080), 1.0));
-        QVERIFY(!ScreenReshapeTracker::reportMatchesLogicalSize(QSize(1920, 1080), QSize(), 1.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(1920, 1080), QSize(1920, 1080), 0.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(), QSize(1920, 1080), 1.0));
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(1920, 1080), QSize(), 1.0));
+    }
+
+    // A client sees the compositor's fractional scale only as a numerator
+    // over 120 (wp_fractional_scale_v1), so the scale it multiplies by can sit
+    // up to 1/240 off the one the compositor divided by, and the product
+    // drifts with the side. A wide panel's real mode must still agree.
+    void pixelSizeMatchesLogicalSize_allowsTheQuantizedScale()
+    {
+        // A 7680x2160 output at a scale the 1/120 grid cannot carry: 1.004 is
+        // sent as round(120.48) = 120, so the client reads 1.0, while the
+        // compositor divides the mode by 1.004 for the logical size.
+        const QSize mode(7680, 2160);
+        const QSize logical(qRound(7680 / 1.004), qRound(2160 / 1.004));
+        QCOMPARE(logical, QSize(7649, 2151));
+        // Logical times the client's scale misses the mode by 31 px on the
+        // wide side, past scale + 1, but within the 1/240 allowance
+        // (ceil(7649 / 240) = 32).
+        QVERIFY(pixelSizeMatchesLogicalSize(mode, logical, 1.0));
+        // A different monitor of the same width class still lands outside.
+        QVERIFY(!pixelSizeMatchesLogicalSize(QSize(7680, 2400), logical, 1.0));
     }
 
     // ─── Report states ──────────────────────────────────────────────────
@@ -230,7 +279,9 @@ private Q_SLOTS:
     void untrackedReport_waitsForTheAdd()
     {
         ScreenReshapeTracker tracker = makeTracker();
-        const auto ignored = tracker.evaluateReport(Dp1, Facts{.tracked = false, .reported = true});
+        Facts untracked = consistentReport();
+        untracked.tracked = false;
+        const auto ignored = tracker.evaluateReport(Dp1, untracked);
         QCOMPARE(ignored.action, Action::Ignore);
         QVERIFY(!ignored.persist);
         QVERIFY(!tracker.isParked(Dp1));
@@ -240,6 +291,103 @@ private Q_SLOTS:
         QCOMPARE(applied.action, Action::Apply);
         QVERIFY(applied.silent);
         QVERIFY(applied.persist);
+    }
+
+    // A screen with no geometry sensor keeps the coarse scale for good, and
+    // no scale change would ever evaluate a parked report again, so its
+    // report applies unchecked. One whose sensor exists but has not mapped is
+    // still checked, because the map announces the real scale.
+    void sensorlessScreen_appliesUnchecked()
+    {
+        ScreenReshapeTracker tracker = makeTracker();
+        tracker.screenAdded(Dp1);
+        QCOMPARE(tracker.evaluateReport(Dp1, inconsistentReport()).action, Action::Park);
+
+        Facts sensorless = inconsistentReport();
+        sensorless.scaleSensor = false;
+        const auto applied = tracker.evaluateReport(Dp1, sensorless);
+        QCOMPARE(applied.action, Action::Apply);
+        QVERIFY(applied.persist);
+        QVERIFY(applied.silent);
+        QVERIFY(!tracker.isParked(Dp1));
+    }
+
+    // ─── Over a real ScreenManager ──────────────────────────────────────
+
+    // Two monitors dock at once. DP-1 is fractional and its sensor has not
+    // mapped, so its report is checked against the coarse scale and parks;
+    // DP-2's agrees and applies. The parked report is still PENDING in the
+    // manager, so DP-1's shape keeps reading its seed: DP-2's apply records
+    // only DP-2, and the verdict changes the reconcile after it takes leave
+    // DP-1 alone. DP-1 moves only at its own accept, once the real scale
+    // arrives, and silently, as the screen settling.
+    void parkedConnector_isNotAppliedByAnotherConnectorsApply()
+    {
+        const QString dp2 = QStringLiteral("DP-2");
+        const QString idA = QStringLiteral("Dell:U27:1");
+        const QString idB = QStringLiteral("LG:Ultra:9");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(Dp1, QRect(0, 0, 1707, 960), idA);
+        fake.addScreen(dp2, QRect(1707, 0, 1920, 1080), idB);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        // Last session's sizes for both monitors.
+        mgr.seedPixelSize(idA, QSize(1920, 1080));
+        mgr.seedPixelSize(idB, QSize(1920, 1080));
+
+        // The registry's shape, read the way the daemon's pixel-size provider
+        // feeds it: ScreenManager::pixelSize.
+        ScreenReshapeTracker tracker = makeTracker([&mgr](const QString& screenId) {
+            const QSize size = mgr.pixelSize(screenId).value_or(QSize());
+            return QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+        });
+        m_snapshot.insert(idA, {QStringLiteral("layout-a"), QStringLiteral("1920x1080")});
+        m_snapshot.insert(idB, {QStringLiteral("layout-b"), QStringLiteral("1920x1080")});
+
+        // Daemon::admitPixelSizeReport's glue: the pending report against the
+        // tracked screen, accepted on Apply. A synthetic screen has no QScreen
+        // to give a scale, so the test supplies the one the daemon would read.
+        const auto admit = [&](const QString& connector, qreal scale) {
+            const PhosphorScreens::PhysicalScreen screen = mgr.physicalScreenFor(connector);
+            Facts facts;
+            facts.tracked = screen.isValid();
+            facts.pendingSize = mgr.pendingPixelSize(connector).value_or(QSize());
+            facts.logicalSize = screen.geometry.size();
+            facts.logicalScale = scale;
+            facts.scaleSensor = true;
+            const ScreenReshapeTracker::ReportVerdict verdict = tracker.evaluateReport(connector, facts);
+            if (verdict.action == Action::Apply) {
+                mgr.acceptCompositorPixelSize(connector);
+            }
+            return verdict;
+        };
+
+        tracker.screenAdded(Dp1);
+        tracker.screenAdded(dp2);
+        mgr.setCompositorPixelSize(Dp1, QSize(2560, 1440));
+        mgr.setCompositorPixelSize(dp2, QSize(3840, 2160));
+
+        QCOMPARE(admit(Dp1, 2.0).action, Action::Park);
+        QCOMPARE(admit(dp2, 2.0).action, Action::Apply);
+
+        // The parked report reads nowhere.
+        QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(1920, 1080));
+        QCOMPARE(mgr.pixelSize(idB).value_or(QSize()), QSize(3840, 2160));
+        QCOMPARE(tracker.noteReshaped({idA, idB}), QStringList{idB});
+        QVERIFY(!tracker.hasRecord(idA));
+
+        // DP-2's reconcile resolves its new verdict. DP-1's shape did not
+        // move, so its verdict did not either.
+        m_snapshot.insert(idB, {QStringLiteral("layout-b-4k"), QStringLiteral("3840x2160")});
+        QCOMPARE(tracker.takeVerdictChanges(), QSet<QString>{idB});
+
+        // The real scale arrives for DP-1: its report applies now, silently.
+        const ScreenReshapeTracker::ReportVerdict settled = admit(Dp1, 1.5);
+        QCOMPARE(settled.action, Action::Apply);
+        QVERIFY(settled.silent);
+        QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(tracker.noteReshaped({idA, idB}), QStringList{idA});
     }
 
     // ─── Reshape records ────────────────────────────────────────────────
@@ -367,5 +515,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_GUILESS_MAIN(TestScreenReshapeTracker)
+QTEST_MAIN(TestScreenReshapeTracker)
 #include "test_screen_reshape_tracker.moc"

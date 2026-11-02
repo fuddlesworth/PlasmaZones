@@ -116,12 +116,15 @@ std::optional<LayoutRegistry::RuleSlotResolution> LayoutRegistry::resolveRuleSlo
     // sibling resolver (gap / lock / default-assignment / the shared bool-slot
     // body serving OSD and drag-selector / overlay / the two param resolvers in
     // layoutregistry_contextparams.cpp). The assignment cascade is the one
-    // resolver that STAMPS it (resolveAssignmentEntry), so both polarities
-    // evaluate correctly and the algorithm-switch feature it exists for —
+    // resolver that STAMPS it (resolveAssignmentEntry), and the algorithm-switch
+    // feature it exists for —
     // `TiledWindowCount GreaterThan 1 → SetTilingAlgorithm bsp` — depends on
     // rules referencing it winning a slot here. Excluding it would leave the
     // provider, the cache key and the daemon's count-change re-resolve hooks
-    // all wired to nothing.
+    // all wired to nothing. The stamp is the provider's answer, which is
+    // nullopt on a screen that is not actively tiling, so the field is absent
+    // there: a positive count leaf is false and a negated one
+    // (`None{TiledWindowCount GreaterThan 1}`) matches that context.
     //
     // A screen-shape field the query cannot answer gets the negation-scoped
     // guard (negatesUnknownScreenShape): a positive leaf on it is inert, a
@@ -203,7 +206,24 @@ const PWR::Rule* LayoutRegistry::resolveLockRule(const PWR::RuleEvaluator& evalu
 std::optional<int> LayoutRegistry::tiledWindowCount(const QString& screenId, int virtualDesktop,
                                                     const QString& activity) const
 {
-    return m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
+    if (!m_tiledWindowCountProvider) {
+        return std::nullopt;
+    }
+    if (const std::optional<int> count = m_tiledWindowCountProvider(screenId, virtualDesktop, activity)) {
+        return count;
+    }
+    // A connector-name caller is the same screen as its stable id, and the
+    // tiling engines key their state by the stable id. Ask once more in that
+    // form so the stable-id retry in the fallback chain is matched against the
+    // screen's real count rather than "unknown". A virtual-screen id carries a
+    // ':' and is never a connector name, so its own count is never replaced.
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
+        if (resolved != screenId) {
+            return m_tiledWindowCountProvider(resolved, virtualDesktop, activity);
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,

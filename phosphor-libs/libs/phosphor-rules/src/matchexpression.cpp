@@ -294,10 +294,15 @@ bool MatchExpression::isValid() const
             }
             break;
         case QMetaType::QString: {
+            // Parsed wider than int so a well-formed number outside int range
+            // is reported as out of range rather than as not a number.
             bool ok = false;
-            m_predicate.value.toString().toInt(&ok);
+            const qlonglong v = m_predicate.value.toString().toLongLong(&ok);
             if (!ok) {
                 return rejectNonNumeric();
+            }
+            if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+                return rejectOutOfRange();
             }
             break;
         }
@@ -314,9 +319,7 @@ bool MatchExpression::isValid() const
             // (e.g. a value above INT_MAX collapsing to 0, which reads as "pid 0").
             if (!std::isfinite(d) || d < static_cast<double>(std::numeric_limits<int>::min())
                 || d > static_cast<double>(std::numeric_limits<int>::max())) {
-                qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with out-of-range value" << d
-                                  << "— numeric fields require an integer within int range.";
-                return false;
+                return rejectOutOfRange();
             }
             // A bit-for-bit integer-valued double is fine (JSON has no int);
             // only a genuine fractional part is the authoring mistake (a Pid 12.7

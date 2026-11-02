@@ -505,6 +505,10 @@ void Daemon::stop()
     // engines the same way, and the adaptor is a Qt child that outlives them.
     if (m_layoutAdaptor) {
         m_layoutAdaptor->setTiledWindowCountProvider({});
+        // A screen-states comparison queued before stop() would run after it
+        // and announce a teardown's half-state. m_shuttingDown keeps any new
+        // one from being queued.
+        m_layoutAdaptor->cancelScreenStatesCheck();
     }
 
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt

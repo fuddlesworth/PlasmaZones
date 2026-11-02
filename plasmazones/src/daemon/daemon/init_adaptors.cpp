@@ -207,9 +207,9 @@ void Daemon::initCoreAdaptors()
         [this](const QString& screenId, int desktop, const QString& activity) {
             return runningModeForContext(screenId, desktop, activity);
         });
-    // Each monitor's size as the compositor last reported it, from the session
-    // state the adaptor just loaded, stands in for the report until this
-    // session's arrives (onCompositorPixelSizeChanged). Here, before start()
+    // Each monitor's size as last accepted from the compositor, from the
+    // session state the adaptor just loaded, stands in for the report until
+    // this session's is accepted (onCompositorPixelSizeChanged). Here, before start()
     // starts the screen manager, so the first resolve of every screen already
     // has it and a report that confirms it moves nothing. The manager tracks
     // no screen yet, so seeding emits nothing.

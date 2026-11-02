@@ -121,7 +121,7 @@ private Q_SLOTS:
     void monitorOverviewVirtualScreenJudgesMonitorRulesByItsOwnShape();
     void monitorOverviewEstimatedSizeIsUnknown();
     void monitorOverviewColorSchemeFromProvider();
-    void monitorOverviewCountsOnlyLiteralMonitorPins();
+    void monitorOverviewCountsRulesThatAddressAMonitor();
     void screenSizeHintNamesPinnedMonitors();
     void screenSizeHintNamesVirtualScreensOfAPinnedMonitor();
     void curveLabelResolverBridgesQmlNaming();
@@ -1047,13 +1047,16 @@ void TestRuleControllerOverview::monitorOverviewColorSchemeFromProvider()
     controller.setColorSchemeProvider({});
 }
 
-void TestRuleControllerOverview::monitorOverviewCountsOnlyLiteralMonitorPins()
+void TestRuleControllerOverview::monitorOverviewCountsRulesThatAddressAMonitor()
 {
-    // A tile counts the rules that address its monitor by a whole ScreenId
-    // (RuleModel::screenIdsOf, the walk the Rules page's monitor filter
-    // reads). A substring pin addresses no one monitor, so it counts on no
-    // tile even where it matches, and a monitor excluded inside a `none`
-    // group is not addressed by the rule.
+    // A tile counts every rule with a ScreenId condition of any operator
+    // outside a `none` group whose whole match holds for its screen. A
+    // "starts with" rule therefore counts on each monitor it matches and on
+    // no other. A rule whose only ScreenId condition sits inside a `none`
+    // group excludes a monitor rather than addressing one, so it counts
+    // nowhere even on the screens its match holds for. Which screens the
+    // `all{DP-1, none{DP-2}}` rule counts on is decided by evaluating its
+    // match, not by that walk.
     RuleController controller;
     QVERIFY(!addRule(controller,
                      leafJson(QStringLiteral("screenId"), QStringLiteral("startsWith"), QStringLiteral("DP")),
@@ -1069,11 +1072,19 @@ void TestRuleControllerOverview::monitorOverviewCountsOnlyLiteralMonitorPins()
                                                                  QStringLiteral("DP-2"))}}}}}},
                      gapActions())
                  .isEmpty());
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("none"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-2"))}}},
+                     gapActions())
+                 .isEmpty());
 
     const QVariantList overview =
-        controller.monitorOverview({screenJson(QStringLiteral("DP-1")), screenJson(QStringLiteral("DP-2"))});
-    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 1);
-    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("ruleCount")).toInt(), 0);
+        controller.monitorOverview({screenJson(QStringLiteral("DP-1")), screenJson(QStringLiteral("DP-2")),
+                                    screenJson(QStringLiteral("HDMI-A-1"))});
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 2);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tileFor(overview, QStringLiteral("HDMI-A-1")).value(QStringLiteral("ruleCount")).toInt(), 0);
 }
 
 void TestRuleControllerOverview::screenSizeHintNamesPinnedMonitors()

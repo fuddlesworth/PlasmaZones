@@ -244,8 +244,9 @@ void Daemon::initLayoutAndSettingsWiring()
     // ScreenAspectRatio rule can tell one monitor's modes apart (a
     // super-ultrawide whose split mode halves its width, for one). The
     // compositor's exact report of the output's current mode, already rotated,
-    // or the last session's report for the monitor until this session's
-    // arrives; a virtual screen answers its region's share of it. nullopt
+    // once the daemon has accepted it (a parked report stays out of every
+    // rule), or the last accepted size for the monitor until then; a virtual
+    // screen answers its region's share of it. nullopt
     // while neither exists, which leaves a positive size or aspect leaf false
     // and gets a negated one refused. Re-driven by onCompositorPixelSizeChanged
     // (start.cpp) and by the two virtual-screen handlers.

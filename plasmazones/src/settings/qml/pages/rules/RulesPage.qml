@@ -275,9 +275,9 @@ SettingsFlickable {
     // rows in their stale pre-move order. The remaining entries (Section /
     // ScreenIds / ConditionCount / ActionCount / IsComposite /
     // ValidationIssueCount / InertAnimationActionCount) are also read when
-    // building the rows but currently
-    // change only through the roles-less updateRule path; they're kept so a
-    // future targeted emitter carrying them rebuilds without a second edit here.
+    // building the rows but currently change only through the roles-less
+    // updateRule path; they're kept so a future targeted emitter carrying
+    // them rebuilds without a second edit here.
     readonly property var _summaryRoles: [RuleModel.SectionRole, RuleModel.MatchSummaryRole, RuleModel.ActionSummaryRole, RuleModel.ScreenIdsRole, RuleModel.ConditionCountRole, RuleModel.ActionCountRole, RuleModel.IsCompositeRole, RuleModel.ValidationIssueCountRole, RuleModel.InertAnimationActionCountRole, RuleModel.PriorityRole]
 
     contentHeight: mainCol.implicitHeight

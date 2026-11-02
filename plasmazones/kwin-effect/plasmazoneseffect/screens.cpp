@@ -703,20 +703,25 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     EffectVirtualScreenDef def;
                     def.id = obj.value(QLatin1String("id")).toString();
 
-                    // Compute absolute geometry from fractional region within physical
-                    // screen. No isValid() test: the arm above returns on an invalid
-                    // physGeom now, so a guard here would be dead and would re-imply that
-                    // an invalid one reaches this loop. The region is kept so an
-                    // output that moves re-derives the rect (onScreenAdded).
+                    // The absolute geometry is cut from the fractional region within the
+                    // physical screen. No physGeom.isValid() test: the arm above returns
+                    // on an invalid physGeom now, so a guard here would be dead and would
+                    // re-imply that an invalid one reaches this loop. The region is kept
+                    // so an output that moves re-derives the rect (onScreenAdded).
                     def.region =
                         QRectF(region.value(QLatin1String("x")).toDouble(), region.value(QLatin1String("y")).toDouble(),
                                region.value(QLatin1String("width")).toDouble(),
                                region.value(QLatin1String("height")).toDouble());
-                    def.geometry = absoluteVirtualScreenRect(def.region, physGeom);
-
-                    if (def.geometry.isValid() && !def.id.isEmpty()) {
-                        defs.append(def);
+                    // Admitted on the daemon's own terms (VirtualScreenDef::isValid):
+                    // a virtual id and a region inside the output. The rect cannot
+                    // decide it, since absoluteVirtualScreenRect floors every side at
+                    // one pixel and would admit a zero-width region as a 1x1 screen.
+                    const bool virtualId = PhosphorIdentity::VirtualScreenId::isVirtual(def.id);
+                    if (!virtualId || !virtualScreenRegionIsValid(def.region)) {
+                        continue;
                     }
+                    def.geometry = absoluteVirtualScreenRect(def.region, physGeom);
+                    defs.append(def);
                 }
 
                 bool defsMutated = true;

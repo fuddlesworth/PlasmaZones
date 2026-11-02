@@ -300,9 +300,13 @@ public:
      * count changes (on the engine's placementChanged).
      *
      * The provider is asked about the screen a public resolver was called
-     * with, once per call. A virtual screen that falls back to its physical
-     * screen's assignment keeps its own count on that retry, so the provider
-     * is never asked about the physical id on the virtual screen's behalf.
+     * with, once per resolver call. A composite such as
+     * @ref isContextActiveLayoutSuppressed runs two resolvers and so asks
+     * twice. A virtual screen that falls back to its physical screen's
+     * assignment keeps its own count on that retry, so the provider is never
+     * asked about the physical id on the virtual screen's behalf. When it
+     * answers nullopt for a connector name, that one reading asks again with
+     * the connector's stable identifier, the form the tiling engines track.
      *
      * The (virtualDesktop, activity) parameters identify the resolution context,
      * but a provider may return the screen's CURRENT-context count when its
@@ -1308,10 +1312,14 @@ private:
 
     /// The tiled-window count @ref m_tiledWindowCountProvider reports for
     /// @p screenId in this context, or nullopt when the provider is unset or
-    /// the screen is not actively tiling. Every public entry point that
-    /// reaches @ref resolveAssignmentEntry reads it ONCE for the screen it was
-    /// asked about, beside @ref screenShape, and hands that reading to every
-    /// fallback try.
+    /// the screen is not actively tiling. A connector name the provider does
+    /// not know is asked again under its stable identifier, so a caller that
+    /// names the screen by connector still sees the count the engines keep
+    /// under the stable id, including on the fallback chain's stable-id retry.
+    /// A virtual-screen id is never a connector name and is asked only as
+    /// given. Every public entry point that reaches @ref resolveAssignmentEntry
+    /// takes this reading ONCE for the screen it was asked about, beside
+    /// @ref screenShape, and hands it to every fallback try.
     std::optional<int> tiledWindowCount(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// @ref assignmentIdForScreen, @ref scrollingTemplateForContext and

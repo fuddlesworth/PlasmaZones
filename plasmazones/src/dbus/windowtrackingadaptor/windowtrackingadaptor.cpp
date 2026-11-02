@@ -284,9 +284,10 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         // A boundary resize, swap or rotate moves every virtual screen's rect
         // with the id set unchanged, so virtualScreensChanged stays silent.
         connect(screenMgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this, noteRestoresChanged);
-        // The compositor's pixel-size report moves the screen shape, and with
-        // it any shape-keyed rule verdict on the layout a context runs.
-        connect(screenMgr, &PhosphorScreens::ScreenManager::compositorPixelSizeChanged, this, noteRestoresChanged);
+        // An accepted pixel-size report (or a seed change) moves the screen
+        // shape, and with it any shape-keyed rule verdict on the layout a
+        // context runs. A report still pending moves nothing a rule reads.
+        connect(screenMgr, &PhosphorScreens::ScreenManager::acceptedPixelSizeChanged, this, noteRestoresChanged);
         // A zone whose fixed size counts device pixels moves when the scale
         // does, at an unchanged output rect (#1160). The first such change
         // lands at startup, when the sensor's real fractional scale replaces

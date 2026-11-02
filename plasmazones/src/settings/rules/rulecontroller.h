@@ -383,8 +383,10 @@ public:
     /// Plain-prose note on the current device-pixel size and nearest aspect
     /// ratio of each screen @p matchJson pins (RuleModel::screenIdsOf), read
     /// from @p screens (the `SettingsController::screens` list). A pinned
-    /// monitor split into virtual screens is named through each of them,
-    /// since its rules are judged against each virtual screen's own size.
+    /// monitor split into virtual screens is named through each of them. The
+    /// daemon retries a virtual screen against its monitor's rules only when
+    /// the virtual screen's own rules fill no slot, and on that retry the
+    /// monitor's rules read the virtual screen's size.
     /// The rule editor shows it under a Screen width, Screen height or
     /// Screen aspect ratio value. Empty when the match pins no connected
     /// screen whose size the daemon knows (`pixelSizeKnown`).

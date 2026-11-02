@@ -14,10 +14,10 @@
  * the assignment it drives, every resolver's cache following a mode change,
  * the refusal of a negated shape leaf while the size is unknown, and a virtual
  * screen's fallback retry still asking about the virtual screen, for its shape
- * and its tiled-window count), autotile
- * tiling params, scrolling context params, and the exactContextEntry pair
- * pinning the settings UI's explicit-versus-resolved discriminator, including
- * its deliberate blindness to a rule's enabled flag.
+ * and its tiled-window count), autotile tiling params, scrolling context
+ * params, and the exactContextEntry pair pinning the settings UI's
+ * explicit-versus-resolved discriminator, including its deliberate blindness
+ * to a rule's enabled flag.
  *
  * The overlay, lock, per-mode gap routing, negation-polarity and specificity
  * halves live in the sibling test_rule_cascade_overlay_lock.cpp, split off at
@@ -35,6 +35,7 @@
 #include <limits>
 
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
@@ -247,9 +248,9 @@ private Q_SLOTS:
     // resolvers (assignment, gap, lock, default assignment, OSD, drag selector
     // and overlay) can only follow through the size folded into their keys,
     // and the uncached tiling and scrolling param resolvers through their
-    // per-call read. The steps
-    // include a HEIGHT-only change (2560x1440 to 2560x1080), so a key folding
-    // the width alone would show up as a stale verdict.
+    // per-call read. The steps include a HEIGHT-only change (2560x1440 to
+    // 2560x1080), so a key folding the width alone would show up as a stale
+    // verdict.
     void testContextScreenSize_everyResolverFollowsSizeChange()
     {
         std::optional<QSize> size = QSize(5120, 1440);
@@ -476,17 +477,25 @@ private Q_SLOTS:
     // engines track the virtual screens, so the physical id has no count of its
     // own, and a retry that asked for it would see "unknown". A positive count
     // leaf would then never match and a negated one would match every count.
+    // Every public entry point that runs the fallback chain is driven here:
+    // the assignment entry and id, the rules-visible active layout, and
+    // hasMatchingAssignmentRule, which is private and observed through
+    // isContextActiveLayoutSuppressed in the closing phase.
     void testTiledWindowCount_virtualScreenRetryKeepsItsOwnCount()
     {
         const QString physical = QStringLiteral("DP-1");
         const QString virtualHalf = QStringLiteral("DP-1/vs:0");
-        // Declared BEFORE the fixture: the provider captures them by reference
-        // and the registry holding it is torn down with the fixture.
+        // Declared BEFORE the fixture: the providers capture them by reference
+        // and the registry holding them is torn down with the fixture.
         std::optional<int> virtualCount = 3;
+        bool suppressDefault = false;
         QStringList askedAbout;
         RegistryFixture f = makeRegistryFixture();
         f.registry->setDefaultLayoutIdProvider([]() {
             return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setDefaultAssignmentSuppressedProvider([&suppressDefault]() {
+            return suppressDefault;
         });
         f.registry->setTiledWindowCountProvider(
             [&virtualCount, &askedAbout, virtualHalf](const QString& screenId, int,
@@ -500,6 +509,7 @@ private Q_SLOTS:
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, physical);
         const PWR::MatchExpression moreThanOne =
             PWR::MatchExpression::makeLeaf(PWR::Field::TiledWindowCount, PWR::Operator::GreaterThan, 1);
+        const PWR::MatchExpression atMostOne = PWR::MatchExpression::makeNone({moreThanOne});
 
         // A positive count rule pinned to the physical id: the half has three
         // tiled windows, so the retry must match on the half's count.
@@ -507,24 +517,103 @@ private Q_SLOTS:
             {shapeAssignmentRule(500, PWR::MatchExpression::makeAll({pinnedToPhysical, moreThanOne}), countLayout)}));
         QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
         QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()), countLayout);
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()), countLayout);
         QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+
+        // Each public entry point reads the count once and threads that one
+        // reading through its retries and its inner resolvers. A layer that
+        // read it again would ask twice here, and on a retry would ask about
+        // the physical id.
+        const auto asksOnce = [&askedAbout, virtualHalf](const auto& call) {
+            askedAbout.clear();
+            call();
+            return askedAbout == QStringList{virtualHalf};
+        };
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->assignmentEntryForScreen(virtualHalf, 0, QString());
+        }));
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->assignmentIdForScreen(virtualHalf, 0, QString());
+        }));
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString());
+        }));
 
         // The negated form: "at most one tiled window". Three is more than one,
         // so the rule must not match, and the default answers. A count read for
         // the physical id would be unknown, and the negation would match.
-        QVERIFY(f.store->setAllRules({shapeAssignmentRule(
-            500, PWR::MatchExpression::makeAll({pinnedToPhysical, PWR::MatchExpression::makeNone({moreThanOne})}),
-            countLayout)}));
+        QVERIFY(f.store->setAllRules(
+            {shapeAssignmentRule(500, PWR::MatchExpression::makeAll({pinnedToPhysical, atMostOne}), countLayout)}));
         QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout,
                  QStringLiteral("{provider-snap-default}"));
         QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()),
+                 QStringLiteral("{provider-snap-default}"));
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()),
                  QStringLiteral("{provider-snap-default}"));
 
         // Positive control for the negated rule: with one tiled window it
         // matches, through the same retry, with no rule-set revision bump.
         virtualCount = 1;
         QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()), countLayout);
         QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+
+        // hasMatchingAssignmentRule. With the default suppressed, an
+        // algorithm-only rule yields no active layout id, so
+        // isContextActiveLayoutSuppressed falls through to asking whether any
+        // assignment rule matches: a match keeps the context live, a miss
+        // leaves it suppressed. The rule is pinned to the physical id, so only
+        // the retry can match it.
+        suppressDefault = true;
+        const auto algorithmOnlyRule = [](const PWR::MatchExpression& match) {
+            PWR::RuleAction algorithm;
+            algorithm.type = QString(PWR::ActionType::SetTilingAlgorithm);
+            algorithm.params.insert(QString(PWR::ActionParam::Algorithm), QStringLiteral("bsp"));
+            return shapeContextRule(500, match, {algorithm});
+        };
+        QVERIFY(
+            f.store->setAllRules({algorithmOnlyRule(PWR::MatchExpression::makeAll({pinnedToPhysical, moreThanOne}))}));
+        virtualCount = 3;
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()), QString());
+        QVERIFY(!f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        virtualCount = 1;
+        QVERIFY(f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+
+        QVERIFY(
+            f.store->setAllRules({algorithmOnlyRule(PWR::MatchExpression::makeAll({pinnedToPhysical, atMostOne}))}));
+        virtualCount = 3;
+        QVERIFY(f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        virtualCount = 1;
+        QVERIFY(!f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+    }
+
+    // ─── A connector-name caller is asked about once, and a VS id as given ──
+    // tiledWindowCount asks the provider again under the stable identifier when
+    // a connector name gets no answer, because the tiling engines track screens
+    // by stable id. A connector with no distinct stable form (the offscreen
+    // platform's screens have no EDID, so idForName hands the name back) must
+    // not be asked twice, and a virtual-screen id, which is never a connector
+    // name, must never be rewritten.
+    void testTiledWindowCount_unknownScreenIsAskedOnlyAsGiven()
+    {
+        QStringList askedAbout;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setTiledWindowCountProvider(
+            [&askedAbout](const QString& screenId, int, const QString&) -> std::optional<int> {
+                askedAbout.append(screenId);
+                return std::nullopt;
+            });
+
+        const QString connector = QStringLiteral("NO-SUCH-OUTPUT");
+        QCOMPARE(PhosphorScreens::ScreenIdentity::idForName(connector), connector);
+        f.registry->assignmentIdForScreen(connector, 0, QString());
+        QCOMPARE(askedAbout, QStringList{connector});
+
+        askedAbout.clear();
+        const QString virtualId = QStringLiteral("NO-SUCH-OUTPUT/vs:0");
+        f.registry->assignmentIdForScreen(virtualId, 0, QString());
+        QCOMPARE(askedAbout, QStringList{virtualId});
     }
 
     // ─── A desktop-pinned assignment and a shape rule compete on priority ──

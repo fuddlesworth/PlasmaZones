@@ -20,6 +20,7 @@
 #include "phosphor_i18n.h"
 #include "config/settings.h"
 #include "common/daemoncontroller.h"
+#include "settings/controller/screenstatescache.h"
 #include "settings/utils/screenhelper.h"
 #include "core/types/constants.h"
 #include "core/types/enums.h"
@@ -149,11 +150,11 @@ class SettingsController : public QObject
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
     // The daemon's getScreenStates answer (each screen's current desktop,
     // activity, resolved assignment and, while it tiles, its tiled-window
-    // count), fetched asynchronously and re-read on the daemon's
-    // screenStatesChanged, on screen, assignment, active-layout and activity
-    // changes, when the window regains focus and when the Rules page comes
-    // into view. The Rules page's monitor tiles
-    // evaluate their conditions against it.
+    // count). Seeded by one blocking call at construction, then re-read
+    // asynchronously on the daemon's screenStatesChanged, on screen,
+    // assignment, active-layout and activity changes, when the window regains
+    // focus and when the Rules page comes into view, while the daemon runs.
+    // The Rules page's monitor tiles evaluate their conditions against it.
     Q_PROPERTY(QVariantList screenStates READ screenStates NOTIFY screenStatesChanged)
 
     // Per-monitor scope: which screen the per-monitor setting groups are
@@ -423,7 +424,7 @@ public:
     // Screen accessors
     QVariantList screenStates() const
     {
-        return m_screenStates;
+        return m_screenStatesCache.states();
     }
     QVariantList screens() const
     {
@@ -882,10 +883,9 @@ Q_SIGNALS:
 public Q_SLOTS:
     /// Coalesce the requests to re-read each screen's state (the daemon's
     /// screenStatesChanged, screens, assignments, active layouts, the current
-    /// activity, the window
-    /// regaining focus, the Rules page coming into view) into one
-    /// refreshScreenStates() on m_screenStatesTimer. Public so the Rules page
-    /// can ask.
+    /// activity, the window regaining focus, the Rules page coming into view)
+    /// into one refreshScreenStates() through m_screenStatesCache. Public so
+    /// the Rules page can ask.
     void scheduleScreenStatesRefresh();
 
 private Q_SLOTS:
@@ -913,9 +913,10 @@ private Q_SLOTS:
     /// A reply that changes the scale reloads the layouts, but only when some
     /// local layout counts device pixels, since no other layout reads it.
     void refreshPrimaryScreenScale();
-    /// Ask the daemon, asynchronously, for getScreenStates and publish the
-    /// answer as `screenStates` when it differs. A failed call keeps the last
-    /// answer.
+    /// Ask the daemon, asynchronously, for getScreenStates and hand the reply
+    /// to m_screenStatesCache, which publishes it as `screenStates` when it
+    /// differs and keeps the last answer when the call fails. Does nothing
+    /// while the daemon is not running, so no trigger D-Bus-activates it.
     void refreshScreenStates();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
@@ -1228,14 +1229,11 @@ private:
     QString m_primaryScreenScaleId;
     quint64 m_primaryScreenScaleRequest = 0;
 
-    // The last getScreenStates answer, its coalescing timer, and the number
-    // of the newest request so an older reply cannot overwrite a newer one.
-    QVariantList m_screenStates;
-    QTimer m_screenStatesTimer;
     // The same wait the layout reload and ScreenHelper's refresh coalesce
     // over: long enough to fold one burst of daemon signals into one call.
     static constexpr int ScreenStatesCoalesceMs = 50;
-    quint64 m_screenStatesRequest = 0;
+    // The last getScreenStates answer and its refresh bookkeeping.
+    ScreenStatesCache m_screenStatesCache{ScreenStatesCoalesceMs};
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // PhosphorZones::LayoutRegistry opens its own assignments backend + scans the standard

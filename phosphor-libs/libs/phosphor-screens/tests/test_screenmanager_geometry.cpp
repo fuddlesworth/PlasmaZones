@@ -293,50 +293,103 @@ private Q_SLOTS:
 
     // ─── Screen size in device pixels ────────────────────────────────────
 
-    // A compositor report records, a repeat is a no-op, a change and a clear
-    // each announce once, and a clear of nothing announces nothing. The size
-    // answers for the connector name and the identifier alike.
-    void testPixelSizeReportSetChangeAndClear()
+    // A compositor report is PENDING: it records and announces through
+    // compositorPixelSizeChanged, a repeat is a no-op, and a change and a
+    // clear each announce once, but pixelSize, isPixelSizeReported and
+    // acceptedPixelSizeChanged see none of it until the host accepts.
+    void testPixelSizePendingReportIsInvisibleUntilAccepted()
     {
         FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 2560, 1440), QStringLiteral("Dell:U27:1"));
 
         ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
-        QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        QSignalSpy pendingSpy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        QSignalSpy acceptedSpy(&mgr, &ScreenManager::acceptedPixelSizeChanged);
 
-        QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
-        QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
+        QVERIFY(!mgr.pendingPixelSize(QStringLiteral("DP-1")).has_value());
 
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
-        QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(pendingSpy.count(), 1);
+        QCOMPARE(pendingSpy.at(0).at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(mgr.pendingPixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(3840, 2160));
+        QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
+        QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
+        QCOMPARE(acceptedSpy.count(), 0);
+
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
+        QCOMPARE(pendingSpy.count(), 1);
+
+        // A rotation reaches the pending store as one change.
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2160, 3840));
+        QCOMPARE(pendingSpy.count(), 2);
+        QCOMPARE(mgr.pendingPixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2160, 3840));
+        QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
+
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize());
+        QCOMPARE(pendingSpy.count(), 3);
+        QVERIFY(!mgr.pendingPixelSize(QStringLiteral("DP-1")).has_value());
+
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(0, 0));
+        QCOMPARE(pendingSpy.count(), 3);
+        QCOMPARE(acceptedSpy.count(), 0);
+
+        // An empty connector records nothing.
+        mgr.setCompositorPixelSize(QString(), QSize(1, 1));
+        QCOMPARE(pendingSpy.count(), 3);
+    }
+
+    // Accepting promotes the pending report: pixelSize answers it under the
+    // connector name and the identifier alike, acceptedPixelSizeChanged fires
+    // once per real change, a repeated accept is a no-op, and a pending clear
+    // accepted drops the answer.
+    void testPixelSizeAcceptPromotesTheReportAndTheClear()
+    {
+        FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 2560, 1440), QStringLiteral("Dell:U27:1"));
+
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QSignalSpy acceptedSpy(&mgr, &ScreenManager::acceptedPixelSizeChanged);
+
+        // Nothing pending and nothing accepted: no change.
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 0);
+
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 1);
+        QCOMPARE(acceptedSpy.at(0).at(0).toString(), QStringLiteral("DP-1"));
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(3840, 2160));
         QCOMPARE(mgr.pixelSize(QStringLiteral("Dell:U27:1")).value_or(QSize()), QSize(3840, 2160));
         QVERIFY(mgr.isPixelSizeReported(QStringLiteral("Dell:U27:1")));
 
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
-        QCOMPARE(spy.count(), 1);
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 1);
 
-        // A rotation reaches the store as one change.
+        // A new pending report leaves the accepted one answering until it is
+        // accepted in turn.
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2160, 3840));
-        QCOMPARE(spy.count(), 2);
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(3840, 2160));
+        QCOMPARE(acceptedSpy.count(), 1);
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 2);
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2160, 3840));
 
+        // A pending clear is not seen until it is accepted either.
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize());
-        QCOMPARE(spy.count(), 3);
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2160, 3840));
+        QVERIFY(mgr.isPixelSizeReported(QStringLiteral("DP-1")));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 3);
         QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
         QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
 
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(0, 0));
-        QCOMPARE(spy.count(), 3);
-
         // An empty id answers nothing, unlike screenGeometry's primary
-        // fallback, and an empty connector records nothing.
+        // fallback.
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
         QVERIFY(!mgr.pixelSize(QString()).has_value());
-        mgr.setCompositorPixelSize(QString(), QSize(1, 1));
-        QCOMPARE(spy.count(), 4);
     }
 
     // A virtual screen answers its region's share of the PIXEL rect, rounded
@@ -373,7 +426,11 @@ private Q_SLOTS:
         // No report and no seed: no virtual screen has a size either.
         QVERIFY(!mgr.pixelSize(vs0).has_value());
 
+        // Nor while the report is only pending.
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2560, 1440));
+        QVERIFY(!mgr.pixelSize(vs1).has_value());
+
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
         QCOMPARE(mgr.pixelSize(vs0).value_or(QSize()), QSize(853, 1440));
         QCOMPARE(mgr.pixelSize(vs1).value_or(QSize()), QSize(854, 1440));
         QCOMPARE(mgr.pixelSize(vs2).value_or(QSize()), QSize(853, 1440));
@@ -388,9 +445,10 @@ private Q_SLOTS:
         QVERIFY(!mgr.isPixelSizeReported(unknown));
     }
 
-    // A seed answers until the compositor reports, the report wins while it
-    // exists, and a seed change announces only when it changes the answer.
-    void testPixelSizeSeedAnswersUntilAReportArrives()
+    // A seed answers until a report is accepted, a pending report does not
+    // shadow it, an accepted report wins while it stands, and a seed change
+    // announces (on both signals) only when it changes the answer.
+    void testPixelSizeSeedAnswersUntilAReportIsAccepted()
     {
         const QString physId = QStringLiteral("Dell:U27:1");
         FakePhysicalScreenSource fake;
@@ -398,42 +456,60 @@ private Q_SLOTS:
 
         ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
-        QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        QSignalSpy pendingSpy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        QSignalSpy acceptedSpy(&mgr, &ScreenManager::acceptedPixelSizeChanged);
 
         mgr.seedPixelSize(physId, QSize(2560, 1440));
-        QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 1);
+        QCOMPARE(acceptedSpy.at(0).at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(pendingSpy.count(), 1);
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
         QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
 
         mgr.seedPixelSize(physId, QSize(2560, 1440));
-        QCOMPARE(spy.count(), 1);
+        QCOMPARE(acceptedSpy.count(), 1);
 
-        // A report that confirms the seed still announces: the size reads the
-        // same, but it is now the compositor's.
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2560, 1440));
-        QCOMPARE(spy.count(), 2);
+        // A pending report, even a different one, leaves the seed answering.
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(5120, 1440));
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
+        QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
+        QCOMPARE(acceptedSpy.count(), 1);
+
+        // A seed change under a pending report still changes the answer, so
+        // it announces.
+        mgr.seedPixelSize(physId, QSize(1920, 1080));
+        QCOMPARE(acceptedSpy.count(), 2);
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(1920, 1080));
+
+        // An accepted report that confirms the seed still announces: the size
+        // reads the same, but it is now the compositor's.
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(1920, 1080));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 3);
         QVERIFY(mgr.isPixelSizeReported(QStringLiteral("DP-1")));
 
-        // A reported screen's seed is shadowed, so changing it changes no
+        // An accepted report shadows the seed, so changing it changes no
         // answer and announces nothing.
-        mgr.seedPixelSize(physId, QSize(1920, 1080));
-        QCOMPARE(spy.count(), 2);
-        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
-
-        // Clearing the report falls back to the current seed.
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize());
-        QCOMPARE(spy.count(), 3);
+        const int pendingBefore = pendingSpy.count();
+        mgr.seedPixelSize(physId, QSize(2560, 1440));
+        QCOMPARE(acceptedSpy.count(), 3);
+        QCOMPARE(pendingSpy.count(), pendingBefore);
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(1920, 1080));
+
+        // An accepted clear falls back to the current seed.
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize());
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 4);
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
         QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
 
         // A seed for a monitor that is not connected changes no answer.
         mgr.seedPixelSize(QStringLiteral("LG:Ultra:9"), QSize(5120, 1440));
-        QCOMPARE(spy.count(), 3);
+        QCOMPARE(acceptedSpy.count(), 4);
 
         // An empty size drops the seed.
         mgr.seedPixelSize(physId, QSize());
-        QCOMPARE(spy.count(), 4);
+        QCOMPARE(acceptedSpy.count(), 5);
         QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
     }
 
@@ -452,6 +528,7 @@ private Q_SLOTS:
         mgr.start();
         mgr.seedPixelSize(bare, QSize(2560, 1440));
         QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        QSignalSpy acceptedSpy(&mgr, &ScreenManager::acceptedPixelSizeChanged);
 
         fake.setIdentifier(QStringLiteral("DP-1"), suffixed);
         fake.addScreen(QStringLiteral("DP-2"), QRect(1707, 0, 1707, 960), QStringLiteral("Dell:U27:1/DP-2"));
@@ -471,43 +548,60 @@ private Q_SLOTS:
         mgr.seedPixelSize(bare, QSize());
         mgr.seedPixelSize(suffixed, QSize(3840, 2160));
         spy.clear();
+        acceptedSpy.clear();
         fake.setIdentifier(QStringLiteral("DP-1"), suffixed);
         fake.addScreen(QStringLiteral("DP-2"), QRect(1707, 0, 1707, 960), QStringLiteral("Dell:U27:1/DP-2"));
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(3840, 2160));
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(acceptedSpy.count(), 1);
+        QCOMPARE(acceptedSpy.at(0).at(0).toString(), QStringLiteral("DP-1"));
     }
 
-    // The daemon's own QScreen removal does not drop a report: the effect is
-    // the only writer, and on a KVM replug its report can land before the
-    // QScreen it describes, or survive one the daemon briefly lost.
-    void testPixelSizeReportSurvivesTheManagersScreenRemoval()
+    // The manager's own QScreen removal keeps the PENDING report (the effect
+    // is the only writer, and on a KVM replug its report can land before the
+    // QScreen it describes) but drops the ACCEPTED one: it was accepted for
+    // the monitor that left, so the screen that next arrives on the connector
+    // answers its own seed until the host accepts a report for it.
+    void testPixelSizeRemovalKeepsThePendingReportAndDropsTheAcceptedOne()
     {
         FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1707, 960), QStringLiteral("Dell:U27:1"));
 
         ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
+        mgr.seedPixelSize(QStringLiteral("LG:Ultra:9"), QSize(5120, 1440));
 
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2560, 1440));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        QSignalSpy acceptedSpy(&mgr, &ScreenManager::acceptedPixelSizeChanged);
         fake.removeScreen(QStringLiteral("DP-1"));
-        // Untracked, so no answer for now, but the record is kept.
         QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
-        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1707, 960), QStringLiteral("Dell:U27:1"));
-        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(mgr.pendingPixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(acceptedSpy.count(), 0);
 
-        // A report for an output the manager has not seen yet is recorded and
-        // answers once the output arrives.
-        QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
+        // A different monitor on the same connector answers its own seed, not
+        // the size accepted for the one that left, which is still pending.
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3413, 960), QStringLiteral("LG:Ultra:9"));
+        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(5120, 1440));
+        QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
+        QCOMPARE(mgr.pendingPixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
+
+        // A report for an output the manager has not seen yet is held pending
+        // and answers once the output arrives and the host accepts it.
+        QSignalSpy pendingSpy(&mgr, &ScreenManager::compositorPixelSizeChanged);
         mgr.setCompositorPixelSize(QStringLiteral("HDMI-A-1"), QSize(1920, 1080));
-        QCOMPARE(spy.count(), 1);
-        fake.addScreen(QStringLiteral("HDMI-A-1"), QRect(1707, 0, 1920, 1080), QStringLiteral("LG:Ultra:9"));
-        QCOMPARE(mgr.pixelSize(QStringLiteral("LG:Ultra:9")).value_or(QSize()), QSize(1920, 1080));
-        QVERIFY(mgr.isPixelSizeReported(QStringLiteral("LG:Ultra:9")));
+        QCOMPARE(pendingSpy.count(), 1);
+        fake.addScreen(QStringLiteral("HDMI-A-1"), QRect(3413, 0, 1920, 1080), QStringLiteral("Dell:U27:1"));
+        QVERIFY(!mgr.pixelSize(QStringLiteral("Dell:U27:1")).has_value());
+        mgr.acceptCompositorPixelSize(QStringLiteral("HDMI-A-1"));
+        QCOMPARE(mgr.pixelSize(QStringLiteral("Dell:U27:1")).value_or(QSize()), QSize(1920, 1080));
+        QVERIFY(mgr.isPixelSizeReported(QStringLiteral("Dell:U27:1")));
     }
 
-    // stop() drops the reports (the effect re-reports every output when it
-    // registers again) and keeps the seeds, which are the host's record.
+    // stop() drops the reports, pending and accepted (the effect re-reports
+    // every output when it registers again), and keeps the seeds, which are
+    // the host's record.
     void testStopDropsReportsAndKeepsSeeds()
     {
         FakePhysicalScreenSource fake;
@@ -517,12 +611,30 @@ private Q_SLOTS:
         ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
         mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
+        mgr.acceptCompositorPixelSize(QStringLiteral("DP-1"));
+        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(2160, 3840));
         mgr.seedPixelSize(QStringLiteral("Dell:U27:2"), QSize(2560, 1440));
 
         mgr.stop();
         mgr.start();
         QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
+        QVERIFY(!mgr.pendingPixelSize(QStringLiteral("DP-1")).has_value());
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-2")).value_or(QSize()), QSize(2560, 1440));
+    }
+
+    // A synthetic screen has no geometry sensor, so its logical scale stays
+    // the fallback for good, which a host gating reports needs to know.
+    void testSyntheticScreenHasNoScaleSensor()
+    {
+        FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("Dell:U27:1"));
+
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = true});
+        mgr.start();
+        const PhysicalScreen screen = mgr.physicalScreenFor(QStringLiteral("DP-1"));
+        QVERIFY(screen.isValid());
+        QVERIFY(!mgr.hasLogicalScaleSensor(screen));
+        QVERIFY(!mgr.hasLogicalScaleSensor(PhysicalScreen()));
     }
 };
 

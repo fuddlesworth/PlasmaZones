@@ -10291,7 +10291,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="938"/>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="457"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="474"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="160"/>
         <source>Scrolling (no template)</source>
         <translation>გადახვევა (ნიმუშის გარეშე)</translation>
@@ -23534,30 +23534,30 @@
         <translation>პქს</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="163"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="179"/>
         <source>Virtual screen %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="165"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="181"/>
         <source>%1 on %2</source>
         <comment>a virtual screen, then the monitor it is part of</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="428"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="445"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="205"/>
         <source>Snapping (no layout)</source>
         <translation>მიმაგრება (განლაგების გარეშე)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="435"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="452"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <source>Tiling (no algorithm)</source>
         <translation>ფილებად დაწყობა (ალგორითმის გარეშე)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="526"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="543"/>
         <source>%1 is %2 × %3 pixels right now, which is closest to %4.</source>
         <comment>monitor name, its width and height in device pixels, then its aspect ratio</comment>
         <translation type="unfinished"></translation>

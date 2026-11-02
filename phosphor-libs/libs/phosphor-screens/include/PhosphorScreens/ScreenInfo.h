@@ -81,8 +81,8 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
     QSize pixelSize;
     /**
      * True when @ref pixelSize is a size the producer's own rules read: the
-     * compositor's report of the output's mode or the size last reported for
-     * that monitor (`pixelSizeSource` "reported" or "seeded" in the
+     * compositor's accepted report of the output's mode or the size last
+     * accepted for that monitor (`pixelSizeSource` "reported" or "seeded" in the
      * getScreenInfo reply). False when it is the producer's estimate from the
      * logical size and scale ("estimated"), which no rule sees, or absent.
      */

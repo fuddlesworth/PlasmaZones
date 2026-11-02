@@ -739,8 +739,11 @@ QSet<QString> Daemon::diffActiveAssignments()
         // assignment apply, a rule reconcile) ends in a diff here, including
         // the ones that leave every assignment id where it was, so the
         // screen-states check is queued from this one place. The tiled count
-        // queues its own (init_engines.cpp).
-        m_layoutAdaptor->scheduleScreenStatesCheck();
+        // queues its own (init_engines.cpp). Not once stop() has begun,
+        // which cancels a queued one.
+        if (!m_shuttingDown) {
+            m_layoutAdaptor->scheduleScreenStatesCheck();
+        }
     }
     return changed;
 }

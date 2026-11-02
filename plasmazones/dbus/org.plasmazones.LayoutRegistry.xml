@@ -737,7 +737,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="screenStatesChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when what getScreenStates answers has changed, in any field. That includes the changes no other signal reports on its own: a screen&apos;s virtual desktop or the current activity moving while its resolved layout stays the same, and the live tiled-window count of a tiling screen. Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per event-loop pass and compared against the previous answer, so it fires once per real change."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when what getScreenStates answers has changed in any field except the display names (layoutName, algorithmName and scrollingTemplateName). That includes the changes no other signal reports on its own: a screen&apos;s virtual desktop or the current activity moving while its resolved layout stays the same, and the live tiled-window count of a tiling screen. A layout rename or an algorithm or template reload moves only a name and does not emit it. Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per event-loop pass and compared against the previous answer, so it fires once per real change, and once after the daemon starts, when the first comparison has nothing before it."/>
         </signal>
     </interface>
 </node>

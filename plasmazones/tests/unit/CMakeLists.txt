@@ -797,13 +797,17 @@ add_test(NAME test_engine_routing COMMAND test_engine_routing)
 # The daemon's screen-reshape bookkeeping (ScreenReshapeTracker): when a
 # compositor pixel-size report applies, parks or is awaited, and the reshape
 # records that keep a verdict from being absorbed or applied twice. Compiles
-# the daemon source directly, like the seed filter.
+# the daemon source directly, like the seed filter. Links the
+# FakePhysicalScreenSource and plasmazones_core (for common/daemonscreenscale.h
+# and PhosphorScreens): the two-connector case runs the tracker over a real
+# ScreenManager's pending and accepted reports.
 add_executable(test_screen_reshape_tracker
     daemon/test_screen_reshape_tracker.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/screenreshapetracker.cpp
 )
 target_include_directories(test_screen_reshape_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
-target_link_libraries(test_screen_reshape_tracker PRIVATE Qt6::Test Qt6::Core)
+target_link_libraries(test_screen_reshape_tracker PRIVATE pz_test_fake_screens)
+target_link_libraries(test_screen_reshape_tracker PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_screen_reshape_tracker COMMAND test_screen_reshape_tracker)
 
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core,
@@ -3210,6 +3214,22 @@ target_link_libraries(test_animation_page_scope
         PhosphorAnimation::PhosphorAnimation
 )
 add_test(NAME test_animation_page_scope COMMAND test_animation_page_scope)
+
+# The settings app's cached getScreenStates answer: coalescing, request
+# numbering, the failed-call arm and publish-on-difference. The helper has no
+# D-Bus dependency, so the test drives it directly.
+add_executable(test_screen_states_cache
+    settings/test_screen_states_cache.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/screenstatescache.h
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/screenstatescache.cpp
+)
+target_include_directories(test_screen_states_cache PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_screen_states_cache
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+add_test(NAME test_screen_states_cache COMMAND test_screen_states_cache)
 
 # Search-catalogue advanced-only flags vs the QML that declares the tier. Reads
 # both trees as TEXT (no Qt Quick engine, no page construction), so it needs

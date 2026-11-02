@@ -37,6 +37,19 @@ inline QRect absoluteVirtualScreenRect(const QRectF& region, const QRect& physic
     return QRect(left, top, qMax(1, right - left), qMax(1, bottom - top));
 }
 
+/// Whether @p region is one the daemon would hold: the region half of
+/// VirtualScreenDef::isValid, with its tolerance. The origin may sit a
+/// tolerance before the output and the far edges a tolerance past it, and both
+/// sides must be positive. absoluteVirtualScreenRect floors every side at one
+/// pixel, so the rect it cuts cannot tell a malformed region from a sliver,
+/// and only the region can.
+inline bool virtualScreenRegionIsValid(const QRectF& region)
+{
+    constexpr qreal Tolerance = 1e-3;
+    return region.x() >= -Tolerance && region.y() >= -Tolerance && region.width() > 0 && region.height() > 0
+        && region.x() + region.width() <= 1.0 + Tolerance && region.y() + region.height() <= 1.0 + Tolerance;
+}
+
 /// A virtual screen's size in device pixels: @p region's share of an output
 /// whose current mode is @p physicalPixelSize (already rotated, as KWin's
 /// LogicalOutput::pixelSize reports it), cut over the pixel rect by

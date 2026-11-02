@@ -70,7 +70,8 @@ public Q_SLOTS:
     /// ScreenManager::logicalScale), and `pixelSize` {width, height}, the
     /// screen's size in device pixels, for a virtual screen its own region's
     /// share. `pixelSize` is ScreenManager::pixelSize: the output's mode as
-    /// the compositor reported it (setPixelSizeFromKWin), or until then the
+    /// the compositor reported it (setPixelSizeFromKWin) once the host
+    /// accepted the report, or until then the
     /// size the host seeded, which is the size last reported for that
     /// monitor, in this session or an earlier one. With neither it is
     /// estimated as the logical size times the scale, rounded, which lands on
@@ -130,7 +131,10 @@ public Q_SLOTS:
     /// record, which is what the effect sends when the output goes away. A
     /// negative size, a size with only one side zero, or one past any real
     /// output's is dropped and leaves the record as it was. Forwards to
-    /// ScreenManager::setCompositorPixelSize. Appended last among the slots.
+    /// ScreenManager::setCompositorPixelSize, where the report is pending
+    /// until the host accepts it (ScreenManager::acceptCompositorPixelSize),
+    /// and getScreenInfo answers it only from then. Appended last among the
+    /// slots.
     void setPixelSizeFromKWin(const QString& screenName, int width, int height);
 
 Q_SIGNALS:
@@ -139,7 +143,7 @@ Q_SIGNALS:
     /// The screen's resolution, position or logical scale changed (the scale
     /// through ScreenManager::logicalScaleChanged), or what getScreenInfo
     /// answers for its size in device pixels did (through
-    /// ScreenManager::compositorPixelSizeChanged), once per effective id.
+    /// ScreenManager::acceptedPixelSizeChanged), once per effective id.
     void screenGeometryChanged(const QString& screenId);
     void virtualScreensChanged(const QString& physicalScreenId);
     /// The screen's available geometry (the work area left by panels) moved

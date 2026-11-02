@@ -153,6 +153,10 @@ void LayoutAdaptor::initCoalesceTimer()
     connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
         Q_EMIT layoutListChanged();
     });
+    // The next event-loop pass: compresses a burst of checks in one turn.
+    m_screenStatesCheck.setSingleShot(true);
+    m_screenStatesCheck.setInterval(0);
+    connect(&m_screenStatesCheck, &QTimer::timeout, this, &LayoutAdaptor::checkScreenStates);
 }
 
 void LayoutAdaptor::connectLayoutManagerSignals()
@@ -876,22 +880,27 @@ void LayoutAdaptor::setTiledWindowCountProvider(std::function<std::optional<int>
 
 void LayoutAdaptor::scheduleScreenStatesCheck()
 {
-    if (m_screenStatesCheckPending) {
+    // Already queued for this pass: the one comparison covers this call too.
+    if (!m_screenStatesCheck.isActive()) {
+        m_screenStatesCheck.start();
+    }
+}
+
+void LayoutAdaptor::cancelScreenStatesCheck()
+{
+    m_screenStatesCheck.stop();
+}
+
+void LayoutAdaptor::checkScreenStates()
+{
+    // The whole answer, so a field added to getScreenStates later is covered
+    // without touching this. A handful of screens, once per turn at most.
+    const QString states = getScreenStates();
+    if (states == m_lastScreenStatesJson) {
         return;
     }
-    m_screenStatesCheckPending = true;
-    QTimer::singleShot(0, this, [this]() {
-        m_screenStatesCheckPending = false;
-        // The whole answer, so a field added to getScreenStates later is
-        // covered without touching this. A handful of screens, once per turn
-        // at most.
-        const QString states = getScreenStates();
-        if (states == m_lastScreenStatesJson) {
-            return;
-        }
-        m_lastScreenStatesJson = states;
-        Q_EMIT screenStatesChanged();
-    });
+    m_lastScreenStatesJson = states;
+    Q_EMIT screenStatesChanged();
 }
 
 void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)

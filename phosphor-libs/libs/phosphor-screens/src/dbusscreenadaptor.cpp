@@ -270,12 +270,14 @@ void DBusScreenAdaptor::connectScreenManagerSignals(ScreenManager* mgr)
         });
     });
     // getScreenInfo's cached JSON carries the size in device pixels, which
-    // the compositor reports after start-up and on every mode change or
-    // rotation, none of them a QScreen geometry event. Drop the blobs and
-    // announce it the way the scale settle above does. A connector the
-    // manager does not track yet has no effective id to announce, and its
-    // own screenAdded follows.
-    connect(mgr, &ScreenManager::compositorPixelSizeChanged, this, [this](const QString& connectorName) {
+    // moves when the host accepts a compositor report (after start-up and on
+    // every mode change or rotation, none of them a QScreen geometry event)
+    // or a seed changes the answer. Drop the blobs and announce it the way
+    // the scale settle above does. A report still pending changes nothing
+    // getScreenInfo answers, so compositorPixelSizeChanged is not followed. A
+    // connector the manager does not track yet has no effective id to
+    // announce, and its own screenAdded follows.
+    connect(mgr, &ScreenManager::acceptedPixelSizeChanged, this, [this](const QString& connectorName) {
         invalidateScreenInfoCache();
         if (!m_screenManager) {
             return;
@@ -478,9 +480,9 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
     // The screen's size in device pixels, for a reader converting a
     // device-pixel unit (a layout's fixed zones) or matching a size rule.
     // The manager's answer is the one the daemon's own readers use: the
-    // compositor's report of the output's mode (a Wayland client never sees
-    // the mode itself, because wl_output's mode event stays inside the QPA
-    // plugin), or until it arrives the host's seed (for the PlasmaZones
+    // compositor's report of the output's mode once the host accepted it (a
+    // Wayland client never sees the mode itself, because wl_output's mode
+    // event stays inside the QPA plugin), or until then the host's seed (for the PlasmaZones
     // daemon, the size last reported for that monitor, in this session or an
     // earlier one), with a virtual screen answering its region's share. With neither, this is
     // estimated as the logical size times the scale above, rounded, which

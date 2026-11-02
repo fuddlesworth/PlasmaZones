@@ -401,8 +401,10 @@ private Q_SLOTS:
     }
 
     // The compositor's report becomes getScreenInfo's pixelSize, replacing
-    // the logical-times-scale estimate, and is announced as a geometry change
-    // so a client that cached the reply reads it again. A 0x0 report clears
+    // the logical-times-scale estimate, once the host accepts it, and is
+    // announced then as a geometry change so a client that cached the reply
+    // reads it again. While it is only pending, getScreenInfo keeps its
+    // previous answer and nothing is announced. An accepted 0x0 report clears
     // it, and the seed answers if there is one, else the estimate comes back.
     // pixelSizeSource names each.
     void testPixelSizeFromKWinFeedsScreenInfo()
@@ -423,6 +425,7 @@ private Q_SLOTS:
         mgr.start();
         AdaptorHost host;
         DBusScreenAdaptor adaptor(&mgr, &store, &host);
+        const QString connector = primary->name();
 
         const QSize estimate(qRound(primary->geometry().width() * mgr.logicalScale(primary)),
                              qRound(primary->geometry().height() * mgr.logicalScale(primary)));
@@ -431,28 +434,44 @@ private Q_SLOTS:
 
         QSignalSpy geometrySpy(&adaptor, SIGNAL(screenGeometryChanged(QString)));
         const QSize mode(3841, 2161);
-        adaptor.setPixelSizeFromKWin(primary->name(), mode.width(), mode.height());
+        adaptor.setPixelSizeFromKWin(connector, mode.width(), mode.height());
+        QCOMPARE(geometrySpy.count(), 0);
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), estimate);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("estimated"));
+
+        mgr.acceptCompositorPixelSize(connector);
         QCOMPARE(geometrySpy.count(), 1);
         QCOMPARE(geometrySpy.at(0).at(0).toString(), physId);
-        // Read after the earlier read cached the estimate: the report must
+        // Read after the earlier reads cached the estimate: the accept must
         // have dropped that cache.
         QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), mode);
         QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("reported"));
 
         // A repeat changes nothing and announces nothing.
-        adaptor.setPixelSizeFromKWin(primary->name(), mode.width(), mode.height());
+        adaptor.setPixelSizeFromKWin(connector, mode.width(), mode.height());
+        mgr.acceptCompositorPixelSize(connector);
         QCOMPARE(geometrySpy.count(), 1);
 
-        // A seed is shadowed while the report stands.
+        // A seed is shadowed while the accepted report stands.
         const QSize seed(2560, 1440);
         mgr.seedPixelSize(physId, seed);
         QCOMPARE(geometrySpy.count(), 1);
         QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("reported"));
 
-        adaptor.setPixelSizeFromKWin(primary->name(), 0, 0);
+        // A pending clear leaves the reported size answering until accepted.
+        adaptor.setPixelSizeFromKWin(connector, 0, 0);
+        QCOMPARE(geometrySpy.count(), 1);
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), mode);
+        mgr.acceptCompositorPixelSize(connector);
         QCOMPARE(geometrySpy.count(), 2);
         QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), seed);
         QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("seeded"));
+
+        // A pending report under a seed leaves the seed answering.
+        adaptor.setPixelSizeFromKWin(connector, mode.width(), mode.height());
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), seed);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("seeded"));
+        QCOMPARE(geometrySpy.count(), 2);
 
         mgr.seedPixelSize(physId, QSize());
         QCOMPARE(geometrySpy.count(), 3);
@@ -462,11 +481,9 @@ private Q_SLOTS:
 
     // The slot is a compositor report: a refused caller changes nothing. A
     // malformed size is dropped rather than read as a clear, so it cannot
-    // erase a good report.
+    // erase a good report. The slot records the PENDING report only.
     void testPixelSizeFromKWinGateAndValidation()
     {
-        // The identifier, not the connector: the store is fed by connector
-        // and announces under the screen's identifier.
         QScreen* const primary = QGuiApplication::primaryScreen();
         const QString physId = primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
         if (physId.isEmpty()) {
@@ -484,7 +501,8 @@ private Q_SLOTS:
 
         const QString connector = primary->name();
         adaptor.setPixelSizeFromKWin(connector, 2560, 1440);
-        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(mgr.pendingPixelSize(connector).value_or(QSize()), QSize(2560, 1440));
+        QVERIFY(!mgr.pixelSize(physId).has_value());
 
         QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
         const QList<QSize> malformed{QSize(-1, 1440), QSize(2560, -1),    QSize(0, 1440),
@@ -493,11 +511,11 @@ private Q_SLOTS:
             adaptor.setPixelSizeFromKWin(connector, size.width(), size.height());
         }
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(mgr.pendingPixelSize(connector).value_or(QSize()), QSize(2560, 1440));
 
         // The upper bound itself is a size like any other.
         adaptor.setPixelSizeFromKWin(connector, 65535, 1440);
-        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(65535, 1440));
+        QCOMPARE(mgr.pendingPixelSize(connector).value_or(QSize()), QSize(65535, 1440));
 
         QString askedFor;
         adaptor.setCompositorReportGate([&askedFor](QLatin1StringView member) {
@@ -506,9 +524,9 @@ private Q_SLOTS:
         });
         adaptor.setPixelSizeFromKWin(connector, 3840, 2160);
         QCOMPARE(askedFor, QStringLiteral("setPixelSizeFromKWin"));
-        QCOMPARE(mgr.pixelSize(physId).value_or(QSize()), QSize(65535, 1440));
+        QCOMPARE(mgr.pendingPixelSize(connector).value_or(QSize()), QSize(65535, 1440));
         adaptor.setPixelSizeFromKWin(connector, 0, 0);
-        QVERIFY(mgr.isPixelSizeReported(physId));
+        QVERIFY(mgr.pendingPixelSize(connector).has_value());
     }
 };
 

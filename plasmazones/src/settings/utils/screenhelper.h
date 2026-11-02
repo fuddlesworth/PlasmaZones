@@ -31,9 +31,10 @@ public:
     /// builds it, plus `pixelWidth` / `pixelHeight` (the size in device
     /// pixels, present only when the daemon answered one) and
     /// `pixelSizeKnown` (true when that size is the compositor's report or
-    /// the one seeded from an earlier session, which is when the daemon's
-    /// rules see it, and false for an estimate). `width` / `height` and
-    /// `displayLabel` stay logical.
+    /// the seeded one, the size last reported for that monitor in this
+    /// session or an earlier one, which is when the daemon's rules see it,
+    /// and false for an estimate). `width` / `height` and `displayLabel` stay
+    /// logical.
     QVariantList screens() const;
 
     /**

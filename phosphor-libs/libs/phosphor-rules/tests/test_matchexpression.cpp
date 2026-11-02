@@ -458,6 +458,7 @@ private Q_SLOTS:
         QTest::addRow("trailing junk") << QVariant(QStringLiteral("2560px")) << false;
         QTest::addRow("long long past int") << QVariant(qlonglong(5000000000LL)) << false;
         QTest::addRow("unsigned past int") << QVariant(qulonglong(3000000000ULL)) << false;
+        QTest::addRow("numeric string past int") << QVariant(QStringLiteral("5000000000")) << false;
         // The accepted shapes: the integral variants, a whole double (JSON's
         // only number), and a string that parses as an int in full.
         QTest::addRow("int") << QVariant(2560) << true;
@@ -466,6 +467,7 @@ private Q_SLOTS:
         QTest::addRow("unsigned long long") << QVariant(qulonglong(2560)) << true;
         QTest::addRow("whole double") << QVariant(2560.0) << true;
         QTest::addRow("numeric string") << QVariant(QStringLiteral("2560")) << true;
+        QTest::addRow("negative numeric string") << QVariant(QStringLiteral("-1")) << true;
     }
 
     void testValidation_numericLeafValueMustBeANumber()

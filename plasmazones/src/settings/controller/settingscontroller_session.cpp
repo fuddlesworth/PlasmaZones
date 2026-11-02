@@ -651,35 +651,31 @@ QVariantList SettingsController::getScreenStates() const
 
 void SettingsController::scheduleScreenStatesRefresh()
 {
-    m_screenStatesTimer.start();
+    m_screenStatesCache.schedule();
 }
 
 void SettingsController::refreshScreenStates()
 {
+    // The call carries D-Bus's auto-start flag, so asking a stopped daemon
+    // would start it, and a focus change or the Rules page coming into view
+    // is no reason to. The runningChanged handler schedules a re-read once
+    // the daemon is up. Checked here rather than per trigger so a burst
+    // folded by the cache costs one check.
+    if (!m_daemonController.isRunning()) {
+        return;
+    }
     // Numbered before the call so a reply to an older request, still in
     // flight, is dropped rather than overwriting a newer answer.
-    const quint64 request = ++m_screenStatesRequest;
+    const quint64 request = m_screenStatesCache.beginRequest();
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                    QStringLiteral("getScreenStates")),
         this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, request](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-        if (request != m_screenStatesRequest) {
-            return;
-        }
         const QDBusMessage reply = w->reply();
-        if (reply.type() != QDBusMessage::ReplyMessage) {
-            // Keep the last answer. An empty list would read as "no screen
-            // has any state", which is not what a failed call says.
-            return;
-        }
-        QVariantList states = screenStatesFromReply(reply);
-        if (states == m_screenStates) {
-            return;
-        }
-        m_screenStates = std::move(states);
-        Q_EMIT screenStatesChanged();
+        const bool ok = reply.type() == QDBusMessage::ReplyMessage;
+        m_screenStatesCache.finishRequest(request, ok, ok ? screenStatesFromReply(reply) : QVariantList());
     });
 }
 

@@ -31,19 +31,23 @@ namespace PlasmaZones {
  * after which the reconcile's own diff comes back empty for that screen. The
  * recorded id is what still tells it the verdict moved.
  *
- * Compositor pixel-size reports, keyed by connector name. A report is APPLIED
- * (the daemon re-seeds and persists it and reconciles the screens it
- * reshaped) only when it agrees with the screen the daemon tracks on that
- * connector (@ref reportMatchesLogicalSize). The report travels over D-Bus and
- * the QScreen change over Wayland, in no fixed order, so a report can describe
- * a mode the daemon's logical geometry does not show yet, or a monitor that
- * replaced the one the daemon still tracks on the same connector. Such a
- * report is PARKED: its reshape is recorded but nothing is resnapped, saved or
- * seeded, and the daemon evaluates it again on the screen's geometry or scale
- * change and on its connector's add. A report that has not been applied since
- * start-up, since its screen was added, or since its connector's report was
- * cleared is AWAITED: it replaces a stand-in with the real size, so the change
- * it causes is the screen settling and applies without an OSD.
+ * Compositor pixel-size reports, keyed by connector name. ScreenManager holds
+ * each report PENDING, and no reader sees it until the daemon accepts it. A
+ * report is APPLIED (accepted, so it becomes what ScreenManager::pixelSize
+ * answers, then re-seeded and persisted, and the screens it reshaped
+ * reconciled) only when it agrees with the screen the daemon tracks on that
+ * connector (pixelSizeMatchesLogicalSize, in common/daemonscreenscale.h). The
+ * report travels over D-Bus and the QScreen change over Wayland, in no fixed
+ * order, so a report can describe a mode the daemon's logical geometry does
+ * not show yet, or a monitor that replaced the one the daemon still tracks on
+ * the same connector. Such a report is PARKED: it stays pending, so the
+ * screen's shape, its verdict and every rule keep the size accepted (or
+ * seeded) before it, and the daemon evaluates it again on the screen's
+ * geometry or scale change and on its connector's add. A report that has not
+ * been applied since start-up, since its screen was added, or since its
+ * connector's report was cleared is AWAITED: it replaces a stand-in with the
+ * real size, so the change it causes is the screen settling and applies
+ * without an OSD.
  *
  * The silent set, keyed by effective screen id: the screens whose verdict
  * change the running reconcile applies without an OSD.
@@ -73,11 +77,17 @@ public:
     {
         /// The daemon tracks a screen with an identifier on the connector.
         bool tracked = false;
-        /// The connector holds a compositor report (false after a clear).
-        bool reported = false;
-        /// The report agrees with the tracked screen's logical geometry and
-        /// scale (@ref reportMatchesLogicalSize).
-        bool consistent = false;
+        /// The connector's PENDING report (ScreenManager::pendingPixelSize),
+        /// empty after a clear.
+        QSize pendingSize;
+        /// The tracked screen's logical size and logical scale, the report
+        /// is checked against.
+        QSize logicalSize;
+        qreal logicalScale = 0.0;
+        /// The tracked screen has a geometry sensor
+        /// (ScreenManager::hasLogicalScaleSensor), so @ref logicalScale is,
+        /// or will be once the sensor maps, the compositor's own scale.
+        bool scaleSensor = false;
     };
 
     enum class ReportAction {
@@ -128,23 +138,26 @@ public:
 
     // ─── Compositor pixel-size reports ───────────────────────────────────
 
-    /// Whether @p reported (device pixels) is the mode of an output whose
-    /// logical size is @p logical at @p scale: each side within scale + 1
-    /// device pixels of the logical side times the scale. The compositor
-    /// derives the logical size by dividing the mode by the scale and rounding,
-    /// which moves the product by up to half the scale. A different mode, a
-    /// rotation the logical geometry has not caught up with, a coarse integer
-    /// scale standing in for a fractional one, and another monitor's size all
-    /// land outside. False for an empty size and a non-positive scale. The
-    /// layout editor accepts a pixel size by the same test.
-    static bool reportMatchesLogicalSize(const QSize& reported, const QSize& logical, qreal scale);
-
-    /// Decide what @p connectorName's report, described by @p facts, means
-    /// now. Called on every report change for the connector and again when a
-    /// parked report may have become consistent. A cleared report on a
-    /// tracked connector arms the awaited state, so the next report applies
-    /// silently, and its own reshape (to the seed or to no size) is silent
-    /// too. A consistent report applies, silently when it was awaited.
+    /// Decide what @p connectorName's pending report, described by @p facts,
+    /// means now. Called on every report change for the connector and again
+    /// when a parked report may have become consistent. A cleared report on a
+    /// tracked connector applies (the daemon accepts the clear) and arms the
+    /// awaited state, so the next report applies silently, and its own
+    /// reshape (to the seed or to no size) is silent too. A report applies
+    /// when it agrees with the tracked screen (pixelSizeMatchesLogicalSize),
+    /// silently when it was awaited, and parks otherwise.
+    ///
+    /// A screen with no geometry sensor applies every report unchecked. Its
+    /// logical scale is the coarse QScreen fallback for good (the integer
+    /// ceiling, 2 for a 1.25 output), against which a fractional output's
+    /// report never agrees, and no later scale change would re-evaluate it,
+    /// so the check would park the report forever and leave the screen's
+    /// rules without a size. The compositor's report is the authority on the
+    /// mode, and the check exists only to wait for the daemon's geometry to
+    /// catch up with it. A screen whose sensor has not mapped yet is checked
+    /// against the fallback and may park, because the sensor's map announces
+    /// the real scale (ScreenManager::logicalScaleChanged) and the daemon
+    /// evaluates the report again then.
     ReportVerdict evaluateReport(const QString& connectorName, const ReportFacts& facts);
 
     /// The daemon began tracking a screen on @p connectorName (start-up or a

@@ -3,7 +3,7 @@
 
 #include "screenreshapetracker.h"
 
-#include <QtMath>
+#include "common/daemonscreenscale.h"
 
 #include <iterator>
 #include <utility>
@@ -68,16 +68,6 @@ bool ScreenReshapeTracker::hasRecord(const QString& screenId) const
     return m_preChangeAssignmentIds.contains(screenId);
 }
 
-bool ScreenReshapeTracker::reportMatchesLogicalSize(const QSize& reported, const QSize& logical, qreal scale)
-{
-    if (reported.isEmpty() || logical.isEmpty() || scale <= 0.0) {
-        return false;
-    }
-    const qreal tolerance = scale + 1.0;
-    return qAbs(reported.width() - logical.width() * scale) <= tolerance
-        && qAbs(reported.height() - logical.height() * scale) <= tolerance;
-}
-
 ScreenReshapeTracker::ReportVerdict ScreenReshapeTracker::evaluateReport(const QString& connectorName,
                                                                          const ReportFacts& facts)
 {
@@ -88,22 +78,26 @@ ScreenReshapeTracker::ReportVerdict ScreenReshapeTracker::evaluateReport(const Q
         m_parkedReports.remove(connectorName);
         return verdict;
     }
-    if (!facts.reported) {
+    if (facts.pendingSize.isEmpty()) {
         // The compositor dropped the output, or a seed moved under a screen
-        // with no report. Either way the screen answers a stand-in until its
-        // next report, which settles it like a first one, and the move to the
-        // stand-in is no change the user made.
+        // with no report pending. Either way, once the daemon accepts the
+        // clear, the screen answers a stand-in (its seed, or no size) until
+        // its next report, which settles it like a first one, and the move to
+        // the stand-in is no change the user made.
         m_parkedReports.remove(connectorName);
         m_awaitingFirstReport.insert(connectorName);
         verdict.action = ReportAction::Apply;
         verdict.silent = true;
         return verdict;
     }
-    if (!facts.consistent) {
+    // Unchecked without a sensor: see the declaration.
+    const bool consistent =
+        !facts.scaleSensor || pixelSizeMatchesLogicalSize(facts.pendingSize, facts.logicalSize, facts.logicalScale);
+    if (!consistent) {
         // A mode the logical geometry has not caught up with, another monitor
-        // on the same connector, or a scale still at its coarse fallback. The
-        // awaited state stays as it is, so the report applies as the first one
-        // when it does apply.
+        // on the same connector, or a scale still at its coarse fallback until
+        // the sensor maps. The awaited state stays as it is, so the report
+        // applies as the first one when it does apply.
         m_parkedReports.insert(connectorName);
         verdict.action = ReportAction::Park;
         return verdict;

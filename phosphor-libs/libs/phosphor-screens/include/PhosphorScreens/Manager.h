@@ -285,7 +285,7 @@ public:
 
     /**
      * @brief Record an output's exact size in device pixels as reported by
-     *        the compositor.
+     *        the compositor, PENDING until the host accepts it.
      *
      * A Wayland client cannot read an output's mode: wl_output's mode event
      * stays inside the QPA plugin, and QScreen::geometry() is the logical
@@ -293,40 +293,48 @@ public:
      * rotated) and pushes it here over D-Bus, the same way it pushes the
      * work area to @ref setCompositorAvailableGeometry.
      *
-     * Keyed by connector name. An invalid or empty size clears the entry for
-     * @p connectorName, which is what the effect sends when the output goes
-     * away. A redundant call (same size already recorded) is a no-op. A real
-     * change emits @ref compositorPixelSizeChanged.
+     * Keyed by connector name. An invalid or empty size clears the pending
+     * entry for @p connectorName, which is what the effect sends when the
+     * output goes away. A redundant call (same pending state) is a no-op. A
+     * real change emits @ref compositorPixelSizeChanged.
      *
-     * Unlike the work-area override, the entry is NOT dropped when the
-     * manager's own QScreen for the connector goes away. The compositor and
-     * the daemon see an output come and go in no fixed order (a KVM switch
-     * presents as unplug and replug), so a report can land before the QScreen
-     * it describes, and dropping it on the daemon's removal would lose the
-     * report that arrived first. The effect is the only writer and clears
-     * what it no longer has. A fresh effect re-sends every output it has when
-     * it registers, which overwrites each entry it still describes, and
-     * @ref stop drops them all.
+     * A pending report is not what @ref pixelSize answers. The report
+     * travels over D-Bus and the QScreen change it goes with over Wayland,
+     * in no fixed order, so it can describe a mode the tracked logical
+     * geometry does not show yet, or a monitor that replaced the tracked one
+     * on the same connector. The manager does not judge that. The host does,
+     * and calls @ref acceptCompositorPixelSize once the report agrees with
+     * the screen it tracks, which makes it the accepted size every reader
+     * sees. A host that does not gate reports accepts each one from its
+     * @ref compositorPixelSizeChanged handler.
      *
-     * The manager does not check a report against the screen it tracks on
-     * the connector. Arriving ahead of the QScreen change it goes with, a
-     * report can describe a mode the tracked logical geometry does not show
-     * yet, or a monitor that replaced the tracked one on the same connector,
-     * and @ref pixelSize answers it from the moment it lands. A host that
-     * persists or acts on a report decides when it agrees with the screen.
+     * Unlike the work-area override, the pending entry is NOT dropped when
+     * the manager's own QScreen for the connector goes away. The compositor
+     * and the daemon see an output come and go in no fixed order (a KVM
+     * switch presents as unplug and replug), so a report can land before the
+     * QScreen it describes, and dropping it on the manager's removal would
+     * lose the report that arrived first. The effect is the only writer and
+     * clears what it no longer has. A fresh effect re-sends every output it
+     * has when it registers, which overwrites each entry it still describes,
+     * and @ref stop drops them all. An effect that goes away without its
+     * clears (unloaded, or the compositor restarted) leaves its entries
+     * behind, so until a fresh effect reports again, a different monitor
+     * plugged into the same connector finds the outgoing monitor's size
+     * pending there.
      */
     void setCompositorPixelSize(const QString& connectorName, const QSize& pixelSize);
 
     /**
      * @brief Seed a monitor's size in device pixels from the host's own record,
-     *        for use until the compositor reports it.
+     *        for use until a compositor report is accepted for it.
      *
      * Keyed by the physical screen's stable identifier, not the connector,
      * because the host persists it across sessions and a connector name does
      * not identify a monitor. Answers @ref pixelSize only for a screen whose
-     * connector has no compositor report. An invalid or empty size drops the
-     * seed. A redundant call is a no-op. A change that alters what
-     * @ref pixelSize answers for a tracked screen emits
+     * connector has no accepted report. A pending report does not shadow it.
+     * An invalid or empty size drops the seed. A redundant call is a no-op.
+     * A change that alters what @ref pixelSize answers for a tracked screen
+     * emits @ref acceptedPixelSizeChanged and then
      * @ref compositorPixelSizeChanged for its connector.
      *
      * Seeds follow an identifier flip the way the virtual-screen configs do
@@ -339,19 +347,59 @@ public:
      *        uses.
      *
      * @p screenId is a physical id (identifier or connector name) or a
-     * virtual one. A physical screen answers its connector's compositor
-     * report, else the seed for its identifier (@ref seedPixelSize), else
-     * nothing. A virtual screen answers its region's share of that size,
-     * computed as VirtualScreenDef::absoluteGeometry over the pixel rect, so
-     * its edges round exactly as the effect's own split of the same pixel
-     * rect does. An empty id, an untracked screen, and a virtual screen the
-     * manager does not know answer nothing.
+     * virtual one. A physical screen answers its connector's ACCEPTED
+     * compositor report (@ref acceptCompositorPixelSize), else the seed for
+     * its identifier (@ref seedPixelSize), else nothing. A report still
+     * pending is never the answer. A virtual screen answers its region's
+     * share of that size, computed as VirtualScreenDef::absoluteGeometry over
+     * the pixel rect, so its edges round exactly as the effect's own split of
+     * the same pixel rect does. An empty id, an untracked screen, and a
+     * virtual screen the manager does not know answer nothing.
      */
     std::optional<QSize> pixelSize(const QString& screenId) const;
 
-    /// True only when @ref pixelSize answers @p screenId from a compositor
-    /// report rather than from a seed or not at all.
+    /// True only when @ref pixelSize answers @p screenId from an accepted
+    /// compositor report rather than from a seed or not at all.
     bool isPixelSizeReported(const QString& screenId) const;
+
+    /**
+     * @brief Promote @p connectorName's pending report to the accepted one.
+     *
+     * The pending report becomes what @ref pixelSize answers for the
+     * connector's screen, and a pending clear drops the accepted report, so
+     * the screen falls back to its seed. A no-op when the accepted state
+     * already matches the pending one. A real change emits
+     * @ref acceptedPixelSizeChanged. Accepting a report that confirms the
+     * seed is a change too: @ref pixelSize answers the same, but
+     * @ref isPixelSizeReported flips.
+     *
+     * The accepted report is dropped, without a signal, when the manager's
+     * own QScreen for the connector goes away: it was accepted for the
+     * monitor that left, and nothing reads an untracked screen's size. The
+     * screen that next arrives on the connector answers its seed until the
+     * host accepts a report for it.
+     */
+    void acceptCompositorPixelSize(const QString& connectorName);
+
+    /// The report pending for @p connectorName (@ref setCompositorPixelSize),
+    /// for a host deciding whether to accept it. Nothing after a clear, and
+    /// for a connector the compositor never reported. The connector need not
+    /// be tracked.
+    std::optional<QSize> pendingPixelSize(const QString& connectorName) const;
+
+    /**
+     * @brief Whether @p screen has a geometry sensor, so @ref logicalScale
+     *        answers the compositor's fractional scale, or will once the
+     *        sensor maps.
+     *
+     * Until the sensor maps, @ref logicalScale answers the coarse QScreen
+     * fallback, and @ref logicalScaleChanged announces the real number when
+     * it arrives. False for a screen with no sensor at all (a synthetic
+     * screen, a manager built without sensors, or one whose layer surface
+     * could not be created): its @ref logicalScale stays the fallback for
+     * good, and no later signal improves it.
+     */
+    bool hasLogicalScaleSensor(const PhysicalScreen& screen) const;
 
 Q_SIGNALS:
     void screenAdded(const PhysicalScreen& screen);
@@ -400,14 +448,20 @@ Q_SIGNALS:
     /// Both IDs are physical (no @c /vs:N suffix).
     void screenIdentifierChanged(const QString& oldId, const QString& newId);
 
-    /// The compositor-reported pixel size for @p connectorName was recorded,
-    /// changed or cleared, or a seed change altered what @ref pixelSize
-    /// answers for that connector's screen. A report that confirms a seed
-    /// fires it too: @ref pixelSize answers the same, but
-    /// @ref isPixelSizeReported has flipped. @p connectorName may name an
-    /// output the manager does not track yet. Appended last among the
-    /// signals.
+    /// The report pending for @p connectorName was recorded, changed or
+    /// cleared (@ref setCompositorPixelSize), or a seed change altered what
+    /// @ref pixelSize answers for that connector's screen: either way a host
+    /// that gates reports evaluates the connector again. A pending change
+    /// alone changes no @ref pixelSize answer. @p connectorName may name an
+    /// output the manager does not track yet.
     void compositorPixelSizeChanged(const QString& connectorName);
+
+    /// What @ref pixelSize answers for @p connectorName's screen changed: an
+    /// accept moved the accepted report (@ref acceptCompositorPixelSize), or
+    /// a seed change altered the answer for a screen with no accepted
+    /// report. An accept that confirms the seed fires it too, because
+    /// @ref isPixelSizeReported has flipped. Appended last among the signals.
+    void acceptedPixelSizeChanged(const QString& connectorName);
 
 protected:
     /// Watches the geometry sensors for @c QEvent::DevicePixelRatioChange,
@@ -519,15 +573,22 @@ private:
     /// compositor report.
     std::optional<QSize> resolvePixelSize(const QString& screenId, bool* reported) const;
 
-    // Compositor-reported output sizes in device pixels, keyed by connector
-    // name. See setCompositorPixelSize for why the daemon's own screen
-    // removal does not drop an entry. Cleared wholesale on stop().
+    // Compositor-reported output sizes in device pixels still PENDING the
+    // host's accept, keyed by connector name. See setCompositorPixelSize for
+    // why the manager's own screen removal does not drop an entry. Cleared
+    // wholesale on stop().
     QHash<QString, QSize> m_compositorPixelSizes;
 
     // Host-provided last-session sizes, keyed by physical screen identifier.
     // Re-keyed on identifier drift like m_virtualConfigs, and kept across
     // stop()/start() for the same reason: the host's record is the source.
     QHash<QString, QSize> m_seededPixelSizes;
+
+    // The compositor reports the host accepted (acceptCompositorPixelSize),
+    // keyed by connector name: what pixelSize answers ahead of a seed.
+    // Dropped per connector on the manager's own screen removal
+    // (destroyGeometrySensor) and wholesale on stop().
+    QHash<QString, QSize> m_acceptedPixelSizes;
 };
 
 } // namespace PhosphorScreens

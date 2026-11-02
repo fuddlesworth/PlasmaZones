@@ -37,6 +37,14 @@ void apply(QHash<QString, QSize>& daemon, const QList<Report>& reports)
     }
 }
 
+// The removal's call, when it owes one, applied after every earlier report.
+void applyRemoval(QHash<QString, QSize>& daemon, const RemovalOutcome& removal)
+{
+    if (removal.report) {
+        apply(daemon, {*removal.report});
+    }
+}
+
 } // namespace
 
 class TestPixelSizeDecisions : public QObject
@@ -152,9 +160,10 @@ private Q_SLOTS:
     }
 
     // A monitor swapped on the same port: KWin adds the new output before it
-    // removes the old one. When the new output's size is already reported, a
-    // clear for the connector would wipe it at the daemon, so the removal owes
-    // a flush instead, which re-reads the live output.
+    // removes the old one, and the flush the add queued can report the new
+    // size before the removal runs. A clear for the connector would then land
+    // after that report and wipe it at the daemon, so the removal owes a flush
+    // instead, which re-reads the live output.
     void removalWithALiveConnectorKeepsTheLiveReport()
     {
         Ledger ledger;
@@ -166,13 +175,20 @@ private Q_SLOTS:
         const RemovalOutcome removal = ledger.remove(true, DP1, true);
         QVERIFY(!removal.report.has_value());
         QVERIFY(removal.flushOwed);
-        apply(daemon, ledger.flush(true, {output(DP1, QSize(2560, 1440))}).reports);
+        // Whatever the removal sends lands after the live output's report.
+        applyRemoval(daemon, removal);
+        QCOMPARE(daemon.value(DP1), QSize(2560, 1440));
+
+        // The owed flush finds the daemon already holding the live size.
+        QVERIFY(ledger.flush(true, {output(DP1, QSize(2560, 1440))}).reports.isEmpty());
         QCOMPARE(daemon.value(DP1), QSize(2560, 1440));
     }
 
-    // The same swap with a monitor of the same size: its report was deduped,
-    // so a clear would leave the daemon with no size and nothing owed to
-    // restore it.
+    // The same swap with a monitor of the same size. Its report was deduped,
+    // and a clear would un-record the connector's sent size, so a later flush
+    // would send it again. Nothing would queue that flush, though: the add's
+    // flush already ran and the live output's mode never moves. The owed flush
+    // is the one that would be missing.
     void removalWithALiveSameSizeConnectorKeepsTheReport()
     {
         Ledger ledger;
@@ -183,7 +199,10 @@ private Q_SLOTS:
         const RemovalOutcome removal = ledger.remove(true, DP1, true);
         QVERIFY(!removal.report.has_value());
         QVERIFY(removal.flushOwed);
-        apply(daemon, ledger.flush(true, {output(DP1, QSize(3840, 2160))}).reports);
+        applyRemoval(daemon, removal);
+        QCOMPARE(daemon.value(DP1), QSize(3840, 2160));
+
+        QVERIFY(ledger.flush(true, {output(DP1, QSize(3840, 2160))}).reports.isEmpty());
         QCOMPARE(daemon.value(DP1), QSize(3840, 2160));
     }
 

@@ -56,14 +56,15 @@ void Daemon::connectScreenSignals()
     m_screenManager->start();
 
     // Every output present at start-up answers its size from the last
-    // session's seed, or not at all, until the compositor reports it. That
-    // first report is the screen settling, so whatever it changes applies
-    // without an OSD (onCompositorPixelSizeChanged). The screen adaptor
-    // accepts reports from the moment init() builds it, and this handler is
-    // not connected until now, so a report that came in already is evaluated
-    // here like one arriving with a screen add: applied when it agrees with
-    // the screen, otherwise parked (before the output's sensor maps, the scale
-    // is still the coarse integer one) and awaited.
+    // session's seed, or not at all, until a compositor report is accepted
+    // for it. That first report is the screen settling, so whatever it
+    // changes applies without an OSD (onCompositorPixelSizeChanged). The
+    // screen adaptor takes reports from the moment init() builds it, and they
+    // wait in ScreenManager as pending, unread, because this handler is not
+    // connected until now. So a report that came in already is evaluated here
+    // like one arriving with a screen add: accepted when it agrees with the
+    // screen, otherwise parked (before the output's sensor maps, the scale is
+    // still the coarse integer one) and awaited.
     for (const PhosphorScreens::PhysicalScreen& screen : m_screenManager->screens()) {
         m_reshapeTracker.screenAdded(screen.name);
         admitPixelSizeReport(screen.name);
@@ -167,15 +168,17 @@ void Daemon::connectScreenSignals()
                             PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), sid));
                     }
                 }
-                // Until the compositor reports the output's size it answers the
-                // last one recorded for the monitor, or none. The report that
-                // replaces it settles the screen and applies without an OSD,
-                // the same as at start-up. A report the connector already holds
-                // is evaluated against this screen now: one that came in ahead
-                // of the add and agrees with it has settled the screen, while
-                // one that does not (the previous monitor's, still standing, or
-                // one checked against a scale that has not settled) is parked
-                // and the screen stays awaited.
+                // Until a compositor report is accepted for the output it
+                // answers the last size recorded for the monitor, or none (the
+                // manager dropped the connector's accepted report with the
+                // screen that left). The report that replaces it settles the
+                // screen and applies without an OSD, the same as at start-up.
+                // A report pending on the connector is evaluated against this
+                // screen now: one that came in ahead of the add and agrees
+                // with it is accepted and has settled the screen, while one
+                // that does not (the previous monitor's, still standing, or
+                // one checked against a scale that has not settled) stays
+                // pending and parked, and the screen stays awaited.
                 m_reshapeTracker.screenAdded(screen.name);
                 admitPixelSizeReport(screen.name);
                 // Re-admit the output to the tiling engines now (F765): its
@@ -320,25 +323,26 @@ void Daemon::connectScreenSignals()
                 // A pixel-size report that arrived ahead of this change was
                 // parked because it disagreed with the old logical geometry.
                 // Now that the geometry has caught up it may agree, and then
-                // it applies here (onCompositorPixelSizeChanged).
+                // it is accepted and reconciled here
+                // (onCompositorPixelSizeChanged).
                 if (m_reshapeTracker.isParked(screen.name)) {
                     onCompositorPixelSizeChanged(screen.name);
                 }
                 // The logical geometry feeds the screen shape only through the
                 // orientation provider, which the registry consults while the
-                // screen's pixel size is unknown. Once the compositor has
-                // reported the size (or a seed stands in for it), a rotation or
-                // a resolution change reaches the rules once, through
-                // onCompositorPixelSizeChanged, and a move or a scale change
-                // reaches them not at all. So the reconcile runs only for a
-                // screen whose shape this change actually moved, which keeps
-                // its forced retile off every reposition. The geometry pass
-                // above only recomputes zones and never diffs the assignment,
-                // so a shape that did move is re-driven here, as a
-                // colour-scheme flip is. A report still parked after this
-                // change is left to its own handler: reconciling the shape it
-                // gave the screen is what parking holds back.
-                if (screen.identifier.isEmpty() || m_reshapeTracker.isParked(screen.name)) {
+                // screen has no accepted or seeded pixel size. Once it has one,
+                // a rotation or a resolution change reaches the rules once,
+                // through the report's accept in onCompositorPixelSizeChanged,
+                // and a move or a scale change reaches them not at all. So the
+                // reconcile runs only for a screen whose shape this change
+                // actually moved, which keeps its forced retile off every
+                // reposition. The geometry pass above only recomputes zones
+                // and never diffs the assignment, so a shape that did move is
+                // re-driven here, as a colour-scheme flip is. A report still
+                // parked after this change is pending and reads nowhere, so it
+                // neither causes nor masks a reshape here: the shape compared
+                // is the one every rule reads.
+                if (screen.identifier.isEmpty()) {
                     return;
                 }
                 const QStringList screenIds = m_screenManager->virtualScreenIdsFor(screen.identifier);
@@ -381,7 +385,8 @@ void Daemon::connectScreenSignals()
                 }
                 // A pixel-size report checked against the coarse start-up
                 // scale was parked. The real scale may make it agree, and
-                // then it applies here (onCompositorPixelSizeChanged).
+                // then it is accepted and applies here
+                // (onCompositorPixelSizeChanged).
                 if (m_reshapeTracker.isParked(screen.name)) {
                     onCompositorPixelSizeChanged(screen.name);
                 }
@@ -449,29 +454,36 @@ ScreenReshapeTracker::ReportVerdict Daemon::admitPixelSizeReport(const QString& 
     const PhosphorScreens::PhysicalScreen screen = m_screenManager->physicalScreenFor(connectorName);
     ScreenReshapeTracker::ReportFacts facts;
     facts.tracked = screen.isValid() && !screen.identifier.isEmpty();
-    // While a report stands for the connector, pixelSize answers the report
-    // itself, never a seed.
-    const std::optional<QSize> reportedSize = facts.tracked && m_screenManager->isPixelSizeReported(screen.identifier)
-        ? m_screenManager->pixelSize(screen.identifier)
-        : std::nullopt;
-    facts.reported = reportedSize.has_value();
-    facts.consistent = reportedSize
-        && ScreenReshapeTracker::reportMatchesLogicalSize(*reportedSize, screen.geometry.size(),
-                                                          m_screenManager->logicalScale(screen));
+    // The PENDING report: nothing reads it until it is accepted below, so a
+    // report this call parks moves no rule, no verdict and no seed.
+    const QSize pendingSize = m_screenManager->pendingPixelSize(connectorName).value_or(QSize());
+    if (facts.tracked) {
+        facts.pendingSize = pendingSize;
+        facts.logicalSize = screen.geometry.size();
+        facts.logicalScale = m_screenManager->logicalScale(screen);
+        facts.scaleSensor = m_screenManager->hasLogicalScaleSensor(screen);
+    }
     const ScreenReshapeTracker::ReportVerdict verdict = m_reshapeTracker.evaluateReport(connectorName, facts);
+    if (verdict.action != ScreenReshapeTracker::ReportAction::Apply) {
+        return verdict;
+    }
+    // The report (or the clear) becomes what ScreenManager::pixelSize answers
+    // for this screen, the registry's shape provider and getScreenInfo
+    // included, before the caller notes the reshape it causes.
+    m_screenManager->acceptCompositorPixelSize(connectorName);
     if (verdict.persist) {
         // What the compositor reports now is next session's seed, and this
-        // session's too: re-seeding a reported monitor answers nothing new
-        // while its report stands (a report outranks a seed, so the manager
+        // session's too: re-seeding a monitor with an accepted report answers
+        // nothing new (an accepted report outranks a seed, so the manager
         // stays silent), but it is what a replug of the same monitor reads
-        // until the compositor reports it again. Only this screen's, under its
-        // own identifier, and only once the report agrees with it: another
+        // until a report is accepted for it again. Only this screen's, under
+        // its own identifier, and only once the report agrees with it: another
         // connector's report may be parked, describing a monitor that has not
         // arrived. The adaptor merges, so a monitor unplugged now keeps the
         // size it last had.
-        m_screenManager->seedPixelSize(screen.identifier, *reportedSize);
+        m_screenManager->seedPixelSize(screen.identifier, pendingSize);
         if (m_windowTrackingAdaptor) {
-            m_windowTrackingAdaptor->recordScreenPixelSizes(QHash<QString, QSize>{{screen.identifier, *reportedSize}});
+            m_windowTrackingAdaptor->recordScreenPixelSizes(QHash<QString, QSize>{{screen.identifier, pendingSize}});
         }
     }
     return verdict;
@@ -480,20 +492,18 @@ ScreenReshapeTracker::ReportVerdict Daemon::admitPixelSizeReport(const QString& 
 void Daemon::onCompositorPixelSizeChanged(const QString& connectorName)
 {
     const ScreenReshapeTracker::ReportVerdict verdict = admitPixelSizeReport(connectorName);
-    if (verdict.action == ScreenReshapeTracker::ReportAction::Ignore || m_shuttingDown) {
+    // A parked report is still pending, so it changed no shape, no verdict
+    // and nothing a diff could absorb: there is nothing to note or reconcile
+    // until it applies.
+    if (verdict.action != ScreenReshapeTracker::ReportAction::Apply || m_shuttingDown) {
         return;
     }
     const QString physId = m_screenManager->physicalScreenFor(connectorName).identifier;
     const QStringList screenIds = m_screenManager->virtualScreenIdsFor(physId);
-    // Recorded for a parked report too, so a diff that runs before it applies
-    // (a screen add, a layout list change) cannot absorb the verdict it moves.
     m_reshapeTracker.noteReshaped(screenIds);
-    if (verdict.action == ScreenReshapeTracker::ReportAction::Park) {
-        return;
-    }
     // Every screen of the output with a pending record: the ones this call
-    // just noted, and the ones noted while the report was parked, whose shape
-    // a diff in between may already have folded into the snapshot.
+    // just noted, and any a logical geometry change noted before the
+    // deferred reconcile it queued has run.
     QStringList pending;
     for (const QString& screenId : screenIds) {
         if (m_reshapeTracker.hasRecord(screenId)) {

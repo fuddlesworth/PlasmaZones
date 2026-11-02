@@ -107,9 +107,9 @@ QString aspectRatioLabel(const QString& token);
 /// Display text for a numeric match value of @p field in the read-only
 /// views: the number with the locale's digit grouping, and a pixel unit on
 /// Screen width and Screen height. A Pid keeps plain digits. The editor's
-/// spin box shows plain digits throughout, since grouping separators get in
-/// the way of typing. The collapsed summary uses this, and the expanded tree
-/// formats the same way in QML.
+/// spin box formats through the style's locale, which under the desktop style
+/// shows plain digits while they are typed. The collapsed summary uses this,
+/// and the expanded tree formats the same way in QML.
 QString numericMatchValueLabel(PhosphorRules::Field field, qint64 value);
 
 /// One-line hover help for a registered action type — the action-side mirror

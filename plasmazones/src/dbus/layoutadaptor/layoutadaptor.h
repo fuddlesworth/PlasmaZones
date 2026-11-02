@@ -104,13 +104,21 @@ public:
 
     /// Queue a comparison of the getScreenStates answer for the next
     /// event-loop pass, and emit @ref screenStatesChanged when it differs from
-    /// the answer the last comparison saw. The daemon calls it wherever a
-    /// field of that answer can move: every active-assignment diff (which the
-    /// desktop and activity switches, screen adds and removals, virtual-screen
-    /// changes, assignment applies and rule reconciles all run) and every
-    /// change of a tiling screen's tiled-window count. Coalesced, so a burst
-    /// in one turn compares once. Not a bus slot.
+    /// the answer the last comparison saw. The first comparison has nothing
+    /// before it, so it emits. The daemon calls it wherever a field other
+    /// than a display name can move: every active-assignment diff (which the
+    /// desktop and activity switches, screen adds and removals,
+    /// virtual-screen changes, assignment applies and rule reconciles all
+    /// run) and every change of a tiling screen's tiled-window count. Nothing
+    /// queues it for a layout rename or an algorithm or template reload,
+    /// which move only the names. Coalesced, so a burst in one turn compares
+    /// once. Not a bus slot.
     void scheduleScreenStatesCheck();
+
+    /// Drop a comparison @ref scheduleScreenStatesCheck queued and has not
+    /// run yet. Daemon::stop calls it, so no signal goes out after the
+    /// daemon's teardown has begun. Not a bus slot.
+    void cancelScreenStatesCheck();
 
 public Q_SLOTS:
     // PhosphorZones::Layout queries
@@ -510,13 +518,17 @@ Q_SIGNALS:
     /**
      * @brief Emitted when what getScreenStates answers has changed.
      *
-     * Covers every field of that answer, including the ones no other signal
-     * reports on its own: a screen's virtual desktop or the activity moving
-     * while its resolved layout stays the same, and the live tiled-window
-     * count of a tiling screen. Carries nothing, so a subscriber re-reads
-     * getScreenStates. Coalesced per event-loop pass and compared against the
-     * previous answer (see @ref scheduleScreenStatesCheck), so it fires once
-     * per real change.
+     * Guaranteed for every field except the display names (layoutName,
+     * algorithmName, scrollingTemplateName), including the ones no other
+     * signal reports on its own: a screen's virtual desktop or the activity
+     * moving while its resolved layout stays the same, and the live
+     * tiled-window count of a tiling screen. A layout rename or an algorithm
+     * or template reload moves only a name and does not fire it, though a
+     * comparison queued for another reason carries a moved name along.
+     * Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per
+     * event-loop pass and compared against the previous answer (see
+     * @ref scheduleScreenStatesCheck), so it fires once per real change, and
+     * once after start-up, when the first comparison has nothing before it.
      */
     void screenStatesChanged();
 
@@ -654,6 +666,9 @@ private:
      * one place — see constructor bodies in layoutadaptor.cpp.
      */
     void initCoalesceTimer();
+    /// The comparison @ref scheduleScreenStatesCheck queues. Private and not a
+    /// slot, so it is no bus method.
+    void checkScreenStates();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -760,9 +775,11 @@ private:
     /// See setTiledWindowCountProvider.
     std::function<std::optional<int>(const QString& screenId)> m_tiledWindowCountProvider;
 
-    /// Compression latch for scheduleScreenStatesCheck, and the getScreenStates
-    /// answer its last comparison saw (empty before the first).
-    bool m_screenStatesCheckPending = false;
+    /// The zero-interval single shot scheduleScreenStatesCheck arms (its
+    /// isActive() is the compression latch, and cancelScreenStatesCheck stops
+    /// it), and the getScreenStates answer the last comparison saw (empty
+    /// before the first).
+    QTimer m_screenStatesCheck;
     QString m_lastScreenStatesJson;
 
     // Suppress screenLayoutChanged D-Bus signal while a settings-driven save

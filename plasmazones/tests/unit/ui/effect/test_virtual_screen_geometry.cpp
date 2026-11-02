@@ -9,7 +9,8 @@
  *        the same region re-derived on an output that moved follows it (F806).
  *        Also the virtual screen's device-pixel size, the share the
  *        screen-shape rule fields read, and parity with the daemon's
- *        VirtualScreenDef::absoluteGeometry, clamps included.
+ *        VirtualScreenDef::absoluteGeometry, clamps included, and the regions
+ *        the effect admits matching the ones VirtualScreenDef::isValid admits.
  */
 
 #include "plasmazoneseffect/virtualscreengeometry.h"
@@ -20,6 +21,7 @@
 
 using PlasmaZones::absoluteVirtualScreenRect;
 using PlasmaZones::virtualScreenPixelSize;
+using PlasmaZones::virtualScreenRegionIsValid;
 
 class TestVirtualScreenGeometry : public QObject
 {
@@ -88,7 +90,10 @@ private Q_SLOTS:
     // rounds the logical size), and half of that scaled by 1.5 would read 1281.
     void pixelShareIsExactUnderFractionalScale()
     {
-        QCOMPARE(virtualScreenPixelSize(QRectF(0.0, 0.0, 0.5, 1.0), QSize(2560, 1440)), QSize(1280, 1440));
+        const QRectF half(0.0, 0.0, 0.5, 1.0);
+        const QRect logicalHalf = absoluteVirtualScreenRect(half, QRect(0, 0, 1707, 960));
+        QCOMPARE(qRound(logicalHalf.width() * 1.5), 1281);
+        QCOMPARE(virtualScreenPixelSize(half, QSize(2560, 1440)), QSize(1280, 1440));
     }
 
     // The daemon admits a region whose far edge overshoots the output by its
@@ -131,7 +136,8 @@ private Q_SLOTS:
         const QList<QRectF> regions = {
             QRectF(0.0, 0.0, 0.5, 1.0),        QRectF(0.5, 0.0, 0.5, 1.0),       QRectF(0.5, 0.0, 0.5005, 1.0),
             QRectF(-0.0005, 0.0, 0.5005, 1.0), QRectF(0.0, 0.5, 1.0, 0.5009),    QRectF(1.0 / 3.0, 0.0, 1.0 / 3.0, 1.0),
-            QRectF(0.0, 0.0, 0.0001, 1.0),     QRectF(0.9995, 0.0, 0.0010, 1.0), QRectF(0.25, -0.0009, 0.5, 1.0009)};
+            QRectF(0.0, 0.0, 0.0001, 1.0),     QRectF(0.9995, 0.0, 0.0010, 1.0), QRectF(0.25, -0.0009, 0.5, 1.0009),
+            QRectF(0.5, 0.0, 0.0001, 1.0),     QRectF(0.0, 0.5, 1.0, 0.0001)};
         for (const QRect& physical : outputs) {
             for (const QRectF& region : regions) {
                 QTest::addRow("%dx%d+%d+%d (%g,%g %gx%g)", physical.width(), physical.height(), physical.x(),
@@ -151,6 +157,44 @@ private Q_SLOTS:
         QCOMPARE(absoluteVirtualScreenRect(region, physical), daemon);
         const QRect daemonPixels = def.absoluteGeometry(QRect(QPoint(), physical.size()));
         QCOMPARE(virtualScreenPixelSize(region, physical.size()), daemonPixels.size());
+    }
+
+    // The effect admits exactly the regions the daemon's
+    // VirtualScreenDef::isValid admits, tolerance edges included. A zero or
+    // negative side is refused although the rect cut from it would floor at
+    // one pixel.
+    void admitsTheDaemonsRegions_data()
+    {
+        QTest::addColumn<QRectF>("region");
+        QTest::newRow("left half") << QRectF(0.0, 0.0, 0.5, 1.0);
+        QTest::newRow("sliver") << QRectF(0.5, 0.0, 0.0001, 1.0);
+        QTest::newRow("far edge inside tolerance") << QRectF(0.5, 0.0, 0.5009, 1.0);
+        QTest::newRow("far edge past tolerance") << QRectF(0.5, 0.0, 0.5011, 1.0);
+        QTest::newRow("origin inside tolerance") << QRectF(-0.0009, 0.0, 0.5, 1.0);
+        QTest::newRow("origin past tolerance") << QRectF(-0.0011, 0.0, 0.5, 1.0);
+        QTest::newRow("zero width") << QRectF(0.5, 0.0, 0.0, 1.0);
+        QTest::newRow("zero height") << QRectF(0.0, 0.5, 1.0, 0.0);
+        QTest::newRow("negative width") << QRectF(0.5, 0.0, -0.25, 1.0);
+        QTest::newRow("bottom past tolerance") << QRectF(0.0, 0.5, 1.0, 0.6);
+    }
+
+    void admitsTheDaemonsRegions()
+    {
+        QFETCH(QRectF, region);
+        PhosphorScreens::VirtualScreenDef def;
+        def.id = QStringLiteral("DP-1/vs:0");
+        def.physicalScreenId = QStringLiteral("DP-1");
+        def.region = region;
+        QCOMPARE(virtualScreenRegionIsValid(region), def.isValid());
+    }
+
+    // The zero-width region the filter refuses would otherwise be cut as a
+    // one-pixel screen.
+    void zeroWidthRegionWouldCutAsOnePixel()
+    {
+        const QRectF zeroWidth(0.5, 0.0, 0.0, 1.0);
+        QVERIFY(!virtualScreenRegionIsValid(zeroWidth));
+        QCOMPARE(absoluteVirtualScreenRect(zeroWidth, QRect(0, 0, 1920, 1080)).size(), QSize(1, 1080));
     }
 
     // A rotated output reports its pixel size already rotated, and a split

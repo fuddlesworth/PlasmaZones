@@ -129,8 +129,10 @@ QSize outputPixelSize(const KWin::LogicalOutput* output);
 /// (pushOutputPixelSizes), and a virtual screen's is its region's share of it
 /// (virtualScreenPixelSize). The daemon stamps context rules from that same
 /// report with the same derivations, so a window rule and a context rule read a
-/// screen alike once the report has landed. Before it lands the daemon answers
-/// from the size it saved for that monitor last session, when it has one.
+/// screen alike once the daemon has accepted the report. It keeps a report
+/// pending until the report agrees with its own geometry for that output, and
+/// until then answers from the size it saved for that monitor last session,
+/// when it has one.
 void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize);
 
 } // namespace PlasmaZones

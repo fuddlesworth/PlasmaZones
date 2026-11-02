@@ -93,8 +93,9 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                     // monitor label is built from them. A reply without the key
                     // (an older daemon) leaves pixelSize invalid. The size is
                     // known, as the daemon's rules see it, only when it is the
-                    // compositor's report or the one seeded from an earlier
-                    // session. An estimate is kept for display but not known.
+                    // compositor's report or the seeded one, the size last
+                    // reported for that monitor in this session or an earlier
+                    // one. An estimate is kept for display but not known.
                     const QJsonObject pixelSize = jsonObj.value(JsonKeys::PixelSize).toObject();
                     const QSize devicePixels(pixelSize.value(::PhosphorZones::ZoneJsonKeys::Width).toInt(),
                                              pixelSize.value(::PhosphorZones::ZoneJsonKeys::Height).toInt());

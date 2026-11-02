@@ -132,6 +132,27 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 2);
     }
 
+    // A check queued and then cancelled (Daemon::stop) never runs, so a
+    // change it would have seen is not announced after the teardown, and a
+    // check queued afterwards still runs.
+    void testScreenStatesChanged_cancelDropsTheQueuedCheck()
+    {
+        int count = 1;
+        m_adaptor->setTiledWindowCountProvider([&count](const QString& screenId) -> std::optional<int> {
+            return screenId == QLatin1String("DP-1") ? std::optional<int>(count) : std::nullopt;
+        });
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::screenStatesChanged);
+
+        m_adaptor->scheduleScreenStatesCheck();
+        m_adaptor->cancelScreenStatesCheck();
+        QVERIFY(!spy.wait(50));
+        QCOMPARE(spy.count(), 0);
+
+        m_adaptor->scheduleScreenStatesCheck();
+        QVERIFY(spy.wait());
+        QCOMPARE(spy.count(), 1);
+    }
+
 private:
     QJsonObject stateFor(const QString& screenId) const
     {

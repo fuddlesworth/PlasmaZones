@@ -48,15 +48,16 @@ namespace PlasmaZones {
 namespace {
 
 namespace ActionType = PhosphorRules::ActionType;
+using PhosphorRules::Field;
 using PhosphorRules::MatchExpression;
 using PhosphorRules::Rule;
 using PhosphorRules::RuleAction;
 
 /// The device-pixel size of @p screen (a `SettingsController::screens` map)
-/// when the daemon's rules see one: the compositor's report, or the size
-/// seeded from an earlier session (`pixelSizeKnown`). The estimate the
-/// daemon's getScreenInfo carries before either exists is not one, so it
-/// answers nullopt here.
+/// when the daemon's rules see one: the compositor's report, or the seeded
+/// size, the one last reported for that monitor in this session or an
+/// earlier one (`pixelSizeKnown`). The estimate the daemon's getScreenInfo
+/// carries before either exists is not one, so it answers nullopt here.
 std::optional<QSize> knownPixelSizeOf(const QVariantMap& screen)
 {
     if (!screen.value(QStringLiteral("pixelSizeKnown")).toBool()) {
@@ -117,12 +118,27 @@ QString ruleModeToken(PhosphorZones::AssignmentEntry::Mode mode)
     return QString();
 }
 
+/// True when @p match has a ScreenId leaf, of any operator, it reaches
+/// without passing through a negation: a rule that addresses a monitor
+/// rather than excluding one.
+bool namesScreenPositively(const MatchExpression& match)
+{
+    if (match.isLeaf()) {
+        return match.predicate().field == Field::ScreenId;
+    }
+    if (match.kind() == MatchExpression::Kind::None) {
+        return false;
+    }
+    return std::any_of(match.children().cbegin(), match.children().cend(), namesScreenPositively);
+}
+
 /// True when @p pin (a ScreenId condition's value) names @p screen (a
 /// `SettingsController::screens` map), ignoring case as the rule engine's
 /// Equals does: the screen's effective id, its stable id, or for a virtual
 /// screen the monitor it is part of. The last is how the daemon carries a
-/// monitor's rules to its virtual screens (the physical-id retry), and those
-/// rules then read the virtual screen's own shape.
+/// monitor's rules to its virtual screens (the physical-id retry, run only
+/// when the virtual screen's own rules fill no slot), and on that retry
+/// those rules read the virtual screen's own shape.
 bool pinNamesScreen(const QString& pin, const QVariantMap& screen)
 {
     const auto same = [&pin](const QString& id) {
@@ -360,12 +376,13 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
             }
         }
 
-        // The rule count: every enabled context rule that addresses a monitor
-        // (RuleModel::screenIdsOf, the walk the Rules page's monitor filter
-        // reads) and whose whole match holds for this screen now, the engine
-        // mode included. The walk skips a `none{ScreenId}` group, which
+        // The rule count: every enabled context rule with a ScreenId condition
+        // of any operator outside a negation, whose whole match holds for this
+        // screen now, the engine mode included. A `none{ScreenId}` group
         // excludes a monitor rather than addressing it. Evaluating the match
-        // settles which screen a pin names, ignoring case as the engine does.
+        // settles which screens the condition names, ignoring case as the
+        // engine does, so a "starts with" monitor rule counts on every screen
+        // it matches.
         //
         // DisableEngine is the one action the daemon does not run through the
         // evaluator. A monitor is disabled iff its id appears in
@@ -393,7 +410,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         int ruleCount = 0;
         QSet<QString> disabledEngineModes;
         for (const Rule& rule : ruleSet.rules()) {
-            if (!rule.enabled || !rule.match.isContextOnly() || RuleModel::screenIdsOf(rule.match).isEmpty()
+            if (!rule.enabled || !rule.match.isContextOnly() || !namesScreenPositively(rule.match)
                 || !rule.match.evaluate(query)) {
                 continue;
             }
