@@ -398,6 +398,7 @@ void TestRuleController::authoringMetadata()
     bool sawLayoutKind = false;
     bool sawVirtualDesktopKind = false;
     bool sawColorSchemeKind = false;
+    bool sawAspectRatioKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -428,14 +429,18 @@ void TestRuleController::authoringMetadata()
         // ColorScheme (light/dark) is the third of the same shape: without it in
         // this loop a dropped options array would leave the editor's dropdown
         // empty with nothing failing.
+        // ScreenAspectRatio (aspectRatio) is the fourth string-token dropdown
+        // and is held to the same shape.
         if (kind == QLatin1String("windowType") || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-            || kind == QLatin1String("colorScheme")) {
+            || kind == QLatin1String("colorScheme") || kind == QLatin1String("aspectRatio")) {
             if (kind == QLatin1String("windowType")) {
                 sawWindowTypeKind = true;
             } else if (kind == QLatin1String("mode")) {
                 sawModeKind = true;
             } else if (kind == QLatin1String("orientation")) {
                 sawOrientationKind = true;
+            } else if (kind == QLatin1String("aspectRatio")) {
+                sawAspectRatioKind = true;
             } else {
                 sawColorSchemeKind = true;
             }
@@ -465,6 +470,7 @@ void TestRuleController::authoringMetadata()
     // string field would drop the light/dark dropdown and leave the user
     // hand-typing the token, so the kind is pinned the same way the others are.
     QVERIFY(sawColorSchemeKind);
+    QVERIFY(sawAspectRatioKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum
@@ -503,6 +509,11 @@ void TestRuleController::authoringMetadata()
     // bucket. A descriptor that dropped it into State would bury it under the
     // window properties in the fly-out.
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("colorScheme"), -1), 0); // Context
+    // The screen-shape fields describe the monitor, so they sit with the
+    // other Context fields rather than with the window Size fields.
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenWidth"), -1), 0); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenHeight"), -1), 0); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenAspectRatio"), -1), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
@@ -557,6 +568,13 @@ void TestRuleController::authoringMetadata()
     QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
     QVERIFY(widthOps.contains(QStringLiteral("equals")));
     QCOMPARE(opWires(QStringLiteral("isTransient")), QSet<QString>{QStringLiteral("equals")});
+    // The screen-shape fields' operator sets, pinned exactly: a size compares
+    // as a number and nothing else, and a ratio token only means anything
+    // compared whole.
+    const QSet<QString> numericOps{QStringLiteral("equals"), QStringLiteral("greaterThan"), QStringLiteral("lessThan")};
+    QCOMPARE(opWires(QStringLiteral("screenWidth")), numericOps);
+    QCOMPARE(opWires(QStringLiteral("screenHeight")), numericOps);
+    QCOMPARE(opWires(QStringLiteral("screenAspectRatio")), QSet<QString>{QStringLiteral("equals")});
 }
 
 void TestRuleController::operatorMetadata()

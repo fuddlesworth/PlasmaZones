@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QUuid>
 #include <QHash>
+#include <functional>
 #include <optional>
 
 namespace PhosphorScreens {
@@ -94,6 +95,12 @@ public:
      * without changing the adaptor.
      */
     void setLayoutSource(PhosphorLayout::ILayoutSource* source);
+
+    /// Inject the daemon's live tiled-window count per screen: the count of the
+    /// tiling state that runs on the screen, or nullopt when no tiling engine
+    /// does. Backs getScreenStates' tiledWindowCount key. Unset, the key is
+    /// never written.
+    void setTiledWindowCountProvider(std::function<std::optional<int>(const QString& screenId)> provider);
 
 public Q_SLOTS:
     // PhosphorZones::Layout queries
@@ -339,7 +346,10 @@ public Q_SLOTS:
      * inherited value from an assigned one. scrollingTemplateId reads the
      * stored entry field rather than the mode-gated resolver, so a template
      * preserved across a mode toggle is reported even while another mode
-     * runs.
+     * runs. tiledWindowCount is the live count of the tiling state running
+     * on the screen, present only while a tiling engine (autotile or
+     * scrolling) runs there, so a reader can evaluate a TiledWindowCount
+     * condition the way the daemon does and leave it unanswered elsewhere.
      *
      * @return JSON string
      */
@@ -724,6 +734,8 @@ private:
     /// Separate from m_layoutSource (which is the full composite used for
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
+    /// See setTiledWindowCountProvider.
+    std::function<std::optional<int>(const QString& screenId)> m_tiledWindowCountProvider;
 
     // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
     // batch is in flight (armed via the setSaveBatchMode slot around a batch

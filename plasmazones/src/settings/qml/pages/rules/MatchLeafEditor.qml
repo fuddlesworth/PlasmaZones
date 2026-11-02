@@ -59,6 +59,24 @@ RowLayout {
     /// guided starting point seeds a bare leaf as the whole match, so the root
     /// case is the common one rather than an edge.
     property bool removable: true
+    /// The whole rule's match, so a screen-size condition can name the size of
+    /// the monitor the rule pins elsewhere in it. Threaded down from the root
+    /// MatchExpressionEditor.
+    property var ruleMatch
+    /// Under a Screen width, Screen height or Screen aspect ratio value: the
+    /// current device-pixel size and nearest ratio of each monitor the rule
+    /// pins (RuleController::screenSizeHint). Empty for every other field, or
+    /// when the rule pins no connected monitor.
+    readonly property string _screenSizeHint: {
+        const field = leaf.node.field;
+        if (field !== "screenWidth" && field !== "screenHeight" && field !== "screenAspectRatio")
+            return "";
+
+        if (!leaf.controller || !leaf.appSettings || !leaf.ruleMatch)
+            return "";
+
+        return leaf.controller.screenSizeHint(leaf.appSettings.screens || [], leaf.ruleMatch);
+    }
 
     signal leafChanged(var updatedLeaf)
     signal removeRequested
@@ -417,27 +435,60 @@ RowLayout {
     Component {
         id: numberValueEditor
 
-        SpinBox {
-            // PositionX / PositionY are the only SIGNED numeric fields: a
-            // monitor placed left of or above the primary starts at a negative
-            // frame coordinate, so a floor of 0 made those two conditions
-            // impossible to author and displayed a stored -1920 as 0 while the
-            // rule kept matching -1920. Every other numeric field (Width,
-            // Height, Pid, Tiled window count, Desktop) is unsigned.
-            readonly property bool _signed: leaf.node.field === "positionX" || leaf.node.field === "positionY"
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing / 2
 
-            // Numeric fields include Pid; the kernel pid_max ceiling is
-            // 4194304, so 5e6 covers every possible PID with headroom. It is
-            // written in scientific form because qmlformat rewrites large
-            // decimal literals to 6-significant-figure scientific notation —
-            // 5e6 is exact under that rounding (a plain 2147483647 is not).
-            // The signed floor mirrors the ceiling so a coordinate has the same
-            // range in both directions.
-            from: _signed ? -5e+06 : 0
-            to: 5e+06
-            value: Number(leaf.node.value) || 0
-            Accessible.name: i18n("Match value")
-            onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
+            SpinBox {
+                // PositionX / PositionY are the only SIGNED numeric fields: a
+                // monitor placed left of or above the primary starts at a negative
+                // frame coordinate, so a floor of 0 made those two conditions
+                // impossible to author and displayed a stored -1920 as 0 while the
+                // rule kept matching -1920. Every other numeric field (Width,
+                // Height, Pid, Tiled window count, Screen width, Screen height)
+                // is unsigned. Desktop has its own picker.
+                readonly property bool _signed: leaf.node.field === "positionX" || leaf.node.field === "positionY"
+
+                Layout.fillWidth: true
+                // Numeric fields include Pid; the kernel pid_max ceiling is
+                // 4194304, so 5e6 covers every possible PID with headroom. It is
+                // written in scientific form because qmlformat rewrites large
+                // decimal literals to 6-significant-figure scientific notation —
+                // 5e6 is exact under that rounding (a plain 2147483647 is not).
+                // The signed floor mirrors the ceiling so a coordinate has the same
+                // range in both directions.
+                from: _signed ? -5e+06 : 0
+                to: 5e+06
+                value: Number(leaf.node.value) || 0
+                // Typed, not stepped: reaching a screen width such as 2560 by
+                // the arrows alone takes thousands of steps.
+                editable: true
+                // The locale's digit grouping, as the collapsed summary and the
+                // expanded tree print the value. The desktop style's own locale
+                // omits group separators, so the formatting reads the
+                // application locale explicitly. Parsing takes the value with or
+                // without separators.
+                textFromValue: function (value, locale) {
+                    return Number(value).toLocaleString(Qt.locale(), "f", 0);
+                }
+                valueFromText: function (text, locale) {
+                    return Number.fromLocaleString(Qt.locale(), text);
+                }
+                Accessible.name: i18n("Match value")
+                onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
+            }
+
+            // The pinned monitor's current size, under a Screen width or
+            // Screen height value. Same muted styling as the string editor's
+            // operator hint.
+            Label {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: leaf._screenSizeHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+            }
         }
     }
 
@@ -571,7 +622,7 @@ RowLayout {
     }
 
     // The closed-vocabulary editors below (window type, mode, orientation,
-    // colour scheme) read the field entry's `options`, `{value, wire, label}`
+    // aspect ratio, colour scheme) read the field entry's `options`, `{value, wire, label}`
     // triples from the controller. The stored value is the window type's enum
     // int, or for the string fields the wire token itself. A value no option
     // holds (a hand-edited rule, a token from a newer build) shows raw.
@@ -628,17 +679,34 @@ RowLayout {
     Component {
         id: aspectRatioValueEditor
 
-        MatchValueCombo {
-            // The value IS the wire token ("16:9", "32:9"), and the options
-            // come straight from the rules library's ratio table.
-            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
-            textRole: "label"
-            valueRole: "value"
-            value: leaf.node.value
-            placeholderText: i18n("Choose an aspect ratio…")
-            Accessible.name: i18n("Aspect ratio")
-            onPicked: function (value) {
-                leaf._emit(leaf.node.field, leaf.node.op, value);
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing / 2
+
+            MatchValueCombo {
+                Layout.fillWidth: true
+                // The value IS the wire token ("16:9", "32:9"), and the options
+                // come straight from the rules library's ratio table.
+                model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+                textRole: "label"
+                valueRole: "value"
+                value: leaf.node.value
+                placeholderText: i18n("Choose an aspect ratio…")
+                Accessible.name: i18n("Screen aspect ratio")
+                onPicked: function (value) {
+                    leaf._emit(leaf.node.field, leaf.node.op, value);
+                }
+            }
+
+            // The pinned monitor's current size and ratio, as under the
+            // Screen width and Screen height values.
+            Label {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: leaf._screenSizeHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
             }
         }
     }

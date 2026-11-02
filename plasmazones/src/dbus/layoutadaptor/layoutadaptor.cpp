@@ -869,6 +869,11 @@ void LayoutAdaptor::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* sourc
     m_autotileLayoutSource = source;
 }
 
+void LayoutAdaptor::setTiledWindowCountProvider(std::function<std::optional<int>(const QString& screenId)> provider)
+{
+    m_tiledWindowCountProvider = std::move(provider);
+}
+
 void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 {
     // The adaptor is a QDBusAbstractAdaptor child of the service-owning

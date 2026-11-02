@@ -139,33 +139,43 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // unfloat path (SnapEngine::unfloatToZone, reachable from the two-argument
     // Snap.setWindowFloat D-Bus slot) documents an empty screen as one of its
     // tiers. Resolve it the way shouldFloatByRule does rather than stamping
-    // nothing: an unstamped screen would leave ScreenId / ActiveLayout /
-    // ScreenOrientation engaged-but-empty under an admission that still admits
+    // nothing: an unstamped screen would leave ScreenId, ActiveLayout and the
+    // screen-shape fields unanswered under an admission that still admits
     // rules referencing them, so a `None{ScreenId Equals X}` group would invert.
     const QString placementScreen = screenId.isEmpty() ? resolveScreenForWindow(windowId) : screenId;
     stampScreenContext(*query, placementScreen);
 
     ensureRuleEvaluator();
-    // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
-    // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
-    // slot, so reading the Placement slot off the same verdict is free. Same open-path
-    // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
+    // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition.
+    // The shared evaluator cache is keyed on (windowId, ruleSet revision) only, so
+    // the FIRST resolver to touch a window seeds the verdict the others reuse, and
+    // that seed must come from a screen-stamped query. When nothing has seeded it
+    // yet, this resolve does, through the cache: on the snap open path
+    // SnapEngine::resolveWindowRestore reaches here before it consults the float /
+    // restore predicates, so a screen-constrained rule resolves correctly for
+    // them too.
     //
-    // The shared evaluator cache is keyed on windowId only, so the FIRST resolver
-    // to touch a window seeds the verdict the others reuse. On the open path that
-    // is this placement resolve: SnapEngine::resolveWindowRestore calls
-    // calculateSnapToPlacementRule up front, before it consults the float /
-    // restore predicates — so the screen-pinned query populates the cache first
-    // and a screen-constrained rule resolves correctly. That is also why the
-    // degenerate no-screen case below must NOT go through the memo: every cached
-    // caller passes admitScreenStamped (resolveCachedFiltered's equivalent-admit
-    // precondition), and an unstamped verdict written under that key would be
-    // read back by the restore predicates as if a screen had been stamped.
-    // Resolve it outside the memo under the admission its stamps actually
-    // warrant, the same shape shouldRestoreFloatedPosition's uncached branch uses.
-    const PhosphorRules::ResolvedActions resolved = query->screenId.isEmpty()
-        ? m_ruleEvaluator->resolveFiltered(*query, admitWith(admissionForStamped(*query), *query))
-        : m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
+    // When the memo already holds a verdict, this resolves FRESH instead of
+    // reading it. The memo is the window's open-time verdict, and this resolver
+    // also runs mid-session, for the Meta+F unfloat's rule tier and the
+    // Snap.snapToAppRule slot: reading it there would answer with the screen
+    // shape, active layout and desktop the window opened under, after a monitor
+    // rotated, changed mode or switched layout. The fresh resolve leaves the
+    // memo alone (clearing it would hand the next seed to an unstamped
+    // predicate, the hazard invalidateRuleMemosForColorSchemeChange documents),
+    // and on the open path it reads the same screen in the same turn as the
+    // seed, so it answers the same.
+    //
+    // The degenerate no-screen case must NOT go through the memo either: every
+    // cached caller passes admitScreenStamped (resolveCachedFiltered's
+    // equivalent-admit precondition), and an unstamped verdict written under that
+    // key would be read back by the restore predicates as if a screen had been
+    // stamped. It resolves under the admission its stamps actually warrant, the
+    // same shape shouldRestoreFloatedPosition's uncached branch uses.
+    const bool seedMemo = !query->screenId.isEmpty() && !m_ruleEvaluator->resolveCachedIfPresent(windowId);
+    const PhosphorRules::ResolvedActions resolved = seedMemo
+        ? m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query))
+        : m_ruleEvaluator->resolveFiltered(*query, admitWith(admissionForStamped(*query), *query));
 
     PhosphorSnapEngine::PlacementDirective directive;
 

@@ -317,6 +317,11 @@ SettingsController::~SettingsController()
         // ~QObject teardown); clear it too so a deferred dataChanged during
         // teardown can't run the lookup against the dangling registry.
         m_rulesPage->setDecorationPackLookup({});
+        // The default-assignment provider reads m_settings and
+        // m_localLayoutManager. The colour-scheme one captures nothing, and
+        // is cleared too so the overview's inputs go together.
+        m_rulesPage->setDefaultAssignmentProvider({});
+        m_rulesPage->setColorSchemeProvider({});
         // Re-emit the label roles once against the now-empty (identity)
         // lookups, so anything that paints during teardown reads raw ids
         // consistently rather than a mix of resolved and raw labels.
@@ -571,6 +576,7 @@ SettingsController::SettingsController(QObject* parent)
                 Q_EMIT activitiesChanged();
             }
             m_screenHelper.refreshScreens();
+            scheduleScreenStatesRefresh();
         }
     });
 
@@ -994,6 +1000,14 @@ SettingsController::SettingsController(QObject* parent)
     // forwarders (and the dirty-tracking guard). Previously refreshScreens
     // ran first and any same-tick screensChanged was lost, leaving QML
     // bindings stale until the next external daemon-driven refresh.
+    //
+    // The screen-states timer is configured first because the refresh below
+    // can start it synchronously through the screensChanged connection, and
+    // an unconfigured QTimer would start as a repeating zero-interval one.
+    m_screenStatesTimer.setSingleShot(true);
+    m_screenStatesTimer.setInterval(50);
+    connect(&m_screenStatesTimer, &QTimer::timeout, this, &SettingsController::refreshScreenStates);
+    connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::scheduleScreenStatesRefresh);
     m_screenHelper.connectToDaemonSignals();
     // Hot-unplug: if the monitor the per-monitor groups are scoped to goes
     // away, fall back to "All Monitors". Lives here (not in the transient
@@ -1033,6 +1047,9 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
     m_screenHelper.refreshScreens();
+    // An unchanged first refresh emits nothing, so ask for the states once
+    // regardless.
+    scheduleScreenStatesRefresh();
 
     // PhosphorZones::Layout load timer (debounce). The five layout-mutation
     // subscriptions (layoutCreated / layoutDeleted / layoutChanged /

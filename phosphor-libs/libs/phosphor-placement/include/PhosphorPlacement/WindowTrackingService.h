@@ -887,8 +887,8 @@ public:
     // marking ANY bit schedules a save, and saveState()'s refreshOpenWindowPlacements()
     // re-derives the affected per-window state into the placement record. They are
     // therefore "schedule a save" triggers, not independent persisted fields; only DirtyActiveLayoutId /
-    // DirtyKnownDesktops / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements / DirtyScrollStrips map to
-    // their own on-disk key.
+    // DirtyKnownDesktops / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements / DirtyScrollStrips /
+    // DirtyScreenPixelSizes map to their own on-disk key.
     enum DirtyField : uint32_t {
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
@@ -904,7 +904,8 @@ public:
         // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
         DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
         DirtyScrollStrips = 1u << 12, ///< scrolling strip-structure snapshots (WTA-provided blob)
-        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bit 10
+        DirtyScreenPixelSizes = 1u << 13, ///< each monitor's last compositor-reported pixel size (WTA-provided)
+        DirtyAll = 0x3FFFu, // covers bits 0-13 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 

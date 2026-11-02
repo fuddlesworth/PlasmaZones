@@ -121,6 +121,12 @@ void Daemon::initCoreAdaptors()
     // getLayoutPreview* methods; this separate pointer targets only the
     // autotile enumeration slot — see LayoutAdaptor::setAutotileLayoutSource.
     m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
+    // The live tiled-window count getScreenStates publishes, the same answer
+    // the registry's TiledWindowCount provider gives the context cascade. The
+    // engines are built later in init(); the lambda reads them per call.
+    m_layoutAdaptor->setTiledWindowCountProvider([this](const QString& screenId) {
+        return tiledWindowCountForScreen(screenId);
+    });
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), &m_profileRegistry, this);
@@ -201,6 +207,18 @@ void Daemon::initCoreAdaptors()
         [this](const QString& screenId, int desktop, const QString& activity) {
             return runningModeForContext(screenId, desktop, activity);
         });
+    // Each monitor's size as the compositor last reported it, from the session
+    // state the adaptor just loaded, stands in for the report until this
+    // session's arrives (onCompositorPixelSizeChanged). Here, before start()
+    // starts the screen manager, so the first resolve of every screen already
+    // has it and a report that confirms it moves nothing. The manager tracks
+    // no screen yet, so seeding emits nothing.
+    {
+        const QHash<QString, QSize> lastSizes = m_windowTrackingAdaptor->screenPixelSizes();
+        for (auto it = lastSizes.constBegin(); it != lastSizes.constEnd(); ++it) {
+            m_screenManager->seedPixelSize(it.key(), it.value());
+        }
+    }
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -258,6 +276,16 @@ void Daemon::initCoreAdaptors()
                                  << ") — clearing any stale drag state held by daemon";
                 m_windowDragAdaptor->clearForCompositorReconnect();
             });
+    // The compositor's pixel-size reports are deliberately NOT cleared on a
+    // (re-)registration, unlike the drag state above. A fresh effect re-sends
+    // every live output's size right after it registers (it starts with no
+    // record of what it sent), which overwrites each entry it still has, so a
+    // clear first would only flip every screen to its seed or to unknown and
+    // back, a second reshape per screen for nothing. An entry for a connector
+    // the new effect no longer has answers for no screen the daemon tracks,
+    // and an output added on that connector later is reported on its add. The
+    // bridge has no unregistration signal to clear on either; the manager
+    // drops every report in stop().
 
     // Registration watchdog: the KWin effect should register as a compositor
     // bridge within a few seconds of startup. If it never does, the daemon is

@@ -107,6 +107,12 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
                           SLOT(onScreenLayoutChanged(QString, QString, int)));
+    // activeLayoutForScreenChanged reports every change to a screen's resolved
+    // layout, a desktop switch and a rule edit among them, where
+    // screenLayoutChanged reports only assignment edits. Both re-read the
+    // cached screen states the Rules page's monitor tiles evaluate against.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("activeLayoutForScreenChanged"),
+                          SLOT(scheduleScreenStatesRefresh()));
     // quickLayoutSlotsChanged fires when quick layout slots are modified externally
     subscribeDaemonSignal(layoutIface, QStringLiteral("quickLayoutSlotsChanged"), SIGNAL(quickLayoutSlotsChanged()));
 

@@ -147,6 +147,12 @@ class SettingsController : public QObject
 
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
+    // The daemon's getScreenStates answer (each screen's current desktop,
+    // activity, resolved assignment and, while it tiles, its tiled-window
+    // count), fetched asynchronously and kept current on screen, assignment,
+    // active-layout and activity changes. The Rules page's monitor tiles
+    // evaluate their conditions against it.
+    Q_PROPERTY(QVariantList screenStates READ screenStates NOTIFY screenStatesChanged)
 
     // Per-monitor scope: which screen the per-monitor setting groups are
     // currently editing. Empty = "All Monitors" (edit the global default).
@@ -413,6 +419,10 @@ public:
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
 
     // Screen accessors
+    QVariantList screenStates() const
+    {
+        return m_screenStates;
+    }
     QVariantList screens() const
     {
         return m_screenHelper.screens();
@@ -809,6 +819,7 @@ Q_SIGNALS:
     /// object at all — so this is effectively a wiring-bug signal there.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
+    void screenStatesChanged();
     void scopeScreenNameChanged();
     /// Emitted whenever any per-screen override map changes (set or clear,
     /// any domain). The monitor scope map re-polls hasPerScreen*Settings()
@@ -891,6 +902,14 @@ private Q_SLOTS:
     /// A reply that changes the scale reloads the layouts, but only when some
     /// local layout counts device pixels, since no other layout reads it.
     void refreshPrimaryScreenScale();
+    /// Coalesce the daemon notifications that move a screen's state (screens,
+    /// assignments, active layouts, the current activity) into one
+    /// refreshScreenStates() on m_screenStatesTimer.
+    void scheduleScreenStatesRefresh();
+    /// Ask the daemon, asynchronously, for getScreenStates and publish the
+    /// answer as `screenStates` when it differs. A failed call keeps the last
+    /// answer.
+    void refreshScreenStates();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
@@ -1201,6 +1220,12 @@ private:
     qreal m_primaryScreenScale = 0.0;
     QString m_primaryScreenScaleId;
     quint64 m_primaryScreenScaleRequest = 0;
+
+    // The last getScreenStates answer, its coalescing timer, and the number
+    // of the newest request so an older reply cannot overwrite a newer one.
+    QVariantList m_screenStates;
+    QTimer m_screenStatesTimer;
+    quint64 m_screenStatesRequest = 0;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // PhosphorZones::LayoutRegistry opens its own assignments backend + scans the standard

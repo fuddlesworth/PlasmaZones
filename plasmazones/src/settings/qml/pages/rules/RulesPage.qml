@@ -496,10 +496,14 @@ SettingsFlickable {
             // lists (layouts/activities/screens) change — including content-
             // only changes like a layout rename that wouldn't move a length
             // counter. See the `Connections { target: settingsController }`
-            // above for the bump points.
+            // above for the bump points. `modelRevision` re-runs it on every
+            // staged rule edit, since the tiles show what the staged rules do,
+            // and `screenStates` when a screen's desktop, activity or
+            // assignment moves.
             tiles: {
                 void (page.tilesRevision); // touch to re-run when the monitor lists change
-                return page.controller.monitorOverview(settingsController.screens);
+                void (page.modelRevision); // touch to re-run when a staged rule changes
+                return page.controller.monitorOverview(settingsController.screens, settingsController.screenStates);
             }
             selectedScreenId: page.monitorFilter
             onMonitorSelected: function (screenId) {

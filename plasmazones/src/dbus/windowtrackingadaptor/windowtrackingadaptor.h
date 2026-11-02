@@ -30,6 +30,7 @@
 #include <QJsonObject>
 #include <QQueue>
 #include <QRect>
+#include <QSize>
 #include <QTimer>
 #include <QPointer>
 #include <functional>
@@ -225,6 +226,20 @@ public:
     }
     /// Marks DirtyKnownDesktops; the list already held marks nothing.
     void setKnownDesktopIds(const QStringList& ids);
+
+    /// Each monitor's size in device pixels as the compositor last reported it, keyed by the monitor's stable
+    /// identifier (ScreenPixelSizes). The daemon seeds the screen manager with them at start-up, so a screen-shape
+    /// rule resolves against the monitor's real size before this session's report arrives.
+    QHash<QString, QSize> screenPixelSizes() const
+    {
+        return m_screenPixelSizes;
+    }
+    /// Merge @p sizes over the ones held: a monitor absent from @p sizes (unplugged now) keeps its last entry. An
+    /// empty or invalid size is skipped. Marks DirtyScreenPixelSizes only when an entry changed.
+    void recordScreenPixelSizes(const QHash<QString, QSize>& sizes);
+    /// Move the entry held under @p oldId to @p newId, the identifier flip ScreenManager::screenIdentifierChanged
+    /// reports. An entry already under @p newId is replaced. Marks DirtyScreenPixelSizes only when something moved.
+    void renameScreenPixelSize(const QString& oldId, const QString& newId);
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
@@ -926,7 +941,7 @@ public:
      */
     void loadState();
 
-    /// Build the per-window rule query: the screen trio, Mode and the live frame
+    /// Build the per-window rule query: the screen-derived fields, Mode and the live frame
     /// stamped on top of the WindowRegistry metadata, which holds no screen and
     /// only the open-time size. @p
     /// screenIdHint names the screen the window is landing on (the open /
@@ -1121,14 +1136,15 @@ public:
     /// alone, so a stamped query is discarded on a hit.
     void stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId, const QString& screenId) const;
 
-    /// Stamp the screen-derived context trio onto @p query: ScreenId, the
+    /// Stamp the screen-derived context fields onto @p query: ScreenId, the
     /// ActiveLayout resolved for that screen's CURRENT desktop and activity
     /// (the same id the windowless context cascade stamps and the daemon
     /// publishes to the KWin effect, so the leaf means one thing everywhere),
     /// and the screen shape (ScreenOrientation, ScreenWidth, ScreenHeight,
-    /// ScreenAspectRatio). An empty @p screenId stamps nothing. Called by
-    /// every resolver that pins a screen, cached and uncached alike, so the
-    /// shared evaluator memo is always seeded with the full trio.
+    /// ScreenAspectRatio), each shape field left unanswered while the
+    /// screen's shape is unknown. An empty @p screenId stamps nothing. Called
+    /// by every resolver that pins a screen, cached and uncached alike, so the
+    /// shared evaluator memo is always seeded with every screen-derived field.
     void stampScreenContext(PhosphorRules::WindowQuery& query, const QString& screenId) const;
 
     /// Resolve the placement directive for a window from its matched window rules, for the open path, the Meta+F
@@ -1713,6 +1729,7 @@ private:
         m_contextModeResolver; ///< setContextModeResolver
     QJsonObject m_loadedScrollStripState;
     QStringList m_knownDesktopIds;
+    QHash<QString, QSize> m_screenPixelSizes; ///< screenPixelSizes()
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)

@@ -87,6 +87,18 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                         info.x = geom[::PhosphorZones::ZoneJsonKeys::X].toInt();
                         info.y = geom[::PhosphorZones::ZoneJsonKeys::Y].toInt();
                     }
+                    // The size in device pixels, which is what a Screen width,
+                    // Screen height or Screen aspect ratio condition compares
+                    // against. width/height above stay logical because every
+                    // monitor label is built from them. A reply without the key
+                    // (an older daemon) leaves pixelSize invalid.
+                    const QJsonObject pixelSize = jsonObj.value(JsonKeys::PixelSize).toObject();
+                    const QSize devicePixels(pixelSize.value(::PhosphorZones::ZoneJsonKeys::Width).toInt(),
+                                             pixelSize.value(::PhosphorZones::ZoneJsonKeys::Height).toInt());
+                    if (devicePixels.width() > 0 && devicePixels.height() > 0) {
+                        info.pixelSize = devicePixels;
+                        info.pixelSizeReported = jsonObj.value(JsonKeys::PixelSizeReported).toBool();
+                    }
                     // Surface a corrupted reply so it doesn't silently produce a
                     // 0×0 picker tile. width/height stay 0 when the geometry
                     // object — or the whole key — is absent (QJsonValue::toInt()

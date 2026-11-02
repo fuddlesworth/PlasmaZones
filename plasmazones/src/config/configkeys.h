@@ -247,6 +247,10 @@ public:
     // The virtual desktop ids the session last saw, in order; the next start diffs them against KWin's.
     P_CONFIG_KEY(knownDesktopIdsKey, "KnownDesktopIds")
 
+    // Each monitor's last compositor-reported size in device pixels, keyed by its stable identifier; the next start
+    // seeds the screen-shape rule fields with it until the compositor reports again.
+    P_CONFIG_KEY(screenPixelSizesKey, "ScreenPixelSizes")
+
     // Legacy per-window restore keys — superseded by WindowPlacements. Retained
     // ONLY so saveState() can deleteKey() them, scrubbing them from any session.json
     // written by an older build. Never written, never read.

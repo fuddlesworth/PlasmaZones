@@ -767,19 +767,23 @@ private:
                                                               const QString& activity) const;
 
     /**
-     * @brief React to a rule change that may have altered active assignments.
+     * @brief React to an input that may have altered active assignments: a rule
+     *        edit, a colour-scheme flip or a change of a screen's shape.
      *
-     * The rule store emits rulesChanged on any edit, but only a change to the
-     * ACTIVE context's resolved assignment needs windows moved, so the screens
-     * the diff reports drive the legacy resnap/OSD path via
-     * LayoutAdaptor::applyAssignmentChangesFor, which carries that set
+     * Only a change to the ACTIVE context's resolved assignment needs windows
+     * moved, so the screens the diff reports drive the legacy resnap/OSD path
+     * via LayoutAdaptor::applyAssignmentChangesFor, which carries that set
      * explicitly rather than staging into the bus client's save-batch buffer.
-     * updateEngineScreens() runs on EVERY call regardless: gap and
+     * A screen whose shape changed also counts when its verdict differs from
+     * the one recorded before the change (@ref m_reshapedScreenPreIds), even if
+     * an earlier diff in the same turn already folded the new verdict into the
+     * snapshot. updateEngineScreens() runs on EVERY call regardless: gap and
      * tiling-parameter rules move tiled geometry without moving any assignment
      * id, and it force-retiles the already-active autotile screens for exactly
-     * that case. Only the resnap / OSD apply is gated on the diff result.
-     * Suppressed while @ref m_suppressAssignmentReconcile is set, so this
-     * file's own bulk assignment writers can flip N rules without a full
+     * that case. Only the resnap / OSD apply, and the controller and layout
+     * filter sync after it (@ref applyChangedAssignments), are gated on the
+     * result. Suppressed while @ref m_suppressAssignmentReconcile is set, so
+     * this file's own bulk assignment writers can flip N rules without a full
      * reconcile per rule.
      */
     void reconcileActiveAssignments();
@@ -788,10 +792,13 @@ private:
      * @brief Queue @ref reconcileActiveAssignments for the next event-loop pass.
      *
      * Compressed under @ref m_reconcileAssignmentsPending, so a burst of
-     * triggers in one turn reconciles once, and gated on m_shuttingDown. The
-     * one entry point for every input that moves an assignment verdict without
-     * an explicit assignment write: a rule-set change, a colour-scheme flip,
-     * and a screen whose shape (orientation, resolution, scale) changed.
+     * triggers in one turn reconciles once, and gated on m_shuttingDown. Used
+     * by the inputs that move an assignment verdict without an explicit
+     * assignment write and can wait a turn: a rule-set change, a colour-scheme
+     * flip, and a logical geometry change that reshaped a screen whose pixel
+     * size is unknown. A compositor pixel-size report reconciles synchronously
+     * instead (@ref onCompositorPixelSizeChanged), and the two virtual-screen
+     * handlers apply their own diff.
      */
     void scheduleReconcileActiveAssignments();
 
@@ -800,11 +807,75 @@ private:
      *        shown overlay properties) for the next event-loop pass.
      *
      * For a non-rule-set input that moves context verdicts the overlay has
-     * already applied. Deferred because the refresh can reload overlay shader
-     * items, and the triggers (a palette-change event, a screen-geometry
-     * change) are still being delivered when they fire.
+     * already applied: a colour-scheme flip, a compositor pixel-size report
+     * that changed a screen's shape, and a logical geometry change that did.
+     * Deferred because the refresh can reload overlay shader items, and the
+     * triggers (a palette-change event, a screen change) are still being
+     * delivered when they fire.
      */
     void scheduleContextOverlayRefresh();
+
+    /**
+     * @brief The screen-shape change handler for a compositor pixel-size report
+     *        (ScreenManager::compositorPixelSizeChanged).
+     *
+     * Persists the reported sizes for the next session's seed, then reconciles
+     * the connector's effective screens whose shape actually moved, the virtual
+     * sub-screens included. Synchronous, unlike every other reconcile trigger:
+     * the effect pushes its sizes as soon as its bridge registers, ahead of its
+     * window announce, and a deferred pass would queue behind an announce
+     * already delivered, adopting those windows under the verdict the size is
+     * about to change. A report that leaves the shape where the last diff saw
+     * it (the size confirms the seed) reconciles nothing. The first report for
+     * a connector after start-up or after its screen was added applies without
+     * an OSD (@ref m_pixelSizeAwaitingFirstReport).
+     */
+    void onCompositorPixelSizeChanged(const QString& connectorName);
+
+    /// The screen-shape component of a screen's assignment cache key, from the
+    /// registry's own reading, so two calls compare equal exactly when every
+    /// shape field a rule can read is unchanged.
+    QString screenShapeToken(const QString& screenId) const;
+
+    /**
+     * @brief Record the screens among @p screenIds whose shape differs from the
+     *        one the last diff saw, and return them.
+     *
+     * Each one's pre-change assignment id goes into @ref m_reshapedScreenPreIds
+     * (the first record wins until a reconcile consumes it). A screen the
+     * snapshot does not hold yet is skipped: its first diff primes it.
+     */
+    QStringList noteReshapedScreens(const QStringList& screenIds);
+
+    /// Consume @ref m_reshapedScreenPreIds and return the recorded screens
+    /// still in the snapshot whose assignment id now differs from the one
+    /// recorded before their shape changed.
+    QSet<QString> takeReshapedVerdictChanges();
+
+    /**
+     * @brief Diff the active assignments for a handler that changed the screen
+     *        set, and return the screens whose verdict moved and that existed
+     *        before and after it.
+     *
+     * @p knownBefore is the snapshot's key set from before the change. New ids
+     * are primed by the diff and left out, because nothing was laid out under
+     * an earlier verdict for them, and removed ids are left out because there
+     * is nothing left to apply to. Recorded reshapes are folded in through
+     * @ref takeReshapedVerdictChanges.
+     */
+    QSet<QString> diffSurvivingAssignments(const QSet<QString>& knownBefore);
+
+    /// Apply @p changed through the KCM apply path (resnap and OSD), then bring
+    /// the controller's current layout, the global active layout and the layout
+    /// filter (an open cheatsheet's with it) back in line through
+    /// @ref syncModeFromAssignments. A no-op for an empty set.
+    void applyChangedAssignments(const QSet<QString>& changed);
+
+    /// The tiled-window count of @p screenId's live tiling state, or nullopt
+    /// when neither tiling engine runs on it. Backs the registry's
+    /// TiledWindowCount provider and the screen states the layout adaptor
+    /// publishes.
+    std::optional<int> tiledWindowCountForScreen(const QString& screenId) const;
 
     /**
      * @brief Recompute each effective screen's active assignment id, publish the
@@ -852,7 +923,11 @@ private:
      * autotile orders, refreshes the autotile screen set, recalculates affected
      * zone geometries inline, resnaps windows on this physical screen and its
      * virtual children, and schedules the debounced geometry update for
-     * downstream consumers.
+     * downstream consumers. A virtual screen that survives the change can come
+     * out with a different shape and so a different assignment verdict: the
+     * screens that existed before and after and whose verdict moved are applied
+     * (@ref diffSurvivingAssignments), ahead of the stored-zone resnap, while
+     * new ids are primed silently.
      */
     void onVirtualScreensReconfigured(const QString& physicalScreenId);
 
@@ -866,7 +941,10 @@ private:
      * snap-assist. The autotile retile is driven by the engine's own handler on
      * virtualScreenRegionsChanged — the Daemon's path does NOT force-retile so
      * there is exactly one retile per change (eliminates the "move then retile"
-     * double-pass users observed on VS swap/rotate).
+     * double-pass users observed on VS swap/rotate). The one exception is a
+     * resize that moves a virtual screen's assignment verdict (its shape is its
+     * region's share of the output): those screens are re-derived and applied
+     * before the resnap, which costs that change a second retile.
      */
     void onVirtualScreenRegionsChanged(const QString& physicalScreenId);
 
@@ -1535,7 +1613,10 @@ private:
     QHash<QString, int> m_scrollFfmMaxScrollPercent;
 
     /// One screen's last-applied assignment state: the resolved assignment
-    /// id. (A resolved templateId used to ride along "for the KCM apply's
+    /// id, and the shape the screen had when it was resolved
+    /// (@ref screenShapeToken), which the shape handlers compare against to
+    /// tell a real reshape from a signal that moved nothing a rule reads. (A
+    /// resolved templateId used to ride along "for the KCM apply's
     /// template-only OSD gate", but that gate keys on
     /// m_lastAnnouncedTemplateByScreen and re-resolves the template itself —
     /// the snapshot field was write-only dead state costing a
@@ -1543,6 +1624,7 @@ private:
     struct ActiveAssignmentSnapshot
     {
         QString assignmentId;
+        QString shapeToken;
         bool operator==(const ActiveAssignmentSnapshot&) const = default;
     };
     // Last-applied active assignment per effective screen (resolved for that
@@ -1573,14 +1655,37 @@ private:
     /// screenRemoved tail drops unplugged screens.
     QHash<QString, QString> m_lastAnnouncedTemplateByScreen;
 
-    // Compression latch for the deferred rulesChanged → reconcile pass. The store emits
-    // rulesChanged synchronously from inside every mutation, and the daemon's own
-    // assignment writes (mode toggle, quick layouts, KCM batch) are stored as rules, so
-    // reconciling inline re-entered the full assignment-apply path mid-toggle (double
-    // OSDs, a resnap racing the engine flip). Deferring to the next event-loop pass lets
-    // the write's own layoutAssigned tail re-prime the snapshot first, so self-inflicted
-    // edits diff empty and only external rule edits apply.
+    // Compression latch for the deferred reconcile pass (scheduleReconcileActiveAssignments),
+    // fed by rulesChanged, the colour-scheme flip and a logical geometry change that
+    // reshaped a screen. For rulesChanged the deferral is what matters: the store emits it
+    // synchronously from inside every mutation, and the daemon's own assignment writes
+    // (mode toggle, quick layouts, KCM batch) are stored as rules, so reconciling inline
+    // re-entered the full assignment-apply path mid-toggle (double OSDs, a resnap racing
+    // the engine flip). Deferring to the next event-loop pass lets the write's own
+    // layoutAssigned tail re-prime the snapshot first, so self-inflicted edits diff empty
+    // and only external rule edits apply.
     bool m_reconcileAssignmentsPending = false;
+
+    // Effective screens whose shape changed since the last reconcile, each with the
+    // assignment id the snapshot held before the change (noteReshapedScreens). A diff
+    // that runs in between without applying (a desktop switch, a screen add, a layout
+    // list change) folds the new verdict into the snapshot, after which the reconcile's
+    // own diff comes back empty for that screen. The recorded id is what still tells it
+    // the verdict moved. Consumed by takeReshapedVerdictChanges; dropped for the screens
+    // an assignment apply has handled.
+    QHash<QString, QString> m_reshapedScreenPreIds;
+
+    // Connector names whose first compositor pixel-size report since start-up, or since
+    // their screen was added, has not arrived. That report replaces a seed or an
+    // unknown size with the real one, so the verdict change it causes is the screen
+    // settling, not a change the user made, and applies without an OSD.
+    QSet<QString> m_pixelSizeAwaitingFirstReport;
+
+    // Effective screens whose assignment change the running reconcile applies without
+    // an OSD (handleAssignmentChangesApplied skips their card). Filled by
+    // onCompositorPixelSizeChanged for a first report and cleared when the reconcile
+    // that read it ends.
+    QSet<QString> m_silentAssignmentApplyScreens;
 
     // Compression latch for the deferred context overlay refresh
     // (scheduleContextOverlayRefresh, fed by the colour-scheme flip and screen-shape

@@ -217,37 +217,16 @@ void Daemon::initLayoutAndSettingsWiring()
     // there. The screen's current-context state aligns with the (desktop,
     // activity) the algorithm is resolved for, so the desktop/activity args are
     // not needed to disambiguate.
-    m_layoutManager->setTiledWindowCountProvider(
-        [this](const QString& screenId, int, const QString&) -> std::optional<int> {
-            // const overloads throughout, as intent: a non-creating lookup
-            // that returns nullptr when the screen has no tiling state, so a
-            // TiledWindowCount predicate stays inert there instead of matching
-            // on a reported 0. (Both overloads are non-creating today — see
-            // AutotileEngine::stateForScreen in autotileengine/facade.cpp — so
-            // the as_const is a statement of intent, not the thing preventing
-            // a create-on-read.) Both tiling-family engines are consulted so a
-            // TiledWindowCount rule works on scrolling screens too.
-            // Pick by LIVE claim, not fixed order: a lingering state on an
-            // engine the screen has since left would shadow the owning
-            // engine's count with a stale one.
-            if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
-                if (const PhosphorEngine::IPlacementState* state =
-                        std::as_const(*m_autotileEngine).stateForScreen(screenId)) {
-                    return state->tiledWindowCount();
-                }
-            }
-            if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
-                if (const PhosphorEngine::IPlacementState* state =
-                        std::as_const(*m_scrollEngine).stateForScreen(screenId)) {
-                    return state->tiledWindowCount();
-                }
-            }
-            return std::nullopt;
-        });
+    m_layoutManager->setTiledWindowCountProvider([this](const QString& screenId, int, const QString&) {
+        return tiledWindowCountForScreen(screenId);
+    });
     // Orientation provider — derives "portrait" / "landscape" from the screen's
-    // geometry so a Field::ScreenOrientation rule can drive any context slot on a
-    // rotated monitor. Returns nullopt for an unknown / invalid geometry (the
-    // predicate then stays inert). A square screen is treated as landscape.
+    // logical geometry. The registry consults it only while the size provider
+    // below has no answer for the screen; a known pixel size decides the
+    // orientation itself, so a rotation reaches the rules as one change.
+    // Returns nullopt for an unknown / invalid geometry, which leaves a positive
+    // orientation leaf false and gets a negated one refused. A square screen is
+    // treated as landscape.
     m_layoutManager->setScreenOrientationProvider([this](const QString& screenId) -> std::optional<QString> {
         if (!m_screenManager) {
             return std::nullopt;
@@ -261,22 +240,18 @@ void Daemon::initLayoutAndSettingsWiring()
     // Size provider — the screen's size in DEVICE pixels, the resolution its
     // display settings report, so a Field::ScreenWidth / ScreenHeight /
     // ScreenAspectRatio rule can tell one monitor's modes apart (a
-    // super-ultrawide a KVM drops to half width, for one). The logical geometry
-    // times the output's scale; a virtual screen takes its own logical rect and
-    // its physical output's scale, so it reports its share of the panel.
-    // nullopt for an unknown geometry or scale keeps the predicates inert.
-    // Re-driven on a geometry or scale change by the screen handlers in
-    // start.cpp (scheduleReconcileActiveAssignments).
+    // super-ultrawide whose split mode halves its width, for one). The
+    // compositor's exact report of the output's current mode, already rotated,
+    // or the last session's report for the monitor until this session's
+    // arrives; a virtual screen answers its region's share of it. nullopt
+    // while neither exists, which leaves a positive size or aspect leaf false
+    // and gets a negated one refused. Re-driven by onCompositorPixelSizeChanged
+    // (start.cpp) and by the two virtual-screen handlers.
     m_layoutManager->setScreenPixelSizeProvider([this](const QString& screenId) -> std::optional<QSize> {
         if (!m_screenManager) {
             return std::nullopt;
         }
-        const QRect geom = m_screenManager->screenGeometry(screenId);
-        const qreal scale = PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId);
-        if (!geom.isValid() || scale <= 0.0) {
-            return std::nullopt;
-        }
-        return QSize(qRound(geom.width() * scale), qRound(geom.height() * scale));
+        return m_screenManager->pixelSize(screenId);
     });
     // Colour-scheme provider — session-wide "light" / "dark" from the live
     // application palette, so a Field::ColorScheme rule can drive any context

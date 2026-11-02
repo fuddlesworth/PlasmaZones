@@ -170,7 +170,7 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
         return std::nullopt;
     }
     // Screen-derived context fields. WindowRegistry metadata carries no screen,
-    // so the trio can only be stamped here: the open path knows the screen the
+    // so they can only be stamped here: the open path knows the screen the
     // window is landing on (screenIdHint, which may be a route target that
     // differs from where the window currently sits), and every other path reads
     // the live screen-for-window resolution. An unresolvable screen stamps
@@ -410,7 +410,9 @@ void WindowTrackingAdaptor::stampScreenContext(PhosphorRules::WindowQuery& query
     // are resolved here and nowhere else — a rule pairing one of them with a
     // ScreenOrientation leaf matched nothing, and (the field being a
     // non-optional context field) a negated leaf matched everything. The
-    // screen width, height and aspect ratio ride the same stamp.
+    // screen width, height and aspect ratio ride the same stamp. While the
+    // screen's shape is unknown the stamp leaves those fields unanswered, and
+    // admitWith refuses a rule that negates one of them.
     m_layoutManager->stampScreenShape(query, screenId);
 }
 

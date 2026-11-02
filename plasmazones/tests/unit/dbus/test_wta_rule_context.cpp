@@ -5,7 +5,9 @@
  * @file test_wta_rule_context.cpp
  * @brief WindowTrackingAdaptor rule-context coverage: the screen-derived
  *        context fields buildContextualRuleQuery stamps (ScreenId,
- *        ActiveLayout, ScreenOrientation), the consumers that read them
+ *        ActiveLayout, and the screen shape: orientation, width, height,
+ *        aspect ratio), the refusal of a rule negating a shape field the
+ *        screen cannot answer yet, and the consumers that read them
  *        (placementZonesByRule, shouldFloatByRule, the snap engine's exclusion
  *        query provider). The open-path screen routing that runs when nothing
  *        snapped the window is covered by test_wta_routing.cpp.
@@ -15,6 +17,7 @@
 #include <QJsonArray>
 #include <QRect>
 #include <QScopeGuard>
+#include <QSize>
 #include <QSignalSpy>
 #include <QString>
 #include <QStringList>
@@ -163,6 +166,26 @@ private:
             return d >= 1 ? std::optional<int>(d) : std::nullopt;
         });
         return desktop;
+    }
+
+    /// Give the fixture screen a size in device pixels through the registry's
+    /// size provider, the hook the daemon wires to the compositor's report.
+    /// Every other screen stays unknown.
+    void setPixelSize(const QSize& size)
+    {
+        const QString screenId = m_screenId;
+        m_layoutManager->setScreenPixelSizeProvider([screenId, size](const QString& queried) -> std::optional<QSize> {
+            return queried == screenId ? std::optional<QSize>(size) : std::nullopt;
+        });
+    }
+
+    /// A SnapToZone action targeting the 1-based zone @p ordinal.
+    static PhosphorRules::RuleAction snapTo(int ordinal)
+    {
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::SnapToZone);
+        action.params.insert(QString(PhosphorRules::ActionParam::Zones), QJsonArray{ordinal});
+        return action;
     }
 
 private Q_SLOTS:
@@ -398,6 +421,141 @@ private Q_SLOTS:
         const PhosphorSnapEngine::PlacementDirective directive =
             m_wta->placementZonesByRule(QStringLiteral("portraitapp|inst15"), m_screenId);
         QVERIFY2(directive.zoneOrdinals.isEmpty(), "a portrait-keyed rule must not fire on a landscape screen");
+    }
+
+    // =====================================================================
+    // Screen size and aspect ratio
+    // =====================================================================
+
+    // The size fields ride the same stamp as the orientation: the registry's
+    // pixel-size provider, which the daemon wires to the compositor's report.
+    // A super-ultrawide here, 5120x1440 on the window's screen only.
+    void testPlacementZonesByRule_screenAspectRatioMatch_resolvesZones()
+    {
+        setPixelSize(QSize(5120, 1440));
+
+        using namespace PhosphorRules;
+        QVERIFY(installRule(
+            QStringLiteral("inst20"), QStringLiteral("wideapp"),
+            MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("32:9")), snapTo(3)));
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("wideapp|inst20"), m_screenId);
+        QCOMPARE(directive.zoneOrdinals, QList<int>{3});
+    }
+
+    // The same rule on a 16:9 screen: the token is derived from the size, not
+    // matched by anything engaged.
+    void testPlacementZonesByRule_screenAspectRatioMismatch_resolvesNothing()
+    {
+        setPixelSize(QSize(2560, 1440));
+
+        using namespace PhosphorRules;
+        QVERIFY(installRule(
+            QStringLiteral("inst21"), QStringLiteral("wideapp"),
+            MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("32:9")), snapTo(3)));
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("wideapp|inst21"), m_screenId);
+        QVERIFY2(directive.zoneOrdinals.isEmpty(), "a 32:9-keyed rule must not fire on a 16:9 screen");
+    }
+
+    void testPlacementZonesByRule_screenWidthMatch_resolvesZones()
+    {
+        setPixelSize(QSize(5120, 1440));
+
+        using namespace PhosphorRules;
+        QVERIFY(installRule(QStringLiteral("inst22"), QStringLiteral("wideapp"),
+                            MatchExpression::makeLeaf(Field::ScreenWidth, Operator::GreaterThan, 3000), snapTo(2)));
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("wideapp|inst22"), m_screenId);
+        QCOMPARE(directive.zoneOrdinals, QList<int>{2});
+    }
+
+    void testPlacementZonesByRule_screenWidthMismatch_resolvesNothing()
+    {
+        // The same monitor in its half-width split mode.
+        setPixelSize(QSize(2560, 1440));
+
+        using namespace PhosphorRules;
+        QVERIFY(installRule(QStringLiteral("inst23"), QStringLiteral("wideapp"),
+                            MatchExpression::makeLeaf(Field::ScreenWidth, Operator::GreaterThan, 3000), snapTo(2)));
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("wideapp|inst23"), m_screenId);
+        QVERIFY2(directive.zoneOrdinals.isEmpty(), "a width-keyed rule must not fire on a narrower screen");
+    }
+
+    // A stamped screen whose size the daemon has not learned yet (no report,
+    // no last-session record) leaves the size fields unanswered. A positive
+    // leaf is then false, but `None{ScreenWidth Equals 5120}` would match every
+    // window, so the admission refuses a rule that negates an unanswered shape
+    // field. The screen IS stamped here (the hint), which is what the
+    // screen-derived exclusion of admitNothingStamped does not cover.
+    void testShouldFloatByRule_unknownShape_negatedSizeLeafHeldOut()
+    {
+        using namespace PhosphorRules;
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        QVERIFY(installRule(
+            QStringLiteral("inst24"), QStringLiteral("sizeapp"),
+            MatchExpression::makeNone({MatchExpression::makeLeaf(Field::ScreenWidth, Operator::Equals, 5120)}),
+            floatAction));
+        const QString windowId = QStringLiteral("sizeapp|inst24");
+
+        QVERIFY2(!m_wta->shouldFloatByRule(windowId, m_screenId),
+                 "a rule negating the width of a screen whose size is unknown must be refused, not match every window");
+
+        // Discriminator: once the size is known the same rule is legitimate,
+        // and a 2560-wide screen is indeed not 5120 wide.
+        setPixelSize(QSize(2560, 1440));
+        QVERIFY2(m_wta->shouldFloatByRule(windowId, m_screenId),
+                 "with the size known, a negated width rule is admitted and judged on the real width");
+    }
+
+    // The same refusal on the aspect token, whose unknown form is an EMPTY
+    // string rather than a disengaged value.
+    void testShouldFloatByRule_unknownShape_negatedAspectLeafHeldOut()
+    {
+        using namespace PhosphorRules;
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        QVERIFY(installRule(QStringLiteral("inst25"), QStringLiteral("aspectapp"),
+                            MatchExpression::makeNone({MatchExpression::makeLeaf(
+                                Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("32:9"))}),
+                            floatAction));
+        const QString windowId = QStringLiteral("aspectapp|inst25");
+
+        QVERIFY(!m_wta->shouldFloatByRule(windowId, m_screenId));
+        setPixelSize(QSize(2560, 1440));
+        QVERIFY(m_wta->shouldFloatByRule(windowId, m_screenId));
+    }
+
+    // The placement resolver runs mid-session as well as at open (the Meta+F
+    // unfloat's rule tier, Snap.snapToAppRule). The shared evaluator memo holds
+    // the OPEN-time verdict, so a later call must resolve fresh: after the
+    // monitor rotates, a portrait-keyed SnapToZone rule must stop answering.
+    void testPlacementZonesByRule_midSession_resolvesTheCurrentShape()
+    {
+        setPixelSize(QSize(1440, 2560));
+
+        using namespace PhosphorRules;
+        QVERIFY(installRule(
+            QStringLiteral("inst26"), QStringLiteral("rotateapp"),
+            MatchExpression::makeLeaf(Field::ScreenOrientation, Operator::Equals, QStringLiteral("portrait")),
+            snapTo(2)));
+        const QString windowId = QStringLiteral("rotateapp|inst26");
+
+        // The open: seeds the memo with the portrait verdict.
+        QCOMPARE(m_wta->placementZonesByRule(windowId, m_screenId).zoneOrdinals, QList<int>{2});
+
+        // The monitor rotates back to landscape. The memo still holds the
+        // portrait verdict (the rule revision did not move), so the later
+        // call has to look past it.
+        setPixelSize(QSize(2560, 1440));
+        QVERIFY2(m_wta->placementZonesByRule(windowId, m_screenId).zoneOrdinals.isEmpty(),
+                 "a mid-session placement resolve must read the screen's current shape, not the open-time verdict");
     }
 
     // =====================================================================

@@ -10,9 +10,13 @@
  * at the next start, so desktops removed, added or moved while it was down
  * renumber the stores keyed on the old positions (F809). Pinned here: the
  * list survives a save and a fresh adaptor's load in order, and setting the
- * list the adaptor already holds marks nothing to save.
+ * list the adaptor already holds marks nothing to save. The monitors' last
+ * reported pixel sizes ride the same session state and are pinned the same
+ * way, plus their merge and their identifier flip.
  */
 
+#include <QHash>
+#include <QSize>
 #include <QTest>
 #include <memory>
 
@@ -36,6 +40,16 @@ QStringList sampleIds()
     return {QStringLiteral("3f2a6d1e-0b7c-4c1d-9a51-1d2e3f4a5b6c"),
             QStringLiteral("8c1b2a3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"),
             QStringLiteral("0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a")};
+}
+
+QString ultrawideId()
+{
+    return QStringLiteral("SAM:Odyssey G9:H1AK500000");
+}
+
+QHash<QString, QSize> sampleSizes()
+{
+    return {{ultrawideId(), QSize(5120, 1440)}, {QStringLiteral("DEL:U2720Q:ABC123"), QSize(2160, 3840)}};
 }
 } // namespace
 
@@ -96,6 +110,63 @@ private Q_SLOTS:
         reordered.swapItemsAt(0, 2);
         m_wta->setKnownDesktopIds(reordered);
         QVERIFY(m_wta->service()->peekDirty() & WTS::DirtyKnownDesktops);
+    }
+
+    // Each monitor's last reported pixel size rides the same session state, and
+    // the daemon seeds the screen manager with it at the next start (F3), so a
+    // screen-shape rule resolves against the real size before the compositor
+    // reports it again.
+    void testScreenPixelSizesRoundTripThroughTheSession()
+    {
+        makeAdaptor();
+        QVERIFY(m_wta->screenPixelSizes().isEmpty());
+        m_wta->recordScreenPixelSizes(sampleSizes());
+        QVERIFY(m_wta->service()->peekDirty() & WTS::DirtyScreenPixelSizes);
+        m_wta->saveStateOnShutdown();
+        destroyAdaptor();
+
+        makeAdaptor();
+        QCOMPARE(m_wta->screenPixelSizes(), sampleSizes());
+    }
+
+    // The record merges: a monitor missing from a later report (unplugged
+    // then) keeps the size it last had, which is what a replug reads. Setting
+    // what is already held marks nothing.
+    void testScreenPixelSizesMergeAndSkipTheUnchanged()
+    {
+        makeAdaptor();
+        m_wta->recordScreenPixelSizes(sampleSizes());
+        m_wta->saveStateOnShutdown();
+        destroyAdaptor();
+
+        makeAdaptor();
+        QCOMPARE(m_wta->service()->peekDirty() & WTS::DirtyScreenPixelSizes, 0u);
+        m_wta->recordScreenPixelSizes(sampleSizes());
+        QCOMPARE(m_wta->service()->peekDirty() & WTS::DirtyScreenPixelSizes, 0u);
+
+        // Only the ultrawide is connected now, in its half-width mode.
+        m_wta->recordScreenPixelSizes({{ultrawideId(), QSize(2560, 1440)}});
+        QVERIFY(m_wta->service()->peekDirty() & WTS::DirtyScreenPixelSizes);
+        QHash<QString, QSize> expected = sampleSizes();
+        expected.insert(ultrawideId(), QSize(2560, 1440));
+        QCOMPARE(m_wta->screenPixelSizes(), expected);
+    }
+
+    // An identifier flip (a second same-model monitor joined) moves the entry
+    // the way the screen manager moves its seed.
+    void testScreenPixelSizeFollowsAnIdentifierFlip()
+    {
+        makeAdaptor();
+        m_wta->recordScreenPixelSizes(sampleSizes());
+        m_wta->saveStateOnShutdown();
+        destroyAdaptor();
+
+        makeAdaptor();
+        const QString flipped = ultrawideId() + QStringLiteral("/DP-2");
+        m_wta->renameScreenPixelSize(ultrawideId(), flipped);
+        QVERIFY(m_wta->service()->peekDirty() & WTS::DirtyScreenPixelSizes);
+        QVERIFY(!m_wta->screenPixelSizes().contains(ultrawideId()));
+        QCOMPARE(m_wta->screenPixelSizes().value(flipped), QSize(5120, 1440));
     }
 
 private:

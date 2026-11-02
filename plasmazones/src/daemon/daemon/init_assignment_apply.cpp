@@ -182,6 +182,14 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // so a SetOsdEnabled context rule can force a card past an off toggle on
     // one monitor without opening every other.
     for (const auto& osd : std::as_const(osdEntries)) {
+        // A screen settling on the compositor's first pixel-size report
+        // (Daemon::onCompositorPixelSizeChanged) is resnapped above but gets
+        // no card: the change is the monitor's real size replacing a stand-in,
+        // not something the user did. Ahead of the template-ledger drop below,
+        // because no card replaces the one it last announced.
+        if (m_silentAssignmentApplyScreens.contains(osd.screenId)) {
+            continue;
+        }
         // Every card this loop can still show for the screen replaces whatever
         // it announced last, so drop the recorded template up front and let the
         // scrolling arms below re-record it. Leaving it would make the NEXT
@@ -296,6 +304,17 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, osd.desktop, activity);
             if (layout)
                 showLayoutOsd(layout, osd.screenId);
+        }
+    }
+
+    // A screen whose shape changed before this apply was just laid out under
+    // its current verdict, so a pending reshape record for it is spent: left
+    // in place, the next reconcile would resnap and announce it a second time.
+    if (changedScreenIds.isEmpty()) {
+        m_reshapedScreenPreIds.clear();
+    } else {
+        for (const QString& screenId : changedScreenIds) {
+            m_reshapedScreenPreIds.remove(screenId);
         }
     }
 

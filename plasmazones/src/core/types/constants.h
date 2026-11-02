@@ -240,6 +240,7 @@ inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String PixelSize{"pixelSize"};
+inline constexpr QLatin1String PixelSizeReported{"pixelSizeReported"};
 }
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;

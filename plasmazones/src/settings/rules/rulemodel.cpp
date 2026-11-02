@@ -459,12 +459,13 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         // screen — it matches a system-wide light/dark state — so a rule whose
         // whole match is the colour scheme would file under a monitor heading
         // while naming no monitor. No curated section describes it, so it goes
-        // to Advanced / Custom.
-        const bool pinsScreenScoped = pinsScreen || fields.contains(Field::VirtualDesktop)
-            || fields.contains(Field::ScreenOrientation) || fields.contains(Field::ScreenWidth)
-            || fields.contains(Field::ScreenHeight) || fields.contains(Field::ScreenAspectRatio)
-            || fields.contains(Field::ActiveLayout) || fields.contains(Field::Mode)
-            || fields.contains(Field::TiledWindowCount);
+        // to Advanced / Custom. Activity is handled above. Every other context
+        // field describes a screen, so the set is derived from the field table
+        // and a new screen-scoped field files under Monitor without an edit
+        // here.
+        const bool pinsScreenScoped = std::any_of(fields.cbegin(), fields.cend(), [](Field field) {
+            return PhosphorRules::fieldIsContext(field) && field != Field::ColorScheme && field != Field::Activity;
+        });
         return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 

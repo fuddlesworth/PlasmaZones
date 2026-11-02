@@ -1557,6 +1557,12 @@ add_executable(test_wta_known_desktops dbus/test_wta_known_desktops.cpp)
 target_link_libraries(test_wta_known_desktops PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_known_desktops COMMAND test_wta_known_desktops)
 
+# getScreenStates' tiledWindowCount key: present while a tiling engine runs on the screen, absent otherwise.
+add_executable(test_layout_adaptor_screen_states dbus/test_layout_adaptor_screen_states.cpp)
+target_link_libraries(test_layout_adaptor_screen_states PRIVATE pz_test_fake_screens)
+target_link_libraries(test_layout_adaptor_screen_states PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core PhosphorZones::PhosphorZones)
+add_test(NAME test_layout_adaptor_screen_states COMMAND test_layout_adaptor_screen_states)
+
 add_executable(test_wta_routing dbus/test_wta_routing.cpp)
 target_link_libraries(test_wta_routing PRIVATE pz_test_fake_screens)
 # Links PhosphorScrollEngine directly: the fixture constructs real ScrollEngine

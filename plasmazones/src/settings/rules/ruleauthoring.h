@@ -97,6 +97,19 @@ QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
 QString colorSchemeLabel(const QString& schemeToken);
 
+/// Label for a ScreenAspectRatio token: the token itself, with a portrait
+/// marker on a taller-than-wide ratio so "10:16" does not read as a repeat of
+/// "16:10". Shared by the editor dropdown (matchFields), the collapsed
+/// rule-list summary and the editor's screen-size hint. An unknown token
+/// round-trips verbatim.
+QString aspectRatioLabel(const QString& token);
+
+/// Display text for a numeric match value of @p field: the number with the
+/// locale's digit grouping, which is what the editor's spin box shows, and a
+/// pixel unit on Screen width and Screen height. The collapsed summary uses
+/// this, and the expanded tree formats the same way in QML.
+QString numericMatchValueLabel(PhosphorRules::Field field, qint64 value);
+
 /// One-line hover help for a registered action type — the action-side mirror
 /// of fieldDescription(), rendered by the action row's info icon. Empty for an
 /// unregistered type; the controller test canary keeps the ladder exhaustive.

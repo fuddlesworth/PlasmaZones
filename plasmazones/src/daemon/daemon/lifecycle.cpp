@@ -776,6 +776,11 @@ void Daemon::stop()
     // otherwise still count as "already seen" a session later.
     m_activeAssignmentByScreen.clear();
     m_lastAnnouncedTemplateByScreen.clear();
+    // The reshape records compare against that snapshot, so they go with it,
+    // and the first-report bookkeeping is rebuilt by the next start().
+    m_reshapedScreenPreIds.clear();
+    m_pixelSizeAwaitingFirstReport.clear();
+    m_silentAssignmentApplyScreens.clear();
     // The per-screen scroll caps the scrolling pass resolves. Same per-session
     // shape as the derived sets above: rewritten by the next pass before any
     // read, but this hash is what decides whether a placementChanged arriving

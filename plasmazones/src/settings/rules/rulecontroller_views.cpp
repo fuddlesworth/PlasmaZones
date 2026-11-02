@@ -5,6 +5,7 @@
 //   * sections() — canonical display-order
 //   * rulesSnapshot() — full QML view of every rule
 //   * monitorOverview() — per-screen aggregate tile data
+//   * screenSizeHint() — the rule editor's note on a pinned monitor's size
 //   * matchFields/operatorsForField/actionTypes/defaultPayloadFor — author surfaces
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
@@ -17,27 +18,163 @@
 
 #include "phosphor_i18n.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/RuleSet.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorRules/WindowQuery.h>
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QLocale>
 #include <QSet>
+#include <QSize>
 
 #include <algorithm>
+#include <optional>
 
 namespace PlasmaZones {
 
 namespace {
 
 namespace ActionType = PhosphorRules::ActionType;
+using PhosphorRules::Field;
 using PhosphorRules::MatchExpression;
 using PhosphorRules::Rule;
 using PhosphorRules::RuleAction;
+
+/// The shape the daemon reads for @p screen (a `SettingsController::screens`
+/// map), the same way LayoutRegistry::screenShape reads its providers: a
+/// known device-pixel size decides the orientation (portrait iff taller than
+/// wide), and only without one does the logical geometry answer it.
+///
+/// The daemon's getScreenInfo also carries an estimated size (logical size
+/// times scale) before the compositor's first report when it has no size
+/// from an earlier session, and the daemon's own resolvers treat the size as
+/// unknown then. The tile uses the estimate, which can miss the mode by a
+/// pixel until that first report lands.
+PhosphorZones::LayoutRegistry::ScreenShape screenShapeOf(const QVariantMap& screen)
+{
+    PhosphorZones::LayoutRegistry::ScreenShape shape;
+    const int pixelWidth = screen.value(QStringLiteral("pixelWidth")).toInt();
+    const int pixelHeight = screen.value(QStringLiteral("pixelHeight")).toInt();
+    if (pixelWidth > 0 && pixelHeight > 0) {
+        shape.pixelSize = QSize(pixelWidth, pixelHeight);
+        shape.orientation = pixelHeight > pixelWidth ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        return shape;
+    }
+    const int width = screen.value(QStringLiteral("width")).toInt();
+    const int height = screen.value(QStringLiteral("height")).toInt();
+    if (width > 0 && height > 0) {
+        shape.orientation = height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    }
+    return shape;
+}
+
+/// The ActiveLayout value the daemon's post-assignment resolvers stamp for
+/// @p entry (LayoutRegistry::rulesVisibleActiveLayoutId): the entry's layout
+/// id, with a scrolling screen's template written as "scrolling:<id>". The
+/// daemon also substitutes its configured default template when the entry
+/// names none, which the settings process does not know, so such a screen
+/// reads as the bare "scrolling:" here.
+QString rulesVisibleActiveLayout(const PhosphorZones::AssignmentEntry& entry)
+{
+    if (entry.mode == PhosphorZones::AssignmentEntry::Scrolling && !entry.scrollingTemplateLayout.isEmpty()
+        && entry.scrollingTemplateLayout != PhosphorZones::NoScrollingTemplate) {
+        return PhosphorLayout::LayoutId::makeScrollingId(entry.scrollingTemplateLayout);
+    }
+    return entry.activeLayoutId();
+}
+
+/// The Mode condition's token for an engine mode.
+QString ruleModeToken(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return QString(PhosphorRules::ModeToken::Snapping);
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return QString(PhosphorRules::ModeToken::Tiling);
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return QString(PhosphorRules::ModeToken::Scrolling);
+    }
+    return QString();
+}
+
+/// True when @p match has a ScreenId leaf it reaches without passing through
+/// a negation: a rule that addresses a monitor rather than excluding one.
+bool namesScreenPositively(const MatchExpression& match)
+{
+    if (match.isLeaf()) {
+        return match.predicate().field == Field::ScreenId;
+    }
+    if (match.kind() == MatchExpression::Kind::None) {
+        return false;
+    }
+    return std::any_of(match.children().cbegin(), match.children().cend(), namesScreenPositively);
+}
+
+/// Append the value of every ScreenId Equals leaf @p match reaches without
+/// passing through a negation.
+void collectPositiveScreenPins(const MatchExpression& match, QStringList& out)
+{
+    if (match.isLeaf()) {
+        const auto& predicate = match.predicate();
+        if (predicate.field == Field::ScreenId && predicate.op == PhosphorRules::Operator::Equals) {
+            const QString value = predicate.value.toString();
+            if (!value.isEmpty()) {
+                out.append(value);
+            }
+        }
+        return;
+    }
+    if (match.kind() == MatchExpression::Kind::None) {
+        return;
+    }
+    for (const MatchExpression& child : match.children()) {
+        collectPositiveScreenPins(child, out);
+    }
+}
+
+/// A short name for @p screen (a `SettingsController::screens` map) to lead a
+/// sentence with: make and model, else the connector. displayLabel is not
+/// used because it carries the LOGICAL size, which would sit beside the
+/// device-pixel size the sentence states.
+QString monitorNameOf(const QVariantMap& screen)
+{
+    QStringList parts;
+    for (const QString& key : {QStringLiteral("manufacturer"), QStringLiteral("model")}) {
+        const QString part = screen.value(key).toString();
+        if (!part.isEmpty()) {
+            parts.append(part);
+        }
+    }
+    QString name = parts.join(QLatin1Char(' '));
+    if (name.isEmpty()) {
+        name = screen.value(QStringLiteral("connectorName")).toString();
+    }
+    if (name.isEmpty()) {
+        name = screen.value(QStringLiteral("name")).toString();
+    }
+    if (screen.value(QStringLiteral("isVirtualScreen")).toBool()) {
+        QString region = screen.value(QStringLiteral("virtualDisplayName")).toString();
+        if (region.isEmpty()) {
+            region =
+                PhosphorI18n::tr("Virtual screen %1").arg(screen.value(QStringLiteral("virtualIndex")).toInt() + 1);
+        }
+        return PhosphorI18n::tr("%1 on %2", "a virtual screen, then the monitor it is part of").arg(region, name);
+    }
+    return name;
+}
 
 } // namespace
 
@@ -96,187 +233,42 @@ QVariantList RuleController::rulesSnapshot() const
     return out;
 }
 
-QVariantList RuleController::monitorOverview(const QVariantList& screens) const
+QVariantList RuleController::monitorOverview(const QVariantList& screens, const QVariantList& screenStates) const
 {
-    // Per-screen accumulator — built in a single pass over the rule set so the
-    // total cost is O(rules × actions + screens) rather than O(screens × rules
-    // × actions). A screen with no pinned rule simply never gets an entry and
-    // falls through to the default "not assigned" tile below.
+    // Each tile shows what the STAGED rules do to one screen as it stands
+    // right now. Every condition, the shape and state ones included, is
+    // evaluated against a query built from that screen's current state, and
+    // the layout and lock come from the daemon's own slot resolvers
+    // (LayoutRegistry::resolveRuleSlots / resolveLockRule), so the tile and the
+    // daemon cannot pick a different winner for a slot. A screen whose state
+    // moves (a rotation, a mode change, a desktop switch, a window opening on
+    // a tiling screen) needs the caller to pass the new state and rebuild.
     //
     // Rebuilt on every QML rebind (no cache). Rule counts in practice are
-    // O(10s), so the recompute cost is negligible — if a user with O(100s)
-    // of rules surfaces, add a cache here invalidated on m_model::dataChanged
-    // / rowsInserted / rowsRemoved / modelReset.
-    struct Summary
-    {
-        int ruleCount = 0;
-        // Wire-string engine tokens from EVERY monitor-axis `DisableEngine`
-        // rule on this screen. Resolved against the screen's effective
-        // `engineMode` at output time to compute the tile's `engineDisabled`
-        // flag — a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
-        // screen must NOT flip the tile to "Engine off" (the active engine is
-        // still Snapping).
-        //
-        // A SET, not a scalar, because the daemon's disable check is a per-mode
-        // UNION and not a single-winner slot: `Settings::disableEntriesFor`
-        // scans the whole rule store and keeps every disable rule whose token
-        // equals the mode it was asked about, so priority plays no part. One
-        // screen can carry a separate disable rule per engine — `disableRuleIdFor`
-        // keys the engine into the rule's identity precisely so those are
-        // distinct rules — and every disable rule is authored at the same
-        // `kContextBandBase` priority. A scalar first-wins would therefore let a
-        // disable for one engine mask the disable for the engine the screen
-        // actually runs, on nothing better than store order.
-        QSet<QString> disabledEngineModes;
-        // Engine mode + ALL layout tokens come from ONE rule: the highest-
-        // priority rule on this screen carrying a SetEngineMode action — the
-        // daemon's per-screen assignment winner. LayoutRegistry::
-        // resolveContextAssignment picks it via highestPriorityMatch filtered to
-        // `hasEngineModeAction(rule) && !isCatchAll`, then entryFromRuleMatchActions
-        // reads the whole entry from that one rule, keeping ALL layout tokens so
-        // the active mode picks which applies. A bare layout rule with NO
-        // SetEngineMode is never that winner, so the daemon never applies its
-        // layout — and neither does the tile. Tracking engineMode and the layout
-        // tokens as independent per-slot first-wins (the previous approach) would
-        // compose an engine from one rule with a layout from another, or surface
-        // a bare-layout rule's token the assignment cascade discards.
-        bool assignmentResolved = false;
-        QString engineMode;
-        QString snappingLayout;
-        QString tilingAlgorithm;
-        QString scrollingTemplate;
-        // Layout-lock state from the highest-priority matching `LockContext`
-        // rule on this screen. `lockResolved` is the first-wins guard (indices
-        // are priority-DESC, so the first LockContext rule seen is the winner of
-        // the daemon's single-winner Locked slot); `locked` is that rule's
-        // boolean value — a higher-priority `value:false` rule reports unlocked
-        // even when a lower one says lock, mirroring `resolveContextLocked`.
-        // Like the engine/disable slots above, this does NOT model terminal-
-        // action (Exclude) cascade termination — but Exclude is window-domain
-        // and these accumulators only see context-only rules, which never carry
-        // it, so the omission is unreachable here.
-        bool lockResolved = false;
-        bool locked = false;
-    };
-    QHash<QString, Summary> byScreen;
+    // O(10s), so the recompute cost is negligible.
 
-    // Sort rules by descending priority before accumulation. Multiple
-    // matching enabled context-only rules on the same screen all contribute to
-    // ruleCount, but the "first wins" guards below (s.assignmentResolved for the
-    // engine-mode assignment winner, s.lockResolved for the Locked slot) mean
-    // the FIRST rule visited pins each. Without sorting that's
-    // "first in rule-iteration order"; with sorting it's "highest priority" —
-    // which matches the daemon's own resolution order for the same rule
-    // set. Sort an index vector rather than the rule list — Rule
-    // carries the full match tree + actions, so copying the list to
-    // sort it was O(N × tree-depth). Sorting ints stays O(N log N) in
-    // ints regardless of rule complexity.
-    const auto& rules = m_model.rules();
-    QList<qsizetype> indices;
-    indices.reserve(rules.size());
-    for (qsizetype i = 0; i < rules.size(); ++i)
-        indices.append(i);
-    std::stable_sort(indices.begin(), indices.end(), [&rules](qsizetype a, qsizetype b) {
-        return rules[a].priority > rules[b].priority;
-    });
-
-    for (qsizetype idx : indices) {
-        const Rule& rule = rules[idx];
-        // Disabled rules never apply — mirror RuleEvaluator::resolve, which
-        // skips !enabled before filling any slot — so the overview reflects the
-        // effective (enabled-only) per-monitor state rather than inflating
-        // ruleCount or labelling a tile from a rule the daemon ignores.
-        if (!rule.enabled) {
-            continue;
-        }
-        // Only context-only rules that pin a monitor count toward a tile.
-        if (!rule.match.isContextOnly()) {
-            continue;
-        }
-        const QStringList screenIds = RuleModel::screenIdsOf(rule.match);
-        if (screenIds.isEmpty()) {
-            continue;
-        }
-        // The daemon does NOT run a DisableEngine rule through RuleEvaluator.
-        // A monitor is disabled iff its id appears in `Settings::disabledMonitors`
-        // (isMonitorDisabled → contextDisabledReason), and that list is built by
-        // `Settings::disableEntriesFor`, which admits a rule only when it is a
-        // MONITOR-AXIS disable rule: exactly one DisableEngine action carrying a
-        // non-empty mode token (ContextRuleBridge::disableRuleMode) plus a match
-        // whose `contextAxisFor` is Monitor. That second half is exactly what
-        // `matchIsExactContextBase` computes — both sides call the same bridge
-        // helper, so the tile and the daemon's gate admit the same rule set by
-        // construction rather than by two predicates that have to be kept in
-        // step. Anything else is honoured on a narrower axis or not at all:
-        //   - screen + desktop / screen + activity feed disabledDesktops /
-        //     disabledActivities, which gate one desktop or activity, not the
-        //     monitor. The tile is a monitor-level surface, so labelling the
-        //     whole screen "Engine off" from one of those overstates it.
-        //   - a match carrying a window-property leaf, or pinning a non-dimension
-        //     context field (Mode / TiledWindowCount / ScreenOrientation /
-        //     ActiveLayout), is not a bare monitor pin — contextAxisFor reports
-        //     CatchAll for it and the daemon never gates the monitor on it.
-        //   - a rule carrying two DisableEngine actions is ambiguous
-        //     (disableRuleMode returns nullopt) and is not a managed disable
-        //     entry at all.
-        // Accumulating any DisableEngine action regardless of shape put "Engine
-        // off" on tiles for rules the daemon does not honour that way.
-        const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
-        const bool isMonitorDisableRule =
-            disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match);
-
-        // Screen-independent, so scanned once per rule; the LockContext scan
-        // stays in the per-screen loop because its first-wins slot is
-        // per-screen state.
-        bool ruleHasEngineMode = false;
-        for (const RuleAction& a : rule.actions) {
-            if (a.type == ActionType::SetEngineMode) {
-                ruleHasEngineMode = true;
-                break;
-            }
-        }
-
-        for (const QString& screenId : screenIds) {
-            Summary& s = byScreen[screenId];
-            ++s.ruleCount;
-            // DisableEngine: accumulate EVERY monitor-axis disable token this
-            // screen carries — the daemon unions them per mode, so there is no
-            // winner to pick and priority is irrelevant here (see the field's
-            // doc). Output-time resolution against the active mode still stops a
-            // Snapping-disable rule from labelling an Autotile screen "off".
-            // Independent of the assignment winner below — a DisableEngine rule
-            // need not carry a SetEngineMode action.
-            if (isMonitorDisableRule) {
-                s.disabledEngineModes.insert(*disableMode);
-            }
-            for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::LockContext && !s.lockResolved) {
-                    // First-wins on the single Locked slot (priority-DESC): the
-                    // highest-priority LockContext rule decides, value and all.
-                    s.lockResolved = true;
-                    s.locked = a.params.value(PhosphorRules::ActionParam::Value).toBool();
-                }
-            }
-            // Engine/layout: capture from the FIRST rule (highest priority) that
-            // carries a SetEngineMode action — the assignment winner. Read its
-            // mode AND every layout token together so the tile can never compose
-            // a layout from a different rule than the engine, nor surface a bare
-            // layout rule (no SetEngineMode) the daemon's assignment discards.
-            if (!s.assignmentResolved && ruleHasEngineMode) {
-                s.assignmentResolved = true;
-                for (const RuleAction& a : rule.actions) {
-                    if (a.type == ActionType::SetEngineMode)
-                        s.engineMode = a.params.value(PhosphorRules::ActionParam::Mode).toString();
-                    else if (a.type == ActionType::SetSnappingLayout)
-                        s.snappingLayout = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
-                    else if (a.type == ActionType::SetTilingAlgorithm)
-                        s.tilingAlgorithm = a.params.value(PhosphorRules::ActionParam::Algorithm).toString();
-                    else if (a.type == ActionType::SetScrollingTemplate)
-                        s.scrollingTemplate = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
-                }
-            }
+    // The staged rules as a set the evaluator can walk. An invalid rule is
+    // skipped here because the daemon's RuleSet::setRules drops it too.
+    PhosphorRules::RuleSet ruleSet;
+    for (const Rule& rule : m_model.rules()) {
+        if (rule.isValid()) {
+            ruleSet.addRule(rule);
         }
     }
+    const PhosphorRules::RuleEvaluator evaluator(ruleSet);
+
+    QHash<QString, QVariantMap> stateById;
+    for (const QVariant& sv : screenStates) {
+        const QVariantMap state = sv.toMap();
+        const QString id = state.value(QStringLiteral("screenId")).toString();
+        if (!id.isEmpty()) {
+            stateById.insert(id, state);
+        }
+    }
+
+    const QString colorScheme = m_colorSchemeProvider ? m_colorSchemeProvider() : QString();
+    const PhosphorZones::AssignmentEntry defaultEntry =
+        m_defaultAssignmentProvider ? m_defaultAssignmentProvider() : PhosphorZones::AssignmentEntry{};
 
     QVariantList out;
     for (const QVariant& sv : screens) {
@@ -297,50 +289,156 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             continue;
         }
 
-        const auto it = byScreen.constFind(screenId);
-        const bool assigned = it != byScreen.constEnd();
-        const Summary summary = assigned ? *it : Summary{};
+        // The windowless context query the daemon's assignment cascade builds
+        // for this screen: desktop, activity and tiled-window count from the
+        // daemon's own getScreenStates answer, the colour scheme, and the
+        // screen shape. With no state entry (daemon down) the desktop reads 0
+        // and the activity empty, so a desktop or activity condition does not
+        // hold, which is the honest answer when the state is unknown.
+        PhosphorRules::WindowQuery query;
+        query.screenId = screenId;
+        const auto stateIt = stateById.constFind(screenId);
+        if (stateIt != stateById.constEnd()) {
+            query.virtualDesktop = stateIt->value(QStringLiteral("virtualDesktop")).toInt();
+            query.activity = stateIt->value(QStringLiteral("activity")).toString();
+            // Present only while the screen tiles, matching the daemon's
+            // tiled-window-count provider, so a count condition stays
+            // unanswered on a snapping screen in both places.
+            const QVariant count = stateIt->value(QStringLiteral("tiledWindowCount"));
+            if (count.isValid()) {
+                query.tiledWindowCount = count.toInt();
+            }
+        }
+        query.colorScheme = colorScheme;
+        PhosphorZones::LayoutRegistry::applyScreenShape(query, screenShapeOf(screen));
+
+        // The assignment slots, with the daemon's retry of a virtual screen
+        // against its monitor's rules. The retry keeps the virtual screen's
+        // shape, as the daemon's does.
+        std::optional<PhosphorZones::LayoutRegistry::RuleSlotResolution> slots =
+            PhosphorZones::LayoutRegistry::resolveRuleSlots(evaluator, query);
+        if (!slots && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            PhosphorRules::WindowQuery physicalQuery = query;
+            physicalQuery.screenId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+            slots = PhosphorZones::LayoutRegistry::resolveRuleSlots(evaluator, physicalQuery);
+        }
+        // The entry is built the way LayoutRegistry::resolveAssignmentEntry
+        // builds it: the engine-mode rule's entry, or the global default when
+        // only a layout slot matched, with each slot winner over its field.
+        // A layout rule with no engine mode therefore applies, to the engine
+        // the default picks. The daemon also lets a DefaultLayoutAssignment
+        // rule swap that default for this one context; the tile does not
+        // evaluate that rule, so it shows the global default there.
+        PhosphorZones::AssignmentEntry entry = defaultEntry;
+        if (slots) {
+            if (slots->modeEntry) {
+                entry = *slots->modeEntry;
+            }
+            if (slots->snappingLayout) {
+                entry.snappingLayout = *slots->snappingLayout;
+            }
+            if (slots->tilingAlgorithm) {
+                entry.tilingAlgorithm = *slots->tilingAlgorithm;
+            }
+            if (slots->scrollingTemplate) {
+                entry.scrollingTemplateLayout = *slots->scrollingTemplate;
+            }
+        }
+
+        // The lock resolver sees the layout the assignment resolved, as the
+        // daemon's does, so an Active layout condition on a lock rule holds.
+        query.activeLayout = rulesVisibleActiveLayout(entry);
+        bool locked = false;
+        if (const Rule* lockRule = PhosphorZones::LayoutRegistry::resolveLockRule(evaluator, query)) {
+            for (const RuleAction& a : lockRule->actions) {
+                // The winner's value decides: a higher-priority value:false
+                // rule reports unlocked even when a lower one says lock, as
+                // resolveContextLocked does.
+                const QJsonValue value = a.params.value(PhosphorRules::ActionParam::Value);
+                if (a.type == ActionType::LockContext && value.isBool()) {
+                    locked = value.toBool();
+                    break;
+                }
+            }
+        }
+
+        // The rule count: every enabled context rule that names a monitor
+        // outside a negation and whose whole match holds for this screen now,
+        // the engine mode included. A `none{ScreenId}` rule excludes a screen
+        // rather than addressing it, and a ScreenId leaf compares ignoring
+        // case, both of which evaluating the match settles.
+        //
+        // DisableEngine is the one action the daemon does not run through the
+        // evaluator. A monitor is disabled iff its id appears in
+        // `Settings::disabledMonitors`, which `Settings::disableEntriesFor`
+        // builds from MONITOR-AXIS disable rules only: exactly one
+        // DisableEngine action carrying a mode token
+        // (ContextRuleBridge::disableRuleMode) plus a match whose
+        // `contextAxisFor` is Monitor. That second half is exactly what
+        // `matchIsExactContextBase` computes, so the tile and the daemon admit
+        // the same rules by construction. Anything else is honoured on a
+        // narrower axis or not at all:
+        //   - screen + desktop / screen + activity feed disabledDesktops /
+        //     disabledActivities, which gate one desktop or activity, not the
+        //     monitor, so labelling the whole screen "Engine off" overstates it.
+        //   - a match carrying a window-property leaf, or pinning a
+        //     non-dimension context field (Mode, TiledWindowCount, the screen
+        //     shape fields, ActiveLayout, ColorScheme), is not a bare monitor
+        //     pin. contextAxisFor reports CatchAll for it.
+        //   - a rule carrying two DisableEngine actions is ambiguous
+        //     (disableRuleMode returns nullopt).
+        // The daemon's check is a per-mode UNION, not a single-winner slot:
+        // every disable rule whose token equals the mode it was asked about
+        // counts, so priority plays no part and every token is collected.
+        query.mode = ruleModeToken(entry.mode);
+        int ruleCount = 0;
+        QSet<QString> disabledEngineModes;
+        for (const Rule& rule : ruleSet.rules()) {
+            if (!rule.enabled || !rule.match.isContextOnly() || !namesScreenPositively(rule.match)
+                || !rule.match.evaluate(query)) {
+                continue;
+            }
+            ++ruleCount;
+            const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
+            if (disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match)) {
+                disabledEngineModes.insert(*disableMode);
+            }
+        }
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        // Show the assignment winner's layout, picked by ITS engine mode — a
-        // snapping engine shows the winner's snapping layout, an autotile engine
-        // its algorithm, a scrolling engine its template layout — mirroring how
-        // the daemon's AssignmentEntry (which carries all three tokens) is
-        // consumed. No assignment
-        // winner (no rule with a SetEngineMode action) → no engine pin → no
-        // layout label, so a bare layout rule the daemon's cascade discards never
-        // resurfaces. modeFromWireString defaults an unrecognised token to
-        // Snapping, matching entryFromRuleMatchActions.
+        // Show the layout the resolved entry runs, picked by ITS engine mode,
+        // mirroring how the daemon's AssignmentEntry (which carries all three
+        // tokens) is consumed. Only when a rule filled a slot: a screen that
+        // runs the global default because no rule assigns it shows no layout,
+        // since the tile summarises the rules.
         QString layoutLabel;
         // Track WHICH lookup applies. Three engine families feed two lookups:
         // the tiling one is kept separate so a UUID-shaped algorithm token
         // cannot resolve through the layouts model, and a tokenised layout or
         // template id cannot resolve through the algorithm list.
         const RuleModel::LabelLookup* labelLookup = nullptr;
-        if (summary.assignmentResolved) {
-            const auto mode = PhosphorZones::modeFromWireString(summary.engineMode)
-                                  .value_or(PhosphorZones::AssignmentEntry::Snapping);
-            if (mode == PhosphorZones::AssignmentEntry::Snapping) {
+        if (slots) {
+            if (entry.mode == PhosphorZones::AssignmentEntry::Snapping) {
                 // The reserved "explicitly none" word gets the same
                 // substitution the scrolling arm below documents, for the
                 // same reason: no lookup resolves it and the fallback showed
                 // a layout apparently named "none". Bare-name wording for the
                 // tile's "%1 · %2" composition, like its scrolling twin.
-                if (summary.snappingLayout == PhosphorZones::NoSnappingLayout) {
+                if (entry.snappingLayout == PhosphorZones::NoSnappingLayout) {
                     layoutLabel = PhosphorI18n::tr("Snapping (no layout)");
                 } else {
-                    layoutLabel = summary.snappingLayout;
+                    layoutLabel = entry.snappingLayout;
                     labelLookup = &m_snappingLayoutLookup;
                 }
-            } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
-                if (summary.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
+            } else if (entry.mode == PhosphorZones::AssignmentEntry::Autotile) {
+                if (entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
                     layoutLabel = PhosphorI18n::tr("Tiling (no algorithm)");
                 } else {
-                    layoutLabel = summary.tilingAlgorithm;
+                    layoutLabel = entry.tilingAlgorithm;
                     labelLookup = &m_tilingAlgorithmLookup;
                 }
-            } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
+            } else if (entry.mode == PhosphorZones::AssignmentEntry::Scrolling) {
                 // The reserved "explicitly none" word is not an id any lookup
                 // can resolve, and the resolve below renders an unresolvable
                 // value verbatim, which showed this tile a template apparently
@@ -356,13 +454,13 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
                 // read as a caption with a colon in the middle. Reuses the
                 // string leafLabel already shows for a scrolling match with no
                 // template, so the concept keeps one translation.
-                if (summary.scrollingTemplate == PhosphorZones::NoScrollingTemplate) {
+                if (entry.scrollingTemplateLayout == PhosphorZones::NoScrollingTemplate) {
                     layoutLabel = PhosphorI18n::tr("Scrolling (no template)");
                 } else {
                     // The snapping lookup reads the shared layouts model, which
                     // carries the native template rows keyed by their raw UUID,
                     // so it resolves a template id to its display name too.
-                    layoutLabel = summary.scrollingTemplate;
+                    layoutLabel = entry.scrollingTemplateLayout;
                     labelLookup = &m_snappingLayoutLookup;
                 }
             }
@@ -377,42 +475,63 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             }
         }
         tile[QStringLiteral("layoutName")] = layoutLabel;
-        // Resolve `engineDisabled` against the screen's effective engine
-        // mode. The accumulator collected every DisableEngine token any
-        // matching rule targets; the tile reads "engine off" only when
-        // a disable rule targets the engine the screen actually runs.
-        // Normalized through the same modeFromWireString().value_or(Snapping)
-        // the layout arm above and the daemon's entryFromRuleMatchActions
-        // use, so an unset engineMode and an unrecognized token both resolve
-        // to Snapping — comparing the raw token missed a snapping-disable
-        // rule on a screen the daemon effectively runs as Snapping. The QML
-        // reads this as `tilingEnabled` (kept for backwards-compatibility
-        // with the existing tile component); the field's semantics are now
-        // "the engine running on this screen is NOT disabled".
-        //
-        // KNOWN LIMITATION, and the reason this is not simply "the effective
-        // mode": the parity above holds for a screen whose mode comes from an
-        // assignment RULE, which is what this accumulator can see. A screen
-        // with only a DisableEngine rule and no assignment rule takes its mode
-        // from the daemon's default-tier synthesis instead, and that tier can
-        // answer Autotile (no default layout id, but a default algorithm set).
-        // Such a screen reads as Snapping here, so a tiling-disable on it
-        // shows as enabled. Closing the gap needs the resolved per-screen mode
-        // passed in — this controller has no settings or daemon handle to
-        // derive it — and the cost was judged out of proportion to a tile
-        // badge. Pass it through `screens` if this ever needs to be exact.
-        const QString effectiveModeWire = PhosphorZones::modeToWireString(
-            PhosphorZones::modeFromWireString(summary.engineMode).value_or(PhosphorZones::AssignmentEntry::Snapping));
-        const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
+        // "Engine off" only when a disable rule targets the engine the screen
+        // actually runs: a DisableEngine{scrolling} rule on a snapping screen
+        // leaves the tile on. The mode is the resolved entry's, which is the
+        // global default's when no rule sets one. The QML reads this as
+        // `tilingEnabled` (kept for backwards-compatibility with the existing
+        // tile component); it means "the engine running on this screen is NOT
+        // disabled".
+        const bool engineDisabled = disabledEngineModes.contains(PhosphorZones::modeToWireString(entry.mode));
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
-        tile[QStringLiteral("ruleCount")] = summary.ruleCount;
-        tile[QStringLiteral("assigned")] = assigned;
-        // True when a LockContext rule pins this monitor's layout (the
-        // highest-priority matching rule's value). The tile shows a lock badge.
-        tile[QStringLiteral("locked")] = summary.locked;
+        tile[QStringLiteral("ruleCount")] = ruleCount;
+        tile[QStringLiteral("assigned")] = ruleCount > 0 || slots.has_value();
+        // True when the winning LockContext rule locks this monitor's layout.
+        // The tile shows a lock badge.
+        tile[QStringLiteral("locked")] = locked;
         out.append(tile);
     }
     return out;
+}
+
+QString RuleController::screenSizeHint(const QVariantList& screens, const QVariantMap& matchJson) const
+{
+    const QJsonObject obj = QJsonObject::fromVariantMap(matchJson);
+    if (obj.isEmpty()) {
+        return QString();
+    }
+    const auto match = MatchExpression::fromJson(obj);
+    if (!match) {
+        return QString();
+    }
+    QStringList pinned;
+    collectPositiveScreenPins(*match, pinned);
+
+    QStringList lines;
+    for (const QVariant& sv : screens) {
+        const QVariantMap screen = sv.toMap();
+        const QString name = screen.value(QStringLiteral("name")).toString();
+        const QString stableId = screen.value(QStringLiteral("screenId")).toString();
+        // Ignoring case, as the rule engine's Equals does.
+        const bool isPinned = std::any_of(pinned.cbegin(), pinned.cend(), [&](const QString& id) {
+            return (!name.isEmpty() && id.compare(name, Qt::CaseInsensitive) == 0)
+                || (!stableId.isEmpty() && id.compare(stableId, Qt::CaseInsensitive) == 0);
+        });
+        if (!isPinned) {
+            continue;
+        }
+        const int width = screen.value(QStringLiteral("pixelWidth")).toInt();
+        const int height = screen.value(QStringLiteral("pixelHeight")).toInt();
+        if (width <= 0 || height <= 0) {
+            continue;
+        }
+        const QLocale locale;
+        lines.append(PhosphorI18n::tr("%1 is %2 × %3 pixels right now, which is closest to %4.",
+                                      "monitor name, its width and height in device pixels, then its aspect ratio")
+                         .arg(monitorNameOf(screen), locale.toString(width), locale.toString(height),
+                              RuleAuthoring::aspectRatioLabel(PhosphorRules::aspectRatioTokenFor(width, height))));
+    }
+    return lines.join(QLatin1Char('\n'));
 }
 
 QVariantList RuleController::matchFields() const

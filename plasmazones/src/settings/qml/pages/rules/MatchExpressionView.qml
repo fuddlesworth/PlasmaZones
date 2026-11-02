@@ -108,7 +108,8 @@ ColumnLayout {
     ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
     ///   - zone → `controller.zoneMatchOptions` displayName for the matching id
     ///   - mode / orientation / aspectRatio / colorScheme → the token's option label from the field entry
-    ///   - everything else (string, number) → `String(value)`
+    ///   - number → the locale-grouped number, with a pixel unit on the screen size fields
+    ///   - everything else (string) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
     /// the editor's dangling-pin fallback.
@@ -192,10 +193,11 @@ ColumnLayout {
                 break;
             }
         }
-        // Closed string-token dropdowns (Mode, Screen orientation, Color scheme)
-        // — resolve the token to its friendly label from the field entry's
-        // options, the same way windowType does, so the tree shows "Portrait"
-        // not the raw "portrait". Every closed-vocabulary kind belongs in this
+        // Closed string-token dropdowns (Mode, Screen orientation, Screen aspect
+        // ratio, Color scheme) — resolve the token to its friendly label from
+        // the field entry's options, the same way windowType does, so the tree
+        // shows "Portrait" not the raw "portrait", and an aspect ratio carries
+        // its portrait marker. Every closed-vocabulary kind belongs in this
         // list: a kind missing here renders its untranslated wire token.
         if (kind === "mode" || kind === "orientation" || kind === "aspectRatio" || kind === "colorScheme") {
             for (var m = 0; m < root.matchFieldOptions.length; ++m) {
@@ -221,6 +223,17 @@ ColumnLayout {
             var idx = parseInt(value, 10) - 1;
             if (idx >= 0 && idx < names.length && names[idx])
                 return names[idx];
+        }
+        // A number reads as the editor's spin box and the collapsed summary
+        // show it (RuleAuthoring::numericMatchValueLabel): the locale's digit
+        // grouping, and a pixel unit on the two screen size fields. A value
+        // that is not a number (a hand-edited rule) shows raw.
+        if ((kind === "number" || kind === "virtualDesktop") && value !== "" && isFinite(Number(value))) {
+            var number = Number(value).toLocaleString(Qt.locale(), "f", 0);
+            if (fieldWire === "screenWidth" || fieldWire === "screenHeight")
+                return i18nc("a screen size in pixels, such as 2,560 px", "%1 px", number);
+
+            return number;
         }
         return String(value);
     }

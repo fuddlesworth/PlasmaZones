@@ -18,19 +18,80 @@
 
 #include <QFile>
 #include <QJSEngine>
+#include <QLocale>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QTest>
 #include <QUuid>
 
 #include "settings/rules/rulecontroller.h"
 #include "settings/rules/rulemodel.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 
 using namespace PlasmaZones;
 using namespace PhosphorRules;
+
+namespace {
+
+/// A leaf predicate in the rule-JSON wire shape the editor writes.
+QVariantMap leafJson(const QString& field, const QString& op, const QVariant& value)
+{
+    return QVariantMap{{QStringLiteral("field"), field}, {QStringLiteral("op"), op}, {QStringLiteral("value"), value}};
+}
+
+/// Stage a monitor-section rule with @p match and @p actions; the new id, or
+/// empty when the controller refused it.
+QString addRule(RuleController& controller, const QVariantMap& match, const QVariantList& actions)
+{
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] = actions;
+    return controller.addRuleFromJson(rule);
+}
+
+/// A `SettingsController::screens` entry. A zero size leaves the device-pixel
+/// keys out, as ScreenHelper does when the daemon answered none.
+QVariantMap screenJson(const QString& name, int pixelWidth = 0, int pixelHeight = 0)
+{
+    QVariantMap screen{{QStringLiteral("name"), name}};
+    if (pixelWidth > 0 && pixelHeight > 0) {
+        screen[QStringLiteral("pixelWidth")] = pixelWidth;
+        screen[QStringLiteral("pixelHeight")] = pixelHeight;
+    }
+    return screen;
+}
+
+/// An engine-mode action plus that engine's layout action.
+QVariantList assignActions(const QString& mode, const QString& layoutType, const QString& layoutKey,
+                           const QString& layoutValue)
+{
+    return {QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")}, {QStringLiteral("mode"), mode}},
+            QVariantMap{{QStringLiteral("type"), layoutType}, {layoutKey, layoutValue}}};
+}
+
+/// A one-action rule that changes nothing the tile shows, for counting.
+QVariantList gapActions()
+{
+    return {QVariantMap{{QStringLiteral("type"), QStringLiteral("setInnerGap")}, {QStringLiteral("value"), 4}}};
+}
+
+/// The tile for @p screenId in @p overview, or an empty map.
+QVariantMap tileFor(const QVariantList& overview, const QString& screenId)
+{
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        if (tile.value(QStringLiteral("screenId")).toString() == screenId) {
+            return tile;
+        }
+    }
+    return {};
+}
+
+} // namespace
 
 class TestRuleControllerOverview : public QObject
 {
@@ -41,14 +102,21 @@ private Q_SLOTS:
     void monitorOverviewIgnoresDisabledRules();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewLayoutFollowsWinnerMode();
-    void monitorOverviewIgnoresBareLayoutRules();
+    void monitorOverviewAppliesBareLayoutRules();
     void monitorOverviewIgnoresNonMonitorAxisDisableRules();
     void monitorOverviewScreenKeyFallback();
-    void monitorOverviewLayoutFromSingleWinningRule();
+    void monitorOverviewLayoutComposesPerSlot();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void monitorOverviewDisableEngineUnionsEveryMode();
+    void monitorOverviewDisableEngineFollowsDefaultMode();
     void monitorOverviewReportsLock();
     void monitorOverviewLockPriorityResolution();
+    void monitorOverviewShapeConditionFollowsCurrentSize();
+    void monitorOverviewLockFollowsCurrentShape();
+    void monitorOverviewCountsOnlyRulesThatApplyNow();
+    void monitorOverviewTiledCountComesFromScreenState();
+    void monitorOverviewVirtualScreenFallsBackToMonitorRules();
+    void screenSizeHintNamesPinnedMonitors();
     void curveLabelResolverBridgesQmlNaming();
     void rulesSnapshotFeedsEveryRuleRowRequiredProperty();
 };
@@ -323,13 +391,13 @@ void TestRuleControllerOverview::monitorOverviewLayoutFollowsWinnerMode()
     QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
 }
 
-void TestRuleControllerOverview::monitorOverviewIgnoresBareLayoutRules()
+void TestRuleControllerOverview::monitorOverviewAppliesBareLayoutRules()
 {
-    // A layout rule with NO SetEngineMode action is never the assignment winner
-    // (the daemon's resolveContextAssignment filters to hasEngineModeAction), so
-    // the daemon never applies its layout — and neither does the tile. The rule
-    // still counts toward ruleCount/assigned (it targets the monitor), but
-    // contributes no layout label, for both a bare tiling and a bare snapping rule.
+    // A layout rule with NO SetEngineMode action fills its own slot: the
+    // daemon's resolveAssignmentEntry bases the entry on the global default
+    // and lets the payload winner override that field. So the tile shows the
+    // bare layout when the default runs the matching engine, and nothing of it
+    // when the default runs another one.
     RuleController controller;
 
     QVariantMap algoRule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -352,10 +420,14 @@ void TestRuleControllerOverview::monitorOverviewIgnoresBareLayoutRules()
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
-    const QVariantList overview = controller.monitorOverview(screens);
+
+    // No default provider: the base is an empty Snapping entry. DP-2's bare
+    // snapping layout applies, DP-1's bare algorithm is held for an engine
+    // the screen does not run.
+    QVariantList overview = controller.monitorOverview(screens);
     QCOMPARE(overview.size(), 2);
 
-    const QVariantMap dp1 = overview.at(0).toMap();
+    QVariantMap dp1 = overview.at(0).toMap();
     // Pin the tile identity before asserting against it, matching the
     // sibling winner-mode test's idiom.
     QCOMPARE(dp1.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-1"));
@@ -364,12 +436,27 @@ void TestRuleControllerOverview::monitorOverviewIgnoresBareLayoutRules()
     QVERIFY2(dp1.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(dp1.value(QStringLiteral("layoutName")).toString()));
 
-    const QVariantMap dp2 = overview.at(1).toMap();
+    QVariantMap dp2 = overview.at(1).toMap();
     QCOMPARE(dp2.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
     QCOMPARE(dp2.value(QStringLiteral("ruleCount")).toInt(), 1);
     QCOMPARE(dp2.value(QStringLiteral("assigned")).toBool(), true);
-    QVERIFY2(dp2.value(QStringLiteral("layoutName")).toString().isEmpty(),
-             qPrintable(dp2.value(QStringLiteral("layoutName")).toString()));
+    QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
+
+    // An Autotile default: DP-1's bare algorithm now applies, and DP-2's
+    // bare snapping layout is held while the screen tiles with the default
+    // algorithm.
+    controller.setDefaultAssignmentProvider([]() {
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("columns");
+        return entry;
+    });
+    overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    dp1 = overview.at(0).toMap();
+    QCOMPARE(dp1.value(QStringLiteral("layoutName")).toString(), QStringLiteral("bsp"));
+    dp2 = overview.at(1).toMap();
+    QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("columns"));
 }
 
 void TestRuleControllerOverview::monitorOverviewIgnoresNonMonitorAxisDisableRules()
@@ -437,7 +524,11 @@ void TestRuleControllerOverview::monitorOverviewIgnoresNonMonitorAxisDisableRule
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
-    const QVariantList overview = controller.monitorOverview(screens);
+    // DP-B sits on desktop 2, so its screen + desktop disable rule matches and
+    // counts. It is still not a monitor-axis disable.
+    const QVariantList states{
+        QVariantMap{{QStringLiteral("screenId"), QStringLiteral("DP-B")}, {QStringLiteral("virtualDesktop"), 2}}};
+    const QVariantList overview = controller.monitorOverview(screens, states);
     QCOMPARE(overview.size(), 2);
     bool sawA = false;
     bool sawB = false;
@@ -473,15 +564,13 @@ void TestRuleControllerOverview::monitorOverviewScreenKeyFallback()
     QCOMPARE(overview.at(1).toMap().value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
 }
 
-void TestRuleControllerOverview::monitorOverviewLayoutFromSingleWinningRule()
+void TestRuleControllerOverview::monitorOverviewLayoutComposesPerSlot()
 {
-    // Engine mode and layout must come from the SAME winning rule. An
-    // engine-mode-only rule and a separate layout-only rule on one screen: the
-    // engine rule is the assignment winner (only it has a SetEngineMode action),
-    // and it carries no layout, so the tile shows NO layout — the other rule's
-    // snapping layout never composes in (the daemon takes the whole entry from
-    // the one winner). Both rules still count. The pre-fix independent-slot model
-    // would have shown "grid" here.
+    // The four assignment slots resolve independently, as the daemon's
+    // resolveRuleSlots does. An engine-mode-only rule and a separate
+    // layout-only rule on one screen: the engine rule decides the mode and the
+    // layout rule fills the snapping-layout slot, so the screen runs "grid"
+    // in Snapping mode. Both rules count.
     RuleController controller;
 
     QVariantMap engineRule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -507,10 +596,7 @@ void TestRuleControllerOverview::monitorOverviewLayoutFromSingleWinningRule()
     QCOMPARE(overview.size(), 1);
     const QVariantMap tile = overview.first().toMap();
     QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
-    // Winner is the engine-only rule (snapping, no layout); the separate
-    // snapping-layout rule's token must NOT leak into the tile.
-    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
-             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+    QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
 }
 
 void TestRuleControllerOverview::monitorOverviewDisableEngineMatchesEffectiveMode()
@@ -622,6 +708,268 @@ void TestRuleControllerOverview::monitorOverviewDisableEngineUnionsEveryMode()
     QVERIFY2(!tile.value(QStringLiteral("tilingEnabled")).toBool(),
              "a disable for a different engine masked the one matching the screen's effective mode");
     QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+}
+
+void TestRuleControllerOverview::monitorOverviewDisableEngineFollowsDefaultMode()
+{
+    // A screen no rule assigns runs the global default's engine, so a
+    // monitor-axis disable for THAT engine turns the tile off. The mode comes
+    // from the default-assignment provider, as the daemon's comes from its
+    // level-1 default.
+    RuleController controller;
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                              {QStringLiteral("mode"), QStringLiteral("autotile")}}})
+                 .isEmpty());
+    const QVariantList screens{screenJson(QStringLiteral("DP-1"))};
+
+    // Without a provider the base is Snapping, which the rule does not disable.
+    QCOMPARE(tileFor(controller.monitorOverview(screens), QStringLiteral("DP-1"))
+                 .value(QStringLiteral("tilingEnabled"))
+                 .toBool(),
+             true);
+
+    controller.setDefaultAssignmentProvider([]() {
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("bsp");
+        return entry;
+    });
+    QCOMPARE(tileFor(controller.monitorOverview(screens), QStringLiteral("DP-1"))
+                 .value(QStringLiteral("tilingEnabled"))
+                 .toBool(),
+             false);
+}
+
+void TestRuleControllerOverview::monitorOverviewShapeConditionFollowsCurrentSize()
+{
+    // The headline two-rule case: a higher-priority rule for the monitor's
+    // wide mode over a plain rule for the same monitor. The tile shows the
+    // wide layout only while the screen is that wide, and counts the
+    // conditional rule only then. With no size known the size condition does
+    // not hold, as in the daemon. The first-added rule ranks higher.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{
+                         {QStringLiteral("all"),
+                          QVariantList{
+                              leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                              leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000)}}},
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("wide")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("standard")))
+                 .isEmpty());
+
+    QVariantMap tile =
+        tileFor(controller.monitorOverview({screenJson(QStringLiteral("DP-1"), 5120, 1440)}), QStringLiteral("DP-1"));
+    QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("wide"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+
+    tile =
+        tileFor(controller.monitorOverview({screenJson(QStringLiteral("DP-1"), 2560, 1440)}), QStringLiteral("DP-1"));
+    QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("standard"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+
+    tile = tileFor(controller.monitorOverview({screenJson(QStringLiteral("DP-1"))}), QStringLiteral("DP-1"));
+    QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("standard"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+}
+
+void TestRuleControllerOverview::monitorOverviewLockFollowsCurrentShape()
+{
+    // The lock badge resolves through the daemon's lock resolver against the
+    // same current shape. DP-1 locks only in its 32:9 mode. DP-2 locks while
+    // portrait, and its orientation comes from the device-pixel size, which
+    // decides it over the logical geometry exactly as the daemon's
+    // screenShape does (the logical size here is deliberately landscape).
+    RuleController controller;
+    const QVariantList lock{
+        QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), true}}};
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("all"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-1")),
+                                               leafJson(QStringLiteral("screenAspectRatio"), QStringLiteral("equals"),
+                                                        QStringLiteral("32:9"))}}},
+                     lock)
+                 .isEmpty());
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("all"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-2")),
+                                               leafJson(QStringLiteral("screenOrientation"), QStringLiteral("equals"),
+                                                        QStringLiteral("portrait"))}}},
+                     lock)
+                 .isEmpty());
+
+    QVariantMap rotated = screenJson(QStringLiteral("DP-2"), 1440, 2560);
+    rotated[QStringLiteral("width")] = 2560;
+    rotated[QStringLiteral("height")] = 1440;
+
+    QVariantList overview = controller.monitorOverview({screenJson(QStringLiteral("DP-1"), 5120, 1440), rotated});
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("locked")).toBool(), true);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("locked")).toBool(), true);
+
+    overview = controller.monitorOverview({screenJson(QStringLiteral("DP-1"), 2560, 1440)});
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("locked")).toBool(), false);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 0);
+}
+
+void TestRuleControllerOverview::monitorOverviewCountsOnlyRulesThatApplyNow()
+{
+    // A rule counts toward a tile when it names a monitor outside a negation
+    // and its whole match holds for that screen now. `none{ScreenId}`
+    // excludes a monitor rather than addressing one, so it counts nowhere. A
+    // ScreenId compares ignoring case, as the rule engine's Equals does. A
+    // desktop condition holds only on the desktop the screen state reports.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("none"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-1"))}}},
+                     gapActions())
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("dp-1")),
+                     gapActions())
+                 .isEmpty());
+    QVERIFY(
+        !addRule(controller,
+                 QVariantMap{{QStringLiteral("all"),
+                              QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                    QStringLiteral("DP-1")),
+                                           leafJson(QStringLiteral("virtualDesktop"), QStringLiteral("equals"), 2)}}},
+                 gapActions())
+             .isEmpty());
+
+    const QVariantList screens{screenJson(QStringLiteral("DP-1")), screenJson(QStringLiteral("DP-2"))};
+    const auto statesOnDesktop = [](int desktop) {
+        return QVariantList{QVariantMap{{QStringLiteral("screenId"), QStringLiteral("DP-1")},
+                                        {QStringLiteral("virtualDesktop"), desktop}},
+                            QVariantMap{{QStringLiteral("screenId"), QStringLiteral("DP-2")},
+                                        {QStringLiteral("virtualDesktop"), desktop}}};
+    };
+
+    QVariantList overview = controller.monitorOverview(screens, statesOnDesktop(1));
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("ruleCount")).toInt(), 0);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("assigned")).toBool(), false);
+
+    overview = controller.monitorOverview(screens, statesOnDesktop(2));
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 2);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("ruleCount")).toInt(), 0);
+}
+
+void TestRuleControllerOverview::monitorOverviewTiledCountComesFromScreenState()
+{
+    // The algorithm-switch rule the TiledWindowCount field exists for: a
+    // higher-priority rule once a second window tiles, over a plain one. The
+    // count comes from the screen state, and its absence (a screen that is
+    // not tiling) leaves the condition unanswered.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{
+                         {QStringLiteral("all"),
+                          QVariantList{
+                              leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                              leafJson(QStringLiteral("tiledWindowCount"), QStringLiteral("greaterThan"), 1)}}},
+                     assignActions(QStringLiteral("autotile"), QStringLiteral("setTilingAlgorithm"),
+                                   QStringLiteral("algorithm"), QStringLiteral("bsp")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("autotile"), QStringLiteral("setTilingAlgorithm"),
+                                   QStringLiteral("algorithm"), QStringLiteral("monocle")))
+                 .isEmpty());
+
+    const QVariantList screens{screenJson(QStringLiteral("DP-1"))};
+    const auto stateWithCount = [](const QVariant& count) {
+        QVariantMap state{{QStringLiteral("screenId"), QStringLiteral("DP-1")}, {QStringLiteral("virtualDesktop"), 1}};
+        if (count.isValid()) {
+            state[QStringLiteral("tiledWindowCount")] = count;
+        }
+        return QVariantList{state};
+    };
+    QCOMPARE(tileFor(controller.monitorOverview(screens, stateWithCount(3)), QStringLiteral("DP-1"))
+                 .value(QStringLiteral("layoutName"))
+                 .toString(),
+             QStringLiteral("bsp"));
+    QCOMPARE(tileFor(controller.monitorOverview(screens, stateWithCount(1)), QStringLiteral("DP-1"))
+                 .value(QStringLiteral("layoutName"))
+                 .toString(),
+             QStringLiteral("monocle"));
+    QCOMPARE(tileFor(controller.monitorOverview(screens, stateWithCount(QVariant())), QStringLiteral("DP-1"))
+                 .value(QStringLiteral("layoutName"))
+                 .toString(),
+             QStringLiteral("monocle"));
+}
+
+void TestRuleControllerOverview::monitorOverviewVirtualScreenFallsBackToMonitorRules()
+{
+    // A virtual screen no rule names takes its monitor's assignment, as the
+    // daemon's resolveWithScreenFallback retries the physical id. The rule
+    // names the monitor, not this screen, so it does not count here.
+    RuleController controller;
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("grid")))
+                 .isEmpty());
+    const QString virtualId = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("DP-1"), 0);
+    const QVariantMap tile = tileFor(controller.monitorOverview({screenJson(virtualId)}), virtualId);
+    QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
+}
+
+void TestRuleControllerOverview::screenSizeHintNamesPinnedMonitors()
+{
+    // The rule editor's note under a screen-size value names the device-pixel
+    // size and nearest ratio of each monitor the rule pins outside a
+    // negation, and says nothing when the rule pins none.
+    const QLocale previous;
+    QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+    const auto restoreLocale = qScopeGuard([previous]() {
+        QLocale::setDefault(previous);
+    });
+
+    RuleController controller;
+    QVariantMap ultrawide = screenJson(QStringLiteral("DP-1"), 5120, 1440);
+    ultrawide[QStringLiteral("manufacturer")] = QStringLiteral("Samsung");
+    ultrawide[QStringLiteral("model")] = QStringLiteral("Odyssey");
+    const QVariantList screens{ultrawide, screenJson(QStringLiteral("DP-2"), 1080, 1920),
+                               screenJson(QStringLiteral("DP-3"))};
+
+    const QString wide = controller.screenSizeHint(
+        screens,
+        QVariantMap{
+            {QStringLiteral("all"),
+             QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                          leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000)}}});
+    QVERIFY2(wide.contains(QStringLiteral("Samsung Odyssey")), qPrintable(wide));
+    QVERIFY2(wide.contains(QStringLiteral("5,120 × 1,440")), qPrintable(wide));
+    QVERIFY2(wide.contains(QStringLiteral("32:9")), qPrintable(wide));
+    QVERIFY2(!wide.contains(QStringLiteral("DP-2")), qPrintable(wide));
+
+    // Matched ignoring case, and a portrait panel carries the marker.
+    const QString tall = controller.screenSizeHint(
+        screens, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("dp-2")));
+    QVERIFY2(tall.contains(QStringLiteral("9:16 (portrait)")), qPrintable(tall));
+
+    // A negated pin, a monitor whose size is unknown, and no pin at all.
+    QVERIFY(controller
+                .screenSizeHint(screens,
+                                QVariantMap{{QStringLiteral("none"),
+                                             QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                                   QStringLiteral("DP-1"))}}})
+                .isEmpty());
+    QVERIFY(controller
+                .screenSizeHint(screens,
+                                leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-3")))
+                .isEmpty());
+    QVERIFY(
+        controller.screenSizeHint(screens, leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000))
+            .isEmpty());
 }
 
 void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()

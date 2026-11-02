@@ -15,6 +15,8 @@
  */
 
 #include <QJsonArray>
+#include <QLocale>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -123,6 +125,7 @@ private Q_SLOTS:
     void animationOverridesSummariseWithTheirEvent();
     void actionLabelPrefixesAreUnique();
     void matchLabelsIgnoreCaseLikeTheEngine();
+    void screenShapeValuesReadLikeTheEditor();
 };
 
 // The engine's Equals compares these leaves ignoring case, so the summary
@@ -217,6 +220,26 @@ void TestRuleModel::sectionDerivation()
     columnWidth.params.insert(ActionParam::Value, 0.5);
     screenScroll.actions = {columnWidth};
     QCOMPARE(RuleModel::sectionFor(screenScroll), RuleModel::Section::Monitor);
+
+    // A rule matching only the screen's shape (no monitor named) describes a
+    // screen, so it files under Monitor & Layout like an orientation rule,
+    // and a rule matching only the colour scheme names no screen and does
+    // not. The screen-scoped set is derived from the field table, so this
+    // fails if a screen-shape field drops out of the derivation.
+    for (const Field shapeField : {Field::ScreenWidth, Field::ScreenHeight, Field::ScreenAspectRatio}) {
+        Rule shapeOnly;
+        shapeOnly.id = QUuid::createUuid();
+        shapeOnly.match = shapeField == Field::ScreenAspectRatio
+            ? MatchExpression::makeLeaf(shapeField, Operator::Equals, QStringLiteral("32:9"))
+            : MatchExpression::makeLeaf(shapeField, Operator::GreaterThan, 3000);
+        shapeOnly.actions = {gap};
+        QCOMPARE(RuleModel::sectionFor(shapeOnly), RuleModel::Section::Monitor);
+    }
+    Rule schemeOnly;
+    schemeOnly.id = QUuid::createUuid();
+    schemeOnly.match = MatchExpression::makeLeaf(Field::ColorScheme, Operator::Equals, QStringLiteral("dark"));
+    schemeOnly.actions = {gap};
+    QCOMPARE(RuleModel::sectionFor(schemeOnly), RuleModel::Section::Advanced);
 
     // A window rule matching only window state (the zone a window sits in,
     // whether it is snapped or floating, on a given monitor or not) is a
@@ -1078,6 +1101,50 @@ void TestRuleModel::animationOverridesSummariseWithTheirEvent()
     const QString bareSummary = bare.data(bare.index(0, 0), RuleModel::ActionSummaryRole).toString();
     QVERIFY2(bareSummary.contains(QStringLiteral("window.open shader: dissolve")), qPrintable(bareSummary));
     QVERIFY2(bareSummary.contains(QStringLiteral("window.close shader: dissolve")), qPrintable(bareSummary));
+}
+
+void TestRuleModel::screenShapeValuesReadLikeTheEditor()
+{
+    // The collapsed summary prints a screen size the way the editor's spin box
+    // shows it (the locale's digit grouping) with a pixel unit, and an aspect
+    // ratio with the dropdown's portrait marker, so "10:16" never reads as a
+    // repeat of "16:10". The locale is pinned so the grouping is known.
+    const QLocale previous;
+    QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+    // Restored on every exit, a failed QVERIFY included, so no later test
+    // inherits the pinned locale.
+    const auto restoreLocale = qScopeGuard([previous]() {
+        QLocale::setDefault(previous);
+    });
+
+    const auto ruleWith = [](const MatchExpression& match) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 100;
+        rule.match = match;
+        RuleAction gap;
+        gap.type = QString(ActionType::SetInnerGap);
+        gap.params.insert(ActionParam::Value, 8);
+        rule.actions = {gap};
+        return rule;
+    };
+    RuleModel model;
+    model.setRules({
+        ruleWith(MatchExpression::makeLeaf(Field::ScreenWidth, Operator::GreaterThan, 2560)),
+        ruleWith(MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("10:16"))),
+        ruleWith(MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("16:10"))),
+        ruleWith(MatchExpression::makeLeaf(Field::Width, Operator::GreaterThan, 1000)),
+    });
+    const auto summaryAt = [&model](int row) {
+        return model.data(model.index(row, 0), RuleModel::MatchSummaryRole).toString();
+    };
+
+    QVERIFY2(summaryAt(0).contains(QStringLiteral("2,560 px")), qPrintable(summaryAt(0)));
+    QVERIFY2(summaryAt(1).contains(QStringLiteral("10:16 (portrait)")), qPrintable(summaryAt(1)));
+    QVERIFY2(!summaryAt(2).contains(QStringLiteral("portrait")), qPrintable(summaryAt(2)));
+    // A window's own size is grouped too but carries no screen unit.
+    QVERIFY2(summaryAt(3).contains(QStringLiteral("1,000")), qPrintable(summaryAt(3)));
+    QVERIFY2(!summaryAt(3).contains(QStringLiteral("px")), qPrintable(summaryAt(3)));
 }
 
 QTEST_MAIN(TestRuleModel)

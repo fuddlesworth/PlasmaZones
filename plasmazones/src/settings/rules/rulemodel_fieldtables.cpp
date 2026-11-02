@@ -128,7 +128,7 @@ QString RuleModel::fieldLabel(PhosphorRules::Field field)
     case Field::ScreenHeight:
         return PhosphorI18n::tr("Screen height");
     case Field::ScreenAspectRatio:
-        return PhosphorI18n::tr("Aspect ratio");
+        return PhosphorI18n::tr("Screen aspect ratio");
     case Field::ActiveLayout:
         return PhosphorI18n::tr("Active layout");
     case Field::ColorScheme:
