@@ -370,9 +370,8 @@ void TestScrollEngineDragInsert::joinTrailColumnIsStableAcrossTicks()
 
 void TestScrollEngineDragInsert::commitWithoutTargetRestoresSlot()
 {
-    // A drop that resolved no target (released where it was picked up): no
-    // target was ever resolved, so commit returns the window to its captured
-    // slot instead of an arbitrary append.
+    // A drop with no resolved target (released where it was picked up)
+    // returns the window to its captured slot instead of an arbitrary append.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});

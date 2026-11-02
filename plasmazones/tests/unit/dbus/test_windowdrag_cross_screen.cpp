@@ -40,6 +40,7 @@
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -823,6 +824,12 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         const QString w = QStringLiteral("s|B");
         QVERIFY2(f.scrolling->isWindowTiled(w), "precondition: the window is a strip column");
+        const auto* state = static_cast<const PhosphorScrollEngine::ScrollState*>(f.scrolling->stateForScreen(f.other));
+        QVERIFY(state);
+        const QString activeBefore = state->strip().activeWindowId();
+        const int anchorBefore = state->strip().viewAnchor();
+        const bool detachedBefore = state->strip().viewDetached();
+        QVERIFY2(activeBefore != w, "precondition: another column holds the strip's focus");
 
         f.adaptor->beginDrag(w, f.otherGeometry.x() + 400, 0, 400, 1080, f.other, 0);
         QVERIFY(!f.scrolling->hasDragInsertPreview());
@@ -833,6 +840,11 @@ private Q_SLOTS:
         QVERIFY(!f.scrolling->hasDragInsertPreview());
         QVERIFY(f.scrolling->isWindowTiled(w));
         QVERIFY2(tiledEmissionsCarryGeometryFor(tiled, w), "the column's strip rect must be re-emitted");
+        // An undo, not a drop: the strip's focus and view are as they were. A
+        // commit would focus the dragged column and detach the view.
+        QCOMPARE(state->strip().activeWindowId(), activeBefore);
+        QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+        QCOMPARE(state->strip().viewDetached(), detachedBefore);
 
         const int alt = static_cast<int>(Qt::AltModifier);
         f.adaptor->beginDrag(w, f.otherGeometry.x() + 400, 0, 400, 1080, f.other, 0);

@@ -505,7 +505,9 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
         return false;
     }
 
-    const Qt::KeyboardModifiers mods = static_cast<Qt::KeyboardModifiers>(modifiers);
+    // Resolved the way dragMoved resolves them, which this same report runs
+    // through right after a promotion.
+    const Qt::KeyboardModifiers mods = resolveReportedModifiers(modifiers);
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
     const bool toggleMode = m_settings && m_settings->toggleActivation();
 
@@ -861,7 +863,9 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // alone when its drag mark clears. Begin then cancel does that and is
         // an exact undo, restoring the slot, the focus and the view the strip
         // had, where a commit would refocus the window and detach the view.
-        // Both batches go out in this one call, ahead of the next paint.
+        // On a strip the begin closes the neighbours up and the cancel puts
+        // them back, two batches from this one call, as the earlier begin at
+        // drag start and commit at the drop also sent.
         //
         // Not when the drop keeps the drag out under always re-insert
         // (#1162): beginDrag carries no modifiers and a key held from the
@@ -884,9 +888,10 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
                 const bool onScrolling = startEngine == m_scrollEngine;
                 const QVector<ParsedTrigger>& triggers =
                     onScrolling ? m_cachedScrollingDragInsertTriggers : m_cachedAutotileDragInsertTriggers;
-                const bool toggleMode =
-                    onScrolling ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle();
-                keptOut = !toggleMode && hasBareAlwaysActive(triggers)
+                // The caches stay empty without settings, so the sentinel test
+                // also guards the toggle read.
+                keptOut = hasBareAlwaysActive(triggers) && m_settings
+                    && !(onScrolling ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle())
                     && anyTriggerHeld(triggers, resolveReportedModifiers(modifiers), mouseButtons,
                                       SentinelMatch::SkipBare);
             }

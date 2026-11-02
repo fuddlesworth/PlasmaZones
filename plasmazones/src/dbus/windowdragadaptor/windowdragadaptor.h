@@ -496,9 +496,9 @@ private:
     /// paired with a button is not it: the per-tick read ANDs the button in,
     /// so it is that button's trigger.
     static bool hasBareAlwaysActive(const QVector<ParsedTrigger>& triggers);
-    /// The modifiers a compositor report carries. A report whose trigger is a
-    /// mouse button alone arrives as 0, so 0 falls back to Qt's own query
-    /// (which may not see the keyboard on Wayland without focus).
+    /// The modifiers a compositor report carries. A report with no modifier
+    /// held arrives as 0, which falls back to Qt's own query (which may not
+    /// see the keyboard on Wayland without focus).
     static Qt::KeyboardModifiers resolveReportedModifiers(int modifiers);
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -843,7 +843,7 @@ private:
     // Drag-insert toggle latch, shared across engines (the cursor is on one
     // screen at a time; the trigger LIST and toggle SETTING are selected per
     // tick by the engine owning the cursor screen).
-    bool m_dragInsertToggled = false; // Current toggle state for drag-insert
+    bool m_dragInsertToggled = false; // A tap has made an explicit choice this drag
     // The insert state the toggle latch's last tap asked for, meaningful only
     // while m_dragInsertToggled is set. Stored as the state, not as a
     // divergence from the default, because the default differs between a

@@ -181,12 +181,12 @@ private Q_SLOTS:
         // Off an engine screen nothing is active, and the latches come back
         // untouched so a return with the trigger still down is not a press.
         const auto d = resolveDragInsertActive(false, false, true, true, true, true, /*prev=*/true,
-                                               /*toggled=*/true, /*toggledInsert=*/false, /*reorder=*/true);
+                                               /*toggled=*/true, /*toggledInsert=*/true, /*reorder=*/true);
         QVERIFY(!d.active);
         QVERIFY(!d.suppressedByTrigger);
         QVERIFY(d.nextPrevTriggerHeld);
         QVERIFY(d.nextToggled);
-        QVERIFY(!d.nextToggledInsert);
+        QVERIFY(d.nextToggledInsert);
     }
 
     void insert_hold_triggerHeld_active()
