@@ -885,11 +885,12 @@ private Q_SLOTS:
 
     // ─── ColorScheme key-fold across EVERY cached resolver ────────────────
     // testContextLock_colorSchemeRuleFollowsProviderFlips proves the fold for
-    // ONE of the seven cached resolvers. The scheme token is a non-rule-set
+    // ONE of the cached resolvers. The scheme token is a non-rule-set
     // input, so each cache that omitted it from its key would latch the first
     // verdict and never re-resolve on a palette switch — a per-resolver bug
     // the lock test cannot see. Drive the same provider flip through the other
-    // six (assignment, gaps, default-assignment, OSD, overlay, drag selector).
+    // cached ones (assignment, gaps, default-assignment, OSD, overlay, drag
+    // selector).
     void testColorSchemeKeyFold_appliesToEveryCachedResolver()
     {
         const auto darkRule = [](const QString& name, const QList<PWR::RuleAction>& actions) {
@@ -915,7 +916,7 @@ private Q_SLOTS:
         shader.type = QString(PWR::ActionType::OverrideOverlayShader);
         shader.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("night-glow"));
         // A dark-scoped SNAPPING LAYOUT rule, so the assignment cache (whose
-        // key carries the scheme token in its own "twc:|or:|cs:" composite
+        // key carries the scheme token in its own "twc:|or:|sz:|cs:" composite
         // rather than through contextCacheKeyToken) is exercised too.
         PWR::RuleAction darkLayout;
         darkLayout.type = QString(PWR::ActionType::SetSnappingLayout);

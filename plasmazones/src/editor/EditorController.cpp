@@ -163,10 +163,10 @@ EditorController::EditorController(QObject* parent)
     subscribe(iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
 
     // The target screen's geometry is cached at switch time (virtual screen
-    // rect, scale, insets, and the bounds override measured against them), so
-    // a change under an unchanged target has to reach it some other way. The
-    // daemon announces resolution, scale and subdivision changes, the only
-    // source for a virtual screen or a fractional scale.
+    // rect, scale and insets), so a change under an unchanged target has to
+    // reach it some other way. The daemon announces resolution, scale and
+    // subdivision changes, the only source for a virtual screen or a
+    // fractional scale.
     const QString screenIface = QString(PhosphorProtocol::Service::Interface::Screen);
     subscribe(screenIface, QStringLiteral("screenGeometryChanged"), this, SLOT(onDaemonScreenGeometryChanged(QString)));
     subscribe(screenIface, QStringLiteral("virtualScreensChanged"), this, SLOT(onDaemonVirtualScreensChanged(QString)));
@@ -177,7 +177,7 @@ EditorController::EditorController(QObject* parent)
     subscribe(screenIface, QStringLiteral("availableGeometryChanged"), this,
               SLOT(onDaemonAvailableGeometryChanged(QString)));
     // A physical target is also measured off the editor's own QScreen
-    // (targetLogicalScreenSizeF), which updates on its own schedule, so watch
+    // (targetFullLogicalScreenSize), which updates on its own schedule, so watch
     // that too. Its available-geometry arm only refetches the insets, and Qt
     // reports a work area on only some Wayland compositors, which is why the
     // daemon's signal above is the one a virtual screen relies on.

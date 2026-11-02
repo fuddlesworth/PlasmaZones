@@ -500,6 +500,17 @@ QString LayoutAdaptor::getScreenStates()
             obj[QLatin1String("algorithmName")] = QString();
         }
 
+        // The live tiled-window count, the value a TiledWindowCount condition
+        // is judged against. Absent, not zero, while no tiling engine runs on
+        // the screen: the daemon leaves the condition unanswered there, and a
+        // reader that took 0 would match `TiledWindowCount Equals 0` on a
+        // snapping screen.
+        if (m_tiledWindowCountProvider) {
+            if (const std::optional<int> count = m_tiledWindowCountProvider(screenId)) {
+                obj[QLatin1String("tiledWindowCount")] = *count;
+            }
+        }
+
         result.append(obj);
     }
 

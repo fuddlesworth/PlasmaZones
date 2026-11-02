@@ -915,8 +915,8 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // windowOutput stays the fallback for an unresolvable id (Discussion #724:
     // w->screen() can disagree with the daemon on identical-model outputs, so
     // the position lookup is still the better of the two remaining options),
-    // mirroring the id-first-then-centre order ruleQuery uses for
-    // screenOrientation.
+    // mirroring the id-first-then-centre order ruleQuery uses for the
+    // screen-shape fields.
     KWin::LogicalOutput* activatedOutput = outputForScreenId(screenId);
     if (!activatedOutput) {
         activatedOutput = windowOutput(w);

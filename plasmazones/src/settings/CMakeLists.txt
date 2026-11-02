@@ -59,6 +59,11 @@ set(plasmazones_settings_SRCS
     # anonymous namespace in pagestate; internal linkage cannot span two TUs).
     controller/settingscontroller_pagekeys.h
     controller/settingscontroller_pagekeys.cpp
+    # The cached getScreenStates answer and its refresh bookkeeping (coalescing,
+    # request numbering, keep-last-on-error), split out so it unit-tests
+    # without D-Bus.
+    controller/screenstatescache.h
+    controller/screenstatescache.cpp
     # Pure page→root scoping helpers for the animation and decoration domains
     # (root dispatch, prefix match, scoped tree diff), split from pagestate so
     # they unit-test without the whole settings-app object graph.

@@ -688,8 +688,8 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="299"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="370"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="318"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="421"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="137"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="166"/>
@@ -2009,30 +2009,30 @@
         <translation>Visa ett specifikt avsnitt på sidan (djuplänk)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="50"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="51"/>
         <source>Identity</source>
         <translation>Identitet</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="56"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="57"/>
         <source>Type</source>
         <translation>Typ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="69"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="70"/>
         <source>State</source>
         <translation>Tillstånd</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="75"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="76"/>
         <source>Taskbar &amp; switcher</source>
         <translation>Aktivitetsfält och växlare</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="298"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="367"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="82"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="317"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="418"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
@@ -2043,195 +2043,210 @@
         <translation>Panelindelning</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="86"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="87"/>
         <source>Size</source>
         <translation>Storlek</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="95"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="99"/>
         <source>Context</source>
         <translation>Sammanhang</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="595"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="101"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
         <source>Other</source>
         <translation>Övrigt</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="108"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="112"/>
         <source>The application&apos;s ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.</source>
         <translation>Programmets ID (Wayland app_id / desktop-post), t.ex. org.kde.konsole.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="110"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="114"/>
         <source>The window&apos;s class as the compositor reports it, which is the WM_CLASS pair &quot;resourceName resourceClass&quot;. Konsole, for example, reports &quot;konsole konsole&quot;, not just &quot;konsole&quot;, so use contains or ends with rather than is.</source>
         <translation>Fönstrets klass så som kompositorn rapporterar den, alltså WM_CLASS-paret ”resourceName resourceClass”. Konsole rapporterar till exempel ”konsole konsole” och inte bara ”konsole”, så använd innehåller eller slutar med i stället för är.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="116"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="120"/>
         <source>The application&apos;s desktop entry file name.</source>
         <translation>Filnamnet på programmets desktop-post.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="118"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="122"/>
         <source>The window&apos;s X11 role (WM_WINDOW_ROLE). Empty for Wayland-native windows.</source>
         <translation>Fönstrets X11-roll (WM_WINDOW_ROLE). Tom för Wayland-inbyggda fönster.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="120"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="124"/>
         <source>The window&apos;s process ID.</source>
         <translation>Fönstrets process-ID.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="122"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="126"/>
         <source>The window&apos;s title-bar text.</source>
         <translation>Texten i fönstrets namnlist.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="124"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="128"/>
         <source>The window&apos;s type (Normal, Dialog, Utility, Notification, …).</source>
         <translation>Fönstrets typ (Normalt, Dialog, Verktyg, Avisering, …).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="126"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="130"/>
         <source>Whether the window is shown on all virtual desktops.</source>
         <translation>Om fönstret visas på alla virtuella skrivbord.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="132"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="136"/>
         <source>Whether the window is fullscreen.</source>
         <translation>Om fönstret är i helskärm.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="137"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
         <translation>Ett rullningsfönster i helskärm i fönster räknas här som helskärm.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="139"/>
         <source>Whether the window is minimized.</source>
         <translation>Om fönstret är minimerat.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="137"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="141"/>
         <source>Whether the window is maximized.</source>
         <translation>Om fönstret är maximerat.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="139"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="143"/>
         <source>Whether the window currently has keyboard focus.</source>
         <translation>Om fönstret för närvarande har tangentbordsfokus.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="141"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="145"/>
         <source>Whether the window is a transient (a dialog or popup owned by another window).</source>
         <translation>Om fönstret är transient (en dialog eller popup som ägs av ett annat fönster).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="143"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="147"/>
         <source>Whether the window is a notification or on-screen display.</source>
         <translation>Om fönstret är en avisering eller en skärmvisning.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="145"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="149"/>
         <source>The window&apos;s width in pixels.</source>
         <translation>Fönstrets bredd i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="147"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="151"/>
         <source>The window&apos;s height in pixels.</source>
         <translation>Fönstrets höjd i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="149"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="153"/>
         <source>Whether the window is set to stay above other windows (always on top).</source>
         <translation>Om fönstret är inställt att ligga ovanför andra fönster (alltid överst).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="151"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="155"/>
         <source>Whether the window is set to stay below other windows.</source>
         <translation>Om fönstret är inställt att ligga under andra fönster.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="153"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="157"/>
         <source>Whether the window is hidden from the taskbar.</source>
         <translation>Om fönstret är dolt från aktivitetsfältet.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="155"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="159"/>
         <source>Whether the window is hidden from the pager.</source>
         <translation>Om fönstret är dolt från skrivbordsvisaren.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="157"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="161"/>
         <source>Whether the window is hidden from the window switcher (Alt+Tab).</source>
         <translation>Om fönstret är dolt från fönsterväxlaren (Alt+Tab).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="159"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="163"/>
         <source>Whether the window is a modal dialog.</source>
         <translation>Om fönstret är en modal dialog.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="161"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="165"/>
         <source>Whether the window has a server-side title-bar and border.</source>
         <translation>Om fönstret har en serverbaserad namnlist och kant.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="163"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="167"/>
         <source>Whether the window can be resized.</source>
         <translation>Om fönstret kan storleksändras.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="169"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="173"/>
         <source>The window&apos;s left-edge X position in pixels.</source>
         <translation>X-positionen för fönstrets vänsterkant i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="175"/>
         <source>The window&apos;s top-edge Y position in pixels.</source>
         <translation>Y-positionen för fönstrets överkant i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="173"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="177"/>
         <source>The window&apos;s title without the application-name suffix the window manager adds.</source>
         <translation>Fönstrets titel utan det programnamnssuffix som fönsterhanteraren lägger till.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="177"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="181"/>
         <source>Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).</source>
         <translation>Om fönstret är fäst i en zon (manuellt zonläge, där panelindelade fönster inte är fästa).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="191"/>
         <source>The monitor the window is on.</source>
         <translation>Skärmen som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="189"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="193"/>
         <source>The virtual desktop the window is on.</source>
         <translation>Det virtuella skrivbord som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="191"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="195"/>
         <source>The KDE Activity the window is on.</source>
         <translation>KDE-aktiviteten som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="195"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="199"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>Hur många fönster som är panelindelade på denna skärm och detta skrivbord. Låter en regel byta panelindelningsalgoritm när fönster öppnas och stängs, till exempel en centrerad layout med ett enda fönster som ger vika när ett andra fönster öppnas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="208"/>
+        <source>The monitor&apos;s width in device pixels, counted before display scaling. A rotated monitor swaps its width and height. Lets a rule pick a different layout or algorithm when the same monitor runs at another resolution.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="213"/>
+        <source>The monitor&apos;s height in device pixels, counted before display scaling. A rotated monitor swaps its width and height. Lets a rule pick a different layout or algorithm when the same monitor runs at another resolution.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
+        <source>The monitor&apos;s shape, rounded to the nearest common ratio such as 16:9 or 32:9. Lets a rule pick a different layout or algorithm when a monitor changes shape, for example when its split mode halves its width.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="223"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
         <translation>Den layout som är aktiv på skärmen just nu, eller den rullningsmall som används där. Låter en regel ändra mellanrum, överlägget eller låsläget för den skärm som visar en viss layout eller mall. Den kan inte ändra vilken layout som är tilldelad, det skulle bli cirkulärt.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="209"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="228"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
         <translation>Om systemets färgschema är ljust eller mörkt. Låter en regel välja andra mellanrum, överläggsfärger eller layouter när skrivbordet växlar mellan dag- och nattteman. Reglerna tillämpas på nytt så snart temat ändras.</translation>
     </message>
@@ -2430,17 +2445,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="73"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="542"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="609"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
         <translation>Skärm</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="292"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="507"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="574"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
         <translation>Skrivbord</translation>
@@ -2467,8 +2482,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="297"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="361"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="316"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="412"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="56"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="29"/>
@@ -2489,12 +2504,12 @@
         <translation>Autopanelindelning</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="375"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="426"/>
         <source>Zone rectangles</source>
         <translation>Zonrektanglar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="378"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="429"/>
         <source>Layout preview</source>
         <translation>Förhandsgranskning av layout</translation>
     </message>
@@ -2504,37 +2519,37 @@
         <translation>Ange motorläge</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="165"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="169"/>
         <source>Whether the window can be moved.</source>
         <translation>Om fönstret kan flyttas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="167"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="171"/>
         <source>Whether the window can be maximized.</source>
         <translation>Om fönstret kan maximeras.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="175"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="179"/>
         <source>Whether the window has been floated out of tiling (snapping or tiling mode).</source>
         <translation>Om fönstret har gjorts flytande ut ur panelindelningen (fästnings- eller panelindelningsläge).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="180"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="184"/>
         <source>Whether the window is managed by the tiling engine.</source>
         <translation>Om fönstret hanteras av panelindelningsmotorn.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="186"/>
         <source>The zone the window is snapped into, in snapping mode. A window spanning several zones counts as being in the first of them. It suits rules about how a window looks or stacks while it sits in a zone, not rules about where a window opens.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="193"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="197"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
         <translation>Motorläget som fönstret placeras av (fästning, panelindelning eller rullning).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="200"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
         <translation>Om skärmen är i stående eller liggande orientering. Låter en regel välja en annan layout eller algoritm på en roterad skärm.</translation>
     </message>
@@ -3548,155 +3563,168 @@
         <translation>Flikindikator bredvid kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="221"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="240"/>
         <source>is</source>
         <translation>är</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="223"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="242"/>
         <source>contains</source>
         <translation>innehåller</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="225"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="244"/>
         <source>starts with</source>
         <translation>börjar med</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="227"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="246"/>
         <source>ends with</source>
         <translation>slutar med</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="229"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="248"/>
         <source>matches regex</source>
         <translation>matchar reguljärt uttryck</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="231"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="250"/>
         <source>matches app-id</source>
         <translation>matchar app-id</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="233"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
         <source>greater than</source>
         <translation>större än</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="235"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <source>less than</source>
         <translation>mindre än</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="263"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="282"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="289"/>
         <source>Unknown</source>
         <translation>Okänt</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="264"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="283"/>
         <source>Normal window</source>
         <translation>Normalt fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="284"/>
         <source>Dialog</source>
         <translation>Dialogruta</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="285"/>
         <source>Utility</source>
         <translation>Verktyg</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="267"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="286"/>
         <source>Toolbar</source>
         <translation>Verktygsrad</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="268"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="287"/>
         <source>Splash screen</source>
         <translation>Startskärm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="288"/>
         <source>Menu</source>
         <translation>Meny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
         <source>Tooltip</source>
         <translation>Verktygstips</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="81"/>
         <source>Notification</source>
         <translation>Avisering</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="291"/>
         <source>Dock / panel</source>
         <translation>Docka / panel</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="274"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="293"/>
         <source>On-screen display</source>
         <translation>Skärmvisning</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="275"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
         <source>Popup</source>
         <translation>Popup</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="276"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
         <source>Plasma applet popup</source>
         <translation>Plasma-appletpopup</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="303"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="322"/>
         <source>Landscape</source>
         <translation>Liggande</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="304"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="323"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
         <source>Portrait</source>
         <translation>Stående</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="327"/>
         <source>Light</source>
         <translation>Ljust</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="308"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="327"/>
         <source>Dark</source>
         <translation>Mörkt</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="383"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="380"/>
+        <source>%1 (portrait)</source>
+        <comment>screen aspect ratio such as 9:16, marked as taller than wide</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="238"/>
+        <source>%1 px</source>
+        <comment>a screen size in pixels, such as 2,560 px</comment>
+        <translation type="unfinished">%1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="434"/>
         <source>End of stack</source>
         <translation>Sist i stacken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="386"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="437"/>
         <source>After focused window</source>
         <translation>Efter fokuserat fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="389"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="440"/>
         <source>As master</source>
         <translation>Som huvudfönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="394"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="445"/>
         <source>Float overflow windows</source>
         <translation>Gör överflödiga fönster flytande</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="448"/>
         <source>Unlimited (no cap)</source>
         <translation>Obegränsat (ingen gräns)</translation>
     </message>
@@ -3827,7 +3855,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="443"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="494"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3844,7 +3872,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="437"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="488"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="652"/>
@@ -3863,7 +3891,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="440"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="491"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/TriggerLabels.qml.cpp" line="53"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="190"/>
@@ -3883,7 +3911,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="446"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="497"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3935,19 +3963,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="492"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="543"/>
         <source>Match the screen shape</source>
         <translation>Följ skärmens form</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="495"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="546"/>
         <source>Side to side</source>
         <translation>Sida vid sida</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="549"/>
         <source>Top to bottom</source>
         <translation>Uppifrån och ned</translation>
     </message>
@@ -4046,7 +4074,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="481"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="532"/>
         <source>Restore only</source>
         <translation>Endast återställa</translation>
     </message>
@@ -4072,7 +4100,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="402"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="453"/>
         <source>Float on drag</source>
         <translation>Gör flytande vid dragning</translation>
     </message>
@@ -4093,19 +4121,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="410"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="461"/>
         <source>Never</source>
         <translation>Aldrig</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="413"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="464"/>
         <source>Always</source>
         <translation>Alltid</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="192"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="416"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="467"/>
         <source>On overflow</source>
         <translation>Vid överflöde</translation>
     </message>
@@ -4160,55 +4188,55 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="459"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="510"/>
         <source>Right of the focused column</source>
         <translation>Till höger om den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="462"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="513"/>
         <source>Left of the focused column</source>
         <translation>Till vänster om den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="465"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="516"/>
         <source>Start of the strip</source>
         <translation>Remsans början</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="468"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="519"/>
         <source>End of the strip</source>
         <translation>Remsans slut</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="220"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="471"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="522"/>
         <source>Into the focused column</source>
         <translation>In i den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="421"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="472"/>
         <source>Normal</source>
         <translation>Normal</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="225"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="475"/>
         <source>Tabbed</source>
         <translation>Med flikar</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="429"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="480"/>
         <source>Titled chips</source>
         <translation>Namngivna brickor</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="230"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="432"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="483"/>
         <source>Segment bar</source>
         <translation>Segmentrad</translation>
     </message>
@@ -4239,42 +4267,42 @@
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="405"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="456"/>
         <source>Reorder in stack</source>
         <translation>Ändra ordning i stacken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="451"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="502"/>
         <source>New column</source>
         <translation>Ny kolumn</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="505"/>
         <source>Consume into focused column</source>
         <translation>Ta in i den fokuserade kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="478"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="529"/>
         <source>Treat as normal windows</source>
         <translation>Behandla som vanliga fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="484"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="535"/>
         <source>Ignore entirely</source>
         <translation>Ignorera helt</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="503"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="554"/>
         <source>Above other windows</source>
         <translation>Över andra fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="506"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="557"/>
         <source>Normal stacking</source>
         <translation>Normal stapling</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="509"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="560"/>
         <source>Below other windows</source>
         <translation>Under andra fönster</translation>
     </message>
@@ -4294,12 +4322,12 @@
         <translation>Dölj zonnummer</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="733"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="800"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
         <translation>Reguljärt uttryck, t.ex. ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="736"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="803"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
         <translation>Matchar efter omvända DNS-segment, så ”firefox” matchar även ”org.mozilla.firefox”.</translation>
     </message>
@@ -4340,29 +4368,29 @@
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="173"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="195"/>
         <source>Tiling (no algorithm assigned)</source>
         <translation>Panelindelning (ingen algoritm tilldelad)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="200"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="222"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="121"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="122"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="532"/>
         <source>On</source>
         <translation>På</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="497"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="200"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="222"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="148"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="433"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="121"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="122"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="532"/>
         <source>Off</source>
         <translation>Av</translation>
     </message>
@@ -5161,7 +5189,7 @@
         <translation>Höger mellanrum (ogiltigt)</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="253"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="275"/>
         <source>%n condition</source>
         <translation>
             <numerusform>%n villkor</numerusform>
@@ -5169,7 +5197,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="255"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="277"/>
         <source>%n conditions</source>
         <translation>
             <numerusform>%n villkor</numerusform>
@@ -5295,8 +5323,8 @@
         <translation>Höger mellanrum: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="229"/>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="595"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="234"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="603"/>
         <source>Everywhere</source>
         <translation>Överallt</translation>
     </message>
@@ -5365,7 +5393,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="61"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="651"/>
         <source>Window type</source>
         <translation>Fönstertyp</translation>
     </message>
@@ -5400,7 +5428,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="77"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="563"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="630"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation>Aktivitet</translation>
@@ -5582,7 +5610,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="119"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="715"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="818"/>
         <source>Zone</source>
         <translation>Zon</translation>
     </message>
@@ -5598,23 +5626,39 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="125"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="618"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="685"/>
         <source>Screen orientation</source>
         <translation>Skärmorientering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="127"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="658"/>
+        <source>Screen width</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
+        <source>Screen height</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="131"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="707"/>
+        <source>Screen aspect ratio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="133"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="761"/>
         <source>Active layout</source>
         <translation>Aktiv layout</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="226"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="248"/>
         <source>Any window</source>
         <translation>Valfritt fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="262"/>
         <source>(condition group)</source>
         <translation>(villkorsgrupp)</translation>
     </message>
@@ -10144,7 +10188,7 @@
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="105"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="155"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="162"/>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="85"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="128"/>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
@@ -10152,18 +10196,18 @@
         <translation>Zon %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="39"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="60"/>
         <source>%1 (%2)</source>
         <comment>a name, then a number telling it apart from others of the same name</comment>
         <translation type="unfinished">%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="70"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="112"/>
         <source>Unnamed layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="88"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="131"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -10247,8 +10291,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="938"/>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="138"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="494"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="160"/>
         <source>Scrolling (no template)</source>
         <translation>Rullning (ingen mall)</translation>
     </message>
@@ -10300,7 +10344,7 @@
         <translation>Kunde inte uppdatera bildförhållande: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="353"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="404"/>
         <source>Template: %1</source>
         <translation>Mall: %1</translation>
     </message>
@@ -14393,7 +14437,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="850"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="468"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="523"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Avbryt</translation>
@@ -14730,7 +14774,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="276"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="180"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="354"/>
         <source>(missing: %1)</source>
         <comment>@info item missing</comment>
         <translation>(saknas: %1)</translation>
@@ -17619,29 +17663,29 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="138"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="532"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="139"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="106"/>
         <source>Primary</source>
         <translation>Primär</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="138"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="532"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="139"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="599"/>
         <source>%1 · %2</source>
         <comment>monitor name, then the primary-monitor marker</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="590"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="541"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="608"/>
         <source>Choose a monitor…</source>
         <translation>Välj en skärm…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="634"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="506"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="573"/>
         <source>Choose a desktop…</source>
         <translation>Välj ett skrivbord…</translation>
     </message>
@@ -17679,7 +17723,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="420"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="211"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="229"/>
         <source>Choose…</source>
         <translation>Välj…</translation>
     </message>
@@ -17721,7 +17765,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="564"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="625"/>
         <source>Add rule</source>
         <translation>Lägg till regel</translation>
     </message>
@@ -17731,191 +17775,196 @@
         <translation>Välj en utgångspunkt först.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="273"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="278"/>
         <source>ALL of</source>
         <comment>composite match where every child must match</comment>
         <translation>ALLA av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="277"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="282"/>
         <source>ANY of</source>
         <comment>composite match where at least one child must match</comment>
         <translation>NÅGON av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="281"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="286"/>
         <source>NONE of</source>
         <comment>composite match where no child may match</comment>
         <translation>INGEN av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="293"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="298"/>
         <source>Condition group type</source>
         <translation>Villkorsgruppstyp</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="312"/>
         <source>Remove group</source>
         <translation>Ta bort grupp</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="309"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="314"/>
         <source>Remove this condition group</source>
         <translation>Ta bort den här villkorsgruppen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="216"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="390"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="398"/>
         <source>Add condition</source>
         <translation>Lägg till villkor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="220"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="225"/>
         <source>Add a second condition, grouping it with this one</source>
         <translation>Lägg till ett andra villkor och gruppera det med det här</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="394"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="402"/>
         <source>Add a condition to this group</source>
         <translation>Lägg till ett villkor i den här gruppen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="225"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="230"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="407"/>
         <source>Add group</source>
         <translation>Lägg till grupp</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="234"/>
         <source>Add a condition group alongside this condition</source>
         <translation>Lägg till en villkorsgrupp bredvid det här villkoret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="411"/>
         <source>Add a nested condition group</source>
         <translation>Lägg till en nästlad villkorsgrupp</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="151"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="158"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="153"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="160"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="163"/>
         <source>%1 · %2</source>
         <comment>@label monitor caption</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="543"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="560"/>
         <source>ALL of</source>
         <comment>Match-tree group where every child must match</comment>
         <translation>ALLA av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="543"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="560"/>
         <source>ANY of</source>
         <comment>Match-tree group where at least one child must match</comment>
         <translation>NÅGON av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="543"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="560"/>
         <source>NONE of</source>
         <comment>Match-tree group where no child may match</comment>
         <translation>INGEN av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="167"/>
         <source>Pick from running applications</source>
         <translation>Välj bland körande program</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="152"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="170"/>
         <source>Pick desktop file from running windows</source>
         <translation>Välj skrivbordsfil från körande fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="155"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="173"/>
         <source>Pick title from running windows</source>
         <translation>Välj titel från körande fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="175"/>
         <source>Pick from running windows</source>
         <translation>Välj bland körande fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="230"/>
         <source>Match field</source>
         <translation>Matchningsfält</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="286"/>
         <source>Match operator</source>
         <translation>Matchningsoperator</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="366"/>
         <source>Remove condition</source>
         <translation>Ta bort villkor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="368"/>
         <source>Remove this condition</source>
         <translation>Ta bort det här villkoret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="374"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="436"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="395"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
         <source>Match value</source>
         <translation>Matchningsvärde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="397"/>
         <source>Value</source>
         <translation>Värde</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="629"/>
         <source>Choose an activity…</source>
         <translation>Välj en aktivitet…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="650"/>
         <source>Choose a window type…</source>
         <translation>Välj en fönstertyp…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
         <source>Choose a mode…</source>
         <translation>Välj ett läge…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="602"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="669"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
         <translation>Placeringsläge</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="684"/>
         <source>Choose an orientation…</source>
         <translation>Välj en orientering…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="706"/>
+        <source>Choose an aspect ratio…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="736"/>
         <source>Choose a scheme…</source>
         <translation>Välj ett schema…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="657"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="760"/>
         <source>Choose a layout…</source>
         <translation>Välj en layout…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="707"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="810"/>
         <source>Choose a zone…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="707"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="810"/>
         <source>No zones in your layouts</source>
         <translation type="unfinished"></translation>
     </message>
@@ -18383,124 +18432,124 @@
         <translation>Vad ska den här regeln handla om?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="404"/>
         <source>Failed to save rules.</source>
         <translation>Det gick inte att spara regler.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="440"/>
         <source>Choose Color</source>
         <translation>Välj färg</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="482"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>PlasmaZones bakgrundstjänst körs inte. Regler kan inte läsas in eller sparas förrän den startar.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="434"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="489"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>Reglerna ändrades på disk medan du redigerade. Att spara nu skriver över de ändringarna. Granska dina redigeringar innan du sparar, eller förkasta dem för att läsa in på nytt.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="445"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="500"/>
         <source>Save anyway</source>
         <translation>Spara ändå</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="505"/>
         <source>Discard and reload</source>
         <translation>Förkasta och läs in på nytt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>Skriv över ändringar på bakgrundstjänstens sida?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>Att spara ersätter regeluppsättningen som bakgrundstjänsten för närvarande har på disk med dina förberedda redigeringar. Regler som ändrades där medan du redigerade går förlorade.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="528"/>
         <source>Overwrite</source>
         <translation>Skriv över</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="578"/>
         <source>Search rules…</source>
         <translation>Sök regler…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="579"/>
         <source>Search rules</source>
         <translation>Sök regler</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="534"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="595"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>Filtrera regler</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="538"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="599"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>System</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="542"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="603"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Användarskapad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="554"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="615"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Aktiv</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="558"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="619"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Inaktiverad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="566"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="627"/>
         <source>Add a new rule</source>
         <translation>Lägg till en ny regel</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="645"/>
         <source>No rules yet</source>
         <translation>Inga regler än</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="645"/>
         <source>No rules match the current filter</source>
         <translation>Inga regler matchar det aktuella filtret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="646"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>Lägg till en regel för att tilldela layouter till skärmar, göra programfönster flytande eller åsidosätta animationer.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="646"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="627"/>
         <source>Try a different filter or search term.</source>
         <translation>Prova ett annat filter eller en annan sökterm.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="596"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="657"/>
         <source>All rules</source>
         <translation>Alla regler</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="598"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="659"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="151"/>
         <source>%n rule</source>
         <translation>
             <numerusform>%n regel</numerusform>
@@ -18508,7 +18557,7 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="660"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · dra för att ange prioritetsordning</translation>
@@ -18521,28 +18570,28 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/DisplayMap.qml.cpp" line="415"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="84"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="86"/>
         <source>Unknown monitor</source>
         <translation>Okänd skärm</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="129"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="131"/>
         <source>Layout locked</source>
         <comment>@info:accessibility monitor tile</comment>
         <translation>Layout låst</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="153"/>
         <source>Not assigned</source>
         <translation>Ej tilldelad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="160"/>
         <source>Engine off</source>
         <translation>Motor av</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="186"/>
         <source>Filter rules to monitor %1</source>
         <translation>Filtrera regler till skärmen %1</translation>
     </message>
@@ -21869,10 +21918,10 @@
         <translation>Färg för %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
+        <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="135"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="31"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="47"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="634"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="737"/>
         <source>Color scheme</source>
         <translation>Färgschema</translation>
     </message>
@@ -22557,7 +22606,7 @@
         <translation>Färgar om släppindikatorns kant medan ett matchande fönster dras.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="251"/>
+        <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="252"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="248"/>
         <source>%1 · %2</source>
         <comment>animation section, then the event inside it</comment>
@@ -22606,7 +22655,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="418"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="618"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="493"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="560"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
         <translation>%1: %2</translation>
@@ -23485,16 +23534,33 @@
         <translation>px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="183"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="179"/>
+        <source>Virtual screen %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="181"/>
+        <source>%1 on %2</source>
+        <comment>a virtual screen, then the monitor it is part of</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="465"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="205"/>
         <source>Snapping (no layout)</source>
         <translation>Fästning (ingen layout)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="165"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="472"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <source>Tiling (no algorithm)</source>
         <translation>Panelindelning (ingen algoritm)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="563"/>
+        <source>%1 is %2 × %3 pixels right now, which is closest to %4.</source>
+        <comment>monitor name, its width and height in device pixels, then its aspect ratio</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="133"/>

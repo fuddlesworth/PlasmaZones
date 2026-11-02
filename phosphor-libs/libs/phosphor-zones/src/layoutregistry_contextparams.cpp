@@ -67,17 +67,21 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
     // screen / layout changes via the daemon's updateEngineScreens, not the hot
     // per-cursor path. Being uncached lets us stamp the active layout AND the
-    // screen orientation onto the query without folding either into a cache key
+    // screen shape onto the query without folding either into a cache key
     // (no cached entry to go stale). Safe from recursion: rulesVisibleActiveLayoutId
     // routes through resolveAssignmentEntry, which never calls this resolver.
     // Mode IS stamped (same rationale as resolveContextScrollingParams): the
     // resolver only runs for autotile screens, and a user rule pinning
     // `Mode Equals "tiling"` alongside a tiling-param action would silently
     // never fire against an unstamped query.
+    // The shape is read once and serves both the query stamp and the active
+    // layout's own resolve, so the two cannot describe different readings.
+    const ScreenShape shape = screenShape(screenId);
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Tiling));
-    stampScreenOrientation(query, screenId);
+    applyScreenShape(query, shape);
     stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                    tiledWindowCount(screenId, virtualDesktop, activity));
     // Filtered resolve, but with NO managed catch-all exclusion (unlike
     // resolveContextGaps'): the baseline rule carries only gap/default slots,
     // never tiling params, so there is no catch-all to exclude here. The
@@ -93,23 +97,29 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
         QString(PWR::ActionSlot::AlgorithmParams),
     };
     const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
-    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [&registry](const PWR::Rule& r) {
-        // TiledWindowCount is not stamped here either, and an absent field
-        // makes a leaf false, so a negated leaf on it would match every
-        // context. Mode IS stamped above, so it stays admitted. Window-sourced
-        // fields carry the negation-scoped guard (positive leaves stay inert
-        // by design; a `none{}` leaf inverts on absence).
-        if (r.match.referencesAnyField({PWR::Field::TiledWindowCount})
-            || r.match.negatesAnyField(PWR::windowSourcedFields())) {
-            return false;
-        }
-        for (const PWR::RuleAction& a : r.actions) {
-            if (tilingSlots.contains(registry.slotFor(a))) {
-                return true;
+    // Read off the query the shape was stamped onto above, so the guard and the
+    // evaluation see the one reading.
+    const QSet<PWR::Field> unknownShape = unknownScreenShapeFields(query);
+    const PWR::ResolvedActions resolved =
+        m_evaluator->resolveFiltered(query, [&registry, &unknownShape](const PWR::Rule& r) {
+            // TiledWindowCount is not stamped here either, and an absent field
+            // makes a leaf false, so a negated leaf on it would match every
+            // context. Mode IS stamped above, so it stays admitted. Window-sourced
+            // fields and unknown screen-shape fields carry the negation-scoped
+            // guard (positive leaves stay inert by design; a `none{}` leaf
+            // inverts on absence).
+            if (r.match.referencesAnyField({PWR::Field::TiledWindowCount})
+                || r.match.negatesAnyField(PWR::windowSourcedFields())
+                || negatesUnknownScreenShape(r.match, unknownShape)) {
+                return false;
             }
-        }
-        return false;
-    });
+            for (const PWR::RuleAction& a : r.actions) {
+                if (tilingSlots.contains(registry.slotFor(a))) {
+                    return true;
+                }
+            }
+            return false;
+        });
 
     ContextTilingParams params;
     // No defense-in-depth clamps here, unlike the scrolling resolver's
@@ -198,17 +208,19 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
 {
     // Per-slot read, uncached for the same reasons resolveContextTilingParams is:
     // it runs on screen / layout changes rather than the hot per-cursor path, which
-    // lets the query carry the active layout and the screen orientation without
+    // lets the query carry the active layout and the screen shape without
     // folding either into a cache key.
     // Field::Mode IS stamped: this resolver only runs for screens the
     // cascade already put in Scrolling mode, so the stamp costs nothing —
     // but a user rule that pins `Mode Equals "scrolling"` alongside a
     // scroll-param action (a redundant-but-legal spelling) would silently
     // never fire against an unstamped query.
+    const ScreenShape shape = screenShape(screenId);
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Scrolling));
-    stampScreenOrientation(query, screenId);
+    applyScreenShape(query, shape);
     stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                    tiledWindowCount(screenId, virtualDesktop, activity));
     // Filtered resolve with no managed catch-all exclusion: same baseline-slot
     // rationale as the tiling-param resolver above. The slot-carrying gate is
     // the same one too, and load-bearing for the same reason: the walk STOPS at
@@ -256,22 +268,26 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         QString(PWR::ActionSlot::ScrollStripAxis),
     };
     const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
-    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [&registry](const PWR::Rule& r) {
-        // TiledWindowCount is not stamped here, and an absent field makes a
-        // leaf false, so a negated leaf on it would match every context. Mode
-        // IS stamped above, so it stays admitted. Window-sourced fields carry
-        // the negation-scoped guard, same as the tiling-param twin.
-        if (r.match.referencesAnyField({PWR::Field::TiledWindowCount})
-            || r.match.negatesAnyField(PWR::windowSourcedFields())) {
-            return false;
-        }
-        for (const PWR::RuleAction& a : r.actions) {
-            if (scrollingSlots.contains(registry.slotFor(a))) {
-                return true;
+    const QSet<PWR::Field> unknownShape = unknownScreenShapeFields(query);
+    const PWR::ResolvedActions resolved =
+        m_evaluator->resolveFiltered(query, [&registry, &unknownShape](const PWR::Rule& r) {
+            // TiledWindowCount is not stamped here, and an absent field makes a
+            // leaf false, so a negated leaf on it would match every context. Mode
+            // IS stamped above, so it stays admitted. Window-sourced fields and
+            // unknown screen-shape fields carry the negation-scoped guard, same as
+            // the tiling-param twin.
+            if (r.match.referencesAnyField({PWR::Field::TiledWindowCount})
+                || r.match.negatesAnyField(PWR::windowSourcedFields())
+                || negatesUnknownScreenShape(r.match, unknownShape)) {
+                return false;
             }
-        }
-        return false;
-    });
+            for (const PWR::RuleAction& a : r.actions) {
+                if (scrollingSlots.contains(registry.slotFor(a))) {
+                    return true;
+                }
+            }
+            return false;
+        });
 
     ContextScrollingParams params;
     // Defense in depth for the two fraction slots (the descriptor validator

@@ -14,6 +14,7 @@
 #include <functional>
 
 #include <PhosphorRules/Rule.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include "rulemodel.h"
 
@@ -152,6 +153,15 @@ public:
     /// zoneMatchOptionsChanged only when it differs, and `{}` clears it before
     /// the captured registry is destroyed.
     void setZoneMatchOptionsProvider(std::function<QVariantList()> provider);
+    /// Install the colour-scheme token ("light" / "dark") monitorOverview
+    /// stamps on each screen's query, read live per call. Unset stamps an
+    /// empty token.
+    void setColorSchemeProvider(std::function<QString()> provider);
+    /// Install the global default assignment monitorOverview bases a screen on
+    /// when a rule fills a layout slot but no rule sets the engine mode (the
+    /// daemon's level-1 default, suppression included). Read live per call.
+    /// Unset reads an empty Snapping entry.
+    void setDefaultAssignmentProvider(std::function<PhosphorZones::AssignmentEntry()> provider);
     /// Re-read each installed zone provider and publish whichever result
     /// changed; a cleared provider keeps its last list. Each provider walks
     /// every layout, but the controller emits only on a real change, so the
@@ -352,21 +362,44 @@ public:
 
     /// Read-only per-monitor summary for the overview strip. Each entry:
     /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned, locked }`
-    /// (`locked` is true when a LockContext rule pins the monitor's layout).
+    /// (`locked` is true when a LockContext rule locks the monitor's layout).
     /// @p screens is the `SettingsController::screens` list (each a map with a
     /// `name` field, and a `screenId` fallback) so the overview can list every
     /// connected monitor — including ones with no rule at all (the "Not
-    /// assigned" tile).
-    Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens) const;
+    /// assigned" tile). Its `pixelWidth` / `pixelHeight` give the screen's
+    /// shape when `pixelSizeKnown` is set, and its logical `width` / `height`
+    /// give only the orientation otherwise, as in the daemon.
+    ///
+    /// Every tile describes what the STAGED rules do to that screen in its
+    /// current state: each rule's whole match is evaluated against a query
+    /// built from the screen's shape, the colour-scheme provider, and the
+    /// matching @p screenStates entry (`SettingsController::screenStates`:
+    /// `screenId`, `virtualDesktop`, `activity`, `tiledWindowCount`). The
+    /// layout and lock come from the daemon's own slot resolvers
+    /// (LayoutRegistry::resolveRuleSlots / resolveLockRule).
+    Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens,
+                                             const QVariantList& screenStates = QVariantList()) const;
+
+    /// Plain-prose note on the current device-pixel size and nearest aspect
+    /// ratio of each screen @p matchJson pins (RuleModel::screenIdsOf), read
+    /// from @p screens (the `SettingsController::screens` list). A pinned
+    /// monitor split into virtual screens is named through each of them. The
+    /// daemon retries a virtual screen against its monitor's rules only when
+    /// the virtual screen's own rules fill no slot, and on that retry the
+    /// monitor's rules read the virtual screen's size.
+    /// The rule editor shows it under a Screen width, Screen height or
+    /// Screen aspect ratio value. Empty when the match pins no connected
+    /// screen whose size the daemon knows (`pixelSizeKnown`).
+    Q_INVOKABLE QString screenSizeHint(const QVariantList& screens, const QVariantMap& matchJson) const;
 
     // ── Authoring metadata for the QML editors ────────────────────────────
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
     ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
-    ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme"|"zone" }`. The screen /
+    ///    "screen"|"activity"|"mode"|"orientation"|"aspectRatio"|"layout"|"colorScheme"|"zone" }`. The screen /
     /// activity / virtualDesktop / layout / zone kinds drive dedicated pickers; the
-    /// closed-vocab kinds (windowType / mode / orientation / colorScheme) also carry an
+    /// closed-vocab kinds (windowType / mode / orientation / aspectRatio / colorScheme) also carry an
     /// `options` list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
@@ -611,6 +644,9 @@ private:
     /// answer, cached and compared for the same reasons as the name list.
     std::function<QVariantList()> m_zoneMatchOptionsProvider;
     QVariantList m_zoneMatchOptions;
+    /// See setColorSchemeProvider / setDefaultAssignmentProvider.
+    std::function<QString()> m_colorSchemeProvider;
+    std::function<PhosphorZones::AssignmentEntry()> m_defaultAssignmentProvider;
 
     /// Re-read one zone provider and publish its list if it changed; a
     /// cleared provider is skipped. refreshZoneLists() runs both, each setter
