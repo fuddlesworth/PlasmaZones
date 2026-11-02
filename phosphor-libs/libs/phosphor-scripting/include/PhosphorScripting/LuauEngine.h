@@ -97,7 +97,8 @@ public:
 
     /// Call `module[function](args...)` under the watchdog, returning a single
     /// result. @p timeoutMs <= 0 means no timeout. A result too large to convert
-    /// (see Marshal::MaxNodes) is reported as CallStatus::Error, not as a nil.
+    /// (see Marshal::MaxNodes and Marshal::MaxBytes) is reported as
+    /// CallStatus::Error, not as a nil.
     CallOutcome callModule(int moduleHandle, const QString& function, const QVariantList& args, int timeoutMs);
 
     bool isValid() const noexcept

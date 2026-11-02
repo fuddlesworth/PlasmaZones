@@ -99,13 +99,25 @@ void pushVariant(lua_State* L, const QVariant& v, int depth)
 namespace {
 
 // State shared by one toVariant() walk: the tables on the current path (to
-// cut cycles) and the values converted so far (to bound the total work).
+// cut cycles), and the values and string bytes converted so far (to bound the
+// total work and memory).
 struct Walk
 {
     QSet<const void*> path;
     int nodes = 0;
+    qsizetype bytes = 0;
     bool exhausted = false;
 };
+
+// Counts @p len bytes of string copy; false once the walk is over MaxBytes.
+bool admitBytes(Walk& walk, size_t len)
+{
+    walk.bytes += static_cast<qsizetype>(std::min(len, static_cast<size_t>(MaxBytes) + 1));
+    if (walk.bytes > MaxBytes) {
+        walk.exhausted = true;
+    }
+    return !walk.exhausted;
+}
 
 QVariant convert(lua_State* L, int idx, int depth, Walk& walk);
 
@@ -150,7 +162,7 @@ QVariant convertTable(lua_State* L, int abs, int depth, Walk& walk)
         // Distinguish a genuinely empty-string key (kept) from a key that
         // failed coercion to a string — only the latter (k == nullptr,
         // e.g. a table/function/boolean key) is dropped.
-        const bool haveKey = (k != nullptr);
+        const bool haveKey = (k != nullptr) && admitBytes(walk, klen);
         const QString key = haveKey ? QString::fromUtf8(k, static_cast<qsizetype>(klen)) : QString();
         lua_pop(L, 1); // key copy
         if (haveKey) {
@@ -190,6 +202,9 @@ QVariant convert(lua_State* L, int idx, int depth, Walk& walk)
     case LUA_TSTRING: {
         size_t len = 0;
         const char* s = lua_tolstring(L, abs, &len);
+        if (!admitBytes(walk, len)) {
+            return QVariant();
+        }
         return QVariant(QString::fromUtf8(s, static_cast<qsizetype>(len)));
     }
     case LUA_TTABLE: {

@@ -367,7 +367,9 @@ LuauEngine::CallOutcome LuauEngine::callModule(int moduleHandle, const QString& 
         // acts on the result could not tell the difference.
         out.result = QVariant();
         out.status = CallStatus::Error;
-        out.message = QStringLiteral("result too large (more than %1 values)").arg(Marshal::MaxNodes);
+        out.message = QStringLiteral("result too large (more than %1 values or %2 bytes of text)")
+                          .arg(Marshal::MaxNodes)
+                          .arg(Marshal::MaxBytes);
         return out;
     }
     out.status = CallStatus::Ok;
