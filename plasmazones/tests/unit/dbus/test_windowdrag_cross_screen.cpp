@@ -778,7 +778,7 @@ private Q_SLOTS:
 
     // A reorder tile flicked within the effect's first-tick throttle (32 ms)
     // reaches endDrag with no tick at all, however far it moved. The drop
-    // runs the begin and commit the tick never did, so the tile goes back to
+    // runs a begin and cancel the tick never did, so the tile goes back to
     // its slot and the engine re-emits its rect: nothing else does, since
     // the engines leave a window alone when its drag mark clears. A flick
     // onto another screen floats where it lands.
@@ -802,6 +802,44 @@ private Q_SLOTS:
         const PhosphorProtocol::DragOutcome away = f.adaptor->endDrag(w, f.inFirst().x(), f.inFirst().y(), 0, 0, false);
         QCOMPARE(away.action, PhosphorProtocol::DragOutcome::ApplyFloat);
         QVERIFY(!f.tiling->hasDragInsertPreview());
+    }
+
+    // The same no-tick drop on a strip, scrolling's always re-insert being
+    // its reorder mode. The drop puts the column back and re-emits its rect.
+    // With the keep-out trigger held from before the drag, no tick ever shows
+    // it, and the drop's own report is the first that can: the window floats.
+    void activeDrag_scrollReorderNoTickDropReturnsUnlessKeptOut()
+    {
+        Fixture f;
+        f.scrollTheOtherScreen();
+        f.settings.setScrollingDragInsertTriggers(
+            {QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::Alt)},
+                         {ConfigDefaults::triggerMouseButtonField(), 0}},
+             QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::AlwaysActive)},
+                         {ConfigDefaults::triggerMouseButtonField(), 0}}});
+        for (const char* id : {"s|A", "s|B", "s|C"}) {
+            f.scrolling->windowOpened(QLatin1String(id), f.other, 0, 0);
+        }
+        QCoreApplication::processEvents();
+        const QString w = QStringLiteral("s|B");
+        QVERIFY2(f.scrolling->isWindowTiled(w), "precondition: the window is a strip column");
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 400, 0, 400, 1080, f.other, 0);
+        QVERIFY(!f.scrolling->hasDragInsertPreview());
+        QSignalSpy tiled(f.scrolling.get(), &PhosphorScrollEngine::ScrollEngine::windowsTiled);
+        const PhosphorProtocol::DragOutcome flick =
+            f.adaptor->endDrag(w, f.inOther().x() + 300, f.inOther().y(), 0, 0, false);
+        QCOMPARE(flick.action, PhosphorProtocol::DragOutcome::NoOp);
+        QVERIFY(!f.scrolling->hasDragInsertPreview());
+        QVERIFY(f.scrolling->isWindowTiled(w));
+        QVERIFY2(tiledEmissionsCarryGeometryFor(tiled, w), "the column's strip rect must be re-emitted");
+
+        const int alt = static_cast<int>(Qt::AltModifier);
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 400, 0, 400, 1080, f.other, 0);
+        const PhosphorProtocol::DragOutcome keptOut =
+            f.adaptor->endDrag(w, f.inOther().x() + 300, f.inOther().y(), alt, 0, false);
+        QCOMPARE(keptOut.action, PhosphorProtocol::DragOutcome::ApplyFloat);
+        QVERIFY(!f.scrolling->hasDragInsertPreview());
     }
 
     // A tile dragged under "always re-insert" with the keep-out trigger held

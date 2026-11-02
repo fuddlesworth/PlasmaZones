@@ -345,14 +345,14 @@ private Q_SLOTS:
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
-        // ...and it GRABS THE KEYBOARD, which every other engine-owned arm
-        // does not. Scrolling's always re-insert is its reorder mode, which
-        // runs the preview with nothing held: hold mode cancels the preview
-        // when the trigger is released, but here only a held keep-out trigger
-        // does (#1162), and only where the user has bound one, so Escape has
-        // to work. Without the
-        // grab Escape reaches KWin's MoveResizeFilter and aborts the whole
-        // move instead of just the re-insert.
+        // ...and it GRABS THE KEYBOARD, which the engine-owned arms outside
+        // reorder mode do not. Scrolling's always re-insert is its reorder
+        // mode, which runs the preview with nothing held: hold mode cancels
+        // the preview when the trigger is released, but here only a held
+        // keep-out trigger does (#1162), and only where the user has bound
+        // one, so Escape has to work. Without the grab Escape reaches KWin's
+        // MoveResizeFilter and aborts the whole move instead of just the
+        // re-insert.
         QVERIFY2(p.grabKeyboard, "always-on re-insert must grab so Escape can cancel the preview, not the move");
         QVERIFY(p.validationError().isEmpty());
     }

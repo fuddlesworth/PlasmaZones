@@ -491,6 +491,15 @@ private:
                         SentinelMatch sentinels = SentinelMatch::Include) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
+    /// Whether @p triggers carries the bare AlwaysActive sentinel, the
+    /// "always" bit of a drag re-insert list (always re-insert). A sentinel
+    /// paired with a button is not it: the per-tick read ANDs the button in,
+    /// so it is that button's trigger.
+    static bool hasBareAlwaysActive(const QVector<ParsedTrigger>& triggers);
+    /// The modifiers a compositor report carries. A report whose trigger is a
+    /// mouse button alone arrives as 0, so 0 falls back to Qt's own query
+    /// (which may not see the keyboard on Wayland without focus).
+    static Qt::KeyboardModifiers resolveReportedModifiers(int modifiers);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Legacy drag state-machine helpers (formerly public D-Bus slots). Now
@@ -835,23 +844,24 @@ private:
     // screen at a time; the trigger LIST and toggle SETTING are selected per
     // tick by the engine owning the cursor screen).
     bool m_dragInsertToggled = false; // Current toggle state for drag-insert
-    // The always re-insert state m_dragInsertToggled was set under. The latch
-    // means "insert on" without always re-insert and "kept out" with it, so
-    // resolveDragInsertActive reads it as clear on a screen with the other
-    // meaning, without writing it back.
-    bool m_dragInsertToggledAlwaysOn = false;
+    // The insert state the toggle latch's last tap asked for, meaningful only
+    // while m_dragInsertToggled is set. Stored as the state, not as a
+    // divergence from the default, because the default differs between a
+    // screen with always re-insert and one without (resolveDragInsertActive).
+    bool m_dragInsertToggledInsert = false;
     // A dragMoved tick reached the drag-insert block over an engine screen
     // this drag. endDrag reads it for a reorder tile: with no such tick the
-    // preview never began, so the drop runs the begin and commit itself;
-    // after one the tick has already decided. Reset by beginDrag and
-    // resetDragState.
+    // preview never began, so the drop puts the tile back itself (or floats
+    // it when its report shows the keep-out held); after one the tick has
+    // already decided. Reset by beginDrag and resetDragState.
     bool m_dragInsertEngineTicked = false;
     bool m_prevDragInsertHeld = false; // Previous frame's drag-insert trigger state
     // Escape dismissed the re-insert for this drag (cancelSnap). While set,
     // dragMoved reads the drag-insert trigger as released and the policy-flip
     // re-latch leaves reorder down. Only a real trigger re-press clears it:
     // an entry other than the bare sentinel released
-    // (m_dragInsertReleasedAfterCancel) and pressed again on an engine screen. Reset by beginDrag and resetDragState.
+    // (m_dragInsertReleasedAfterCancel) and pressed again on an engine
+    // screen. Reset by beginDrag and resetDragState.
     bool m_dragInsertCancelled = false;
     bool m_dragInsertReleasedAfterCancel = false;
     // Journal-diagnostic dedup for the "drag-insert tick:" line: first tick

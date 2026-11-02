@@ -43,29 +43,27 @@ ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode, bo
 
 DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn, bool toggleMode,
                                            bool rawTriggerHeld, bool graceHeld, bool prevTriggerHeld, bool toggled,
-                                           bool toggledAlwaysOn, bool reorderActive)
+                                           bool toggledInsert, bool reorderActive)
 {
     DragInsertDecision out;
     out.nextPrevTriggerHeld = prevTriggerHeld;
     out.nextToggled = toggled;
-    out.nextToggledAlwaysOn = toggledAlwaysOn;
+    out.nextToggledInsert = toggledInsert;
     if (!onEngineScreen) {
         return out;
     }
 
-    // A latch set under the other inversion reads as clear here (see the
-    // header) but is not written back cleared, so the tap it records still
-    // holds once the drag returns to a screen with the inversion it was set
-    // under. Only a tap on this screen rewrites it, in this screen's terms. A
-    // hold-mode screen never flips the latch, so it passes through untouched.
-    const bool latch = toggled && toggledAlwaysOn == alwaysOn;
+    // The stored pair is the user's last explicit choice (see the header),
+    // read here as "diverges from this screen's default". A hold-mode screen
+    // never flips it, so it passes through untouched.
+    const bool latch = toggled && toggledInsert != alwaysOn;
     // Toggle mode reads the raw state, since the grace never applies there;
     // hold mode reads the state the grace extended.
     const ActivationDecision decision =
         resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode, alwaysOn, prevTriggerHeld, latch);
     if (decision.nextActivationToggled != latch) {
-        out.nextToggled = decision.nextActivationToggled;
-        out.nextToggledAlwaysOn = alwaysOn;
+        out.nextToggled = true;
+        out.nextToggledInsert = decision.nextActivationToggled != alwaysOn;
     }
     // The edge latch follows the RAW state on every engine-screen tick, not
     // the grace-extended one: the toggle setting is per engine, so a hold

@@ -173,7 +173,7 @@ private Q_SLOTS:
 
     // ─── Drag re-insert (resolveDragInsertActive, discussion #1162) ───────
     // Argument order: onEngineScreen, cancelled, alwaysOn, toggleMode,
-    // rawTriggerHeld, graceHeld, prevTriggerHeld, toggled, toggledAlwaysOn,
+    // rawTriggerHeld, graceHeld, prevTriggerHeld, toggled, toggledInsert,
     // reorderActive.
 
     void insert_offEngineScreen_inactive_latchesKept()
@@ -181,12 +181,12 @@ private Q_SLOTS:
         // Off an engine screen nothing is active, and the latches come back
         // untouched so a return with the trigger still down is not a press.
         const auto d = resolveDragInsertActive(false, false, true, true, true, true, /*prev=*/true,
-                                               /*toggled=*/true, /*toggledAlwaysOn=*/true, /*reorder=*/true);
+                                               /*toggled=*/true, /*toggledInsert=*/false, /*reorder=*/true);
         QVERIFY(!d.active);
         QVERIFY(!d.suppressedByTrigger);
         QVERIFY(d.nextPrevTriggerHeld);
         QVERIFY(d.nextToggled);
-        QVERIFY(d.nextToggledAlwaysOn);
+        QVERIFY(!d.nextToggledInsert);
     }
 
     void insert_hold_triggerHeld_active()
@@ -260,10 +260,10 @@ private Q_SLOTS:
         QVERIFY(!press.active);
         QVERIFY(press.suppressedByTrigger);
         QVERIFY(press.nextToggled);
-        QVERIFY(press.nextToggledAlwaysOn);
+        QVERIFY2(!press.nextToggledInsert, "the tap chose to keep the drag out");
 
         const auto released = resolveDragInsertActive(true, false, true, true, false, false, press.nextPrevTriggerHeld,
-                                                      press.nextToggled, press.nextToggledAlwaysOn, false);
+                                                      press.nextToggled, press.nextToggledInsert, false);
         QVERIFY(!released.active);
         QVERIFY(released.suppressedByTrigger);
     }
@@ -271,9 +271,10 @@ private Q_SLOTS:
     void insert_alwaysOn_toggle_secondPress_reinserts()
     {
         const auto d = resolveDragInsertActive(true, false, true, true, /*raw=*/true, true, /*prev=*/false,
-                                               /*toggled=*/true, /*toggledAlwaysOn=*/true, false);
+                                               /*toggled=*/true, /*toggledInsert=*/false, false);
         QVERIFY(d.active);
-        QVERIFY(!d.nextToggled);
+        QVERIFY(d.nextToggled);
+        QVERIFY2(d.nextToggledInsert, "the second tap chose the insert again");
     }
 
     void insert_alwaysOn_toggle_defaultIsReinsert()
@@ -286,10 +287,11 @@ private Q_SLOTS:
     }
 
     /**
-     * The toggle latch is shared across engines, but it means "insert on"
-     * without always-on and "kept out" with it. A tap on one toggle-mode
-     * screen crossing onto a toggle-mode screen with the other inversion must
-     * keep the outcome the user tapped for, not turn into its opposite.
+     * The toggle latch is shared across engines, and a screen's default
+     * differs with always-on (insert off without it, on with it). The latch
+     * records the insert state the last tap chose, so a tap on one
+     * toggle-mode screen keeps its outcome on a screen with the other
+     * inversion instead of turning into its opposite.
      */
     void insert_toggleLatch_crossingIntoAlwaysOnKeepsTheInsert()
     {
@@ -298,30 +300,47 @@ private Q_SLOTS:
                                                     /*prev=*/false, /*toggled=*/false, false, false);
         QVERIFY(tapped.active);
         QVERIFY(tapped.nextToggled);
-        QVERIFY(!tapped.nextToggledAlwaysOn);
+        QVERIFY(tapped.nextToggledInsert);
 
         // Released, then crossed onto an always-on toggle-mode screen.
         const auto crossed = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, false, false, true,
-                                                     tapped.nextToggled, tapped.nextToggledAlwaysOn, false);
+                                                     tapped.nextToggled, tapped.nextToggledInsert, false);
         QVERIFY2(crossed.active, "a tap that turned the insert on must not keep the drag out on the next screen");
 
         // And back again with no tap in between: the tap still holds there.
         const auto back = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, false,
-                                                  crossed.nextToggled, crossed.nextToggledAlwaysOn, false);
+                                                  crossed.nextToggled, crossed.nextToggledInsert, false);
         QVERIFY2(back.active, "a round trip must not lose the tap that turned the insert on");
+    }
+
+    void insert_toggleLatch_lastTapWinsAcrossScreens()
+    {
+        // Tapped on A (no always-on): insert on. Then two taps on B (always
+        // on): kept out, then the insert again. The last tap asked for the
+        // insert, so A shows it too, as it would with no taps on B.
+        const auto onA = resolveDragInsertActive(true, false, false, true, true, true, false, false, false, false);
+        const auto tap1 = resolveDragInsertActive(true, false, true, true, true, true, false, onA.nextToggled,
+                                                  onA.nextToggledInsert, false);
+        QVERIFY(!tap1.active);
+        const auto tap2 = resolveDragInsertActive(true, false, true, true, true, true, false, tap1.nextToggled,
+                                                  tap1.nextToggledInsert, false);
+        QVERIFY(tap2.active);
+        const auto backOnA = resolveDragInsertActive(true, false, false, true, false, false, true, tap2.nextToggled,
+                                                     tap2.nextToggledInsert, false);
+        QVERIFY2(backOnA.active, "the last tap asked for the insert, so A must show it");
     }
 
     void insert_toggleLatch_tapOnTheOtherScreenRewritesIt()
     {
-        // A latch carried from a screen without always-on reads as clear on
-        // an always-on screen, so a tap there keeps the drag out, and the
-        // latch is rewritten in that screen's terms.
+        // A choice carried from a screen without always-on (insert) matches
+        // an always-on screen's default, so a tap there keeps the drag out,
+        // and the latch records that new choice.
         const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, /*raw=*/true, true,
-                                               /*prev=*/false, /*toggled=*/true, /*toggledAlwaysOn=*/false, false);
+                                               /*prev=*/false, /*toggled=*/true, /*toggledInsert=*/true, false);
         QVERIFY(!d.active);
         QVERIFY(d.suppressedByTrigger);
         QVERIFY(d.nextToggled);
-        QVERIFY(d.nextToggledAlwaysOn);
+        QVERIFY(!d.nextToggledInsert);
     }
 
     void insert_toggleLatch_crossingOutOfAlwaysOnKeepsTheDragOut()
@@ -329,21 +348,20 @@ private Q_SLOTS:
         // Kept out by a tap under always-on, then crossed onto a toggle-mode
         // screen without it, where the default is already "not inserting".
         const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, /*prev=*/false,
-                                               /*toggled=*/true, /*toggledAlwaysOn=*/true, false);
+                                               /*toggled=*/true, /*toggledInsert=*/false, false);
         QVERIFY(!d.active);
-        // Read as clear here, but carried unchanged for the way back.
         QVERIFY(d.nextToggled);
-        QVERIFY(d.nextToggledAlwaysOn);
+        QVERIFY(!d.nextToggledInsert);
     }
 
     void insert_toggleLatch_passesThroughAHoldModeScreen()
     {
-        // A hold-mode screen never reads the latch, so a set latch and the
-        // inversion it was set under survive it for the next toggle screen.
+        // A hold-mode screen never flips the latch, so a set latch and the
+        // choice it records survive it for the next toggle screen.
         const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, /*toggle=*/false, false, false, false,
-                                               /*toggled=*/true, /*toggledAlwaysOn=*/false, false);
+                                               /*toggled=*/true, /*toggledInsert=*/true, false);
         QVERIFY(d.nextToggled);
-        QVERIFY(!d.nextToggledAlwaysOn);
+        QVERIFY(d.nextToggledInsert);
     }
 
     void insert_reorderLatch_forcesPreview()

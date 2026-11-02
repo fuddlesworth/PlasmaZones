@@ -280,7 +280,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // move-window modifier and also the default trigger). The user must
     // release and re-press to toggle.
     m_dragInsertToggled = false;
-    m_dragInsertToggledAlwaysOn = false;
+    m_dragInsertToggledInsert = false;
     m_dragInsertEngineTicked = false;
     m_prevDragInsertHeld = true;
     m_dragInsertCancelled = false;
@@ -419,10 +419,11 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // (#1162). A begin here would detach the tile and the first tick,
         // which does see the trigger, would re-attach it, reflowing the
         // neighbours twice. Two cases follow from the begin waiting for a
-        // tick. A drop that no tick reached (zero motion) puts the tile back
-        // rather than floating it (endDrag). A begin the engine refuses
-        // abandons reorder for the rest of the drag, and the window floats at
-        // the drop (dragMoved).
+        // tick. A drop that no tick reached (a click, a flick inside the
+        // first tick's 32 ms, a move with no pointer) puts the tile back, or
+        // floats it when the drop's own report shows the keep-out held
+        // (endDrag). A begin the engine refuses abandons reorder for the rest
+        // of the drag, and the window floats at the drop (dragMoved).
         if (policy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen && startReorderMode) {
             PhosphorEngine::IPlacementEngine* startEngine = dragInsertEngineFor(startScreenId);
             m_dragReorderActive = startEngine && startEngine->isWindowTiled(windowId);
@@ -851,26 +852,50 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
             return outcome;
         }
         // A tile in reorder mode whose drag no engine tick reached. The
-        // preview begins on the first tick (beginDrag), and the effect sends
-        // none for the first 32 ms of a move, so a click or a quick flick has
-        // no preview to settle, and floating it would float a tile the user
-        // never got to aim. It runs the begin and commit here instead: a
-        // commit with no target puts the window back in its slot and
-        // re-emits its rect, which is the only thing that does, since the
-        // engines deliberately leave a window alone when its drag mark
-        // clears. Only on the screen the drag started on, which is the one
-        // the latch was armed for. A flick onto another screen floats where
-        // it lands, as a preview cancelled at a screen mismatch does. Once a
+        // preview begins on the first tick (beginDrag), and a position tick
+        // comes at the earliest 32 ms into a move, so a click, a quick flick,
+        // or a move with no pointer at all (touch, tablet, keyboard) has no
+        // preview to settle. Floating it would float a tile the user never
+        // got to aim, so the drop puts it back in its slot, which needs the
+        // engine to re-emit its rect: the engines deliberately leave a window
+        // alone when its drag mark clears. Begin then cancel does that and is
+        // an exact undo, restoring the slot, the focus and the view the strip
+        // had, where a commit would refocus the window and detach the view.
+        // Both batches go out in this one call, ahead of the next paint.
+        //
+        // Not when the drop keeps the drag out under always re-insert
+        // (#1162): beginDrag carries no modifiers and a key held from the
+        // start sends no tick, so the drop's own report is the first that can
+        // show it held. Hold mode only, as on a tick, since a toggle needs a
+        // press it never saw, and with no tick there is no grace stamp. Only
+        // on the screen the drag started on, which is the one the latch was
+        // armed for; a drop on another screen floats where it lands. Once a
         // tick ran, the tick decided: a preview it began was settled above,
-        // and none means the trigger kept the drag out (#1162), the begin was
+        // and none means the trigger kept the drag out, the begin was
         // refused, or the preview was cancelled since, all of which float.
         if (reorderArmed && !engineTicked) {
-            PhosphorEngine::IPlacementEngine* startEngine = dragInsertEngineFor(policyScreenId);
-            if (startEngine
-                && PhosphorScreens::ScreenIdentity::screensMatch(policyScreenId,
-                                                                 resolveScreenAt(QPointF(cursorX, cursorY)).screenId)
-                && startEngine->beginDragInsertPreview(windowId, policyScreenId)
-                && settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
+            const QString releaseScreenId = resolveScreenAt(QPointF(cursorX, cursorY)).screenId;
+            PhosphorEngine::IPlacementEngine* startEngine =
+                PhosphorScreens::ScreenIdentity::screensMatch(policyScreenId, releaseScreenId)
+                ? dragInsertEngineFor(releaseScreenId)
+                : nullptr;
+            bool keptOut = false;
+            if (startEngine) {
+                const bool onScrolling = startEngine == m_scrollEngine;
+                const QVector<ParsedTrigger>& triggers =
+                    onScrolling ? m_cachedScrollingDragInsertTriggers : m_cachedAutotileDragInsertTriggers;
+                const bool toggleMode =
+                    onScrolling ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle();
+                keptOut = !toggleMode && hasBareAlwaysActive(triggers)
+                    && anyTriggerHeld(triggers, resolveReportedModifiers(modifiers), mouseButtons,
+                                      SentinelMatch::SkipBare);
+            }
+            // The release screen's id, not the policy's: the two name the same
+            // screen here, and the release id is the spelling the tick path
+            // hands the engines, which key their contexts by it.
+            if (startEngine && !keptOut && startEngine->beginDragInsertPreview(windowId, releaseScreenId)) {
+                startEngine->cancelDragInsertPreview(/*dragStillActive=*/false);
+                clearScrollDropIndicator();
                 outcome.action = PhosphorProtocol::DragOutcome::NoOp;
                 hideOverlayAndSelector();
                 resetDragState();

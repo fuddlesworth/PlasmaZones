@@ -57,8 +57,8 @@ struct DragInsertDecision
     bool suppressedByTrigger = false;
     bool nextPrevTriggerHeld = false; ///< Feedback for next tick's edge detection.
     bool nextToggled = false; ///< Feedback for the toggle latch.
-    /// Feedback for the inversion the toggle latch was last read under.
-    bool nextToggledAlwaysOn = false;
+    /// Feedback for the insert state the toggle latch's choice asked for.
+    bool nextToggledInsert = false;
 };
 
 /**
@@ -90,19 +90,18 @@ struct DragInsertDecision
  *                        only, so in toggle mode it equals the raw state.
  *                        Under @p alwaysOn the grace extends the keep-out.
  * @param prevTriggerHeld Last engine-screen tick's raw state.
- * @param toggled         The toggle latch. It is shared across engines and
- *                        means "diverges from the default": insert on without
- *                        always re-insert, kept out with it.
- * @param toggledAlwaysOn The @p alwaysOn the latch was set under. On a
- *                        screen with the other inversion a set latch reads
- *                        as clear, since read as-is it would turn the user's
- *                        last tap into its opposite. Clear is right both
- *                        ways: a tap that turned the insert on lands on a
- *                        screen whose default is already on, and a tap that
- *                        kept the drag out lands on one whose default is
- *                        already off. The latch is not rewritten by that
- *                        read, so the tap holds again back on its own
- *                        screen; only a tap on this screen rewrites it.
+ * @param toggled         The toggle latch: a tap has made an explicit choice
+ *                        this drag. Clear, every screen shows its default
+ *                        (insert off, or on under always re-insert).
+ * @param toggledInsert   The insert state that choice asked for. It is
+ *                        stored as the state itself, not as "diverges from
+ *                        the default", because the latch is shared across
+ *                        engines and the default differs between a screen
+ *                        with always re-insert and one without: carried as
+ *                        a divergence, a tap would turn into its opposite at
+ *                        the crossing. Each tap flips the state the current
+ *                        screen shows and records the result, so the last
+ *                        tap is what every screen shows.
  * @param reorderActive   The drag-start reorder latch, which keeps the
  *                        preview on for a tiled window (Krohnkite reorder, or
  *                        scrolling's always re-insert). It yields to the
@@ -110,7 +109,7 @@ struct DragInsertDecision
  */
 PLASMAZONES_EXPORT DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, bool alwaysOn,
                                                               bool toggleMode, bool rawTriggerHeld, bool graceHeld,
-                                                              bool prevTriggerHeld, bool toggled, bool toggledAlwaysOn,
+                                                              bool prevTriggerHeld, bool toggled, bool toggledInsert,
                                                               bool reorderActive);
 
 /// @brief Outcome of one hold-mode release-grace evaluation.

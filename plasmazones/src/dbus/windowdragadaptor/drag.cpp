@@ -413,13 +413,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
     // Parse modifiers early — needed for both retrigger check and normal processing.
     // KWin Effect provides modifiers via the mouseChanged signal.
-    Qt::KeyboardModifiers mods;
-    if (modifiers != 0) {
-        mods = static_cast<Qt::KeyboardModifiers>(modifiers);
-    } else {
-        // Fallback: try Qt query (may not work on Wayland without focus)
-        mods = QGuiApplication::queryKeyboardModifiers();
-    }
+    const Qt::KeyboardModifiers mods = resolveReportedModifiers(modifiers);
 
     // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs this
     // tick's inputs once the grace has run out. Records the RESOLVED modifiers:
@@ -540,10 +534,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // held or toggled trigger keeps the drag OUT, so a window can still be
         // dragged as a floating one. The bare sentinel matches every tick, so
         // under always-on the trigger read leaves it out.
-        const bool insertAlwaysOn =
-            insertEngine && std::any_of(insertTriggers.cbegin(), insertTriggers.cend(), [](const ParsedTrigger& pt) {
-                return pt.modifier == static_cast<int>(DragModifier::AlwaysActive) && pt.mouseButton == 0;
-            });
+        const bool insertAlwaysOn = insertEngine && hasBareAlwaysActive(insertTriggers);
         const bool toggleMode = insertEngine
             && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
 
@@ -609,10 +600,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // screen, so leaving one mid-drag runs the cross-screen cancel below.
         const DragInsertDecision insertDecision = resolveDragInsertActive(
             insertEngine != nullptr, m_dragInsertCancelled, insertAlwaysOn, toggleMode, rawInsertHeld, insertGrace.held,
-            m_prevDragInsertHeld, m_dragInsertToggled, m_dragInsertToggledAlwaysOn, m_dragReorderActive);
+            m_prevDragInsertHeld, m_dragInsertToggled, m_dragInsertToggledInsert, m_dragReorderActive);
         m_prevDragInsertHeld = insertDecision.nextPrevTriggerHeld;
         m_dragInsertToggled = insertDecision.nextToggled;
-        m_dragInsertToggledAlwaysOn = insertDecision.nextToggledAlwaysOn;
+        m_dragInsertToggledInsert = insertDecision.nextToggledInsert;
         const bool insertHeld = insertDecision.active;
 
         // Journal diagnostic, AFTER the resolve so it reports what the
@@ -726,10 +717,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     stopDragScrollTimer();
                     // A begin the reorder latch asked for and the engine
                     // refused abandons reorder for the rest of the drag. Left
-                    // armed, this would retry every tick, the policy-flip
-                    // re-latch would re-arm it, and endDrag would read the
-                    // armed latch with no preview as a click and put the tile
-                    // back instead of floating it where it was dropped.
+                    // armed, this would retry every tick and the policy-flip
+                    // re-latch would re-arm it.
                     if (m_dragReorderActive && !adoptionRefused) {
                         qCWarning(lcDbusWindow)
                             << "dragMoved: reorder mode requested but beginDragInsertPreview failed for" << windowId
