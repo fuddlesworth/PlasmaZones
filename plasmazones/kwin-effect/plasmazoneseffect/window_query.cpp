@@ -120,7 +120,7 @@ void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize)
     // off (2560x1440 at 150% read back as 2561 wide).
     const int width = pixelSize.width();
     const int height = pixelSize.height();
-    query.screenOrientation = height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    query.screenOrientation = PhosphorRules::orientationTokenFor(width, height);
     query.screenWidth = width;
     query.screenHeight = height;
     query.screenAspectRatio = PhosphorRules::aspectRatioTokenFor(width, height);

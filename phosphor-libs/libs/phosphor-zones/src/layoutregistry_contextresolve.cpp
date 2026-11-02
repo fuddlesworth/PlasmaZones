@@ -200,9 +200,15 @@ const PWR::Rule* LayoutRegistry::resolveLockRule(const PWR::RuleEvaluator& evalu
     });
 }
 
+std::optional<int> LayoutRegistry::tiledWindowCount(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const
+{
+    return m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
+}
+
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
-                                                                      const QString& activity,
-                                                                      const ScreenShape& shape) const
+                                                                      const QString& activity, const ScreenShape& shape,
+                                                                      const std::optional<int>& tiledCount) const
 {
     // Resolution is per-slot. There are four independent slots — engine mode,
     // snapping layout, tiling algorithm, scrolling template — each resolved
@@ -247,16 +253,18 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // stale mode/layout on the layout-only path until the next rule edit. The
     // fold-in is a handful of O(1) provider / per-context-slot reads, so the
     // expensive priority walk stays memoized.
-    // Live tiled-window count for this context (nullopt when not actively
-    // tiling). It is NOT part of the rule set, so it cannot ride the cache's
-    // revision-invalidation contract like the global default does. Instead it
-    // is folded into the cache KEY (the `mode` slot of this cache, which for the
-    // assignment resolver carries the count + screen shape + scheme composite below) so a
-    // count change yields a fresh entry rather than a stale hit, while
-    // count-independent callers (overlay / OSD per cursor-move, where the count is
-    // steady) keep hitting the cache.
-    const std::optional<int> tiledCount =
-        m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
+    // @p tiledCount is the live tiled-window count (nullopt when not actively
+    // tiling), read once by the public entry point for the screen it was asked
+    // about, exactly like @p shape: on a virtual-screen fallback retry it is the
+    // virtual screen's count, because the physical id of a split monitor has no
+    // tiling state and would answer nullopt. It is NOT part of the rule set, so
+    // it cannot ride the cache's revision-invalidation contract like the global
+    // default does. Instead it is folded into the cache KEY (the `mode` slot of
+    // this cache, which for the assignment resolver carries the count + screen
+    // shape + scheme composite below) so a count change yields a fresh entry
+    // rather than a stale hit, while count-independent callers (overlay / OSD
+    // per cursor-move, where the count is steady) keep hitting the cache.
+    //
     // Both the tiled count and the screen shape (orientation and device-pixel
     // size) are non-rule-set inputs the stamped query depends on, so both must
     // ride the cache KEY (the assignment resolver stamps the shape but not
@@ -332,11 +340,12 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
 QString LayoutRegistry::rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop,
                                                    const QString& activity) const
 {
-    return rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, screenShape(screenId));
+    return rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, screenShape(screenId),
+                                      tiledWindowCount(screenId, virtualDesktop, activity));
 }
 
 QString LayoutRegistry::rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity,
-                                                   const ScreenShape& shape) const
+                                                   const ScreenShape& shape, const std::optional<int>& tiledCount) const
 {
     // The assignment id, except that a Scrolling context with a resolved
     // template substitutes the PREFIXED "scrolling:<templateUuid>" — parity
@@ -347,9 +356,10 @@ QString LayoutRegistry::rulesVisibleActiveLayoutId(const QString& screenId, int 
     // back into the gap/lock/overlay resolvers. The bare sentinel therefore
     // now means "scrolling with no template" to rules; "any scrolling
     // screen" is a Mode leaf.
-    QString id = assignmentIdForScreen(screenId, virtualDesktop, activity, shape);
+    QString id = assignmentIdForScreen(screenId, virtualDesktop, activity, shape, tiledCount);
     if (PhosphorLayout::LayoutId::isScrolling(id)) {
-        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity, shape);
+        const ScrollingTemplate templ =
+            scrollingTemplateForContext(screenId, virtualDesktop, activity, shape, tiledCount);
         if (templ.isValid()) {
             id = PhosphorLayout::LayoutId::makeScrollingId(templ.id.toString());
         }
@@ -387,7 +397,8 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // Safe from recursion: rulesVisibleActiveLayoutId routes through resolveAssignmentEntry,
     // which never calls back into the gap resolver.
     const ScreenShape shape = screenShape(screenId);
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                              tiledWindowCount(screenId, virtualDesktop, activity));
     const QString schemeToken = colorSchemeToken();
 
     // Hot-path cache via the shared revision-invalidated memoizer: the geometry
@@ -569,7 +580,8 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // query, so a Field::ActiveLayout or screen-shape lock rule works and
     // refreshes when either changes.
     const ScreenShape shape = screenShape(screenId);
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                              tiledWindowCount(screenId, virtualDesktop, activity));
     const QString schemeToken = colorSchemeToken();
 
     // Hot-path cache via the shared revision-invalidated memoizer: the lock
@@ -697,7 +709,8 @@ std::optional<bool> LayoutRegistry::resolveContextBoolSlot(QHash<ContextResolveK
     // assignment cascade, so there is no recursion hazard, and a rule
     // scoping on the active layout is legitimate.
     const ScreenShape shape = screenShape(screenId);
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                              tiledWindowCount(screenId, virtualDesktop, activity));
     const QString schemeToken = colorSchemeToken();
     return resolveCachedContext(
         cache, cacheRevision, screenId, virtualDesktop, activity,
@@ -793,7 +806,8 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
     // query, so a Field::ActiveLayout or screen-shape overlay rule works and
     // refreshes when either changes.
     const ScreenShape shape = screenShape(screenId);
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                              tiledWindowCount(screenId, virtualDesktop, activity));
     const QString schemeToken = colorSchemeToken();
 
     return resolveCachedContext(

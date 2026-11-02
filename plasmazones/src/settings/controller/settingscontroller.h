@@ -149,8 +149,10 @@ class SettingsController : public QObject
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
     // The daemon's getScreenStates answer (each screen's current desktop,
     // activity, resolved assignment and, while it tiles, its tiled-window
-    // count), fetched asynchronously and kept current on screen, assignment,
-    // active-layout and activity changes. The Rules page's monitor tiles
+    // count), fetched asynchronously and re-read on the daemon's
+    // screenStatesChanged, on screen, assignment, active-layout and activity
+    // changes, when the window regains focus and when the Rules page comes
+    // into view. The Rules page's monitor tiles
     // evaluate their conditions against it.
     Q_PROPERTY(QVariantList screenStates READ screenStates NOTIFY screenStatesChanged)
 
@@ -877,6 +879,15 @@ Q_SIGNALS:
     // see ctor for rationale (QMetaMethod::fromSignal vs indexOfSlot).
     void _settingsPropertyNotifyForwarder();
 
+public Q_SLOTS:
+    /// Coalesce the requests to re-read each screen's state (the daemon's
+    /// screenStatesChanged, screens, assignments, active layouts, the current
+    /// activity, the window
+    /// regaining focus, the Rules page coming into view) into one
+    /// refreshScreenStates() on m_screenStatesTimer. Public so the Rules page
+    /// can ask.
+    void scheduleScreenStatesRefresh();
+
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
@@ -902,10 +913,6 @@ private Q_SLOTS:
     /// A reply that changes the scale reloads the layouts, but only when some
     /// local layout counts device pixels, since no other layout reads it.
     void refreshPrimaryScreenScale();
-    /// Coalesce the daemon notifications that move a screen's state (screens,
-    /// assignments, active layouts, the current activity) into one
-    /// refreshScreenStates() on m_screenStatesTimer.
-    void scheduleScreenStatesRefresh();
     /// Ask the daemon, asynchronously, for getScreenStates and publish the
     /// answer as `screenStates` when it differs. A failed call keeps the last
     /// answer.
@@ -1225,6 +1232,9 @@ private:
     // of the newest request so an older reply cannot overwrite a newer one.
     QVariantList m_screenStates;
     QTimer m_screenStatesTimer;
+    // The same wait the layout reload and ScreenHelper's refresh coalesce
+    // over: long enough to fold one burst of daemon signals into one call.
+    static constexpr int ScreenStatesCoalesceMs = 50;
     quint64 m_screenStatesRequest = 0;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.

@@ -102,6 +102,16 @@ public:
     /// never written.
     void setTiledWindowCountProvider(std::function<std::optional<int>(const QString& screenId)> provider);
 
+    /// Queue a comparison of the getScreenStates answer for the next
+    /// event-loop pass, and emit @ref screenStatesChanged when it differs from
+    /// the answer the last comparison saw. The daemon calls it wherever a
+    /// field of that answer can move: every active-assignment diff (which the
+    /// desktop and activity switches, screen adds and removals, virtual-screen
+    /// changes, assignment applies and rule reconciles all run) and every
+    /// change of a tiling screen's tiled-window count. Coalesced, so a burst
+    /// in one turn compares once. Not a bus slot.
+    void scheduleScreenStatesCheck();
+
 public Q_SLOTS:
     // PhosphorZones::Layout queries
     QString getActiveLayout();
@@ -497,6 +507,19 @@ Q_SIGNALS:
      */
     void assignmentChangesApplied(const QStringList& changedScreenIds);
 
+    /**
+     * @brief Emitted when what getScreenStates answers has changed.
+     *
+     * Covers every field of that answer, including the ones no other signal
+     * reports on its own: a screen's virtual desktop or the activity moving
+     * while its resolved layout stays the same, and the live tiled-window
+     * count of a tiling screen. Carries nothing, so a subscriber re-reads
+     * getScreenStates. Coalesced per event-loop pass and compared against the
+     * previous answer (see @ref scheduleScreenStatesCheck), so it fires once
+     * per real change.
+     */
+    void screenStatesChanged();
+
 private Q_SLOTS:
     // String-based connection slots for PhosphorZones::LayoutRegistry signals
     // (PhosphorZones::LayoutRegistry redeclares signals for Q_PROPERTY, so we use string-based connections)
@@ -736,6 +759,11 @@ private:
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     /// See setTiledWindowCountProvider.
     std::function<std::optional<int>(const QString& screenId)> m_tiledWindowCountProvider;
+
+    /// Compression latch for scheduleScreenStatesCheck, and the getScreenStates
+    /// answer its last comparison saw (empty before the first).
+    bool m_screenStatesCheckPending = false;
+    QString m_lastScreenStatesJson;
 
     // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
     // batch is in flight (armed via the setSaveBatchMode slot around a batch

@@ -66,7 +66,7 @@ RowLayout {
     /// Under a Screen width, Screen height or Screen aspect ratio value: the
     /// current device-pixel size and nearest ratio of each monitor the rule
     /// pins (RuleController::screenSizeHint). Empty for every other field, or
-    /// when the rule pins no connected monitor.
+    /// when the rule pins no connected monitor whose size the daemon knows.
     readonly property string _screenSizeHint: {
         const field = leaf.node.field;
         if (field !== "screenWidth" && field !== "screenHeight" && field !== "screenAspectRatio")
@@ -438,7 +438,23 @@ RowLayout {
         ColumnLayout {
             spacing: Kirigami.Units.smallSpacing / 2
 
+            // The style's typed-input handler assigns `value` directly, which
+            // severs the `value:` binding below after the first keystroke.
+            // The box is one instance across every numeric field (the Loader
+            // keeps it while the value kind stays "number"), so a later field
+            // switch, which seeds a new value, would leave it showing the old
+            // number. Following the node here keeps it in step either way.
+            Connections {
+                function onNodeChanged() {
+                    numberSpin.value = Number(leaf.node.value) || 0;
+                }
+
+                target: leaf
+            }
+
             SpinBox {
+                id: numberSpin
+
                 // PositionX / PositionY are the only SIGNED numeric fields: a
                 // monitor placed left of or above the primary starts at a negative
                 // frame coordinate, so a floor of 0 made those two conditions
@@ -460,26 +476,23 @@ RowLayout {
                 to: 5e+06
                 value: Number(leaf.node.value) || 0
                 // Typed, not stepped: reaching a screen width such as 2560 by
-                // the arrows alone takes thousands of steps.
+                // the arrows alone takes thousands of steps. The default
+                // textFromValue / valueFromText format through the style's
+                // locale, which in the desktop style omits group separators
+                // (as QSpinBox does), so the box shows plain digits while
+                // they are typed. Grouping and the px unit appear only in the
+                // read-only summaries (RuleAuthoring::numericMatchValueLabel).
                 editable: true
-                // The locale's digit grouping, as the collapsed summary and the
-                // expanded tree print the value. The desktop style's own locale
-                // omits group separators, so the formatting reads the
-                // application locale explicitly. Parsing takes the value with or
-                // without separators.
-                textFromValue: function (value, locale) {
-                    return Number(value).toLocaleString(Qt.locale(), "f", 0);
-                }
-                valueFromText: function (text, locale) {
-                    return Number.fromLocaleString(Qt.locale(), text);
-                }
                 Accessible.name: i18n("Match value")
                 onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
             }
 
             // The pinned monitor's current size, under a Screen width or
             // Screen height value. Same muted styling as the string editor's
-            // operator hint.
+            // operator hint, but left announced where that hint is ignored by
+            // screen readers: this is the one place the editor states the
+            // monitor's current size, which is what the value is compared
+            // against.
             Label {
                 Layout.fillWidth: true
                 visible: text.length > 0
@@ -698,7 +711,8 @@ RowLayout {
             }
 
             // The pinned monitor's current size and ratio, as under the
-            // Screen width and Screen height values.
+            // Screen width and Screen height values, and announced for the
+            // same reason.
             Label {
                 Layout.fillWidth: true
                 visible: text.length > 0

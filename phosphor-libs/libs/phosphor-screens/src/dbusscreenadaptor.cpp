@@ -43,7 +43,10 @@ constexpr QLatin1String kKeyGeometry{"geometry"};
 constexpr QLatin1String kKeyPhysicalSize{"physicalSize"};
 constexpr QLatin1String kKeyDevicePixelRatio{"devicePixelRatio"};
 constexpr QLatin1String kKeyPixelSize{"pixelSize"};
-constexpr QLatin1String kKeyPixelSizeReported{"pixelSizeReported"};
+constexpr QLatin1String kKeyPixelSizeSource{"pixelSizeSource"};
+constexpr QLatin1String kPixelSizeSourceReported{"reported"};
+constexpr QLatin1String kPixelSizeSourceSeeded{"seeded"};
+constexpr QLatin1String kPixelSizeSourceEstimated{"estimated"};
 constexpr QLatin1String kKeyRefreshRate{"refreshRate"};
 constexpr QLatin1String kKeyDepth{"depth"};
 constexpr QLatin1String kKeyScreenId{"screenId"};
@@ -477,21 +480,28 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
     // The manager's answer is the one the daemon's own readers use: the
     // compositor's report of the output's mode (a Wayland client never sees
     // the mode itself, because wl_output's mode event stays inside the QPA
-    // plugin), or until it arrives the host's last-session seed, with a
-    // virtual screen answering its region's share. With neither, this is
+    // plugin), or until it arrives the host's seed (for the PlasmaZones
+    // daemon, the size last reported for that monitor, in this session or an
+    // earlier one), with a virtual screen answering its region's share. With neither, this is
     // estimated as the logical size times the scale above, rounded, which
     // keeps the layout editor working before the first report and without a
     // manager. The compositor made the logical size by dividing the mode by
     // that scale, so the estimate lands on the mode or within a pixel of it,
     // but only once the scale is the real one: before the output's sensor
     // maps, the coarse fallback makes it wrong. screenGeometryChanged
-    // announces each later answer. pixelSizeReported says whether the size
-    // is the compositor's report.
+    // announces each later answer. pixelSizeSource says which of the three
+    // the size is, so a reader can tell the size a rule reads (reported or
+    // seeded) from the estimate no rule sees.
     const std::optional<QSize> knownPixelSize =
         m_screenManager ? m_screenManager->pixelSize(screenId) : std::optional<QSize>();
     const QSize pixelSize = knownPixelSize.value_or(QSize(qRound(geom.width() * scale), qRound(geom.height() * scale)));
     info[kKeyPixelSize] = QJsonObject{{kKeyWidth, pixelSize.width()}, {kKeyHeight, pixelSize.height()}};
-    info[kKeyPixelSizeReported] = m_screenManager && m_screenManager->isPixelSizeReported(screenId);
+    if (knownPixelSize) {
+        info[kKeyPixelSizeSource] =
+            m_screenManager->isPixelSizeReported(screenId) ? kPixelSizeSourceReported : kPixelSizeSourceSeeded;
+    } else if (!pixelSize.isEmpty()) {
+        info[kKeyPixelSizeSource] = kPixelSizeSourceEstimated;
+    }
     info[kKeyRefreshRate] = screen->refreshRate();
     info[kKeyDepth] = screen->depth();
     info[kKeyScreenId] = screenId;

@@ -303,16 +303,19 @@ public:
      * the daemon see an output come and go in no fixed order (a KVM switch
      * presents as unplug and replug), so a report can land before the QScreen
      * it describes, and dropping it on the daemon's removal would lose the
-     * report that arrived first. The effect is the only writer. It clears
-     * what it no longer has, and the host clears everything through
-     * @ref clearCompositorPixelSizes when the compositor bridge comes or
-     * goes.
+     * report that arrived first. The effect is the only writer and clears
+     * what it no longer has. A fresh effect re-sends every output it has when
+     * it registers, which overwrites each entry it still describes, and
+     * @ref stop drops them all.
+     *
+     * The manager does not check a report against the screen it tracks on
+     * the connector. Arriving ahead of the QScreen change it goes with, a
+     * report can describe a mode the tracked logical geometry does not show
+     * yet, or a monitor that replaced the tracked one on the same connector,
+     * and @ref pixelSize answers it from the moment it lands. A host that
+     * persists or acts on a report decides when it agrees with the screen.
      */
     void setCompositorPixelSize(const QString& connectorName, const QSize& pixelSize);
-
-    /// Drop every compositor-reported pixel size. Emits
-    /// @ref compositorPixelSizeChanged once for each connector that had one.
-    void clearCompositorPixelSizes();
 
     /**
      * @brief Seed a monitor's size in device pixels from the host's own record,
@@ -349,13 +352,6 @@ public:
     /// True only when @ref pixelSize answers @p screenId from a compositor
     /// report rather than from a seed or not at all.
     bool isPixelSizeReported(const QString& screenId) const;
-
-    /// The compositor-reported sizes of the tracked screens, keyed by each
-    /// screen's stable identifier, for the host to persist and hand back
-    /// through @ref seedPixelSize next session. A report for a connector the
-    /// manager does not track, or for a screen with no identifier, is left
-    /// out.
-    QHash<QString, QSize> reportedPixelSizesByIdentifier() const;
 
 Q_SIGNALS:
     void screenAdded(const PhysicalScreen& screen);
@@ -408,10 +404,9 @@ Q_SIGNALS:
     /// changed or cleared, or a seed change altered what @ref pixelSize
     /// answers for that connector's screen. A report that confirms a seed
     /// fires it too: @ref pixelSize answers the same, but
-    /// @ref isPixelSizeReported has flipped and
-    /// @ref reportedPixelSizesByIdentifier has a new entry. @p connectorName
-    /// may name an output the manager does not track yet. Appended last
-    /// among the signals.
+    /// @ref isPixelSizeReported has flipped. @p connectorName may name an
+    /// output the manager does not track yet. Appended last among the
+    /// signals.
     void compositorPixelSizeChanged(const QString& connectorName);
 
 protected:
@@ -526,8 +521,7 @@ private:
 
     // Compositor-reported output sizes in device pixels, keyed by connector
     // name. See setCompositorPixelSize for why the daemon's own screen
-    // removal does not drop an entry. Cleared wholesale by
-    // clearCompositorPixelSizes and on stop().
+    // removal does not drop an entry. Cleared wholesale on stop().
     QHash<QString, QSize> m_compositorPixelSizes;
 
     // Host-provided last-session sizes, keyed by physical screen identifier.

@@ -94,7 +94,7 @@ public:
         ConditionCountRole, ///< number of leaf predicates in the match tree
         ActionCountRole, ///< number of actions
         IsCompositeRole, ///< true if the match is a non-trivial composite
-        ScreenIdsRole, ///< QStringList of ScreenId leaf values in the match
+        ScreenIdsRole, ///< QStringList of the monitors the match addresses (screenIdsOf)
         ValidationIssueCountRole, ///< int — number of semantic validation
                                   ///< issues the rule carries (a context-domain
                                   ///< action paired with a window-property match,
@@ -201,9 +201,15 @@ public:
     /// `RuleController` so the per-Field label table lives in exactly one place.
     static QString fieldLabel(PhosphorRules::Field field);
 
-    /// Every non-empty `ScreenId` leaf value found anywhere in @p match.
-    /// Shared with `RuleController` so the recursive walk lives in one
-    /// place — the model exposes it as `ScreenIdsRole`.
+    /// The value of every non-empty `ScreenId` Equals leaf @p match reaches
+    /// without passing through a `none` group: the monitors the rule
+    /// addresses, as opposed to ones it excludes. The values are kept as
+    /// written, so a consumer compares them ignoring case, as the rule
+    /// engine's Equals does. The one walk: the model exposes it as
+    /// `ScreenIdsRole` (the Rules page's monitor filter), and
+    /// `RuleController::monitorOverview` (which rules a tile counts) and
+    /// `RuleController::screenSizeHint` (which monitors the editor's note
+    /// names) read it too.
     static QStringList screenIdsOf(const PhosphorRules::MatchExpression& match);
 
     /// Display label for an action type id that no built-in label covers —

@@ -736,5 +736,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="The screen&apos;s new active layout id (a layout UUID in braces, &apos;autotile:&lt;algo&gt;&apos;, the reserved word &apos;none&apos; for an explicit no-layout opt-out, or &apos;autotile:none&apos; for an explicit no-algorithm opt-out). Empty when the screen no longer resolves to any layout; setting a screen to None emits the reserved word, not empty."/>
             </arg>
         </signal>
+        <signal name="screenStatesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when what getScreenStates answers has changed, in any field. That includes the changes no other signal reports on its own: a screen&apos;s virtual desktop or the current activity moving while its resolved layout stays the same, and the live tiled-window count of a tiling screen. Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per event-loop pass and compared against the previous answer, so it fires once per real change."/>
+        </signal>
     </interface>
 </node>

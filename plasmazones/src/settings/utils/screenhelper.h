@@ -30,8 +30,10 @@ public:
     /// One map per screen, as PhosphorScreens::screenInfoListToVariantList
     /// builds it, plus `pixelWidth` / `pixelHeight` (the size in device
     /// pixels, present only when the daemon answered one) and
-    /// `pixelSizeReported` (true when that size is the compositor's own
-    /// report). `width` / `height` and `displayLabel` stay logical.
+    /// `pixelSizeKnown` (true when that size is the compositor's report or
+    /// the one seeded from an earlier session, which is when the daemon's
+    /// rules see it, and false for an estimate). `width` / `height` and
+    /// `displayLabel` stay logical.
     QVariantList screens() const;
 
     /**

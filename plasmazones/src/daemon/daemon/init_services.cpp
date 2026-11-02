@@ -31,6 +31,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
@@ -232,10 +233,11 @@ void Daemon::initLayoutAndSettingsWiring()
             return std::nullopt;
         }
         const QRect geom = m_screenManager->screenGeometry(screenId);
-        if (!geom.isValid()) {
+        const QString orientation = PhosphorRules::orientationTokenFor(geom.width(), geom.height());
+        if (orientation.isEmpty()) {
             return std::nullopt;
         }
-        return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        return orientation;
     });
     // Size provider — the screen's size in DEVICE pixels, the resolution its
     // display settings report, so a Field::ScreenWidth / ScreenHeight /

@@ -34,7 +34,7 @@ QVariantList screenMaps(const QList<PhosphorScreens::ScreenInfo>& infos)
         QVariantMap map = maps.at(i).toMap();
         map[QStringLiteral("pixelWidth")] = info.pixelSize.width();
         map[QStringLiteral("pixelHeight")] = info.pixelSize.height();
-        map[QStringLiteral("pixelSizeReported")] = info.pixelSizeReported;
+        map[QStringLiteral("pixelSizeKnown")] = info.pixelSizeKnown;
         maps[i] = map;
     }
     return maps;

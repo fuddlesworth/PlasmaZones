@@ -747,12 +747,16 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       behind the same compositor-report gate as its siblings. A new effect
 //       on a daemon without the method gets UnknownMethod on a
 //       fire-and-forget call and is otherwise unaffected. An old effect on a
-//       new daemon never reports, and the daemon keeps answering with the
-//       size it seeded from an earlier session or, failing that, with the
-//       estimate. Both degrade to the pre-method answer, which is no wrong
-//       answer the handshake must refuse, so it takes no v11. getScreenInfo
-//       gains pixelSizeReported beside pixelSize in the same change, which a
-//       reader that does not know the key never looks at.
+//       new daemon never reports. The daemon's rules then read a size only
+//       where one was seeded from an earlier session's report, and otherwise
+//       leave the screen width, height and aspect ratio fields unknown: a
+//       positive condition on them is false and a negated one is refused,
+//       while orientation falls back to the logical geometry. Only
+//       getScreenInfo keeps answering with the estimate. An unanswered
+//       condition is no wrong answer the handshake must refuse, so it takes
+//       no v11. getScreenInfo gains pixelSizeSource beside pixelSize in the
+//       same change, which a reader that does not know the key never looks
+//       at.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

@@ -16,23 +16,39 @@ namespace PlasmaZones {
 /// compositor coordinates. The edges are rounded and the size derived from
 /// them, so two virtual screens that share an edge in fractions share it in
 /// pixels too: rounding each size on its own left one-pixel gaps or overlaps.
+///
+/// The same arithmetic as the daemon's VirtualScreenDef::absoluteGeometry,
+/// clamps included, so both processes cut a region alike. The daemon admits a
+/// region that overshoots the output by its tolerance, and the clamps pull the
+/// far edges back onto the output and the near edges onto its origin, and keep
+/// each side at least one pixel.
 inline QRect absoluteVirtualScreenRect(const QRectF& region, const QRect& physical)
 {
-    const int left = physical.x() + qRound(region.x() * physical.width());
-    const int top = physical.y() + qRound(region.y() * physical.height());
-    const int right = physical.x() + qRound((region.x() + region.width()) * physical.width());
-    const int bottom = physical.y() + qRound((region.y() + region.height()) * physical.height());
-    return QRect(left, top, right - left, bottom - top);
+    int left = physical.x() + qRound(region.x() * physical.width());
+    int top = physical.y() + qRound(region.y() * physical.height());
+    int right = physical.x() + qRound((region.x() + region.width()) * physical.width());
+    int bottom = physical.y() + qRound((region.y() + region.height()) * physical.height());
+    right = qMin(right, physical.x() + physical.width());
+    bottom = qMin(bottom, physical.y() + physical.height());
+    left = qMin(left, right - 1);
+    top = qMin(top, bottom - 1);
+    left = qMax(left, physical.x());
+    top = qMax(top, physical.y());
+    return QRect(left, top, qMax(1, right - left), qMax(1, bottom - top));
 }
 
 /// A virtual screen's size in device pixels: @p region's share of an output
 /// whose current mode is @p physicalPixelSize (already rotated, as KWin's
-/// LogicalOutput::pixelSize reports it). The edges are rounded over the pixel
-/// rect exactly as the daemon's VirtualScreenDef::absoluteGeometry rounds them,
-/// so the screen-shape rule fields read the same size in both processes. An
-/// empty @p physicalPixelSize yields an empty size.
+/// LogicalOutput::pixelSize reports it), cut over the pixel rect by
+/// absoluteVirtualScreenRect, so the screen-shape rule fields read the same
+/// size the daemon's VirtualScreenDef::absoluteGeometry gives. An empty
+/// @p physicalPixelSize yields an empty size, where the one-pixel floor would
+/// otherwise make up a 1x1 screen.
 inline QSize virtualScreenPixelSize(const QRectF& region, const QSize& physicalPixelSize)
 {
+    if (physicalPixelSize.isEmpty()) {
+        return QSize();
+    }
     return absoluteVirtualScreenRect(region, QRect(QPoint(), physicalPixelSize)).size();
 }
 

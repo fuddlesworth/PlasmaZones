@@ -39,10 +39,10 @@ inline constexpr qreal MaxPlausibleScreenScale = 8.0;
 /// region's share), or an invalid size when the reply carries none, as a
 /// daemon older than the key answers. The daemon publishes the output's mode
 /// as the compositor reported it, or until the first report the size last
-/// reported for that monitor in an earlier session. With neither it
-/// estimates the size as the logical size times the scale, rounded, which can
-/// miss the mode by a pixel on a fractional scale. The reply's
-/// pixelSizeReported says whether the size is the compositor's report.
+/// reported for that monitor, in this session or an earlier one. With neither
+/// it estimates the size as the logical size times the scale, rounded, which
+/// can miss the mode by a pixel on a fractional scale. The reply's
+/// pixelSizeSource says which of the three the size is.
 ///
 /// The one parser for both the blocking queryDaemonScreenScale and an
 /// asynchronous getScreenInfo reply, so the layout editor and the settings

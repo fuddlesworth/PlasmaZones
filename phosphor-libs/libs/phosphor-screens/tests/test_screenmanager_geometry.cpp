@@ -405,8 +405,6 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
         QCOMPARE(mgr.pixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
         QVERIFY(!mgr.isPixelSizeReported(QStringLiteral("DP-1")));
-        // A seed is not a report, so nothing is offered back for persisting.
-        QVERIFY(mgr.reportedPixelSizesByIdentifier().isEmpty());
 
         mgr.seedPixelSize(physId, QSize(2560, 1440));
         QCOMPARE(spy.count(), 1);
@@ -506,52 +504,6 @@ private Q_SLOTS:
         fake.addScreen(QStringLiteral("HDMI-A-1"), QRect(1707, 0, 1920, 1080), QStringLiteral("LG:Ultra:9"));
         QCOMPARE(mgr.pixelSize(QStringLiteral("LG:Ultra:9")).value_or(QSize()), QSize(1920, 1080));
         QVERIFY(mgr.isPixelSizeReported(QStringLiteral("LG:Ultra:9")));
-    }
-
-    // clearCompositorPixelSizes drops every report and announces each
-    // connector once, in a stable order. Seeds survive it.
-    void testClearCompositorPixelSizesAnnouncesEachConnector()
-    {
-        FakePhysicalScreenSource fake;
-        fake.addScreen(QStringLiteral("DP-2"), QRect(0, 0, 1920, 1080), QStringLiteral("Dell:U27:2"));
-        fake.addScreen(QStringLiteral("DP-1"), QRect(1920, 0, 1920, 1080), QStringLiteral("Dell:U27:1"));
-
-        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
-        mgr.start();
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
-        mgr.setCompositorPixelSize(QStringLiteral("DP-2"), QSize(2560, 1440));
-        mgr.seedPixelSize(QStringLiteral("Dell:U27:2"), QSize(1920, 1080));
-
-        QSignalSpy spy(&mgr, &ScreenManager::compositorPixelSizeChanged);
-        mgr.clearCompositorPixelSizes();
-        QCOMPARE(spy.count(), 2);
-        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
-        QCOMPARE(spy.at(1).at(0).toString(), QStringLiteral("DP-2"));
-        QVERIFY(!mgr.pixelSize(QStringLiteral("DP-1")).has_value());
-        QCOMPARE(mgr.pixelSize(QStringLiteral("DP-2")).value_or(QSize()), QSize(1920, 1080));
-
-        mgr.clearCompositorPixelSizes();
-        QCOMPARE(spy.count(), 2);
-    }
-
-    // reportedPixelSizesByIdentifier offers the host what to persist: the
-    // reports of tracked screens, keyed by identifier. Not seeds, and not a
-    // report for an output the manager does not track.
-    void testReportedPixelSizesByIdentifier()
-    {
-        FakePhysicalScreenSource fake;
-        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("Dell:U27:1"));
-        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("Dell:U27:2"));
-
-        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
-        mgr.start();
-        mgr.setCompositorPixelSize(QStringLiteral("DP-1"), QSize(3840, 2160));
-        mgr.seedPixelSize(QStringLiteral("Dell:U27:2"), QSize(2560, 1440));
-        mgr.setCompositorPixelSize(QStringLiteral("HDMI-A-9"), QSize(1280, 1024));
-
-        const QHash<QString, QSize> reported = mgr.reportedPixelSizesByIdentifier();
-        QCOMPARE(reported.size(), 1);
-        QCOMPARE(reported.value(QStringLiteral("Dell:U27:1")), QSize(3840, 2160));
     }
 
     // stop() drops the reports (the effect re-reports every output when it

@@ -71,6 +71,18 @@ void pruneToLiveScreens(QHash<QString, int>& cache, const QSet<QString>& live)
     }
 }
 
+// Every output as PixelSizeDecisions reads it.
+QList<PixelSizeDecisions::OutputPixelSize> kwinOutputPixelSizes()
+{
+    QList<PixelSizeDecisions::OutputPixelSize> outputs;
+    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
+        if (output) {
+            outputs.append({output->name(), output->pixelSize(), output->isPlaceholder()});
+        }
+    }
+    return outputs;
+}
+
 } // namespace
 
 // @p excluded is left out of the duplicate scan below, and exists for ONE caller:
@@ -1002,26 +1014,12 @@ void PlasmaZonesEffect::scheduleOutputPixelSizeFlush()
 
 void PlasmaZonesEffect::flushOutputPixelSizes()
 {
-    bool changed = false;
-    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
-        if (!output || output->isPlaceholder()) {
-            continue;
-        }
-        const QString connector = output->name();
-        const QSize size = output->pixelSize();
-        // Reported whether or not the size moved: the report keeps its own
-        // record, and a size seen while the bridge was down is still owed.
-        reportOutputPixelSize(connector, size);
-        // A refresh-rate change emits currentModeChanged too, and moves
-        // nothing a rule reads.
-        const auto seen = m_outputPixelSizes.constFind(connector);
-        if (seen != m_outputPixelSizes.constEnd() && *seen == size) {
-            continue;
-        }
-        m_outputPixelSizes.insert(connector, size);
-        changed = true;
+    const PixelSizeDecisions::FlushOutcome outcome =
+        m_pixelSizeLedger.flush(m_daemonGate.serviceRegistered, kwinOutputPixelSizes());
+    for (const PixelSizeDecisions::Report& report : outcome.reports) {
+        sendPixelSizeReport(report);
     }
-    if (!changed) {
+    if (!outcome.shapeChanged) {
         return;
     }
     // The screen-shape rule fields are read live from the output at resolve
@@ -1039,37 +1037,22 @@ void PlasmaZonesEffect::flushOutputPixelSizes()
     }
 }
 
-void PlasmaZonesEffect::reportOutputPixelSize(const QString& connectorName, const QSize& size)
+void PlasmaZonesEffect::sendPixelSizeReport(const PixelSizeDecisions::Report& report)
 {
-    if (!m_daemonGate.serviceRegistered || connectorName.isEmpty()) {
-        return;
-    }
-    if (size.isEmpty()) {
-        // A clear is owed only for a size this bridge sent.
-        if (m_reportedPixelSizes.remove(connectorName) == 0) {
-            return;
-        }
-    } else {
-        const auto reported = m_reportedPixelSizes.constFind(connectorName);
-        if (reported != m_reportedPixelSizes.constEnd() && *reported == size) {
-            return;
-        }
-        m_reportedPixelSizes.insert(connectorName, size);
-    }
-    const int width = size.isEmpty() ? 0 : size.width();
-    const int height = size.isEmpty() ? 0 : size.height();
-    qCDebug(lcEffect) << "Reporting pixel size for" << connectorName << "=" << width << "x" << height;
+    const int width = report.pixelSize.width();
+    const int height = report.pixelSize.height();
+    qCDebug(lcEffect) << "Reporting pixel size for" << report.connector << "=" << width << "x" << height;
     PhosphorProtocol::ClientHelpers::fireAndForget(
         this, PhosphorProtocol::Service::Interface::Screen, QStringLiteral("setPixelSizeFromKWin"),
-        {connectorName, width, height}, QStringLiteral("setPixelSizeFromKWin"));
+        {report.connector, width, height}, QStringLiteral("setPixelSizeFromKWin"));
 }
 
 void PlasmaZonesEffect::pushOutputPixelSizes()
 {
-    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
-        if (output && !output->isPlaceholder()) {
-            reportOutputPixelSize(output->name(), output->pixelSize());
-        }
+    const QList<PixelSizeDecisions::Report> reports =
+        m_pixelSizeLedger.push(m_daemonGate.serviceRegistered, kwinOutputPixelSizes());
+    for (const PixelSizeDecisions::Report& report : reports) {
+        sendPixelSizeReport(report);
     }
 }
 
@@ -1156,23 +1139,22 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
 
     // Forget the output's pixel size and clear the one the daemon holds for its
-    // connector: the effect is the size's only writer, so nothing else retires
-    // it. Before the motion-clock early-return, like the drops above. A
-    // connector a live output still carries (a monitor swapped on the same
-    // port, whose add KWin emits before this removal) keeps its daemon entry
-    // and is re-read by a flush instead, so the clear cannot land after that
-    // output's report and wipe it.
+    // connector, unless a live output still carries the connector
+    // (PixelSizeDecisions::Ledger::remove). Before the motion-clock
+    // early-return, like the drops above.
     const QString connector = output->name();
-    m_outputPixelSizes.remove(connector);
     const auto liveOutputs = KWin::effects->screens();
     const bool connectorLive =
         std::any_of(liveOutputs.cbegin(), liveOutputs.cend(), [&](const KWin::LogicalOutput* other) {
             return other && other != output && other->name() == connector;
         });
-    if (connectorLive) {
+    const PixelSizeDecisions::RemovalOutcome removal =
+        m_pixelSizeLedger.remove(m_daemonGate.serviceRegistered, connector, connectorLive);
+    if (removal.report) {
+        sendPixelSizeReport(*removal.report);
+    }
+    if (removal.flushOwed) {
         scheduleOutputPixelSizeFlush();
-    } else {
-        reportOutputPixelSize(connector, QSize());
     }
 
     // Drop any live desktop-switch transition on this output. A disconnected

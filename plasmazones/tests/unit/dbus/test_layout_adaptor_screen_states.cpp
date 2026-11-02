@@ -3,7 +3,8 @@
 
 /**
  * @file test_layout_adaptor_screen_states.cpp
- * @brief LayoutAdaptor::getScreenStates' tiledWindowCount key.
+ * @brief LayoutAdaptor::getScreenStates' tiledWindowCount key, and the
+ *        screenStatesChanged signal that announces a changed answer.
  *
  * The settings app evaluates a rule's conditions against each screen's live
  * state, and a TiledWindowCount condition needs the count the daemon judges it
@@ -18,7 +19,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCoreApplication>
 #include <QRect>
+#include <QSignalSpy>
 #include <QString>
 #include <QTest>
 
@@ -93,11 +96,40 @@ private Q_SLOTS:
         QCOMPARE(dp1.value(QLatin1String("tiledWindowCount")).toInt(-1), 0);
     }
 
-    // No provider wired (the settings and editor processes' own adaptors):
-    // the key is never written.
+    // No provider wired (an adaptor the daemon has not wired yet, or one
+    // whose provider Daemon::stop() cleared): the key is never written.
     void testTiledWindowCount_absentWithoutAProvider()
     {
         QVERIFY(!stateFor(QStringLiteral("DP-1")).contains(QLatin1String("tiledWindowCount")));
+    }
+
+    // screenStatesChanged fires once per real change of the answer: a burst of
+    // checks in one turn compares once, a check that finds the answer as it
+    // was stays quiet, and a field no other signal reports (here the tiled
+    // count, which moves no assignment) is announced.
+    void testScreenStatesChanged_firesOncePerRealChange()
+    {
+        int count = 3;
+        m_adaptor->setTiledWindowCountProvider([&count](const QString& screenId) -> std::optional<int> {
+            return screenId == QLatin1String("DP-1") ? std::optional<int>(count) : std::nullopt;
+        });
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::screenStatesChanged);
+
+        // The first comparison has nothing before it, so it announces.
+        m_adaptor->scheduleScreenStatesCheck();
+        m_adaptor->scheduleScreenStatesCheck();
+        QVERIFY(spy.wait());
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+
+        m_adaptor->scheduleScreenStatesCheck();
+        QVERIFY(!spy.wait(50));
+        QCOMPARE(spy.count(), 1);
+
+        count = 4;
+        m_adaptor->scheduleScreenStatesCheck();
+        QVERIFY(spy.wait());
+        QCOMPARE(spy.count(), 2);
     }
 
 private:

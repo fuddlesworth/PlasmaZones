@@ -299,6 +299,11 @@ public:
      * (the daemon) re-resolves and re-applies the per-screen algorithm when the
      * count changes (on the engine's placementChanged).
      *
+     * The provider is asked about the screen a public resolver was called
+     * with, once per call. A virtual screen that falls back to its physical
+     * screen's assignment keeps its own count on that retry, so the provider
+     * is never asked about the physical id on the virtual screen's behalf.
+     *
      * The (virtualDesktop, activity) parameters identify the resolution context,
      * but a provider may return the screen's CURRENT-context count when its
      * backing engine only tracks the visible desktop. That is sound because the
@@ -696,8 +701,8 @@ public:
     /// @ref stampScreenShape (the query values) and the cache-key fold (see
     /// @ref contextCacheKeyToken) so both describe the same reading.
     ///
-    /// A known size decides the orientation (portrait iff taller than wide, the
-    /// same tokens the daemon's orientation provider returns), so a rotation
+    /// A known size decides the orientation (PhosphorRules::orientationTokenFor,
+    /// the derivation the daemon's orientation provider shares), so a rotation
     /// reaches the rules as one change and the orientation provider is not
     /// consulted at all. That provider answers only while the size is unknown.
     ScreenShape screenShape(const QString& screenId) const
@@ -706,8 +711,7 @@ public:
         if (m_screenPixelSizeProvider) {
             if (const auto size = m_screenPixelSizeProvider(screenId); size && !size->isEmpty()) {
                 shape.pixelSize = *size;
-                shape.orientation =
-                    size->height() > size->width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+                shape.orientation = PhosphorRules::orientationTokenFor(size->width(), size->height());
                 return shape;
             }
         }
@@ -740,12 +744,11 @@ public:
     }
 
     /// Read @p screenId's shape and stamp it onto @p query. Used by the
-    /// daemon's per-window rule query; every context resolver in this registry
-    /// (the seven cached ones and the two uncached param resolvers) reads
-    /// @ref screenShape once and passes it to @ref applyScreenShape, because it
-    /// needs the same reading for its key or its active-layout resolve. Either way
-    /// every windowless-context query carries the shape, so a
-    /// @c Field::ScreenOrientation, @c Field::ScreenWidth, @c Field::ScreenHeight
+    /// daemon's per-window rule query; every context resolver in this registry,
+    /// cached or not, reads @ref screenShape once and passes it to
+    /// @ref applyScreenShape, because it needs the same reading for its key or
+    /// its active-layout resolve. Either way every windowless-context query
+    /// carries the shape, so a @c Field::ScreenOrientation, @c Field::ScreenWidth, @c Field::ScreenHeight
     /// or @c Field::ScreenAspectRatio predicate matches regardless of which
     /// context slot is being resolved. The shape is geometry-derived and
     /// layout-independent, so this is safe to call from the assignment cascade
@@ -1269,7 +1272,10 @@ private:
     /// public entry point for the screen it was asked about. A fallback retry
     /// passes the same shape for the physical id, so a shape condition always
     /// describes the screen being resolved (a virtual screen's own share), never
-    /// the physical panel the retry borrows assignments from.
+    /// the physical panel the retry borrows assignments from. @p tiledCount gets
+    /// the same treatment (see @ref tiledWindowCount): the physical id of a
+    /// split monitor has no tiling state of its own, so a count read per try
+    /// would turn the virtual screen's count into "unknown" on the retry.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
     /// by (screenId, virtualDesktop, activity) plus a
@@ -1297,18 +1303,28 @@ private:
     /// called on the registry's owner thread (typically the main Qt thread).
     /// The cache itself takes no lock; concurrent calls are not supported.
     std::optional<AssignmentEntry> resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
-                                                          const QString& activity, const ScreenShape& shape) const;
+                                                          const QString& activity, const ScreenShape& shape,
+                                                          const std::optional<int>& tiledCount) const;
+
+    /// The tiled-window count @ref m_tiledWindowCountProvider reports for
+    /// @p screenId in this context, or nullopt when the provider is unset or
+    /// the screen is not actively tiling. Every public entry point that
+    /// reaches @ref resolveAssignmentEntry reads it ONCE for the screen it was
+    /// asked about, beside @ref screenShape, and hands that reading to every
+    /// fallback try.
+    std::optional<int> tiledWindowCount(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// @ref assignmentIdForScreen, @ref scrollingTemplateForContext and
-    /// @ref rulesVisibleActiveLayoutId with the screen shape already read, so a
-    /// resolver that folds the shape into its own key resolves the active layout
-    /// against that same reading. The public forms read the shape and delegate.
+    /// @ref rulesVisibleActiveLayoutId with the screen shape and the tiled-window
+    /// count already read, so a resolver that folds the shape into its own key
+    /// resolves the active layout against that same reading. The public forms
+    /// read both and delegate.
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity,
-                                  const ScreenShape& shape) const;
+                                  const ScreenShape& shape, const std::optional<int>& tiledCount) const;
     ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity,
-                                                  const ScreenShape& shape) const;
+                                                  const ScreenShape& shape, const std::optional<int>& tiledCount) const;
     QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity,
-                                       const ScreenShape& shape) const;
+                                       const ScreenShape& shape, const std::optional<int>& tiledCount) const;
 
     /// True if a rule whose match is exactly the context shape
     /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
@@ -1353,7 +1369,8 @@ private:
     /// tail, and collapsing "settled empty" into "miss" would make an
     /// explicit Snapping pin report the default tier's autotile id.
     std::optional<QString> resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
-                                                     const QString& activity, const ScreenShape& shape) const;
+                                                     const QString& activity, const ScreenShape& shape,
+                                                     const std::optional<int>& tiledCount) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
@@ -1456,7 +1473,7 @@ private:
     /// its own qHash); the alias keeps existing qualified uses compiling.
     using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
-    /// Shared revision-invalidated memoization for the seven cached context
+    /// Shared revision-invalidated memoization for the cached context
     /// resolvers (@ref resolveAssignmentEntry, @ref resolveContextGaps,
     /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
     /// @ref resolveContextOsdEnabled, @ref resolveContextDragSelectorEnabled,

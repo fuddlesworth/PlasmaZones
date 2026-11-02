@@ -245,6 +245,29 @@ private Q_SLOTS:
         QCOMPARE(aspectRatioTokenFor(width, height), token);
     }
 
+    void testOrientationToken_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("height");
+        QTest::addColumn<QString>("token");
+        QTest::addRow("1920x1080 landscape") << 1920 << 1080 << QStringLiteral("landscape");
+        QTest::addRow("1080x1920 portrait") << 1080 << 1920 << QStringLiteral("portrait");
+        QTest::addRow("taller by a pixel") << 1919 << 1920 << QStringLiteral("portrait");
+        QTest::addRow("square is landscape") << 1920 << 1920 << QStringLiteral("landscape");
+        QTest::addRow("zero width") << 0 << 1080 << QString();
+        QTest::addRow("zero height") << 1920 << 0 << QString();
+        QTest::addRow("negative width") << -1080 << 1920 << QString();
+        QTest::addRow("negative height") << 1920 << -1 << QString();
+    }
+
+    void testOrientationToken()
+    {
+        QFETCH(int, width);
+        QFETCH(int, height);
+        QFETCH(QString, token);
+        QCOMPARE(orientationTokenFor(width, height), token);
+    }
+
     void testAspectRatioVocabularyIsUnique()
     {
         // The picker lists the vocabulary verbatim, so a duplicate token would

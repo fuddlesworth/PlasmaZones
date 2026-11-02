@@ -794,6 +794,18 @@ target_include_directories(test_engine_routing PRIVATE ${CMAKE_SOURCE_DIR}/plasm
 target_link_libraries(test_engine_routing PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_engine_routing COMMAND test_engine_routing)
 
+# The daemon's screen-reshape bookkeeping (ScreenReshapeTracker): when a
+# compositor pixel-size report applies, parks or is awaited, and the reshape
+# records that keep a verdict from being absorbed or applied twice. Compiles
+# the daemon source directly, like the seed filter.
+add_executable(test_screen_reshape_tracker
+    daemon/test_screen_reshape_tracker.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/screenreshapetracker.cpp
+)
+target_include_directories(test_screen_reshape_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_screen_reshape_tracker PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_screen_reshape_tracker COMMAND test_screen_reshape_tracker)
+
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core,
 # so the three suites below link its sources from this library. The catalog TU
 # is not in it: the teardown suite does not need it, and an OBJECT library puts
@@ -1407,11 +1419,22 @@ target_include_directories(test_running_windows_decisions PRIVATE ${CMAKE_SOURCE
 add_test(NAME test_running_windows_decisions COMMAND test_running_windows_decisions)
 
 # The absolute rect of a virtual screen (plasmazoneseffect/virtualscreengeometry.h):
-# edges rounded, re-derived when its output moves (F806). Same header-only reach.
+# edges rounded, re-derived when its output moves (F806). Same header-only reach,
+# plus PhosphorScreens::Core for the daemon's VirtualScreenDef::absoluteGeometry,
+# which the cut is compared against.
 add_executable(test_virtual_screen_geometry ui/effect/test_virtual_screen_geometry.cpp)
-target_link_libraries(test_virtual_screen_geometry PRIVATE Qt6::Test Qt6::Core)
+target_link_libraries(test_virtual_screen_geometry PRIVATE Qt6::Test Qt6::Core PhosphorScreens::Core)
 target_include_directories(test_virtual_screen_geometry PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_virtual_screen_geometry COMMAND test_virtual_screen_geometry)
+
+# Which output pixel sizes the effect owes the daemon, and when the shape
+# verdicts drop (plasmazoneseffect/pixelsizedecisions.h): the report dedupe, the
+# clear on removal, a bridge restart and a refresh-only mode change. Same
+# header-only reach.
+add_executable(test_pixel_size_decisions ui/effect/test_pixel_size_decisions.cpp)
+target_link_libraries(test_pixel_size_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pixel_size_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_pixel_size_decisions COMMAND test_pixel_size_decisions)
 
 # Pure-logic test for the screen of a window filling a split output
 # (plasmazoneseffect/windowscreendecisions.h): engine, then restore rect, then

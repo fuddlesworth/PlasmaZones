@@ -54,13 +54,15 @@ QString addRule(RuleController& controller, const QVariantMap& match, const QVar
 }
 
 /// A `SettingsController::screens` entry. A zero size leaves the device-pixel
-/// keys out, as ScreenHelper does when the daemon answered none.
-QVariantMap screenJson(const QString& name, int pixelWidth = 0, int pixelHeight = 0)
+/// keys out, as ScreenHelper does when the daemon answered none. @p known is
+/// ScreenHelper's `pixelSizeKnown`: false for the daemon's estimate.
+QVariantMap screenJson(const QString& name, int pixelWidth = 0, int pixelHeight = 0, bool known = true)
 {
     QVariantMap screen{{QStringLiteral("name"), name}};
     if (pixelWidth > 0 && pixelHeight > 0) {
         screen[QStringLiteral("pixelWidth")] = pixelWidth;
         screen[QStringLiteral("pixelHeight")] = pixelHeight;
+        screen[QStringLiteral("pixelSizeKnown")] = known;
     }
     return screen;
 }
@@ -116,7 +118,12 @@ private Q_SLOTS:
     void monitorOverviewCountsOnlyRulesThatApplyNow();
     void monitorOverviewTiledCountComesFromScreenState();
     void monitorOverviewVirtualScreenFallsBackToMonitorRules();
+    void monitorOverviewVirtualScreenJudgesMonitorRulesByItsOwnShape();
+    void monitorOverviewEstimatedSizeIsUnknown();
+    void monitorOverviewColorSchemeFromProvider();
+    void monitorOverviewCountsOnlyLiteralMonitorPins();
     void screenSizeHintNamesPinnedMonitors();
+    void screenSizeHintNamesVirtualScreensOfAPinnedMonitor();
     void curveLabelResolverBridgesQmlNaming();
     void rulesSnapshotFeedsEveryRuleRowRequiredProperty();
 };
@@ -922,6 +929,153 @@ void TestRuleControllerOverview::monitorOverviewVirtualScreenFallsBackToMonitorR
     QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
 }
 
+void TestRuleControllerOverview::monitorOverviewVirtualScreenJudgesMonitorRulesByItsOwnShape()
+{
+    // A monitor split into a wide and a narrow virtual screen: both inherit
+    // the monitor's rules through the physical-id retry, and the retry judges
+    // a screen-size condition against each virtual screen's own size, as the
+    // daemon's does. Only the wide one takes the wide layout.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{
+                         {QStringLiteral("all"),
+                          QVariantList{
+                              leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                              leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000)}}},
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("wide")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("standard")))
+                 .isEmpty());
+
+    const QString wideId = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("DP-1"), 0);
+    const QString narrowId = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("DP-1"), 1);
+    const QVariantList overview =
+        controller.monitorOverview({screenJson(wideId, 3840, 1440), screenJson(narrowId, 1280, 1440)});
+    QCOMPARE(tileFor(overview, wideId).value(QStringLiteral("layoutName")).toString(), QStringLiteral("wide"));
+    QCOMPARE(tileFor(overview, narrowId).value(QStringLiteral("layoutName")).toString(), QStringLiteral("standard"));
+}
+
+void TestRuleControllerOverview::monitorOverviewEstimatedSizeIsUnknown()
+{
+    // Before the compositor's first report, with no size from an earlier
+    // session, the daemon's getScreenInfo carries an estimate that its own
+    // rules do not see. The tile treats it the same way: a size condition
+    // does not hold on it, and the orientation comes from the logical
+    // geometry (landscape here) rather than from the estimate (portrait).
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{
+                         {QStringLiteral("all"),
+                          QVariantList{
+                              leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                              leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000)}}},
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("wide")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("standard")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("all"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-2")),
+                                               leafJson(QStringLiteral("screenOrientation"), QStringLiteral("equals"),
+                                                        QStringLiteral("portrait"))}}},
+                     QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")},
+                                              {QStringLiteral("value"), true}}})
+                 .isEmpty());
+
+    QVariantMap tall = screenJson(QStringLiteral("DP-2"), 1440, 2560, false);
+    tall[QStringLiteral("width")] = 2560;
+    tall[QStringLiteral("height")] = 1440;
+    const QVariantList estimated{screenJson(QStringLiteral("DP-1"), 5120, 1440, false), tall};
+
+    QVariantList overview = controller.monitorOverview(estimated);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("layoutName")).toString(),
+             QStringLiteral("standard"));
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("locked")).toBool(), false);
+    QVERIFY(controller
+                .screenSizeHint(estimated,
+                                leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")))
+                .isEmpty());
+
+    // The same sizes once known decide both.
+    tall[QStringLiteral("pixelSizeKnown")] = true;
+    overview = controller.monitorOverview({screenJson(QStringLiteral("DP-1"), 5120, 1440), tall});
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("layoutName")).toString(),
+             QStringLiteral("wide"));
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("locked")).toBool(), true);
+}
+
+void TestRuleControllerOverview::monitorOverviewColorSchemeFromProvider()
+{
+    // A ColorScheme condition reads the scheme the provider answers on each
+    // call, so the tile follows a light/dark flip without a rule edit.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     QVariantMap{{QStringLiteral("all"),
+                                  QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                        QStringLiteral("DP-1")),
+                                               leafJson(QStringLiteral("colorScheme"), QStringLiteral("equals"),
+                                                        QStringLiteral("dark"))}}},
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("night")))
+                 .isEmpty());
+    QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                     assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
+                                   QStringLiteral("layoutId"), QStringLiteral("day")))
+                 .isEmpty());
+    const QVariantList screens{screenJson(QStringLiteral("DP-1"))};
+    const auto layoutNow = [&controller, &screens]() {
+        return tileFor(controller.monitorOverview(screens), QStringLiteral("DP-1"))
+            .value(QStringLiteral("layoutName"))
+            .toString();
+    };
+
+    QCOMPARE(layoutNow(), QStringLiteral("day"));
+    QString scheme = QStringLiteral("dark");
+    controller.setColorSchemeProvider([&scheme]() {
+        return scheme;
+    });
+    QCOMPARE(layoutNow(), QStringLiteral("night"));
+    scheme = QStringLiteral("light");
+    QCOMPARE(layoutNow(), QStringLiteral("day"));
+    controller.setColorSchemeProvider({});
+}
+
+void TestRuleControllerOverview::monitorOverviewCountsOnlyLiteralMonitorPins()
+{
+    // A tile counts the rules that address its monitor by a whole ScreenId
+    // (RuleModel::screenIdsOf, the walk the Rules page's monitor filter
+    // reads). A substring pin addresses no one monitor, so it counts on no
+    // tile even where it matches, and a monitor excluded inside a `none`
+    // group is not addressed by the rule.
+    RuleController controller;
+    QVERIFY(!addRule(controller,
+                     leafJson(QStringLiteral("screenId"), QStringLiteral("startsWith"), QStringLiteral("DP")),
+                     gapActions())
+                 .isEmpty());
+    QVERIFY(!addRule(controller,
+                     QVariantMap{
+                         {QStringLiteral("all"),
+                          QVariantList{
+                              leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
+                              QVariantMap{{QStringLiteral("none"),
+                                           QVariantList{leafJson(QStringLiteral("screenId"), QStringLiteral("equals"),
+                                                                 QStringLiteral("DP-2"))}}}}}},
+                     gapActions())
+                 .isEmpty());
+
+    const QVariantList overview =
+        controller.monitorOverview({screenJson(QStringLiteral("DP-1")), screenJson(QStringLiteral("DP-2"))});
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-1")).value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tileFor(overview, QStringLiteral("DP-2")).value(QStringLiteral("ruleCount")).toInt(), 0);
+}
+
 void TestRuleControllerOverview::screenSizeHintNamesPinnedMonitors()
 {
     // The rule editor's note under a screen-size value names the device-pixel
@@ -970,6 +1124,37 @@ void TestRuleControllerOverview::screenSizeHintNamesPinnedMonitors()
     QVERIFY(
         controller.screenSizeHint(screens, leafJson(QStringLiteral("screenWidth"), QStringLiteral("greaterThan"), 3000))
             .isEmpty());
+}
+
+void TestRuleControllerOverview::screenSizeHintNamesVirtualScreensOfAPinnedMonitor()
+{
+    // A rule pinning a monitor that is split into virtual screens is judged
+    // against each virtual screen's own size, so the note names each of them,
+    // matched ignoring case like a whole-monitor pin. A virtual screen of
+    // another monitor stays out.
+    const QLocale previous;
+    QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+    const auto restoreLocale = qScopeGuard([previous]() {
+        QLocale::setDefault(previous);
+    });
+
+    RuleController controller;
+    const auto virtualScreen = [](const QString& physicalId, int index, int width, int height) {
+        QVariantMap screen = screenJson(PhosphorIdentity::VirtualScreenId::make(physicalId, index), width, height);
+        screen[QStringLiteral("isVirtualScreen")] = true;
+        screen[QStringLiteral("virtualIndex")] = index;
+        screen[QStringLiteral("connectorName")] = physicalId;
+        return screen;
+    };
+    const QVariantList screens{virtualScreen(QStringLiteral("DP-1"), 0, 3840, 1440),
+                               virtualScreen(QStringLiteral("DP-1"), 1, 1280, 1440),
+                               virtualScreen(QStringLiteral("DP-2"), 0, 1920, 1080)};
+
+    const QString hint = controller.screenSizeHint(
+        screens, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("dp-1")));
+    QVERIFY2(hint.contains(QStringLiteral("3,840 × 1,440")), qPrintable(hint));
+    QVERIFY2(hint.contains(QStringLiteral("1,280 × 1,440")), qPrintable(hint));
+    QVERIFY2(!hint.contains(QStringLiteral("1,920")), qPrintable(hint));
 }
 
 void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()

@@ -48,36 +48,43 @@ namespace PlasmaZones {
 namespace {
 
 namespace ActionType = PhosphorRules::ActionType;
-using PhosphorRules::Field;
 using PhosphorRules::MatchExpression;
 using PhosphorRules::Rule;
 using PhosphorRules::RuleAction;
 
-/// The shape the daemon reads for @p screen (a `SettingsController::screens`
-/// map), the same way LayoutRegistry::screenShape reads its providers: a
-/// known device-pixel size decides the orientation (portrait iff taller than
-/// wide), and only without one does the logical geometry answer it.
-///
-/// The daemon's getScreenInfo also carries an estimated size (logical size
-/// times scale) before the compositor's first report when it has no size
-/// from an earlier session, and the daemon's own resolvers treat the size as
-/// unknown then. The tile uses the estimate, which can miss the mode by a
-/// pixel until that first report lands.
+/// The device-pixel size of @p screen (a `SettingsController::screens` map)
+/// when the daemon's rules see one: the compositor's report, or the size
+/// seeded from an earlier session (`pixelSizeKnown`). The estimate the
+/// daemon's getScreenInfo carries before either exists is not one, so it
+/// answers nullopt here.
+std::optional<QSize> knownPixelSizeOf(const QVariantMap& screen)
+{
+    if (!screen.value(QStringLiteral("pixelSizeKnown")).toBool()) {
+        return std::nullopt;
+    }
+    const QSize size(screen.value(QStringLiteral("pixelWidth")).toInt(),
+                     screen.value(QStringLiteral("pixelHeight")).toInt());
+    if (size.width() <= 0 || size.height() <= 0) {
+        return std::nullopt;
+    }
+    return size;
+}
+
+/// The shape the daemon reads for @p screen, the same way
+/// LayoutRegistry::screenShape reads its providers: a known device-pixel
+/// size decides the orientation, and only while the size is unknown does
+/// the logical geometry answer it (the daemon's orientation provider reads
+/// the same logical geometry).
 PhosphorZones::LayoutRegistry::ScreenShape screenShapeOf(const QVariantMap& screen)
 {
     PhosphorZones::LayoutRegistry::ScreenShape shape;
-    const int pixelWidth = screen.value(QStringLiteral("pixelWidth")).toInt();
-    const int pixelHeight = screen.value(QStringLiteral("pixelHeight")).toInt();
-    if (pixelWidth > 0 && pixelHeight > 0) {
-        shape.pixelSize = QSize(pixelWidth, pixelHeight);
-        shape.orientation = pixelHeight > pixelWidth ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    if (const auto size = knownPixelSizeOf(screen)) {
+        shape.pixelSize = *size;
+        shape.orientation = PhosphorRules::orientationTokenFor(size->width(), size->height());
         return shape;
     }
-    const int width = screen.value(QStringLiteral("width")).toInt();
-    const int height = screen.value(QStringLiteral("height")).toInt();
-    if (width > 0 && height > 0) {
-        shape.orientation = height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
-    }
+    shape.orientation = PhosphorRules::orientationTokenFor(screen.value(QStringLiteral("width")).toInt(),
+                                                           screen.value(QStringLiteral("height")).toInt());
     return shape;
 }
 
@@ -110,39 +117,23 @@ QString ruleModeToken(PhosphorZones::AssignmentEntry::Mode mode)
     return QString();
 }
 
-/// True when @p match has a ScreenId leaf it reaches without passing through
-/// a negation: a rule that addresses a monitor rather than excluding one.
-bool namesScreenPositively(const MatchExpression& match)
+/// True when @p pin (a ScreenId condition's value) names @p screen (a
+/// `SettingsController::screens` map), ignoring case as the rule engine's
+/// Equals does: the screen's effective id, its stable id, or for a virtual
+/// screen the monitor it is part of. The last is how the daemon carries a
+/// monitor's rules to its virtual screens (the physical-id retry), and those
+/// rules then read the virtual screen's own shape.
+bool pinNamesScreen(const QString& pin, const QVariantMap& screen)
 {
-    if (match.isLeaf()) {
-        return match.predicate().field == Field::ScreenId;
+    const auto same = [&pin](const QString& id) {
+        return !id.isEmpty() && pin.compare(id, Qt::CaseInsensitive) == 0;
+    };
+    const QString name = screen.value(QStringLiteral("name")).toString();
+    if (same(name) || same(screen.value(QStringLiteral("screenId")).toString())) {
+        return true;
     }
-    if (match.kind() == MatchExpression::Kind::None) {
-        return false;
-    }
-    return std::any_of(match.children().cbegin(), match.children().cend(), namesScreenPositively);
-}
-
-/// Append the value of every ScreenId Equals leaf @p match reaches without
-/// passing through a negation.
-void collectPositiveScreenPins(const MatchExpression& match, QStringList& out)
-{
-    if (match.isLeaf()) {
-        const auto& predicate = match.predicate();
-        if (predicate.field == Field::ScreenId && predicate.op == PhosphorRules::Operator::Equals) {
-            const QString value = predicate.value.toString();
-            if (!value.isEmpty()) {
-                out.append(value);
-            }
-        }
-        return;
-    }
-    if (match.kind() == MatchExpression::Kind::None) {
-        return;
-    }
-    for (const MatchExpression& child : match.children()) {
-        collectPositiveScreenPins(child, out);
-    }
+    return PhosphorIdentity::VirtualScreenId::isVirtual(name)
+        && same(PhosphorIdentity::VirtualScreenId::extractPhysicalId(name));
 }
 
 /// A short name for @p screen (a `SettingsController::screens` map) to lead a
@@ -293,8 +284,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // for this screen: desktop, activity and tiled-window count from the
         // daemon's own getScreenStates answer, the colour scheme, and the
         // screen shape. With no state entry (daemon down) the desktop reads 0
-        // and the activity empty, so a desktop or activity condition does not
-        // hold, which is the honest answer when the state is unknown.
+        // and the activity empty.
         PhosphorRules::WindowQuery query;
         query.screenId = screenId;
         const auto stateIt = stateById.constFind(screenId);
@@ -302,8 +292,8 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
             query.virtualDesktop = stateIt->value(QStringLiteral("virtualDesktop")).toInt();
             query.activity = stateIt->value(QStringLiteral("activity")).toString();
             // Present only while the screen tiles, matching the daemon's
-            // tiled-window-count provider, so a count condition stays
-            // unanswered on a snapping screen in both places.
+            // tiled-window-count provider, so the query leaves the count
+            // unset on a snapping screen in both places.
             const QVariant count = stateIt->value(QStringLiteral("tiledWindowCount"));
             if (count.isValid()) {
                 query.tiledWindowCount = count.toInt();
@@ -313,8 +303,10 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         PhosphorZones::LayoutRegistry::applyScreenShape(query, screenShapeOf(screen));
 
         // The assignment slots, with the daemon's retry of a virtual screen
-        // against its monitor's rules. The retry keeps the virtual screen's
-        // shape, as the daemon's does.
+        // against its monitor's rules. Only the id the rules are matched
+        // against changes: the retry keeps everything else the virtual
+        // screen's query carries, its shape and its tiled-window count
+        // included, as the daemon's retry does.
         std::optional<PhosphorZones::LayoutRegistry::RuleSlotResolution> slots =
             PhosphorZones::LayoutRegistry::resolveRuleSlots(evaluator, query);
         if (!slots && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -346,7 +338,13 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         }
 
         // The lock resolver sees the layout the assignment resolved, as the
-        // daemon's does, so an Active layout condition on a lock rule holds.
+        // daemon's does. The daemon reads that id through
+        // assignmentIdForScreen, which differs from the entry's own id in two
+        // cases this process cannot follow: an entry naming no layout that is
+        // not an explicit Snapping pin takes the global default's id there,
+        // and a scrolling entry naming no template takes the configured
+        // default template (see rulesVisibleActiveLayout). An Active layout
+        // condition on a lock rule can read differently here in those cases.
         query.activeLayout = rulesVisibleActiveLayout(entry);
         bool locked = false;
         if (const Rule* lockRule = PhosphorZones::LayoutRegistry::resolveLockRule(evaluator, query)) {
@@ -362,11 +360,12 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
             }
         }
 
-        // The rule count: every enabled context rule that names a monitor
-        // outside a negation and whose whole match holds for this screen now,
-        // the engine mode included. A `none{ScreenId}` rule excludes a screen
-        // rather than addressing it, and a ScreenId leaf compares ignoring
-        // case, both of which evaluating the match settles.
+        // The rule count: every enabled context rule that addresses a monitor
+        // (RuleModel::screenIdsOf, the walk the Rules page's monitor filter
+        // reads) and whose whole match holds for this screen now, the engine
+        // mode included. The walk skips a `none{ScreenId}` group, which
+        // excludes a monitor rather than addressing it. Evaluating the match
+        // settles which screen a pin names, ignoring case as the engine does.
         //
         // DisableEngine is the one action the daemon does not run through the
         // evaluator. A monitor is disabled iff its id appears in
@@ -394,7 +393,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         int ruleCount = 0;
         QSet<QString> disabledEngineModes;
         for (const Rule& rule : ruleSet.rules()) {
-            if (!rule.enabled || !rule.match.isContextOnly() || !namesScreenPositively(rule.match)
+            if (!rule.enabled || !rule.match.isContextOnly() || RuleModel::screenIdsOf(rule.match).isEmpty()
                 || !rule.match.evaluate(query)) {
                 continue;
             }
@@ -504,27 +503,25 @@ QString RuleController::screenSizeHint(const QVariantList& screens, const QVaria
     if (!match) {
         return QString();
     }
-    QStringList pinned;
-    collectPositiveScreenPins(*match, pinned);
+    const QStringList pinned = RuleModel::screenIdsOf(*match);
 
     QStringList lines;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
-        const QString name = screen.value(QStringLiteral("name")).toString();
-        const QString stableId = screen.value(QStringLiteral("screenId")).toString();
-        // Ignoring case, as the rule engine's Equals does.
-        const bool isPinned = std::any_of(pinned.cbegin(), pinned.cend(), [&](const QString& id) {
-            return (!name.isEmpty() && id.compare(name, Qt::CaseInsensitive) == 0)
-                || (!stableId.isEmpty() && id.compare(stableId, Qt::CaseInsensitive) == 0);
+        const bool isPinned = std::any_of(pinned.cbegin(), pinned.cend(), [&screen](const QString& pin) {
+            return pinNamesScreen(pin, screen);
         });
         if (!isPinned) {
             continue;
         }
-        const int width = screen.value(QStringLiteral("pixelWidth")).toInt();
-        const int height = screen.value(QStringLiteral("pixelHeight")).toInt();
-        if (width <= 0 || height <= 0) {
+        // Only a size the daemon's rules see. An estimate could name a size
+        // the rule is not judged against.
+        const auto size = knownPixelSizeOf(screen);
+        if (!size) {
             continue;
         }
+        const int width = size->width();
+        const int height = size->height();
         const QLocale locale;
         lines.append(PhosphorI18n::tr("%1 is %2 × %3 pixels right now, which is closest to %4.",
                                       "monitor name, its width and height in device pixels, then its aspect ratio")

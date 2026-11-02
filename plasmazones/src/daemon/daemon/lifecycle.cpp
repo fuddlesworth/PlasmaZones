@@ -500,6 +500,12 @@ void Daemon::stop()
         m_layoutManager->setDefaultScrollingTemplateProvider({});
         m_layoutManager->setScrollingTemplateStore(nullptr);
     }
+    // The layout adaptor's twin of the registry's tiled-count provider
+    // (getScreenStates' tiledWindowCount) captures `this` and reads the
+    // engines the same way, and the adaptor is a Qt child that outlives them.
+    if (m_layoutAdaptor) {
+        m_layoutAdaptor->setTiledWindowCountProvider({});
+    }
 
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
     // children of the daemon (destroyed later); a D-Bus call arriving between engine
@@ -777,10 +783,8 @@ void Daemon::stop()
     m_activeAssignmentByScreen.clear();
     m_lastAnnouncedTemplateByScreen.clear();
     // The reshape records compare against that snapshot, so they go with it,
-    // and the first-report bookkeeping is rebuilt by the next start().
-    m_reshapedScreenPreIds.clear();
-    m_pixelSizeAwaitingFirstReport.clear();
-    m_silentAssignmentApplyScreens.clear();
+    // and the pixel-size report bookkeeping is rebuilt by the next start().
+    m_reshapeTracker.reset();
     // The per-screen scroll caps the scrolling pass resolves. Same per-session
     // shape as the derived sets above: rewritten by the next pass before any
     // read, but this hash is what decides whether a placementChanged arriving

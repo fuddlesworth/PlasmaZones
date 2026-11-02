@@ -80,7 +80,8 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Tiling));
     applyScreenShape(query, shape);
     stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                    tiledWindowCount(screenId, virtualDesktop, activity));
     // Filtered resolve, but with NO managed catch-all exclusion (unlike
     // resolveContextGaps'): the baseline rule carries only gap/default slots,
     // never tiling params, so there is no catch-all to exclude here. The
@@ -218,7 +219,8 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QString(PWR::ModeToken::Scrolling));
     applyScreenShape(query, shape);
     stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity, shape,
+                                                    tiledWindowCount(screenId, virtualDesktop, activity));
     // Filtered resolve with no managed catch-all exclusion: same baseline-slot
     // rationale as the tiling-param resolver above. The slot-carrying gate is
     // the same one too, and load-bearing for the same reason: the walk STOPS at

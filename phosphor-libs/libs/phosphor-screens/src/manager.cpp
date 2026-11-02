@@ -21,8 +21,6 @@
 #include <QTimer>
 #include <QWindow>
 
-#include <algorithm>
-
 using PhosphorWayland::LayerSurface;
 
 namespace PhosphorScreens {
@@ -175,7 +173,8 @@ void ScreenManager::stop()
     m_compositorAvailableGeometry.clear();
     // Same for the compositor's pixel sizes: the effect re-reports every
     // output when it registers again. The seeds stay, like m_virtualConfigs,
-    // because the host's own record is their source.
+    // because the host's own record is their source. Nothing is announced:
+    // the manager tracks no screen once stopped.
     m_compositorPixelSizes.clear();
 }
 
@@ -732,22 +731,6 @@ void ScreenManager::setCompositorPixelSize(const QString& connectorName, const Q
     Q_EMIT compositorPixelSizeChanged(connectorName);
 }
 
-void ScreenManager::clearCompositorPixelSizes()
-{
-    if (m_compositorPixelSizes.isEmpty()) {
-        return;
-    }
-    // Clear first so every listener re-resolves against the final state, and
-    // emit in a stable order.
-    QStringList connectors = m_compositorPixelSizes.keys();
-    std::sort(connectors.begin(), connectors.end());
-    m_compositorPixelSizes.clear();
-    qCInfo(lcPhosphorScreens) << "Compositor pixel sizes cleared for" << connectors;
-    for (const QString& connectorName : std::as_const(connectors)) {
-        Q_EMIT compositorPixelSizeChanged(connectorName);
-    }
-}
-
 void ScreenManager::seedPixelSize(const QString& physicalScreenId, const QSize& pixelSize)
 {
     if (physicalScreenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
@@ -839,21 +822,6 @@ bool ScreenManager::isPixelSizeReported(const QString& screenId) const
     bool reported = false;
     resolvePixelSize(screenId, &reported);
     return reported;
-}
-
-QHash<QString, QSize> ScreenManager::reportedPixelSizesByIdentifier() const
-{
-    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
-    QHash<QString, QSize> sizes;
-    for (const auto& screen : m_trackedScreens) {
-        if (screen.identifier.isEmpty()) {
-            continue;
-        }
-        if (const auto it = m_compositorPixelSizes.constFind(screen.name); it != m_compositorPixelSizes.constEnd()) {
-            sizes.insert(screen.identifier, it.value());
-        }
-    }
-    return sizes;
 }
 
 void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldIds)

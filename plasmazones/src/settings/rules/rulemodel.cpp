@@ -77,7 +77,9 @@ void collectFields(const MatchExpression& match, QList<Field>& out)
 
 /// Append every non-empty ScreenId leaf value in @p match to @p out.
 /// Only the scalar Equals shape pins a literal monitor (the value is a
-/// connector / screen id string).
+/// connector / screen id string), and only outside a negation: a
+/// `none{ScreenId}` group excludes that monitor rather than addressing it,
+/// so the walk does not descend into one.
 void collectScreenIds(const MatchExpression& match, QStringList& out)
 {
     if (match.isLeaf()) {
@@ -93,6 +95,9 @@ void collectScreenIds(const MatchExpression& match, QStringList& out)
             // under-count the rule against every tile. Such a rule doesn't pin a
             // specific monitor, so it contributes no screen id.
         }
+        return;
+    }
+    if (match.kind() == MatchExpression::Kind::None) {
         return;
     }
     for (const MatchExpression& child : match.children()) {

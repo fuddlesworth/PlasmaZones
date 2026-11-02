@@ -32,6 +32,7 @@
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
 #include "daemon/daemon_fwd.h"
+#include "daemon/daemon/screenreshapetracker.h"
 
 namespace PlasmaZones {
 
@@ -775,9 +776,9 @@ private:
      * via LayoutAdaptor::applyAssignmentChangesFor, which carries that set
      * explicitly rather than staging into the bus client's save-batch buffer.
      * A screen whose shape changed also counts when its verdict differs from
-     * the one recorded before the change (@ref m_reshapedScreenPreIds), even if
-     * an earlier diff in the same turn already folded the new verdict into the
-     * snapshot. updateEngineScreens() runs on EVERY call regardless: gap and
+     * the one recorded before the change (@ref m_reshapeTracker's reshape
+     * records), even if an earlier diff already folded the new verdict into
+     * the snapshot. updateEngineScreens() runs on EVERY call regardless: gap and
      * tiling-parameter rules move tiled geometry without moving any assignment
      * id, and it force-retiles the already-active autotile screens for exactly
      * that case. Only the resnap / OSD apply, and the controller and layout
@@ -807,8 +808,11 @@ private:
      *        shown overlay properties) for the next event-loop pass.
      *
      * For a non-rule-set input that moves context verdicts the overlay has
-     * already applied: a colour-scheme flip, a compositor pixel-size report
-     * that changed a screen's shape, and a logical geometry change that did.
+     * already applied: a colour-scheme flip, an applied compositor pixel-size
+     * report that changed a screen's shape (@ref onCompositorPixelSizeChanged),
+     * a logical geometry change that did, and a virtual-screen reconfigure or
+     * region change that reshaped a virtual screen
+     * (@ref onVirtualScreensReconfigured, @ref onVirtualScreenRegionsChanged).
      * Deferred because the refresh can reload overlay shader items, and the
      * triggers (a palette-change event, a screen change) are still being
      * delivered when they fire.
@@ -816,41 +820,74 @@ private:
     void scheduleContextOverlayRefresh();
 
     /**
-     * @brief The screen-shape change handler for a compositor pixel-size report
-     *        (ScreenManager::compositorPixelSizeChanged).
+     * @brief React to a change in what ScreenManager knows of a connector's
+     *        size in device pixels (ScreenManager::compositorPixelSizeChanged:
+     *        a compositor report set, changed or cleared, or a seed that moved
+     *        under a screen with no report), and re-evaluate a parked report.
      *
-     * Persists the reported sizes for the next session's seed, then reconciles
-     * the connector's effective screens whose shape actually moved, the virtual
-     * sub-screens included. Synchronous, unlike every other reconcile trigger:
-     * the effect pushes its sizes as soon as its bridge registers, ahead of its
-     * window announce, and a deferred pass would queue behind an announce
-     * already delivered, adopting those windows under the verdict the size is
-     * about to change. A report that leaves the shape where the last diff saw
-     * it (the size confirms the seed) reconciles nothing. The first report for
-     * a connector after start-up or after its screen was added applies without
-     * an OSD (@ref m_pixelSizeAwaitingFirstReport).
+     * The report arrives over D-Bus and the QScreen change it goes with over
+     * Wayland, in no fixed order. A report that disagrees with the screen the
+     * daemon tracks on that connector, as
+     * ScreenReshapeTracker::reportMatchesLogicalSize judges it against that
+     * screen's logical geometry and logical scale, describes a mode the
+     * daemon's geometry does not show yet, a
+     * monitor that replaced the tracked one on the same connector, or a scale
+     * still at its coarse start-up fallback. Applying it then would resnap
+     * into the new verdict's zones over a stale logical rect, and would save
+     * and seed the size under the outgoing monitor's identifier. So such a
+     * report is PARKED: its reshape is recorded (so a diff in between cannot
+     * absorb the verdict) and nothing else happens. The screenGeometryChanged
+     * and logicalScaleChanged handlers call this again for a parked connector,
+     * and a screen add evaluates its connector's report afresh
+     * (@ref admitPixelSizeReport), so it applies once the screen catches up.
+     * While parked the rules already read the report, because
+     * ScreenManager::pixelSize answers it; only the reconcile, the save and
+     * the seed wait.
+     *
+     * An APPLIED report re-seeds and persists the size under that screen's
+     * identifier alone, then reconciles the connector's effective screens
+     * whose shape actually moved, the virtual sub-screens included, after
+     * cancelling a live drag-insert preview on the output. Synchronous, unlike
+     * the deferred reconcile triggers: the effect pushes its sizes as soon as
+     * its bridge registers, ahead of its window announce, and a deferred pass
+     * would queue behind an announce already delivered, adopting those
+     * windows under the verdict the size is about to change. A report that
+     * leaves the shape where the last diff saw it (the size confirms the seed)
+     * reconciles nothing.
+     *
+     * The first applied report for a connector after start-up, after its
+     * screen was added, or after its report was cleared applies without an
+     * OSD, as does the reshape a clear causes: each replaces a stand-in with
+     * the real size or the other way round, which is the screen settling, not
+     * a change the user made. Logins trace as: the seed serves until the
+     * report arrives; a report checked against the coarse integer scale is
+     * parked until logicalScaleChanged brings the real one, then applies
+     * silently. A daemon restart under a running effect gets every output's
+     * report again when the bridge registers, or finds it already held at
+     * start-up, and applies it the same way. Bookkeeping in
+     * @ref m_reshapeTracker.
      */
     void onCompositorPixelSizeChanged(const QString& connectorName);
+
+    /**
+     * @brief Evaluate @p connectorName's report the way
+     *        @ref onCompositorPixelSizeChanged does, re-seeding and persisting
+     *        it when it applies, but without reacting to a reshape.
+     *
+     * For start-up and a screen add, where the screen's ids are new to the
+     * active-assignment snapshot and the handler's own diff resolves them
+     * with whatever size is in force. Returns the tracker's verdict.
+     */
+    ScreenReshapeTracker::ReportVerdict admitPixelSizeReport(const QString& connectorName);
 
     /// The screen-shape component of a screen's assignment cache key, from the
     /// registry's own reading, so two calls compare equal exactly when every
     /// shape field a rule can read is unchanged.
     QString screenShapeToken(const QString& screenId) const;
 
-    /**
-     * @brief Record the screens among @p screenIds whose shape differs from the
-     *        one the last diff saw, and return them.
-     *
-     * Each one's pre-change assignment id goes into @ref m_reshapedScreenPreIds
-     * (the first record wins until a reconcile consumes it). A screen the
-     * snapshot does not hold yet is skipped: its first diff primes it.
-     */
-    QStringList noteReshapedScreens(const QStringList& screenIds);
-
-    /// Consume @ref m_reshapedScreenPreIds and return the recorded screens
-    /// still in the snapshot whose assignment id now differs from the one
-    /// recorded before their shape changed.
-    QSet<QString> takeReshapedVerdictChanges();
+    /// What @ref m_reshapeTracker reads of this daemon: the active-assignment
+    /// snapshot and @ref screenShapeToken.
+    ScreenReshapeTracker::Lookups reshapeTrackerLookups();
 
     /**
      * @brief Diff the active assignments for a handler that changed the screen
@@ -861,7 +898,7 @@ private:
      * are primed by the diff and left out, because nothing was laid out under
      * an earlier verdict for them, and removed ids are left out because there
      * is nothing left to apply to. Recorded reshapes are folded in through
-     * @ref takeReshapedVerdictChanges.
+     * ScreenReshapeTracker::takeVerdictChanges.
      */
     QSet<QString> diffSurvivingAssignments(const QSet<QString>& knownBefore);
 
@@ -1666,26 +1703,15 @@ private:
     // and only external rule edits apply.
     bool m_reconcileAssignmentsPending = false;
 
-    // Effective screens whose shape changed since the last reconcile, each with the
-    // assignment id the snapshot held before the change (noteReshapedScreens). A diff
-    // that runs in between without applying (a desktop switch, a screen add, a layout
-    // list change) folds the new verdict into the snapshot, after which the reconcile's
-    // own diff comes back empty for that screen. The recorded id is what still tells it
-    // the verdict moved. Consumed by takeReshapedVerdictChanges; dropped for the screens
-    // an assignment apply has handled.
-    QHash<QString, QString> m_reshapedScreenPreIds;
-
-    // Connector names whose first compositor pixel-size report since start-up, or since
-    // their screen was added, has not arrived. That report replaces a seed or an
-    // unknown size with the real one, so the verdict change it causes is the screen
-    // settling, not a change the user made, and applies without an OSD.
-    QSet<QString> m_pixelSizeAwaitingFirstReport;
-
-    // Effective screens whose assignment change the running reconcile applies without
-    // an OSD (handleAssignmentChangesApplied skips their card). Filled by
-    // onCompositorPixelSizeChanged for a first report and cleared when the reconcile
-    // that read it ends.
-    QSet<QString> m_silentAssignmentApplyScreens;
+    // The reshape and pixel-size report bookkeeping (see ScreenReshapeTracker), over
+    // m_activeAssignmentByScreen and screenShapeToken. Its reshape records are noted
+    // by the shape handlers, consumed by reconcileActiveAssignments and
+    // diffSurvivingAssignments, dropped for the screens an assignment apply or a
+    // desktop or activity switch has laid out, and for a removed output. Its silent
+    // set is filled by onCompositorPixelSizeChanged and read by
+    // handleAssignmentChangesApplied, which skips those screens' cards, and cleared
+    // when the reconcile that read it ends.
+    ScreenReshapeTracker m_reshapeTracker{reshapeTrackerLookups()};
 
     // Compression latch for the deferred context overlay refresh
     // (scheduleContextOverlayRefresh, fed by the colour-scheme flip and screen-shape

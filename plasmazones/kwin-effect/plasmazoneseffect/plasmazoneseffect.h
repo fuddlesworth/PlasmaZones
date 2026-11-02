@@ -34,6 +34,7 @@
 // KDE ones (own header → project → KDE → Qt).
 #include "dragpolicytransition.h"
 #include "effect_state.h"
+#include "pixelsizedecisions.h"
 #include "placementstatement.h"
 #include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
@@ -2741,21 +2742,19 @@ private:
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
-    /// Collapse the pixel-size edges of one event-loop turn (an output added,
-    /// and each output's currentModeChanged and transformChanged) onto a single
-    /// queued flushOutputPixelSizes.
+    /// Collapse the pixel-size edges of one event-loop turn onto a single
+    /// queued flushOutputPixelSizes. The edges: an output added, each output's
+    /// currentModeChanged and transformChanged, and an output removed while a
+    /// live output still carries its connector (onScreenRemoved), whose size
+    /// the flush re-reads instead of clearing it at the daemon.
     void scheduleOutputPixelSizeFlush();
-    /// Read every output's LogicalOutput::pixelSize, report each to the daemon
-    /// (reportOutputPixelSize) and, when any differs from m_outputPixelSizes,
-    /// record it and drop the rule verdicts once: the screen-shape rule fields
-    /// derive from that size (stampScreenShape) and no verdict cache key moves
-    /// with it. Placeholder outputs are skipped.
+    /// Read every output's LogicalOutput::pixelSize, send the reports the
+    /// ledger owes (PixelSizeDecisions::Ledger::flush) and, when a size moved,
+    /// drop the rule verdicts once: the screen-shape rule fields derive from
+    /// that size (stampScreenShape) and no verdict cache key moves with it.
     void flushOutputPixelSizes();
-    /// Send @p size for connector @p connectorName to the daemon
-    /// (setPixelSizeFromKWin), unless the bridge is down or the daemon already
-    /// holds that value from this bridge (m_reportedPixelSizes). An empty size
-    /// sends the 0x0 clear, and only for a connector this bridge reported.
-    void reportOutputPixelSize(const QString& connectorName, const QSize& size);
+    /// Send one setPixelSizeFromKWin call. A 0x0 size is the clear.
+    void sendPixelSizeReport(const PixelSizeDecisions::Report& report);
     /// Report every non-placeholder output's pixel size. continueDaemonReadySetup
     /// runs it once the bridge is registered: the outputs were added before
     /// that (onScreenAdded runs at load), and a restarted daemon holds none.
@@ -3857,14 +3856,11 @@ private:
     // Per-screen current virtual desktop last reported to the daemon (physical
     // screenId → 1-based desktop), for dedup of KWin's per-output desktopChanged.
     QHash<QString, int> m_lastScreenDesktop;
-    // Each output's device pixel size as flushOutputPixelSizes last read it
-    // (connector name → LogicalOutput::pixelSize), so a refresh-rate-only
-    // currentModeChanged does not drop every rule verdict.
-    QHash<QString, QSize> m_outputPixelSizes;
-    // The size this bridge last sent the daemon per connector
-    // (reportOutputPixelSize). Cleared when the daemon goes away, so the next
-    // bridge's pushOutputPixelSizes sends every output again.
-    QHash<QString, QSize> m_reportedPixelSizes;
+    // Each output's device pixel size as the last flush read it, and as this
+    // bridge last sent it (connector name → LogicalOutput::pixelSize). The
+    // sent half is forgotten when the daemon goes away, so the next bridge's
+    // pushOutputPixelSizes sends every output again.
+    PixelSizeDecisions::Ledger m_pixelSizeLedger;
     // A flushOutputPixelSizes is queued for the end of this event-loop turn.
     bool m_outputPixelSizeFlushQueued = false;
 

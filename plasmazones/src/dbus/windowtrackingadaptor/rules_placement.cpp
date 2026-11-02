@@ -149,11 +149,14 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition.
     // The shared evaluator cache is keyed on (windowId, ruleSet revision) only, so
     // the FIRST resolver to touch a window seeds the verdict the others reuse, and
-    // that seed must come from a screen-stamped query. When nothing has seeded it
-    // yet, this resolve does, through the cache: on the snap open path
-    // SnapEngine::resolveWindowRestore reaches here before it consults the float /
-    // restore predicates, so a screen-constrained rule resolves correctly for
-    // them too.
+    // that seed must come from a screen-stamped query. On a first placement down
+    // the snap open path the seeder is applyOpenDesktopRouting, which
+    // SnapAdaptor::resolveWindowRestore runs before the engine's
+    // SnapEngine::resolveWindowRestore reaches here. When nothing has seeded it
+    // yet (a restore that is no first placement, so no routing ran), this
+    // resolve does, through the cache, and resolveWindowRestore consults the
+    // float / restore predicates only after it, so a screen-constrained rule
+    // resolves correctly for them too.
     //
     // When the memo already holds a verdict, this resolves FRESH instead of
     // reading it. The memo is the window's open-time verdict, and this resolver
@@ -275,8 +278,10 @@ bool WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         return false;
     }
     // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
-    // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
-    // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
+    // resolveCached is keyed on windowId (+ rule-set revision). On the snap open path
+    // this runs first (SnapAdaptor::resolveWindowRestore calls it before the engine's
+    // resolveWindowRestore), so it is the resolve that seeds the window's memo with a
+    // screen-stamped query, and the float / restore predicates read that verdict later.
     stampScreenContext(*query, screenId);
     ensureRuleEvaluator();
     return emitRouteToDesktopIfMatched(

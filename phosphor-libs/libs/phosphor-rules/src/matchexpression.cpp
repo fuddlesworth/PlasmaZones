@@ -271,6 +271,11 @@ bool MatchExpression::isValid() const
                               << "— numeric fields require an integer.";
             return false;
         };
+        const auto rejectOutOfRange = [this]() {
+            qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with out-of-range value" << m_predicate.value
+                              << "— numeric fields require an integer within int range.";
+            return false;
+        };
         switch (valueTypeId) {
         case QMetaType::Int:
         case QMetaType::Double:
@@ -278,14 +283,14 @@ bool MatchExpression::isValid() const
         case QMetaType::LongLong: {
             const qlonglong v = m_predicate.value.toLongLong();
             if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
-                return rejectNonNumeric();
+                return rejectOutOfRange();
             }
             break;
         }
         case QMetaType::UInt:
         case QMetaType::ULongLong:
             if (m_predicate.value.toULongLong() > static_cast<qulonglong>(std::numeric_limits<int>::max())) {
-                return rejectNonNumeric();
+                return rejectOutOfRange();
             }
             break;
         case QMetaType::QString: {

@@ -874,6 +874,26 @@ void LayoutAdaptor::setTiledWindowCountProvider(std::function<std::optional<int>
     m_tiledWindowCountProvider = std::move(provider);
 }
 
+void LayoutAdaptor::scheduleScreenStatesCheck()
+{
+    if (m_screenStatesCheckPending) {
+        return;
+    }
+    m_screenStatesCheckPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_screenStatesCheckPending = false;
+        // The whole answer, so a field added to getScreenStates later is
+        // covered without touching this. A handful of screens, once per turn
+        // at most.
+        const QString states = getScreenStates();
+        if (states == m_lastScreenStatesJson) {
+            return;
+        }
+        m_lastScreenStatesJson = states;
+        Q_EMIT screenStatesChanged();
+    });
+}
+
 void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 {
     // The adaptor is a QDBusAbstractAdaptor child of the service-owning

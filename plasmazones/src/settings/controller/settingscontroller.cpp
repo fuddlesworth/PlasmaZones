@@ -1005,9 +1005,18 @@ SettingsController::SettingsController(QObject* parent)
     // can start it synchronously through the screensChanged connection, and
     // an unconfigured QTimer would start as a repeating zero-interval one.
     m_screenStatesTimer.setSingleShot(true);
-    m_screenStatesTimer.setInterval(50);
+    m_screenStatesTimer.setInterval(ScreenStatesCoalesceMs);
     connect(&m_screenStatesTimer, &QTimer::timeout, this, &SettingsController::refreshScreenStates);
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::scheduleScreenStatesRefresh);
+    // The daemon's screenStatesChanged reports each state move. The states
+    // are also re-read whenever the window regains focus, which is when the
+    // user comes back to look, so a signal missed while the daemon was
+    // restarting cannot leave the tiles stale.
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive) {
+            scheduleScreenStatesRefresh();
+        }
+    });
     m_screenHelper.connectToDaemonSignals();
     // Hot-unplug: if the monitor the per-monitor groups are scoped to goes
     // away, fall back to "All Monitors". Lives here (not in the transient
@@ -1047,9 +1056,12 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
     m_screenHelper.refreshScreens();
-    // An unchanged first refresh emits nothing, so ask for the states once
-    // regardless.
-    scheduleScreenStatesRefresh();
+    // Seed the states with one blocking call, as the screen list above was,
+    // so the Rules page's first tiles already evaluate against them rather
+    // than drawing a stateless pass and redrawing when an asynchronous reply
+    // lands. The refresh above may also have started the timer, whose reply
+    // republishes only on a difference.
+    m_screenStates = getScreenStates();
 
     // PhosphorZones::Layout load timer (debounce). The five layout-mutation
     // subscriptions (layoutCreated / layoutDeleted / layoutChanged /

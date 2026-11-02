@@ -71,12 +71,14 @@ public Q_SLOTS:
     /// screen's size in device pixels, for a virtual screen its own region's
     /// share. `pixelSize` is ScreenManager::pixelSize: the output's mode as
     /// the compositor reported it (setPixelSizeFromKWin), or until then the
-    /// size the host seeded from its last session. With neither it is
+    /// size the host seeded, which is the size last reported for that
+    /// monitor, in this session or an earlier one. With neither it is
     /// estimated as the logical size times the scale, rounded, which lands on
     /// the mode or within a pixel of it once the scale is the real one.
-    /// `pixelSizeReported` is true only when the size is the compositor's
-    /// report. An id that does not resolve, including a virtual screen the
-    /// manager does not know, answers an empty string and is not cached.
+    /// `pixelSizeSource` names which of the three it is: "reported",
+    /// "seeded" or "estimated". It is absent when there is no size at all. An
+    /// id that does not resolve, including a virtual screen the manager does
+    /// not know, answers an empty string and is not cached.
     QString getScreenInfo(const QString& screenId);
     QString getPrimaryScreen();
     QString getScreenId(const QString& connectorName);

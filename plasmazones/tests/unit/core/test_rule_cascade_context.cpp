@@ -13,7 +13,8 @@
  * ActiveLayout stamp), the screen shape (device-pixel size and aspect ratio:
  * the assignment it drives, every resolver's cache following a mode change,
  * the refusal of a negated shape leaf while the size is unknown, and a virtual
- * screen's fallback retry still asking about the virtual screen), autotile
+ * screen's fallback retry still asking about the virtual screen, for its shape
+ * and its tiled-window count), autotile
  * tiling params, scrolling context params, and the exactContextEntry pair
  * pinning the settings UI's explicit-versus-resolved discriminator, including
  * its deliberate blindness to a rule's enabled flag.
@@ -28,6 +29,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QStringList>
 #include <QTest>
 #include <QUuid>
 #include <limits>
@@ -241,9 +243,11 @@ private Q_SLOTS:
 
     // ─── Every context resolver follows a size change ─────────────────────
     // One rule per resolver, all keyed on the same aspect leaf, then the size
-    // is moved under them with no rule-set revision bump. The seven cached
-    // resolvers can only follow through the size folded into their keys, and
-    // the two uncached param resolvers through their per-call read. The steps
+    // is moved under them with no rule-set revision bump. The cached
+    // resolvers (assignment, gap, lock, default assignment, OSD, drag selector
+    // and overlay) can only follow through the size folded into their keys,
+    // and the uncached tiling and scrolling param resolvers through their
+    // per-call read. The steps
     // include a HEIGHT-only change (2560x1440 to 2560x1080), so a key folding
     // the width alone would show up as a stale verdict.
     void testContextScreenSize_everyResolverFollowsSizeChange()
@@ -464,6 +468,63 @@ private Q_SLOTS:
         QVERIFY(f.store->setAllRules({panelRule, monitorRule, pinnedHalfRule}));
         QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, halfLayout);
         QCOMPARE(f.registry->assignmentEntryForScreen(physical, 0, QString()).snappingLayout, panelLayout);
+    }
+
+    // ─── A virtual screen's fallback retry keeps its own tiled-window count ──
+    // The count gets the shape's treatment: read once for the virtual screen and
+    // handed to the retry on the physical id. On a split monitor the tiling
+    // engines track the virtual screens, so the physical id has no count of its
+    // own, and a retry that asked for it would see "unknown". A positive count
+    // leaf would then never match and a negated one would match every count.
+    void testTiledWindowCount_virtualScreenRetryKeepsItsOwnCount()
+    {
+        const QString physical = QStringLiteral("DP-1");
+        const QString virtualHalf = QStringLiteral("DP-1/vs:0");
+        // Declared BEFORE the fixture: the provider captures them by reference
+        // and the registry holding it is torn down with the fixture.
+        std::optional<int> virtualCount = 3;
+        QStringList askedAbout;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setTiledWindowCountProvider(
+            [&virtualCount, &askedAbout, virtualHalf](const QString& screenId, int,
+                                                      const QString&) -> std::optional<int> {
+                askedAbout.append(screenId);
+                return screenId == virtualHalf ? virtualCount : std::nullopt;
+            });
+
+        const QString countLayout = QStringLiteral("{99999999-9999-9999-9999-999999999999}");
+        const PWR::MatchExpression pinnedToPhysical =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, physical);
+        const PWR::MatchExpression moreThanOne =
+            PWR::MatchExpression::makeLeaf(PWR::Field::TiledWindowCount, PWR::Operator::GreaterThan, 1);
+
+        // A positive count rule pinned to the physical id: the half has three
+        // tiled windows, so the retry must match on the half's count.
+        QVERIFY(f.store->setAllRules(
+            {shapeAssignmentRule(500, PWR::MatchExpression::makeAll({pinnedToPhysical, moreThanOne}), countLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()), countLayout);
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+
+        // The negated form: "at most one tiled window". Three is more than one,
+        // so the rule must not match, and the default answers. A count read for
+        // the physical id would be unknown, and the negation would match.
+        QVERIFY(f.store->setAllRules({shapeAssignmentRule(
+            500, PWR::MatchExpression::makeAll({pinnedToPhysical, PWR::MatchExpression::makeNone({moreThanOne})}),
+            countLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()),
+                 QStringLiteral("{provider-snap-default}"));
+
+        // Positive control for the negated rule: with one tiled window it
+        // matches, through the same retry, with no rule-set revision bump.
+        virtualCount = 1;
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
     }
 
     // ─── A desktop-pinned assignment and a shape rule compete on priority ──

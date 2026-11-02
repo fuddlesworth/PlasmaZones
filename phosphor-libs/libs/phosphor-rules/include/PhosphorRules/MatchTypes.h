@@ -168,6 +168,19 @@ inline QString aspectRatioTokenFor(int width, int height)
     return QString(best->token);
 }
 
+/// The `Field::ScreenOrientation` token for a @p width x @p height screen:
+/// "portrait" when it is taller than wide and "landscape" otherwise, so a
+/// square screen is landscape. Empty for a non-positive size, like
+/// @ref aspectRatioTokenFor. The one derivation every producer (daemon,
+/// effect, settings) calls.
+inline QString orientationTokenFor(int width, int height)
+{
+    if (width <= 0 || height <= 0) {
+        return QString();
+    }
+    return height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
+}
+
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
 // source classification. Adding a new field: append an enum value above,

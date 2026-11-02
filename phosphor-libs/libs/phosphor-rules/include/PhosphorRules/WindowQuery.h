@@ -93,7 +93,7 @@ struct WindowQuery
     // The screen-shape members follow tiledWindowCount because this header is
     // installed and new members are appended.
     QString screenAspectRatio; ///< nearest common aspect ratio of the resolving screen ("16:9", "32:9", …);
-                               ///< empty = unknown (no size provider)
+                               ///< empty = the size is unknown
 
     /// The resolving screen's size in DEVICE pixels (its mode, not the scaled
     /// logical size). Optional for the same reason as tiledWindowCount: there is

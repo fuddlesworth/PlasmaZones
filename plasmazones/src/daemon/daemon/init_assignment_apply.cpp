@@ -182,12 +182,13 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // so a SetOsdEnabled context rule can force a card past an off toggle on
     // one monitor without opening every other.
     for (const auto& osd : std::as_const(osdEntries)) {
-        // A screen settling on the compositor's first pixel-size report
-        // (Daemon::onCompositorPixelSizeChanged) is resnapped above but gets
+        // A screen settling on the compositor's first pixel-size report, or
+        // on the stand-in a cleared report leaves
+        // (Daemon::onCompositorPixelSizeChanged), is resnapped above but gets
         // no card: the change is the monitor's real size replacing a stand-in,
         // not something the user did. Ahead of the template-ledger drop below,
         // because no card replaces the one it last announced.
-        if (m_silentAssignmentApplyScreens.contains(osd.screenId)) {
+        if (m_reshapeTracker.isSilent(osd.screenId)) {
             continue;
         }
         // Every card this loop can still show for the screen replaces whatever
@@ -311,11 +312,9 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // its current verdict, so a pending reshape record for it is spent: left
     // in place, the next reconcile would resnap and announce it a second time.
     if (changedScreenIds.isEmpty()) {
-        m_reshapedScreenPreIds.clear();
+        m_reshapeTracker.clearRecords();
     } else {
-        for (const QString& screenId : changedScreenIds) {
-            m_reshapedScreenPreIds.remove(screenId);
-        }
+        m_reshapeTracker.dropRecords(changedScreenIdsList);
     }
 
     // Refresh the active-assignment snapshot to what was just applied,

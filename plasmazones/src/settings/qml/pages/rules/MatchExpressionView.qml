@@ -108,7 +108,7 @@ ColumnLayout {
     ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
     ///   - zone → `controller.zoneMatchOptions` displayName for the matching id
     ///   - mode / orientation / aspectRatio / colorScheme → the token's option label from the field entry
-    ///   - number → the locale-grouped number, with a pixel unit on the screen size fields
+    ///   - number → the locale-grouped number, with a pixel unit on the screen size fields (a Pid stays plain)
     ///   - everything else (string) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
@@ -224,10 +224,14 @@ ColumnLayout {
             if (idx >= 0 && idx < names.length && names[idx])
                 return names[idx];
         }
-        // A number reads as the editor's spin box and the collapsed summary
-        // show it (RuleAuthoring::numericMatchValueLabel): the locale's digit
-        // grouping, and a pixel unit on the two screen size fields. A value
-        // that is not a number (a hand-edited rule) shows raw.
+        // A number reads as the collapsed summary shows it
+        // (RuleAuthoring::numericMatchValueLabel): the locale's digit
+        // grouping, and a pixel unit on the two screen size fields. A Pid is
+        // an identifier, so it keeps plain digits, and so does a value that
+        // is not a number (a hand-edited rule).
+        if (fieldWire === "pid")
+            return String(value);
+
         if ((kind === "number" || kind === "virtualDesktop") && value !== "" && isFinite(Number(value))) {
             var number = Number(value).toLocaleString(Qt.locale(), "f", 0);
             if (fieldWire === "screenWidth" || fieldWire === "screenHeight")

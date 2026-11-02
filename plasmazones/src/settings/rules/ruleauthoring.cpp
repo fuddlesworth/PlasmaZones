@@ -387,6 +387,11 @@ QString aspectRatioLabel(const QString& token)
 
 QString numericMatchValueLabel(PhosphorRules::Field field, qint64 value)
 {
+    // A process id is an identifier rather than a quantity, so it keeps the
+    // plain digits every process list prints.
+    if (field == PhosphorRules::Field::Pid) {
+        return QString::number(value);
+    }
     const QString number = QLocale().toString(value);
     if (field == PhosphorRules::Field::ScreenWidth || field == PhosphorRules::Field::ScreenHeight) {
         return PhosphorI18n::tr("%1 px", "a screen size in pixels, such as 2,560 px").arg(number);

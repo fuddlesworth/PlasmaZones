@@ -240,7 +240,12 @@ inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String PixelSize{"pixelSize"};
-inline constexpr QLatin1String PixelSizeReported{"pixelSizeReported"};
+// Where pixelSize came from: "reported" (the compositor's report), "seeded"
+// (the size reported in an earlier session) or "estimated" (logical size
+// times scale). The daemon's rules see a size only for the first two.
+inline constexpr QLatin1String PixelSizeSource{"pixelSizeSource"};
+inline constexpr QLatin1String PixelSizeSourceReported{"reported"};
+inline constexpr QLatin1String PixelSizeSourceSeeded{"seeded"};
 }
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;

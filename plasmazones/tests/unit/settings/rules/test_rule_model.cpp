@@ -125,7 +125,7 @@ private Q_SLOTS:
     void animationOverridesSummariseWithTheirEvent();
     void actionLabelPrefixesAreUnique();
     void matchLabelsIgnoreCaseLikeTheEngine();
-    void screenShapeValuesReadLikeTheEditor();
+    void screenShapeValuesReadGroupedInSummaries();
 };
 
 // The engine's Equals compares these leaves ignoring case, so the summary
@@ -488,6 +488,14 @@ void TestRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
 
     const auto contains = MatchExpression::makeLeaf(Field::ScreenId, Operator::Contains, QStringLiteral("HDMI"));
     QVERIFY(RuleModel::screenIdsOf(contains).isEmpty());
+
+    // A monitor inside a `none` group is excluded, not addressed, so the walk
+    // stops there and the monitor filter does not list the rule under it.
+    const auto excludesDp2 = MatchExpression::makeNone(
+        {MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2"))});
+    QVERIFY(RuleModel::screenIdsOf(excludesDp2).isEmpty());
+    const auto dp1ButNotDp2 = MatchExpression::makeAll({eq, excludesDp2});
+    QCOMPARE(RuleModel::screenIdsOf(dp1ButNotDp2), QStringList{QStringLiteral("DP-1")});
 }
 
 void TestRuleModel::actionSummaryRendersAllEngineModes()
@@ -1103,12 +1111,12 @@ void TestRuleModel::animationOverridesSummariseWithTheirEvent()
     QVERIFY2(bareSummary.contains(QStringLiteral("window.close shader: dissolve")), qPrintable(bareSummary));
 }
 
-void TestRuleModel::screenShapeValuesReadLikeTheEditor()
+void TestRuleModel::screenShapeValuesReadGroupedInSummaries()
 {
-    // The collapsed summary prints a screen size the way the editor's spin box
-    // shows it (the locale's digit grouping) with a pixel unit, and an aspect
-    // ratio with the dropdown's portrait marker, so "10:16" never reads as a
-    // repeat of "16:10". The locale is pinned so the grouping is known.
+    // The collapsed summary prints a screen size with the locale's digit
+    // grouping and a pixel unit, and an aspect ratio with the dropdown's
+    // portrait marker, so "10:16" never reads as a repeat of "16:10". The
+    // locale is pinned so the grouping is known.
     const QLocale previous;
     QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
     // Restored on every exit, a failed QVERIFY included, so no later test
@@ -1134,6 +1142,7 @@ void TestRuleModel::screenShapeValuesReadLikeTheEditor()
         ruleWith(MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("10:16"))),
         ruleWith(MatchExpression::makeLeaf(Field::ScreenAspectRatio, Operator::Equals, QStringLiteral("16:10"))),
         ruleWith(MatchExpression::makeLeaf(Field::Width, Operator::GreaterThan, 1000)),
+        ruleWith(MatchExpression::makeLeaf(Field::Pid, Operator::Equals, 1234567)),
     });
     const auto summaryAt = [&model](int row) {
         return model.data(model.index(row, 0), RuleModel::MatchSummaryRole).toString();
@@ -1145,6 +1154,8 @@ void TestRuleModel::screenShapeValuesReadLikeTheEditor()
     // A window's own size is grouped too but carries no screen unit.
     QVERIFY2(summaryAt(3).contains(QStringLiteral("1,000")), qPrintable(summaryAt(3)));
     QVERIFY2(!summaryAt(3).contains(QStringLiteral("px")), qPrintable(summaryAt(3)));
+    // A process id is an identifier, so it keeps plain digits.
+    QVERIFY2(summaryAt(4).contains(QStringLiteral("1234567")), qPrintable(summaryAt(4)));
 }
 
 QTEST_MAIN(TestRuleModel)

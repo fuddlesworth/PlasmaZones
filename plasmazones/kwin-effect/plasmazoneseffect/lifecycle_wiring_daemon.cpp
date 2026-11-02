@@ -162,7 +162,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         m_daemonGate.serviceRegistered = false;
         // The pixel sizes died with the daemon. Forgetting what was sent makes
         // the next bridge's pushOutputPixelSizes send every output again.
-        m_reportedPixelSizes.clear();
+        m_pixelSizeLedger.forgetSent();
         // A drag's keyboard grab is there for Escape to reach the daemon, and
         // none is left: give Escape back to KWin's move filter now rather than
         // at the drop (F574, which drag start alone checked).

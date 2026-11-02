@@ -120,11 +120,12 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                        RuleAuthoring::aspectRatioLabel(predicate.value.toString()));
     }
 
-    // A number reads as the editor's spin box shows it, with the locale's
-    // digit grouping (and a pixel unit on the screen size fields), so the
-    // summary and the editor agree on "2,560". The desktop number keeps the
-    // name lookup below under Equals. A value that is not a number at all (a
-    // hand-edited rule) falls through and round-trips verbatim.
+    // A number reads with the locale's digit grouping, a pixel unit on the
+    // screen size fields, and plain digits for a Pid
+    // (RuleAuthoring::numericMatchValueLabel), the same way the expanded tree
+    // prints it. The desktop number keeps the name lookup below under Equals.
+    // A value that is not a number at all (a hand-edited rule) falls through
+    // and round-trips verbatim.
     if (PhosphorRules::fieldIsNumeric(predicate.field)
         && !(predicate.field == Field::VirtualDesktop && predicate.op == Operator::Equals)) {
         bool isNumber = false;

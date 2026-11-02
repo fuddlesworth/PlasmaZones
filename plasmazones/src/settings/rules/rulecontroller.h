@@ -154,8 +154,8 @@ public:
     /// the captured registry is destroyed.
     void setZoneMatchOptionsProvider(std::function<QVariantList()> provider);
     /// Install the colour-scheme token ("light" / "dark") monitorOverview
-    /// stamps on each screen's query, read live per call. Unset reads empty,
-    /// which leaves a ColorScheme condition unanswered there.
+    /// stamps on each screen's query, read live per call. Unset stamps an
+    /// empty token.
     void setColorSchemeProvider(std::function<QString()> provider);
     /// Install the global default assignment monitorOverview bases a screen on
     /// when a rule fills a layout slot but no rule sets the engine mode (the
@@ -366,8 +366,9 @@ public:
     /// @p screens is the `SettingsController::screens` list (each a map with a
     /// `name` field, and a `screenId` fallback) so the overview can list every
     /// connected monitor — including ones with no rule at all (the "Not
-    /// assigned" tile). Its `pixelWidth` / `pixelHeight` and logical
-    /// `width` / `height` give the screen's shape.
+    /// assigned" tile). Its `pixelWidth` / `pixelHeight` give the screen's
+    /// shape when `pixelSizeKnown` is set, and its logical `width` / `height`
+    /// give only the orientation otherwise, as in the daemon.
     ///
     /// Every tile describes what the STAGED rules do to that screen in its
     /// current state: each rule's whole match is evaluated against a query
@@ -380,11 +381,13 @@ public:
                                              const QVariantList& screenStates = QVariantList()) const;
 
     /// Plain-prose note on the current device-pixel size and nearest aspect
-    /// ratio of each monitor @p matchJson pins with a ScreenId condition
-    /// outside a negation, read from @p screens (the
-    /// `SettingsController::screens` list). The rule editor shows it under a
-    /// Screen width, Screen height or Screen aspect ratio value. Empty when
-    /// the match pins no connected monitor whose size is known.
+    /// ratio of each screen @p matchJson pins (RuleModel::screenIdsOf), read
+    /// from @p screens (the `SettingsController::screens` list). A pinned
+    /// monitor split into virtual screens is named through each of them,
+    /// since its rules are judged against each virtual screen's own size.
+    /// The rule editor shows it under a Screen width, Screen height or
+    /// Screen aspect ratio value. Empty when the match pins no connected
+    /// screen whose size the daemon knows (`pixelSizeKnown`).
     Q_INVOKABLE QString screenSizeHint(const QVariantList& screens, const QVariantMap& matchJson) const;
 
     // ── Authoring metadata for the QML editors ────────────────────────────

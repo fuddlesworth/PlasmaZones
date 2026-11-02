@@ -853,6 +853,12 @@ void Daemon::initEnginesAndWiring()
             return; // count unchanged — nothing a count rule could key on moved
         }
         m_lastTiledCountByScreen.insert(screenId, owned);
+        // getScreenStates publishes the count, and a count that moves no
+        // assignment reaches no diff (diffActiveAssignments queues the check
+        // for every other field).
+        if (m_layoutAdaptor) {
+            m_layoutAdaptor->scheduleScreenStatesCheck();
+        }
         updateEngineScreens();
         // A count rule that swaps the screen out of tiling releases its
         // windows in that recompute, and this gate has no resnap of its

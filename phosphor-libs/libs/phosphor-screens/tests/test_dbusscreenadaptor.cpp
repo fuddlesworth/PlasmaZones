@@ -99,10 +99,10 @@ QSize pixelSizeOf(const QString& screenInfoJson)
     return QSize(size.value(QLatin1String("width")).toInt(), size.value(QLatin1String("height")).toInt());
 }
 
-/// The `pixelSizeReported` flag a getScreenInfo reply carries.
-bool pixelSizeReportedOf(const QString& screenInfoJson)
+/// The `pixelSizeSource` a getScreenInfo reply carries, empty when absent.
+QString pixelSizeSourceOf(const QString& screenInfoJson)
 {
-    return QJsonDocument::fromJson(screenInfoJson.toUtf8()).object().value(QLatin1String("pixelSizeReported")).toBool();
+    return QJsonDocument::fromJson(screenInfoJson.toUtf8()).object().value(QLatin1String("pixelSizeSource")).toString();
 }
 
 } // namespace
@@ -403,7 +403,8 @@ private Q_SLOTS:
     // The compositor's report becomes getScreenInfo's pixelSize, replacing
     // the logical-times-scale estimate, and is announced as a geometry change
     // so a client that cached the reply reads it again. A 0x0 report clears
-    // it and the estimate comes back.
+    // it, and the seed answers if there is one, else the estimate comes back.
+    // pixelSizeSource names each.
     void testPixelSizeFromKWinFeedsScreenInfo()
     {
         // The identifier, not the connector: the store is fed by connector
@@ -426,7 +427,7 @@ private Q_SLOTS:
         const QSize estimate(qRound(primary->geometry().width() * mgr.logicalScale(primary)),
                              qRound(primary->geometry().height() * mgr.logicalScale(primary)));
         QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), estimate);
-        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), false);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("estimated"));
 
         QSignalSpy geometrySpy(&adaptor, SIGNAL(screenGeometryChanged(QString)));
         const QSize mode(3841, 2161);
@@ -436,16 +437,27 @@ private Q_SLOTS:
         // Read after the earlier read cached the estimate: the report must
         // have dropped that cache.
         QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), mode);
-        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), true);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("reported"));
 
         // A repeat changes nothing and announces nothing.
         adaptor.setPixelSizeFromKWin(primary->name(), mode.width(), mode.height());
         QCOMPARE(geometrySpy.count(), 1);
 
+        // A seed is shadowed while the report stands.
+        const QSize seed(2560, 1440);
+        mgr.seedPixelSize(physId, seed);
+        QCOMPARE(geometrySpy.count(), 1);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("reported"));
+
         adaptor.setPixelSizeFromKWin(primary->name(), 0, 0);
         QCOMPARE(geometrySpy.count(), 2);
+        QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), seed);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("seeded"));
+
+        mgr.seedPixelSize(physId, QSize());
+        QCOMPARE(geometrySpy.count(), 3);
         QCOMPARE(pixelSizeOf(adaptor.getScreenInfo(physId)), estimate);
-        QCOMPARE(pixelSizeReportedOf(adaptor.getScreenInfo(physId)), false);
+        QCOMPARE(pixelSizeSourceOf(adaptor.getScreenInfo(physId)), QStringLiteral("estimated"));
     }
 
     // The slot is a compositor report: a refused caller changes nothing. A

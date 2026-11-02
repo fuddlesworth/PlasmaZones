@@ -148,9 +148,10 @@ inline auto admissionForStamped(const PhosphorRules::WindowQuery& query)
 
 /// The screen-shape fields @p query leaves unanswered: ScreenOrientation and
 /// ScreenAspectRatio while their token is empty, ScreenWidth and ScreenHeight
-/// while disengaged. Mirrors phosphor-zones' private helper of the same name,
-/// which every context resolver there applies, so a window rule and a context
-/// rule refuse the same shape leaves on the same screen.
+/// while disengaged. Mirrors PhosphorZones::RuleHelpers::unknownScreenShapeFields
+/// (layoutregistry_rulehelpers_p.h, private to phosphor-zones, so it cannot be
+/// called from here), which every context resolver there applies, so a window
+/// rule and a context rule refuse the same shape leaves on the same screen.
 inline QSet<PhosphorRules::Field> unknownScreenShapeFields(const PhosphorRules::WindowQuery& query)
 {
     QSet<PhosphorRules::Field> unknown;

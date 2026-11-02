@@ -692,7 +692,7 @@ QSet<QString> Daemon::diffActiveAssignments()
         ActiveAssignmentSnapshot snapshot;
         snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         // The shape the verdict above was resolved under, for the shape
-        // handlers to compare against (noteReshapedScreens).
+        // handlers to compare against (ScreenReshapeTracker::noteReshaped).
         snapshot.shapeToken = screenShapeToken(screenId);
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
@@ -734,12 +734,26 @@ QSet<QString> Daemon::diffActiveAssignments()
             activeIds.insert(it.key(), it.value().assignmentId);
         }
         m_layoutAdaptor->publishActiveAssignments(activeIds, changed);
+        // Every edge that moves a getScreenStates field other than the tiled
+        // count (a desktop or activity switch, a screen add or removal, an
+        // assignment apply, a rule reconcile) ends in a diff here, including
+        // the ones that leave every assignment id where it was, so the
+        // screen-states check is queued from this one place. The tiled count
+        // queues its own (init_engines.cpp).
+        m_layoutAdaptor->scheduleScreenStatesCheck();
     }
     return changed;
 }
 
 void Daemon::reconcileActiveAssignments()
 {
+    // The screens onCompositorPixelSizeChanged marked silent are for this pass
+    // only, whichever way it ends, the suppressed early return below included:
+    // a later reconcile that applies the same verdict was not asked to keep
+    // quiet.
+    const auto silentScope = qScopeGuard([this] {
+        m_reshapeTracker.clearSilent();
+    });
     // Bulk-write suppression (m_suppressAssignmentReconcile, daemon.h). The
     // assignment writers in this file flip N rules in a row and each write emits
     // RuleStore::rulesChanged synchronously; reconciling per rule would run a
@@ -757,14 +771,9 @@ void Daemon::reconcileActiveAssignments()
     QSet<QString> changed = diffActiveAssignments();
     // A screen whose shape changed since the last reconcile counts when its
     // verdict differs from the one it had before the change, even if a diff
-    // between the two (a desktop switch, a screen add) already folded the new
-    // verdict into the snapshot and the diff above came back empty for it.
-    changed.unite(takeReshapedVerdictChanges());
-    // The first-report screens onCompositorPixelSizeChanged marked silent are
-    // for this pass only, whichever way it ends.
-    const auto silentScope = qScopeGuard([this] {
-        m_silentAssignmentApplyScreens.clear();
-    });
+    // between the two (a screen add, a layout list change) already folded the
+    // new verdict into the snapshot and the diff above came back empty for it.
+    changed.unite(m_reshapeTracker.takeVerdictChanges());
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
     // only tracks the active snapping-layout uuid / "autotile:<algo>" id). These
@@ -830,42 +839,26 @@ QString Daemon::screenShapeToken(const QString& screenId) const
     return PhosphorZones::LayoutRegistry::screenShapeKeyToken(m_layoutManager->screenShape(screenId));
 }
 
-QStringList Daemon::noteReshapedScreens(const QStringList& screenIds)
+ScreenReshapeTracker::Lookups Daemon::reshapeTrackerLookups()
 {
-    QStringList reshaped;
-    for (const QString& screenId : screenIds) {
+    ScreenReshapeTracker::Lookups lookups;
+    lookups.snapshot = [this](const QString& screenId) -> std::optional<ScreenReshapeTracker::SnapshotEntry> {
         const auto snapshot = m_activeAssignmentByScreen.constFind(screenId);
-        if (snapshot == m_activeAssignmentByScreen.constEnd() || snapshot->shapeToken == screenShapeToken(screenId)) {
-            continue;
+        if (snapshot == m_activeAssignmentByScreen.constEnd()) {
+            return std::nullopt;
         }
-        // The FIRST record stands until a reconcile consumes it: a second
-        // reshape in between must still compare against the verdict the
-        // windows were laid out under, not an intermediate one.
-        if (!m_reshapedScreenPreIds.contains(screenId)) {
-            m_reshapedScreenPreIds.insert(screenId, snapshot->assignmentId);
-        }
-        reshaped.append(screenId);
-    }
-    return reshaped;
-}
-
-QSet<QString> Daemon::takeReshapedVerdictChanges()
-{
-    QSet<QString> moved;
-    for (auto it = m_reshapedScreenPreIds.constBegin(); it != m_reshapedScreenPreIds.constEnd(); ++it) {
-        const auto snapshot = m_activeAssignmentByScreen.constFind(it.key());
-        if (snapshot != m_activeAssignmentByScreen.constEnd() && snapshot->assignmentId != it.value()) {
-            moved.insert(it.key());
-        }
-    }
-    m_reshapedScreenPreIds.clear();
-    return moved;
+        return ScreenReshapeTracker::SnapshotEntry{snapshot->assignmentId, snapshot->shapeToken};
+    };
+    lookups.shapeToken = [this](const QString& screenId) {
+        return screenShapeToken(screenId);
+    };
+    return lookups;
 }
 
 QSet<QString> Daemon::diffSurvivingAssignments(const QSet<QString>& knownBefore)
 {
     QSet<QString> changed = diffActiveAssignments();
-    changed.unite(takeReshapedVerdictChanges());
+    changed.unite(m_reshapeTracker.takeVerdictChanges());
     for (auto it = changed.begin(); it != changed.end();) {
         it = knownBefore.contains(*it) && m_activeAssignmentByScreen.contains(*it) ? std::next(it) : changed.erase(it);
     }

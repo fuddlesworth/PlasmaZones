@@ -8,10 +8,13 @@
  *        derived from them, so abutting virtual screens share their edge, and
  *        the same region re-derived on an output that moved follows it (F806).
  *        Also the virtual screen's device-pixel size, the share the
- *        screen-shape rule fields read.
+ *        screen-shape rule fields read, and parity with the daemon's
+ *        VirtualScreenDef::absoluteGeometry, clamps included.
  */
 
 #include "plasmazoneseffect/virtualscreengeometry.h"
+
+#include <PhosphorScreens/VirtualScreen.h>
 
 #include <QTest>
 
@@ -82,13 +85,72 @@ private Q_SLOTS:
 
     // The share is taken over the pixel rect, not the logical rect scaled
     // back up. At 150% a 2560x1440 mode is a 1707x960 logical output (KWin
-    // rounds the logical size), and half of that scaled by 1.5 reads 1281.
+    // rounds the logical size), and half of that scaled by 1.5 would read 1281.
     void pixelShareIsExactUnderFractionalScale()
     {
-        const QRectF half(0.0, 0.0, 0.5, 1.0);
-        QCOMPARE(virtualScreenPixelSize(half, QSize(2560, 1440)), QSize(1280, 1440));
-        const QRect logicalHalf = absoluteVirtualScreenRect(half, QRect(0, 0, 1707, 960));
-        QCOMPARE(qRound(logicalHalf.width() * 1.5), 1281);
+        QCOMPARE(virtualScreenPixelSize(QRectF(0.0, 0.0, 0.5, 1.0), QSize(2560, 1440)), QSize(1280, 1440));
+    }
+
+    // The daemon admits a region whose far edge overshoots the output by its
+    // tolerance. The far edge is pulled back onto the output, so the share is
+    // the output's half and not two or three pixels wider.
+    void overshootingRegionIsClampedToTheOutput()
+    {
+        const QRectF overshoot(0.5, 0.0, 0.5005, 1.0);
+        QCOMPARE(virtualScreenPixelSize(overshoot, QSize(3840, 2160)), QSize(1920, 2160));
+        QCOMPARE(virtualScreenPixelSize(overshoot, QSize(5120, 1440)), QSize(2560, 1440));
+        QCOMPARE(absoluteVirtualScreenRect(overshoot, QRect(100, 0, 3840, 2160)), QRect(2020, 0, 1920, 2160));
+    }
+
+    // A region starting a tolerance before the output's origin starts at the
+    // origin.
+    void undershootingOriginIsClampedToTheOutput()
+    {
+        const QRectF undershoot(-0.0005, 0.0, 0.5005, 1.0);
+        QCOMPARE(virtualScreenPixelSize(undershoot, QSize(3840, 2160)), QSize(1920, 2160));
+        QCOMPARE(absoluteVirtualScreenRect(undershoot, QRect(100, 50, 3840, 2160)), QRect(100, 50, 1920, 2160));
+    }
+
+    // A sliver that rounds to nothing keeps one pixel, as the daemon's does,
+    // so the effect neither drops a screen the daemon keeps nor reads it as
+    // empty.
+    void sliverKeepsOnePixel()
+    {
+        QCOMPARE(virtualScreenPixelSize(QRectF(0.0, 0.0, 0.0001, 1.0), QSize(1920, 1080)), QSize(1, 1080));
+    }
+
+    // Every region the daemon's VirtualScreenDef::absoluteGeometry cuts, cut
+    // here: the shape fields and the screen a point lands on agree across the
+    // two processes, overshoots and slivers included.
+    void matchesTheDaemonsCut_data()
+    {
+        QTest::addColumn<QRectF>("region");
+        QTest::addColumn<QRect>("physical");
+        const QList<QRect> outputs = {QRect(0, 0, 3840, 2160), QRect(0, 0, 5120, 1440), QRect(0, 0, 1921, 1080),
+                                      QRect(2560, 300, 1707, 960), QRect(0, 0, 1440, 2560)};
+        const QList<QRectF> regions = {
+            QRectF(0.0, 0.0, 0.5, 1.0),        QRectF(0.5, 0.0, 0.5, 1.0),       QRectF(0.5, 0.0, 0.5005, 1.0),
+            QRectF(-0.0005, 0.0, 0.5005, 1.0), QRectF(0.0, 0.5, 1.0, 0.5009),    QRectF(1.0 / 3.0, 0.0, 1.0 / 3.0, 1.0),
+            QRectF(0.0, 0.0, 0.0001, 1.0),     QRectF(0.9995, 0.0, 0.0010, 1.0), QRectF(0.25, -0.0009, 0.5, 1.0009)};
+        for (const QRect& physical : outputs) {
+            for (const QRectF& region : regions) {
+                QTest::addRow("%dx%d+%d+%d (%g,%g %gx%g)", physical.width(), physical.height(), physical.x(),
+                              physical.y(), region.x(), region.y(), region.width(), region.height())
+                    << region << physical;
+            }
+        }
+    }
+
+    void matchesTheDaemonsCut()
+    {
+        QFETCH(QRectF, region);
+        QFETCH(QRect, physical);
+        PhosphorScreens::VirtualScreenDef def;
+        def.region = region;
+        const QRect daemon = def.absoluteGeometry(physical);
+        QCOMPARE(absoluteVirtualScreenRect(region, physical), daemon);
+        const QRect daemonPixels = def.absoluteGeometry(QRect(QPoint(), physical.size()));
+        QCOMPARE(virtualScreenPixelSize(region, physical.size()), daemonPixels.size());
     }
 
     // A rotated output reports its pixel size already rotated, and a split
