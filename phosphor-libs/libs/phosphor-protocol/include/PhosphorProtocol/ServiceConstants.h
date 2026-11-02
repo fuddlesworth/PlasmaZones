@@ -736,6 +736,27 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       the gate exists to expose, not a pairing the version can sort out, so
 //       it takes no v11.
 //       PhosphorCompositor::DaemonClient documents the ordering it needs.
+//
+//   Also after v10, WITHOUT a bump: Screen gains setPixelSizeFromKWin
+//       (s i i), through which the effect reports each output's exact size
+//       in device pixels (its current mode, rotated) beside the work area it
+//       already reports, and 0x0 when the output goes away. A Wayland client
+//       cannot read an output's mode, so before this the daemon could only
+//       estimate the size as the logical size times the scale, which misses
+//       the mode by a pixel on a fractional scale. It is ADDITIVE, and it sits
+//       behind the same compositor-report gate as its siblings. A new effect
+//       on a daemon without the method gets UnknownMethod on a
+//       fire-and-forget call and is otherwise unaffected. An old effect on a
+//       new daemon never reports. The daemon's rules then read a size only
+//       where one was seeded from an earlier session's report, and otherwise
+//       leave the screen width, height and aspect ratio fields unknown: a
+//       positive condition on them is false and a negated one is refused,
+//       while orientation falls back to the logical geometry. Only
+//       getScreenInfo keeps answering with the estimate. An unanswered
+//       condition is no wrong answer the handshake must refuse, so it takes
+//       no v11. getScreenInfo gains pixelSizeSource beside pixelSize in the
+//       same change, which a reader that does not know the key never looks
+//       at.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

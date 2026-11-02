@@ -8,6 +8,7 @@
 #include <QString>
 #include <QStringView>
 
+#include <cmath>
 #include <optional>
 
 namespace PhosphorRules {
@@ -15,9 +16,10 @@ namespace PhosphorRules {
 /// Match fields. Each names one attribute of a WindowQuery — either a
 /// window property (absent during a windowless context query) or a context
 /// attribute (present during context resolution, except the optional
-/// tiledWindowCount which is absent when the count is unknown). A predicate over
-/// an absent field evaluates false, which is what makes window-property rules
-/// naturally inert during context resolution without special-casing.
+/// tiledWindowCount, screenWidth and screenHeight, each absent when unknown).
+/// A predicate over an absent field evaluates false, which is what makes
+/// window-property rules naturally inert during context resolution without
+/// special-casing.
 enum class Field : int {
     // ── Window properties [0, 29] ────────────────────────────────────────
     AppId = 0,
@@ -69,12 +71,16 @@ enum class Field : int {
                        ///< "scrolling:")
     // ── Context colour-scheme field [40] ─────────────────────────────────
     ColorScheme = 40, ///< context — "light" / "dark" system colour scheme, session-wide
+    // ── Context screen-size fields [41, 43] ──────────────────────────────
+    ScreenWidth = 41, ///< context — the resolving screen's width in device pixels
+    ScreenHeight = 42, ///< context — the resolving screen's height in device pixels
+    ScreenAspectRatio = 43, ///< context — the resolving screen's nearest common aspect ratio ("16:9", "32:9", …)
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::ColorScheme) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::ScreenAspectRatio) + 1;
 
 /// The closed wire vocabulary of `Field::Mode` — the placement mode a window
 /// is in, or that a context resolves to. Every in-tree producer stamps the
@@ -115,6 +121,66 @@ inline constexpr QLatin1StringView kModeTokens[] = {
     ModeToken::Scrolling,
 };
 
+/// One entry of the `Field::ScreenAspectRatio` vocabulary: the token a rule
+/// compares against and the width-over-height ratio it stands for.
+struct AspectRatioToken
+{
+    QLatin1StringView token;
+    double ratio;
+};
+
+/// The complete `Field::ScreenAspectRatio` vocabulary, landscape first and then
+/// the portrait forms a rotated monitor reports. The names are the ones monitors
+/// are sold under, so "21:9" stands for the whole ultrawide family (2560x1080,
+/// 3440x1440, 3840x1600) rather than for exactly 2.333.
+inline constexpr AspectRatioToken kAspectRatioTokens[] = {
+    {QLatin1StringView("1:1"), 1.0},           {QLatin1StringView("5:4"), 5.0 / 4.0},
+    {QLatin1StringView("4:3"), 4.0 / 3.0},     {QLatin1StringView("3:2"), 3.0 / 2.0},
+    {QLatin1StringView("16:10"), 16.0 / 10.0}, {QLatin1StringView("16:9"), 16.0 / 9.0},
+    {QLatin1StringView("21:9"), 21.0 / 9.0},   {QLatin1StringView("32:10"), 32.0 / 10.0},
+    {QLatin1StringView("32:9"), 32.0 / 9.0},   {QLatin1StringView("4:5"), 4.0 / 5.0},
+    {QLatin1StringView("3:4"), 3.0 / 4.0},     {QLatin1StringView("2:3"), 2.0 / 3.0},
+    {QLatin1StringView("10:16"), 10.0 / 16.0}, {QLatin1StringView("9:16"), 9.0 / 16.0},
+    {QLatin1StringView("9:21"), 9.0 / 21.0},   {QLatin1StringView("10:32"), 10.0 / 32.0},
+    {QLatin1StringView("9:32"), 9.0 / 32.0},
+};
+
+/// The `Field::ScreenAspectRatio` token for a @p width x @p height screen: the
+/// vocabulary entry whose ratio is nearest, measured on a log scale so a
+/// portrait screen and its landscape twin sit the same distance from their
+/// tokens. Empty for a non-positive size, which no token describes. The one
+/// derivation every producer (daemon, effect, tests) calls.
+inline QString aspectRatioTokenFor(int width, int height)
+{
+    if (width <= 0 || height <= 0) {
+        return QString();
+    }
+    const double logRatio = std::log(double(width) / double(height));
+    const AspectRatioToken* best = nullptr;
+    double bestDistance = 0.0;
+    for (const AspectRatioToken& candidate : kAspectRatioTokens) {
+        const double distance = std::abs(logRatio - std::log(candidate.ratio));
+        if (!best || distance < bestDistance) {
+            best = &candidate;
+            bestDistance = distance;
+        }
+    }
+    return QString(best->token);
+}
+
+/// The `Field::ScreenOrientation` token for a @p width x @p height screen:
+/// "portrait" when it is taller than wide and "landscape" otherwise, so a
+/// square screen is landscape. Empty for a non-positive size, like
+/// @ref aspectRatioTokenFor. The one derivation every producer (daemon,
+/// effect, settings) calls.
+inline QString orientationTokenFor(int width, int height)
+{
+    if (width <= 0 || height <= 0) {
+        return QString();
+    }
+    return height > width ? QStringLiteral("portrait") : QStringLiteral("landscape");
+}
+
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
 // source classification. Adding a new field: append an enum value above,
@@ -133,9 +199,9 @@ enum class FieldType : int {
 enum class FieldSource : int {
     Window, ///< absent during windowless context queries
     Context, ///< resolvable during a windowless context query (screen / desktop /
-             ///< activity / mode / screen orientation / active layout / colour scheme
-             ///< are always set; tiledWindowCount is optional and absent when the
-             ///< count is unknown)
+             ///< activity / mode / screen orientation / active layout / colour scheme /
+             ///< aspect ratio are always set; tiledWindowCount and the screen width and
+             ///< height are optional and absent when unknown)
 };
 
 /// Compile-time descriptor for one Field.
@@ -209,18 +275,23 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // resolved. String-valued (Equals against the token) and Context-sourced so
     // it is present during windowless context resolution — which lets an
     // orientation rule drive the per-context overrides (gaps, lock, overlay,
-    // tiling and scrolling params, OSD) for a rotated monitor.
+    // tiling and scrolling params, OSD) for a rotated monitor, and the
+    // layout/algorithm assignment itself: LayoutRegistry::resolveAssignmentEntry
+    // stamps it and lets any rule carrying an assignment slot action compete.
     //
-    // NOT the layout/algorithm ASSIGNMENT cascade, though: this is a
-    // non-dimension context field, so `ContextRuleBridge::contextAxisFor`
-    // classifies any match pinning it as CatchAll and
-    // `isContextAssignmentRule` refuses it. An orientation-keyed assignment
-    // rule loads and evaluates but never wins the cascade.
+    // What a non-dimension context field does NOT do is take part in the
+    // Monitors page's per-context projections: `ContextRuleBridge::contextAxisFor`
+    // classifies a match pinning it as CatchAll and `isContextAssignmentRule`
+    // refuses it, so such a rule is never listed or rebuilt as a plain
+    // (screen, desktop, activity) assignment. It wins the cascade through
+    // ordinary rule priority instead.
     //
-    // Empty when no geometry provider is wired. Empty is a PRESENT value, not
-    // an absent one: a positive `Equals` leaf is false against it, but a
-    // NEGATED leaf matches, so the same rule inverts wherever the provider is
-    // missing (the settings and editor processes, which wire none).
+    // Empty when neither a size nor a geometry provider answered. Empty is a
+    // PRESENT value, not an absent one: a positive `Equals` leaf is false
+    // against it, and a NEGATED leaf would match. LayoutRegistry's context
+    // resolvers refuse a rule that negates it while it is empty, so that
+    // inversion does not reach them; any other evaluator of an unstamped query
+    // (the settings and editor processes wire no provider) still sees it.
     {Field::ScreenOrientation, QLatin1StringView("screenOrientation"), FieldType::String, FieldSource::Context},
     // [39] — The layout id currently resolved for the screen (snap UUID,
     // "autotile:<algo>", or the bare "scrolling:" sentinel). String-valued (Equals against the id) and Context-
@@ -232,10 +303,12 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // [40] — The system colour scheme, "light" / "dark". String-valued (Equals
     // against the token) and Context-sourced so a scheme rule can drive the
     // per-context override slots — a darker overlay at night, thicker gaps in
-    // a light setup. Like ScreenOrientation above it is a NON-DIMENSION
-    // context field, so it cannot drive the layout/algorithm ASSIGNMENT
-    // cascade (contextAxisFor classifies a match pinning it as CatchAll and
-    // isContextAssignmentRule refuses it).
+    // a light setup — and the layout/algorithm assignment, which stamps it.
+    // Like ScreenOrientation above it is a NON-DIMENSION context field: it
+    // competes in the cascade through ordinary rule priority, but never takes
+    // part in the Monitors page's per-context projections (contextAxisFor
+    // classifies a match pinning it as CatchAll and isContextAssignmentRule
+    // refuses it).
     //
     // Session-wide, not per-screen: the daemon derives it from the application
     // palette and provides it to the registry, which folds it into every
@@ -244,6 +317,33 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // wired, with the same present-but-empty caveat orientation carries: a
     // positive leaf is false there, a negated leaf matches.
     {Field::ColorScheme, QLatin1StringView("colorScheme"), FieldType::String, FieldSource::Context},
+    // [41, 43] — The size of the screen being resolved, so one monitor can
+    // resolve differently at different resolutions (a super-ultrawide whose
+    // split mode halves its width, for one). Width and height are in
+    // DEVICE pixels, the output's mode as the display settings report it, not
+    // the scaled logical size: a user types the resolution they see there.
+    // Int-valued (Equals / GreaterThan / LessThan) and Context-sourced.
+    //
+    // The aspect ratio is a closed token vocabulary (`kAspectRatioTokens`
+    // below), the common ratio NEAREST the screen's own, so "32:9" matches a
+    // 5120x1440 panel and "21:9" matches 3440x1440 as well as 2560x1080.
+    // Derived from the same device size through `aspectRatioTokenFor`, the one
+    // helper every producer calls, so the daemon and the effect cannot round
+    // a ratio differently.
+    //
+    // Like ScreenOrientation these are non-dimension context fields: they drive
+    // every context slot including the assignment cascade, through rule
+    // priority, but never the Monitors page's per-context projections. While
+    // the size is unknown (no size provider wired, or it has no answer for the
+    // screen yet) the width and height are ABSENT and the aspect ratio is
+    // present-but-empty. Either way a positive leaf is false, and a negated
+    // one would match. LayoutRegistry's context resolvers refuse a rule that
+    // negates any of the three while the size is unknown, so a "not 32:9" rule
+    // waits for a real size instead of firing on every screen; any other
+    // evaluator of an unstamped query still sees the inversion.
+    {Field::ScreenWidth, QLatin1StringView("screenWidth"), FieldType::Int, FieldSource::Context},
+    {Field::ScreenHeight, QLatin1StringView("screenHeight"), FieldType::Int, FieldSource::Context},
+    {Field::ScreenAspectRatio, QLatin1StringView("screenAspectRatio"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");
@@ -324,10 +424,10 @@ inline bool fieldIsBool(Field field)
     return idx >= 0 && idx < FieldCount && kFieldTable[idx].type == FieldType::Bool;
 }
 
-/// True if @p field describes the **context** a window appears in
-/// (screen / virtual desktop / activity / placement mode / tiled-window count /
-/// screen orientation / active layout / colour scheme) rather than a property
-/// of the window itself.
+/// True if @p field describes the **context** a window appears in (screen /
+/// virtual desktop / activity / placement mode / tiled-window count / screen
+/// orientation / active layout / colour scheme / screen width, height and
+/// aspect ratio) rather than a property of the window itself.
 inline bool fieldIsContext(Field field)
 {
     const int idx = static_cast<int>(field);
@@ -345,10 +445,8 @@ enum class Operator : int {
     EndsWith = 3, ///< suffix, case-insensitive (strings)
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
-    GreaterThan =
-        6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
-    LessThan =
-        7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
+    GreaterThan = 6, ///< numeric compare (every FieldType::Int field)
+    LessThan = 7, ///< numeric compare (every FieldType::Int field)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous

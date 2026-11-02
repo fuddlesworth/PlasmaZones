@@ -3,8 +3,9 @@
 
 // RuleController label-lookup setters. These are tiny pass-throughs that
 // forward the resolver into RuleModel, plus the zone-name enumerator the
-// SnapToZone picker reads and the zone-option enumerator the Zone condition
-// picker reads, and they form a coherent sub-surface.
+// SnapToZone picker reads, the zone-option enumerator the Zone condition
+// picker reads, and the two providers the monitor overview reads, and they
+// form a coherent sub-surface.
 // Same class as rulecontroller.cpp, separate TU, no API change.
 
 #include "rulecontroller.h"
@@ -89,6 +90,16 @@ void RuleController::setZoneMatchOptionsProvider(std::function<QVariantList()> p
     // Same clear-keeps-the-last-list contract as setZoneNamesProvider.
     m_zoneMatchOptionsProvider = std::move(provider);
     refreshZoneMatchOptions();
+}
+
+void RuleController::setColorSchemeProvider(std::function<QString()> provider)
+{
+    m_colorSchemeProvider = std::move(provider);
+}
+
+void RuleController::setDefaultAssignmentProvider(std::function<PhosphorZones::AssignmentEntry()> provider)
+{
+    m_defaultAssignmentProvider = std::move(provider);
 }
 
 void RuleController::refreshZoneLists()

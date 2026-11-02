@@ -124,6 +124,11 @@ void LayoutRegistry::setScreenOrientationProvider(
     m_screenOrientationProvider = std::move(provider);
 }
 
+void LayoutRegistry::setScreenPixelSizeProvider(std::function<std::optional<QSize>(const QString& screenId)> provider)
+{
+    m_screenPixelSizeProvider = std::move(provider);
+}
+
 void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)
 {
     m_snappingPreferredProvider = std::move(provider);

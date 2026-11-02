@@ -707,7 +707,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
                 // A drop that changed the window's screen without changing its
                 // snap state (NoOp / CancelSnap) still stales the per-screen
-                // match inputs (ScreenId, ScreenOrientation, ActiveLayout). The
+                // match inputs (ScreenId, the screen-shape fields, ActiveLayout). The
                 // outputChanged / VS-crossing handlers skip their own
                 // invalidation while a drag is in flight and record the window id
                 // in m_dragSuppressedRuleInvalidations instead, so draining that

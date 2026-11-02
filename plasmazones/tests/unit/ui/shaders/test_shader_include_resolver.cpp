@@ -294,6 +294,63 @@ private Q_SLOTS:
         QVERIFY2(out.contains(QStringLiteral("// from pack")), qPrintable(out));
         QVERIFY2(!out.contains(QStringLiteral("// from system")), qPrintable(out));
     }
+
+    // An absolute include name is refused even when the file exists: a
+    // third-party pack must not inline arbitrary files from the system.
+    void absoluteIncludeNameIsRefused()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString headerPath = tmp.filePath(QStringLiteral("header.glsl"));
+        writeFile(headerPath, QStringLiteral("float helper() { return 1.0; }\n"));
+
+        const QString source =
+            QStringLiteral("#version 450\n#include \"") + headerPath + QStringLiteral("\"\nvoid main() {}\n");
+        QString err;
+        const QString out =
+            PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {tmp.path()}, &err);
+        QVERIFY(out.isEmpty());
+        QVERIFY2(err.contains(QStringLiteral("Absolute include path")), qPrintable(err));
+    }
+
+    // A file over MaxIncludeBytes is an error, not a truncated include.
+    void oversizedIncludeIsRefused()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QFile big(tmp.filePath(QStringLiteral("big.glsl")));
+        QVERIFY(big.open(QIODevice::WriteOnly));
+        big.write(QByteArray(PhosphorShaders::ShaderIncludeResolver::MaxIncludeBytes + 1, ' '));
+        big.close();
+
+        const QString source = QStringLiteral("#version 450\n#include \"big.glsl\"\nvoid main() {}\n");
+        QString err;
+        const QString out = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {}, &err);
+        QVERIFY(out.isEmpty());
+        QVERIFY2(err.contains(QStringLiteral("too large")), qPrintable(err));
+    }
+
+    // Each level includes the next one four times. Every file is small and the
+    // chain stays within MaxIncludeDepth, but the expansion would hold 4^9
+    // copies of the leaf: the resolver stops at MaxExpandedSize instead.
+    void repeatedIncludeFanOutIsBounded()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const int levels = 9;
+        writeFile(tmp.filePath(QStringLiteral("level%1.glsl").arg(levels)),
+                  QStringLiteral("// ") + QString(4000, QLatin1Char('x')) + QStringLiteral("\n"));
+        for (int i = levels - 1; i >= 1; --i) {
+            const QString line = QStringLiteral("#include \"level%1.glsl\"\n").arg(i + 1);
+            writeFile(tmp.filePath(QStringLiteral("level%1.glsl").arg(i)), line + line + line + line);
+        }
+
+        const QString source = QStringLiteral("#version 450\n#include \"level1.glsl\"\nvoid main() {}\n");
+        QString err;
+        const QString out = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {}, &err);
+        QVERIFY(out.isEmpty());
+        QVERIFY2(err.contains(QStringLiteral("Expanded shader too large")), qPrintable(err));
+    }
 };
 
 QTEST_MAIN(TestShaderIncludeResolver)

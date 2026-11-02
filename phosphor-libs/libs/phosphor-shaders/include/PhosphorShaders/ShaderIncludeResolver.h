@@ -15,10 +15,23 @@ namespace PhosphorShaders {
 /// Supports:
 /// - #include "path" — search relative to current file's directory, then include paths
 /// - #include <path> — search only in include paths (e.g. global shaders dir)
+///
+/// An include name is always relative to a search directory: an absolute name
+/// is an error. Shader packs can come from third parties, and an absolute name
+/// would let one inline any readable file on the system.
 class PHOSPHORSHADERS_EXPORT ShaderIncludeResolver
 {
 public:
     static constexpr int MaxIncludeDepth = 10;
+
+    /// Largest include file, in bytes. A bigger file is an error, not a
+    /// truncated read.
+    static constexpr qint64 MaxIncludeBytes = 1 << 20;
+
+    /// Largest expanded source, in UTF-16 code units. One file may include
+    /// another several times at each of the MaxIncludeDepth levels, so the
+    /// depth and the per-file limit alone do not bound the output.
+    static constexpr qsizetype MaxExpandedSize = 16 << 20;
 
     /// Reserved include name for the generated `p_<id>` autocomplete sidecar
     /// (`plasmazones-shader-validate --emit-preamble`). An `#include` of a file
@@ -39,7 +52,8 @@ public:
     /// @param source Raw shader source (may contain #include "..." or #include <...>)
     /// @param currentFileDir Directory of the file that contains @p source
     /// @param includePaths Directories to search for includes
-    /// @param outError If non-null, set on error (file not found, depth exceeded)
+    /// @param outError If non-null, set on error (file not found, absolute
+    ///        name, depth or size exceeded)
     /// @param outIncludedPaths If non-null, appended with the canonical
     ///        absolute path of every successfully-resolved include file.
     ///        Lets callers fingerprint transitively-included headers (e.g.

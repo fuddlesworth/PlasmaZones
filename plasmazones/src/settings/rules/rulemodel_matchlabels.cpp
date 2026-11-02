@@ -114,6 +114,28 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                        RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
     }
 
+    // Aspect ratio: the token with the editor dropdown's portrait marker.
+    if (predicate.field == Field::ScreenAspectRatio) {
+        return compose(RuleModel::fieldLabel(predicate.field),
+                       RuleAuthoring::aspectRatioLabel(predicate.value.toString()));
+    }
+
+    // A number reads with the locale's digit grouping, a pixel unit on the
+    // screen size fields, and plain digits for a Pid
+    // (RuleAuthoring::numericMatchValueLabel), the same way the expanded tree
+    // prints it. The desktop number keeps the name lookup below under Equals.
+    // A value that is not a number at all (a hand-edited rule) falls through
+    // and round-trips verbatim.
+    if (PhosphorRules::fieldIsNumeric(predicate.field)
+        && !(predicate.field == Field::VirtualDesktop && predicate.op == Operator::Equals)) {
+        bool isNumber = false;
+        const qint64 number = predicate.value.toLongLong(&isNumber);
+        if (isNumber) {
+            return compose(RuleModel::fieldLabel(predicate.field),
+                           RuleAuthoring::numericMatchValueLabel(predicate.field, number));
+        }
+    }
+
     // Window type is the int underlying the WindowType enum — resolve it to the
     // friendly label ("Window type: Dialog") via the same single-source table the
     // editor dropdown uses, rather than showing the bare int.

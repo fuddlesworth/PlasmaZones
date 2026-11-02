@@ -57,6 +57,13 @@ namespace {
 /// assignmentEntryForScreen / hasMatchingAssignmentRule /
 /// scrollingTemplateForContext / scrollingTemplateExplicitlyNone so the six
 /// callers cannot drift.
+///
+/// Every caller reads the screen shape and the tiled-window count ONCE for
+/// @p screenId before entering the chain and hands that one reading to each
+/// try. A retry swaps the id the rules are matched against, never the screen
+/// the shape and count describe: a virtual screen inherits its physical
+/// screen's assignments, but a ScreenWidth, ScreenAspectRatio or
+/// TiledWindowCount condition still asks about the virtual screen itself.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -699,6 +706,14 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
 PhosphorZones::ScrollingTemplate
 LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
+    return scrollingTemplateForContext(screenId, virtualDesktop, activity, screenShape(screenId),
+                                       tiledWindowCount(screenId, virtualDesktop, activity));
+}
+
+PhosphorZones::ScrollingTemplate
+LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity,
+                                            const ScreenShape& shape, const std::optional<int>& tiledCount) const
+{
     // Mode-gated BY DESIGN: a template preserved on a non-Scrolling context
     // (the lossless-toggle contract) must not resolve — the engine push and
     // the picker consume the LIVE template only. The raw field-inspection
@@ -710,9 +725,10 @@ LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtual
     // physical screen's Scrolling assignment must inherit that assignment's
     // template too. The mode gate stays on the RESOLVED entry, so a fallback
     // hop that lands on a non-Scrolling entry still resolves no template.
-    const auto entry = resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity](const QString& sid) {
-        return resolveAssignmentEntry(sid, virtualDesktop, activity);
-    });
+    const auto entry =
+        resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity, &shape, &tiledCount](const QString& sid) {
+            return resolveAssignmentEntry(sid, virtualDesktop, activity, shape, tiledCount);
+        });
     if (!entry || entry->mode != AssignmentEntry::Scrolling) {
         return {};
     }
@@ -747,9 +763,12 @@ bool LayoutRegistry::scrollingTemplateExplicitlyNone(const QString& screenId, in
 {
     // Same resolution and same mode gate as scrollingTemplateForContext, so
     // the two can never disagree about which entry they are describing.
-    const auto entry = resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity](const QString& sid) {
-        return resolveAssignmentEntry(sid, virtualDesktop, activity);
-    });
+    const ScreenShape shape = screenShape(screenId);
+    const std::optional<int> tiledCount = tiledWindowCount(screenId, virtualDesktop, activity);
+    const auto entry =
+        resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity, &shape, &tiledCount](const QString& sid) {
+            return resolveAssignmentEntry(sid, virtualDesktop, activity, shape, tiledCount);
+        });
     return entry && entry->mode == AssignmentEntry::Scrolling && entry->scrollingTemplateLayout == NoScrollingTemplate;
 }
 
@@ -802,9 +821,11 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     // arm: a "none" preserved on a non-Snapping entry (the lossless
     // mode-toggle contract) is dormant data, not an opt-out in force.
     bool explicitlyNone = false;
-    auto tryResolve = [this, virtualDesktop, &activity,
+    const ScreenShape shape = screenShape(screenId);
+    const std::optional<int> tiledCount = tiledWindowCount(screenId, virtualDesktop, activity);
+    auto tryResolve = [this, virtualDesktop, &activity, &shape, &tiledCount,
                        &explicitlyNone](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
-        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity, shape, tiledCount);
         if (!entry) {
             return std::nullopt; // genuine miss — the caller may retry
         }
@@ -913,31 +934,41 @@ bool LayoutRegistry::hasExplicitSnappingModePin(const QString& sid, int virtualD
 QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                               const QString& activity) const
 {
+    return assignmentIdForScreen(screenId, virtualDesktop, activity, screenShape(screenId),
+                                 tiledWindowCount(screenId, virtualDesktop, activity));
+}
+
+QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity,
+                                              const ScreenShape& shape, const std::optional<int>& tiledCount) const
+{
     // The stored cascade walk lives in resolveStoredAssignmentId — this
     // method is that walk plus the level-1 default tail, and delegating keeps
     // the two from ever resolving the cascade differently. The optional's
     // ENGAGED-but-empty state is load-bearing: an explicit mode-only Snapping
     // pin settles the chain with no layout identity, and treating that as a
     // miss would synthesize the default tier's autotile id here.
-    if (const auto stored = resolveStoredAssignmentId(screenId, virtualDesktop, activity)) {
+    if (const auto stored = resolveStoredAssignmentId(screenId, virtualDesktop, activity, shape, tiledCount)) {
         return *stored;
     }
 
     // No stored entry in the cascade — fall through to the level-1 global
     // default via the injected providers, honoring the global suppress setting
     // and any per-context DefaultLayoutAssignment override.
-    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
+    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity, shape);
     return def.activeLayoutId();
 }
 
 QString LayoutRegistry::storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                                     const QString& activity) const
 {
-    return resolveStoredAssignmentId(screenId, virtualDesktop, activity).value_or(QString());
+    return resolveStoredAssignmentId(screenId, virtualDesktop, activity, screenShape(screenId),
+                                     tiledWindowCount(screenId, virtualDesktop, activity))
+        .value_or(QString());
 }
 
 std::optional<QString> LayoutRegistry::resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
-                                                                 const QString& activity) const
+                                                                 const QString& activity, const ScreenShape& shape,
+                                                                 const std::optional<int>& tiledCount) const
 {
     // Shared cascade with layoutForScreen, accepting any entry whose
     // activeLayoutId() is non-empty (incl. Autotile entries), but a miss
@@ -945,8 +976,9 @@ std::optional<QString> LayoutRegistry::resolveStoredAssignmentId(const QString& 
     // context has its own assignment (exact or rule-based)" from "the
     // resolver would hand out the registry-wide default". Connector /
     // virtual-screen fallback applies here too.
-    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
-        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+    auto tryResolve = [this, virtualDesktop, &activity, &shape,
+                       &tiledCount](const QString& sid) -> std::optional<QString> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity, shape, tiledCount);
         if (!entry) {
             return std::nullopt;
         }
@@ -973,8 +1005,11 @@ std::optional<QString> LayoutRegistry::resolveStoredAssignmentId(const QString& 
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                          const QString& activity) const
 {
-    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<AssignmentEntry> {
-        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+    const ScreenShape shape = screenShape(screenId);
+    const std::optional<int> tiledCount = tiledWindowCount(screenId, virtualDesktop, activity);
+    auto tryResolve = [this, virtualDesktop, &activity, &shape,
+                       &tiledCount](const QString& sid) -> std::optional<AssignmentEntry> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity, shape, tiledCount);
         if (!entry) {
             return std::nullopt;
         }
@@ -996,7 +1031,7 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
 
     // Cascade miss — synthesize from the level-1 global default, honoring the
     // global suppress setting and any per-context DefaultLayoutAssignment override.
-    return resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
+    return resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity, shape);
 }
 
 AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int virtualDesktop,
@@ -1026,9 +1061,12 @@ QString LayoutRegistry::scrollingTemplateLayoutForScreen(const QString& screenId
 bool LayoutRegistry::hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop,
                                                const QString& activity) const
 {
+    const ScreenShape shape = screenShape(screenId);
+    const std::optional<int> tiledCount = tiledWindowCount(screenId, virtualDesktop, activity);
     return resolveWithScreenFallback(screenId,
-                                     [this, virtualDesktop, &activity](const QString& sid) {
-                                         return resolveAssignmentEntry(sid, virtualDesktop, activity);
+                                     [this, virtualDesktop, &activity, &shape, &tiledCount](const QString& sid) {
+                                         return resolveAssignmentEntry(sid, virtualDesktop, activity, shape,
+                                                                       tiledCount);
                                      })
         .has_value();
 }

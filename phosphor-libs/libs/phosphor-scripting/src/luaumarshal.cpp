@@ -5,9 +5,11 @@
 
 #include <lua.h>
 
+#include <QSet>
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <cmath>
 
 namespace PhosphorScripting {
@@ -94,8 +96,90 @@ void pushVariant(lua_State* L, const QVariant& v, int depth)
     }
 }
 
-QVariant toVariant(lua_State* L, int idx, int depth)
+namespace {
+
+// State shared by one toVariant() walk: the tables on the current path (to
+// cut cycles), and the values and string bytes converted so far (to bound the
+// total work and memory).
+struct Walk
 {
+    QSet<const void*> path;
+    int nodes = 0;
+    qsizetype bytes = 0;
+    bool exhausted = false;
+};
+
+// Counts @p len bytes of string copy; false once the walk is over MaxBytes.
+bool admitBytes(Walk& walk, size_t len)
+{
+    walk.bytes += static_cast<qsizetype>(std::min(len, static_cast<size_t>(MaxBytes) + 1));
+    if (walk.bytes > MaxBytes) {
+        walk.exhausted = true;
+    }
+    return !walk.exhausted;
+}
+
+QVariant convert(lua_State* L, int idx, int depth, Walk& walk);
+
+QVariant convertTable(lua_State* L, int abs, int depth, Walk& walk)
+{
+    if (depth > MaxDepth) {
+        return QVariant();
+    }
+    // Reserve stack for the reads below (rawgeti / pushvalue / next). See
+    // the pushVariant note: this runs outside any protected call.
+    if (!lua_checkstack(L, 4)) {
+        return QVariant();
+    }
+    // lua_objlen returns the array border as int; guard the (not normally
+    // reachable) negative case so the loop bound is always sane.
+    const int n = lua_objlen(L, abs);
+    if (n < 0) {
+        return QVariant();
+    }
+    if (n > 0) {
+        QVariantList list;
+        list.reserve(std::min(n, MaxNodes - walk.nodes));
+        for (int i = 1; i <= n && !walk.exhausted; ++i) {
+            lua_rawgeti(L, abs, i);
+            list.append(convert(L, -1, depth + 1, walk));
+            lua_pop(L, 1);
+        }
+        return list;
+    }
+    QVariantMap map;
+    lua_pushnil(L);
+    while (lua_next(L, abs) != 0) {
+        if (walk.exhausted) {
+            lua_pop(L, 2); // value + key: lua_next is abandoned, not finished
+            break;
+        }
+        // value at -1, key at -2. Stringify a COPY of the key so we never
+        // call lua_tolstring on the live key (which can corrupt lua_next).
+        lua_pushvalue(L, -2);
+        size_t klen = 0;
+        const char* k = lua_tolstring(L, -1, &klen);
+        // Distinguish a genuinely empty-string key (kept) from a key that
+        // failed coercion to a string — only the latter (k == nullptr,
+        // e.g. a table/function/boolean key) is dropped.
+        const bool haveKey = (k != nullptr) && admitBytes(walk, klen);
+        const QString key = haveKey ? QString::fromUtf8(k, static_cast<qsizetype>(klen)) : QString();
+        lua_pop(L, 1); // key copy
+        if (haveKey) {
+            map.insert(key, convert(L, -1, depth + 1, walk));
+        }
+        lua_pop(L, 1); // value, keep original key for lua_next
+    }
+    return map;
+}
+
+QVariant convert(lua_State* L, int idx, int depth, Walk& walk)
+{
+    if (walk.exhausted || ++walk.nodes > MaxNodes) {
+        walk.exhausted = true;
+        return QVariant();
+    }
+
     // Absolute index so stack growth during table reads doesn't shift it.
     const int abs = idx < 0 ? lua_gettop(L) + idx + 1 : idx;
 
@@ -118,57 +202,36 @@ QVariant toVariant(lua_State* L, int idx, int depth)
     case LUA_TSTRING: {
         size_t len = 0;
         const char* s = lua_tolstring(L, abs, &len);
+        if (!admitBytes(walk, len)) {
+            return QVariant();
+        }
         return QVariant(QString::fromUtf8(s, static_cast<qsizetype>(len)));
     }
     case LUA_TTABLE: {
-        if (depth > MaxDepth) {
-            return QVariant();
+        const void* table = lua_topointer(L, abs);
+        if (walk.path.contains(table)) {
+            return QVariant(); // a table inside itself: cut the cycle here
         }
-        // Reserve stack for the reads below (rawgeti / pushvalue / next). See
-        // the pushVariant note: this runs outside any protected call.
-        if (!lua_checkstack(L, 4)) {
-            return QVariant();
-        }
-        // lua_objlen returns the array border as int; guard the (not normally
-        // reachable) negative case so the loop bound is always sane.
-        const int n = lua_objlen(L, abs);
-        if (n < 0) {
-            return QVariant();
-        }
-        if (n > 0) {
-            QVariantList list;
-            list.reserve(n);
-            for (int i = 1; i <= n; ++i) {
-                lua_rawgeti(L, abs, i);
-                list.append(toVariant(L, -1, depth + 1));
-                lua_pop(L, 1);
-            }
-            return list;
-        }
-        QVariantMap map;
-        lua_pushnil(L);
-        while (lua_next(L, abs) != 0) {
-            // value at -1, key at -2. Stringify a COPY of the key so we never
-            // call lua_tolstring on the live key (which can corrupt lua_next).
-            lua_pushvalue(L, -2);
-            size_t klen = 0;
-            const char* k = lua_tolstring(L, -1, &klen);
-            // Distinguish a genuinely empty-string key (kept) from a key that
-            // failed coercion to a string — only the latter (k == nullptr,
-            // e.g. a table/function/boolean key) is dropped.
-            const bool haveKey = (k != nullptr);
-            const QString key = haveKey ? QString::fromUtf8(k, static_cast<qsizetype>(klen)) : QString();
-            lua_pop(L, 1); // key copy
-            if (haveKey) {
-                map.insert(key, toVariant(L, -1, depth + 1));
-            }
-            lua_pop(L, 1); // value, keep original key for lua_next
-        }
-        return map;
+        walk.path.insert(table);
+        QVariant value = convertTable(L, abs, depth, walk);
+        walk.path.remove(table);
+        return value;
     }
     default:
         return QVariant();
     }
+}
+
+} // namespace
+
+QVariant toVariant(lua_State* L, int idx, int depth, bool* tooLarge)
+{
+    Walk walk;
+    QVariant value = convert(L, idx, depth, walk);
+    if (tooLarge) {
+        *tooLarge = walk.exhausted;
+    }
+    return walk.exhausted ? QVariant() : value;
 }
 
 } // namespace Marshal
