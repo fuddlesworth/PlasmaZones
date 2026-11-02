@@ -59,7 +59,7 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
     }
     if (!m_virtualScreenSize.isValid()) {
         // Without the daemon's answer the reference falls back to the whole
-        // physical monitor (targetLogicalScreenSizeF), which is the closest
+        // physical monitor (targetFullLogicalScreenSize), which is the closest
         // size the editor can know but not the virtual screen's own.
         qCWarning(lcEditor) << "Virtual screen" << screenName
                             << "geometry unavailable from the daemon; using its physical monitor's size";
@@ -72,7 +72,7 @@ void EditorController::ensureTargetScreenScale()
         return;
     }
     // No target means the primary screen, the same fallback
-    // targetLogicalScreenSizeF() measures.
+    // targetFullLogicalScreenSize() measures.
     QString screenId = m_targetScreen;
     if (screenId.isEmpty()) {
         if (QScreen* primary = QGuiApplication::primaryScreen()) {
@@ -251,7 +251,8 @@ void EditorController::applyTargetScreen(const QString& screenName, bool forceLa
 
     // Publish a plain screen-size change the loaders' own guards cannot see
     // (their prev capture happens after the swap above, so switching between
-    // differently sized screens with no fixed-zone override fires nothing).
+    // differently sized screens fires nothing there when the incoming layout
+    // keeps the unit and area the outgoing one had).
     // A duplicate emit when the loader already published is a harmless
     // re-notify.
     if (targetScreenSize() != sizeBeforeSwitch) {

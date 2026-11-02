@@ -13,7 +13,6 @@
 #include <QVariantList>
 #include <QFont>
 #include <QRectF>
-#include <QSizeF>
 #include <QTimer>
 #include <QUuid>
 #include <QScreen>
@@ -834,15 +833,12 @@ private:
     /// it converts zones copied in the other unit, so it asks whenever the
     /// clipboard's unit differs from the layout's, a logical layout included.
     void ensureTargetScreenScale();
-    /// The target's whole logical rect size, before insets and the override:
-    /// the virtual screen's, else the physical monitor's.
+    /// The target's whole logical rect size, before insets: the virtual
+    /// screen's, else the physical monitor's.
     QSize targetFullLogicalScreenSize() const;
     /// targetScreenSize() before the device-pixel scaling: the occupied area
     /// of the virtual screen, else of the physical one.
     QSize targetLogicalScreenSize() const;
-    /// targetLogicalScreenSize() unrounded, so the device-pixel scaling
-    /// rounds once.
-    QSizeF targetLogicalScreenSizeF() const;
     /// The layout as saveLayout() sends it, built from the editor's state.
     QJsonObject currentLayoutJson() const;
     /// Publish targetScreenSize() after anything it depends on changed:
@@ -850,9 +846,9 @@ private:
     /// the fixed zones' relative copies re-derived against it.
     void republishTargetScreenSize(const QSize& previous);
     /// Re-read everything the reference size is derived from for the
-    /// current target (virtual screen geometry, scale, insets, the bounds
-    /// override) and republish it. For geometry that changed under an
-    /// unchanged target, such as a resolution, scale or subdivision change.
+    /// current target (virtual screen geometry, scale and insets) and
+    /// republish it. For geometry that changed under an unchanged target,
+    /// such as a resolution, scale or subdivision change.
     void refreshTargetScreenGeometry();
     /// Carry out the gated screen switch (caller cleared the replace
     /// decision). forceLayoutMode = the plain-screen launch shape: flips out

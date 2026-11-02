@@ -179,9 +179,9 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 
 QSize EditorController::targetScreenSize() const
 {
-    const QSizeF logical = targetLogicalScreenSizeF();
+    const QSize logical = targetLogicalScreenSize();
     if (!m_fixedGeometryInDevicePixels || m_targetScreenScale <= 0.0) {
-        return logical.toSize();
+        return logical;
     }
     // Device pixels per logical pixel on each axis. The daemon's pixelSize
     // for the target's full rect fixes the ratio so the full area maps onto
@@ -198,8 +198,7 @@ QSize EditorController::targetScreenSize() const
         ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
         ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
     }
-    // The device pixels the logical size covers on the target output,
-    // rounded once from the unrounded logical size.
+    // The device pixels the logical size covers on the target output.
     return QSize(qRound(logical.width() * ratioX), qRound(logical.height() * ratioY));
 }
 
@@ -218,11 +217,6 @@ QSize EditorController::targetFullLogicalScreenSize() const
 
 QSize EditorController::targetLogicalScreenSize() const
 {
-    return targetLogicalScreenSizeF().toSize();
-}
-
-QSizeF EditorController::targetLogicalScreenSizeF() const
-{
     // Always the live area, whatever size the layout was authored for, so a
     // canvas pixel is a screen pixel in fullscreen editing and the windowed
     // canvas is that same picture scaled. Fixed zones that overflow the area
@@ -234,11 +228,11 @@ QSizeF EditorController::targetLogicalScreenSizeF() const
     // which is the area the canvas shows and the daemon lays fixed zones out
     // in, so it is the area their numbers are measured against.
     if (m_useFullScreenGeometry) {
-        return QSizeF(full);
+        return full;
     }
     const int width = full.width() - m_insetLeft - m_insetRight;
     const int height = full.height() - m_insetTop - m_insetBottom;
-    return (width > 0 && height > 0) ? QSizeF(width, height) : QSizeF(full);
+    return (width > 0 && height > 0) ? QSize(width, height) : full;
 }
 
 int EditorController::insetLeft() const
