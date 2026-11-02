@@ -33,11 +33,14 @@
 #include "settings/rules/rulepickeroptions.h"
 #include "settings/utils/dbusutils.h"
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
+#include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -522,6 +525,9 @@ void SettingsController::onActivitiesChanged()
     // Unconditional for the same reason as virtualDesktopsChanged above: KDE
     // is the change authority for this event, so no snapshot compare.
     Q_EMIT activitiesChanged();
+    // currentActivityChanged lands here too, and each screen's state names
+    // the current activity.
+    scheduleScreenStatesRefresh();
 }
 
 void SettingsController::onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop)
@@ -536,6 +542,7 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     // small. If a future consumer needs per-screen targeting, widen the
     // signal in lockstep with the QML side (single-signal source of truth).
     Q_EMIT screenLayoutChanged();
+    scheduleScreenStatesRefresh();
 }
 
 namespace {
@@ -619,10 +626,12 @@ void SettingsController::onRunningWindowsAvailable(const QString& json)
 // Screen state query
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QVariantList SettingsController::getScreenStates() const
+namespace {
+
+/// The getScreenStates reply as one map per screen. Shared by the blocking
+/// query and the cached asynchronous one so both read the reply the same way.
+QVariantList screenStatesFromReply(const QDBusMessage& reply)
 {
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getScreenStates"));
     const QJsonArray arr = DaemonDBus::replyJsonArray(reply, QLatin1String("getScreenStates"));
     QVariantList result;
     result.reserve(arr.size());
@@ -631,6 +640,49 @@ QVariantList SettingsController::getScreenStates() const
             result.append(value.toObject().toVariantMap());
     }
     return result;
+}
+
+} // namespace
+
+QVariantList SettingsController::getScreenStates() const
+{
+    return screenStatesFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                        QStringLiteral("getScreenStates")));
+}
+
+void SettingsController::scheduleScreenStatesRefresh()
+{
+    m_screenStatesCache.schedule();
+}
+
+void SettingsController::refreshScreenStates()
+{
+    // A focus change or the Rules page coming into view is no reason to
+    // start a stopped daemon, so the call is not made while it is down. The
+    // runningChanged handler schedules a re-read once the daemon is up.
+    // Checked here rather than per trigger so a burst folded by the cache
+    // costs one check. No unit test drives this gate because constructing
+    // a SettingsController needs a session bus.
+    if (!m_daemonController.isRunning()) {
+        return;
+    }
+    // The daemon can still leave the bus between that check and delivery, so
+    // the message itself also refuses to start it. ClientHelpers::asyncCall
+    // leaves D-Bus's auto-start flag set, hence the message is built here.
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getScreenStates"));
+    message.setAutoStartService(false);
+    // Numbered before the call so a reply to an older request, still in
+    // flight, is dropped rather than overwriting a newer answer.
+    const quint64 request = m_screenStatesCache.beginRequest();
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, request](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusMessage reply = w->reply();
+        const bool ok = reply.type() == QDBusMessage::ReplyMessage;
+        m_screenStatesCache.finishRequest(request, ok, ok ? screenStatesFromReply(reply) : QVariantList());
+    });
 }
 
 QVariantMap SettingsController::getScrollingBlueprintProgress(const QString& screenId) const

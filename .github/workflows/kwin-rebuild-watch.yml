@@ -207,6 +207,10 @@ jobs:
             image: fedora:44
             query: |
               dnf -q repoquery --queryformat '%{version}\n' kwin | sort -V | tail -n 1
+          - channel: fedora-45
+            image: fedora:45
+            query: |
+              dnf -q repoquery --queryformat '%{version}\n' kwin | sort -V | tail -n 1
           - channel: opensuse-tumbleweed
             image: opensuse/tumbleweed:latest
             query: |

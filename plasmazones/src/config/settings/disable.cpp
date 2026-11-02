@@ -44,8 +44,9 @@ namespace {
 //   - `isContextOnly()` — a rule carrying a window-property leaf is not a
 //     context rule at all. Rebuilding it from the decoded dims would drop that
 //     leaf, and `disableEntryFor` has nowhere to put it.
-//   - `pinsNonDimensionContextField()` — a rule pinning Mode /
-//     TiledWindowCount / ScreenOrientation / ActiveLayout is more specific than
+//   - `pinsNonDimensionContextField()` — a rule pinning Mode,
+//     TiledWindowCount, ActiveLayout, ColorScheme or a screen-shape field
+//     (orientation, width, height, aspect ratio) is more specific than
 //     the (screen, desktop, activity) shape the entry strings can key. Taking it
 //     as a bare axis rule would BOTH over-report the gate (an
 //     `All{ScreenId==A, ScreenOrientation=="portrait"}` disable would switch the
@@ -183,8 +184,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // axisOf() gates admission with exactly the shapes disableEntriesFor
         // reports, so this walk drops only rules the append loop below rebuilds.
         // Anything it refuses — a window-property leaf, a pinned non-dimension
-        // context field (Mode / TiledWindowCount / ScreenOrientation /
-        // ActiveLayout), a Combined tuple — is NOT the pure (screen, desktop,
+        // context field (Mode, TiledWindowCount, ActiveLayout, ColorScheme or a
+        // screen-shape field), a Combined tuple — is NOT the pure (screen, desktop,
         // activity) shape this (axis, mode) rewrite owns, so it falls through to
         // `kept` untouched. Dropping it would destroy the rule outright: the
         // append loop rebuilds only the bare tuple, so the extra leaf would be

@@ -15,6 +15,7 @@
 #include <PhosphorWayland/LayerSurface.h>
 
 #include <QEvent>
+#include <QPoint>
 #include <QScreen>
 #include <QThread>
 #include <QTimer>
@@ -170,6 +171,13 @@ void ScreenManager::stop()
     // so keeping stale rects across a stop/start cycle would only risk a
     // transient mismatch before that push lands.
     m_compositorAvailableGeometry.clear();
+    // Same for the compositor's pixel sizes, pending and accepted alike: the
+    // effect re-reports every output when it registers again, and the host
+    // accepts each afresh. The seeds stay, like m_virtualConfigs, because the
+    // host's own record is their source. Nothing is announced: the manager
+    // tracks no screen once stopped.
+    m_compositorPixelSizes.clear();
+    m_acceptedPixelSizes.clear();
 }
 
 QVector<PhysicalScreen> ScreenManager::screens() const
@@ -309,6 +317,14 @@ void ScreenManager::destroyGeometrySensor(const QString& screenName)
     // a same-connector reconnect starts from the heuristic until the effect
     // re-pushes a fresh clientArea for the new output.
     m_compositorAvailableGeometry.remove(screenName);
+    // The accepted pixel size goes the same way: it was accepted for the
+    // monitor that left, and a different one on the same connector must
+    // answer its own seed until the host accepts a report for it. The
+    // PENDING report stays (see setCompositorPixelSize). Not announced, as
+    // nothing reads an untracked screen's size.
+    m_acceptedPixelSizes.remove(screenName);
+    // A sensor created for the connector later maps afresh.
+    m_mappedScaleSensors.remove(screenName);
 }
 
 void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
@@ -614,18 +630,34 @@ qreal ScreenManager::logicalScale(QScreen* screen) const
 
 bool ScreenManager::eventFilter(QObject* watched, QEvent* event)
 {
-    if (event && event->type() == QEvent::DevicePixelRatioChange) {
+    const bool scaleChange = event && event->type() == QEvent::DevicePixelRatioChange;
+    const bool expose = event && event->type() == QEvent::Expose;
+    if (scaleChange || expose) {
         // Reverse-resolve the sensor to its screen rather than capturing the
         // name: the map is small (one entry per output) and a captured name
         // would need its own teardown to stay honest.
         for (auto it = m_geometrySensors.constBegin(); it != m_geometrySensors.constEnd(); ++it) {
-            if (it.value() == watched) {
-                const PhysicalScreen screen = trackedScreenByName(it.key());
+            if (it.value() != watched) {
+                continue;
+            }
+            const PhysicalScreen screen = trackedScreenByName(it.key());
+            if (scaleChange) {
                 if (screen.isValid()) {
                     Q_EMIT logicalScaleChanged(screen);
                 }
-                break;
+            } else if (it.value()->isExposed() && !m_mappedScaleSensors.contains(it.key())) {
+                // The first expose follows the compositor's first configure,
+                // and KWin settles the surface's preferred scale before that
+                // (see isLogicalScaleSensorMapped), so the scale the sensor
+                // carries now is the compositor's. A scale change event alone
+                // would miss an integer output, whose real scale is the
+                // fallback's and so never changes.
+                m_mappedScaleSensors.insert(it.key());
+                if (screen.isValid()) {
+                    Q_EMIT logicalScaleSensorMapped(screen);
+                }
             }
+            break;
         }
     }
     // Never filtered: the sensor still needs the event.
@@ -700,6 +732,185 @@ void ScreenManager::setCompositorAvailableGeometry(const QString& screenName, co
     }
 }
 
+void ScreenManager::setCompositorPixelSize(const QString& connectorName, const QSize& pixelSize)
+{
+    if (connectorName.isEmpty()) {
+        return;
+    }
+
+    // An empty size clears the pending entry (the effect sends 0x0 for an
+    // output it no longer has). Both paths early-return when nothing changed,
+    // so the effect re-reporting every output collapses to a no-op instead of
+    // re-running every listener's evaluation. Neither touches the accepted
+    // report: only acceptCompositorPixelSize moves what pixelSize answers.
+    if (!pixelSize.isEmpty()) {
+        if (m_compositorPixelSizes.value(connectorName) == pixelSize) {
+            return;
+        }
+        m_compositorPixelSizes.insert(connectorName, pixelSize);
+        qCInfo(lcPhosphorScreens) << "Compositor pixel size pending for" << connectorName << "=" << pixelSize;
+    } else {
+        if (m_compositorPixelSizes.remove(connectorName) == 0) {
+            return;
+        }
+        qCInfo(lcPhosphorScreens) << "Compositor pixel size clear pending for" << connectorName;
+    }
+    Q_EMIT compositorPixelSizeChanged(connectorName);
+}
+
+void ScreenManager::acceptCompositorPixelSize(const QString& connectorName)
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    // An untracked connector has no screen to answer for. Its report stays
+    // pending, for the host to accept once the connector's screen arrives,
+    // and the accepted store holds only tracked connectors, as
+    // destroyGeometrySensor keeps it.
+    if (connectorName.isEmpty() || !trackedScreenByName(connectorName).isValid()) {
+        return;
+    }
+    // A pending clear drops the accepted report, so the screen falls back to
+    // its seed. Unchanged either way is a no-op, which keeps a host that
+    // accepts on every evaluation from announcing a move nobody made.
+    if (const auto pending = m_compositorPixelSizes.constFind(connectorName);
+        pending != m_compositorPixelSizes.constEnd()) {
+        if (const auto accepted = m_acceptedPixelSizes.constFind(connectorName);
+            accepted != m_acceptedPixelSizes.constEnd() && accepted.value() == pending.value()) {
+            return;
+        }
+        m_acceptedPixelSizes.insert(connectorName, pending.value());
+        qCInfo(lcPhosphorScreens) << "Compositor pixel size accepted for" << connectorName << "=" << pending.value();
+    } else {
+        if (m_acceptedPixelSizes.remove(connectorName) == 0) {
+            return;
+        }
+        qCInfo(lcPhosphorScreens) << "Compositor pixel size clear accepted for" << connectorName;
+    }
+    Q_EMIT acceptedPixelSizeChanged(connectorName);
+}
+
+std::optional<QSize> ScreenManager::pendingPixelSize(const QString& connectorName) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    if (const auto it = m_compositorPixelSizes.constFind(connectorName); it != m_compositorPixelSizes.constEnd()) {
+        return it.value();
+    }
+    return std::nullopt;
+}
+
+bool ScreenManager::hasLogicalScaleSensor(const PhysicalScreen& screen) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    // A sensor exists from createGeometrySensor until destroyGeometrySensor,
+    // mapped or not. logicalScale reads it only once it is mapped, and the
+    // eventFilter announces the scale it maps with.
+    return !m_geometrySensors.value(screen.name).isNull();
+}
+
+bool ScreenManager::isLogicalScaleSensorMapped(const PhysicalScreen& screen) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    return hasLogicalScaleSensor(screen) && m_mappedScaleSensors.contains(screen.name);
+}
+
+void ScreenManager::seedPixelSize(const QString& physicalScreenId, const QSize& pixelSize)
+{
+    if (physicalScreenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
+        return;
+    }
+    if (!pixelSize.isEmpty()) {
+        if (m_seededPixelSizes.value(physicalScreenId) == pixelSize) {
+            return;
+        }
+        m_seededPixelSizes.insert(physicalScreenId, pixelSize);
+    } else if (m_seededPixelSizes.remove(physicalScreenId) == 0) {
+        return;
+    }
+
+    // The seed answers only for a tracked screen whose connector has no
+    // accepted report. Anywhere else the change is not visible through
+    // pixelSize(). The answer moved, and a host gating reports may want to
+    // act on the move, so both signals go out.
+    for (const auto& screen : std::as_const(m_trackedScreens)) {
+        if (screen.identifier == physicalScreenId && !m_acceptedPixelSizes.contains(screen.name)) {
+            Q_EMIT acceptedPixelSizeChanged(screen.name);
+            Q_EMIT compositorPixelSizeChanged(screen.name);
+            break;
+        }
+    }
+}
+
+std::optional<QSize> ScreenManager::resolvePixelSize(const QString& screenId, bool* reported) const
+{
+    if (reported) {
+        *reported = false;
+    }
+    // An empty id answers nothing here, unlike screenGeometry's
+    // primary-output fallback: a size condition must describe the screen it
+    // was asked about, never a stand-in.
+    if (screenId.isEmpty()) {
+        return std::nullopt;
+    }
+    const bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+    const QString physId = isVirtual ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    const PhysicalScreen screen = trackedScreenFor(physId);
+    if (!screen.isValid()) {
+        return std::nullopt;
+    }
+
+    // The accepted report only. A pending one may describe a mode the logical
+    // geometry has not caught up with, or another monitor, until the host
+    // accepts it (setCompositorPixelSize).
+    QSize physical;
+    bool fromReport = false;
+    if (const auto it = m_acceptedPixelSizes.constFind(screen.name); it != m_acceptedPixelSizes.constEnd()) {
+        physical = it.value();
+        fromReport = true;
+    } else if (!screen.identifier.isEmpty()) {
+        physical = m_seededPixelSizes.value(screen.identifier);
+    }
+    if (physical.isEmpty()) {
+        return std::nullopt;
+    }
+    if (!isVirtual) {
+        if (reported) {
+            *reported = fromReport;
+        }
+        return physical;
+    }
+
+    // A virtual screen's share of the output's pixels, split the way its
+    // logical rect is split (rebuildVirtualGeometryCache), over the pixel
+    // rect instead. Looked up by id, never by index, for the reason
+    // getScreenInfo gives.
+    const auto cfgIt = m_virtualConfigs.constFind(physId);
+    if (cfgIt == m_virtualConfigs.constEnd()) {
+        return std::nullopt;
+    }
+    for (const auto& def : cfgIt->screens) {
+        if (def.id == screenId) {
+            if (reported) {
+                *reported = fromReport;
+            }
+            return def.absoluteGeometry(QRect(QPoint(), physical)).size();
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<QSize> ScreenManager::pixelSize(const QString& screenId) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    return resolvePixelSize(screenId, nullptr);
+}
+
+bool ScreenManager::isPixelSizeReported(const QString& screenId) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    bool reported = false;
+    resolvePixelSize(screenId, &reported);
+    return reported;
+}
+
 void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldIds)
 {
     // Compare each still-tracked screen's prior identifier (captured before
@@ -739,8 +950,29 @@ void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldI
             invalidateVirtualGeometryCache(newId);
         }
 
+        // The pixel-size seed is the same monitor's, so it moves with the id.
+        // A seed the host had at newId from an earlier session is replaced
+        // when one exists at oldId, and otherwise starts answering for this
+        // screen, which only matters while no accepted report covers its
+        // connector.
+        const QSize seedBefore = m_seededPixelSizes.value(oldId);
+        if (const auto seeded = m_seededPixelSizes.constFind(oldId); seeded != m_seededPixelSizes.constEnd()) {
+            m_seededPixelSizes.erase(seeded);
+            m_seededPixelSizes.insert(newId, seedBefore);
+        }
+        const QString connectorName = screen.name;
+        const bool seedAnswerChanged =
+            m_seededPixelSizes.value(newId) != seedBefore && !m_acceptedPixelSizes.contains(connectorName);
+
         qCInfo(lcPhosphorScreens) << "Screen identifier drift:" << oldId << "→" << newId;
         Q_EMIT screenIdentifierChanged(oldId, newId);
+        // After the flip is announced, so a listener that re-reads the size
+        // under the screen's id already knows the new one. Both signals, as
+        // seedPixelSize sends them for a seed that moves the answer.
+        if (seedAnswerChanged) {
+            Q_EMIT acceptedPixelSizeChanged(connectorName);
+            Q_EMIT compositorPixelSizeChanged(connectorName);
+        }
     }
 }
 

@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QUuid>
 #include <QHash>
+#include <functional>
 #include <optional>
 
 namespace PhosphorScreens {
@@ -94,6 +95,31 @@ public:
      * without changing the adaptor.
      */
     void setLayoutSource(PhosphorLayout::ILayoutSource* source);
+
+    /// Inject the daemon's live tiled-window count per screen: the count of the
+    /// tiling state that runs on the screen, or nullopt when no tiling engine
+    /// does. Backs getScreenStates' tiledWindowCount key. Unset, the key is
+    /// never written.
+    void setTiledWindowCountProvider(std::function<std::optional<int>(const QString& screenId)> provider);
+
+    /// Queue a comparison of the getScreenStates answer for the next
+    /// event-loop pass, and emit @ref screenStatesChanged when it differs from
+    /// the answer the last comparison saw. The first comparison has nothing
+    /// before it, so it emits. The daemon calls it wherever a field other
+    /// than a display name can move: every active-assignment diff (which the
+    /// desktop and activity switches, screen adds and removals,
+    /// virtual-screen changes, assignment applies and rule reconciles all
+    /// run) and every change of a tiling screen's tiled-window count. No call
+    /// exists for a display name alone: a layout list change or a template
+    /// reload queues it only through the assignment diff its handler runs,
+    /// and an algorithm reload not at all. Coalesced, so a burst in one turn
+    /// compares once. Not a bus slot.
+    void scheduleScreenStatesCheck();
+
+    /// Drop a comparison @ref scheduleScreenStatesCheck queued and has not
+    /// run yet. Daemon::stop calls it, so no signal goes out after the
+    /// daemon's teardown has begun. Not a bus slot.
+    void cancelScreenStatesCheck();
 
 public Q_SLOTS:
     // PhosphorZones::Layout queries
@@ -339,7 +365,10 @@ public Q_SLOTS:
      * inherited value from an assigned one. scrollingTemplateId reads the
      * stored entry field rather than the mode-gated resolver, so a template
      * preserved across a mode toggle is reported even while another mode
-     * runs.
+     * runs. tiledWindowCount is the live count of the tiling state running
+     * on the screen, present only while a tiling engine (autotile or
+     * scrolling) runs there, so a reader can evaluate a TiledWindowCount
+     * condition the way the daemon does and leave it unanswered elsewhere.
      *
      * @return JSON string
      */
@@ -487,6 +516,25 @@ Q_SIGNALS:
      */
     void assignmentChangesApplied(const QStringList& changedScreenIds);
 
+    /**
+     * @brief Emitted when what getScreenStates answers has changed.
+     *
+     * Guaranteed for every field except the display names (layoutName,
+     * algorithmName, scrollingTemplateName), including the ones no other
+     * signal reports on its own: a screen's virtual desktop or the activity
+     * moving while its resolved layout stays the same, and the live
+     * tiled-window count of a tiling screen. A change that moves only a name
+     * (a layout rename, an algorithm or template reload) is not guaranteed to
+     * fire it. It may, because a comparison that runs for any reason, the
+     * assignment diff a layout list change or a template reload runs
+     * included, carries a moved name along.
+     * Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per
+     * event-loop pass and compared against the previous answer (see
+     * @ref scheduleScreenStatesCheck), so it fires once per real change, and
+     * once after start-up, when the first comparison has nothing before it.
+     */
+    void screenStatesChanged();
+
 private Q_SLOTS:
     // String-based connection slots for PhosphorZones::LayoutRegistry signals
     // (PhosphorZones::LayoutRegistry redeclares signals for Q_PROPERTY, so we use string-based connections)
@@ -621,6 +669,9 @@ private:
      * one place — see constructor bodies in layoutadaptor.cpp.
      */
     void initCoalesceTimer();
+    /// The comparison @ref scheduleScreenStatesCheck queues. Private and not a
+    /// slot, so it is no bus method.
+    void checkScreenStates();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -724,6 +775,15 @@ private:
     /// Separate from m_layoutSource (which is the full composite used for
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
+    /// See setTiledWindowCountProvider.
+    std::function<std::optional<int>(const QString& screenId)> m_tiledWindowCountProvider;
+
+    /// The zero-interval single shot scheduleScreenStatesCheck arms (its
+    /// isActive() is the compression latch, and cancelScreenStatesCheck stops
+    /// it), and the getScreenStates answer the last comparison saw (empty
+    /// before the first).
+    QTimer m_screenStatesCheck;
+    QString m_lastScreenStatesJson;
 
     // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
     // batch is in flight (armed via the setSaveBatchMode slot around a batch

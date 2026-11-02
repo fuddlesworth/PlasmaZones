@@ -26,6 +26,7 @@
 #include <PhosphorZones/Zone.h>
 
 #include <QSet>
+#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -285,6 +286,44 @@ void SettingsController::installRuleLabelLookups()
         return name.isEmpty() ? packId : name;
     };
     m_rulesPage->setDecorationPackLookup(resolveDecorationPackLookup);
+    // The monitor overview's two inputs that are not rules. The colour scheme
+    // is this process's palette, which follows the same session theme the
+    // daemon classifies.
+    m_rulesPage->setColorSchemeProvider([]() {
+        return Settings::systemColorSchemeToken();
+    });
+    // The global default a screen falls back to when a rule fills a layout
+    // slot but none sets the engine mode. Mirrors the daemon's level-1
+    // default (LayoutRegistry::resolveDefaultAssignmentEntry over the
+    // providers the daemon wires in init_services.cpp): nothing while the
+    // default is suppressed, Snapping with the default layout while snapping
+    // is on (an id whose layout is gone reads as no layout, and the reserved
+    // no-layout word passes through), else Autotile with the default
+    // algorithm while autotiling is on and one is set.
+    m_rulesPage->setDefaultAssignmentProvider([this]() -> PhosphorZones::AssignmentEntry {
+        PhosphorZones::AssignmentEntry entry;
+        if (m_settings.suppressDefaultLayoutAssignment()) {
+            return entry;
+        }
+        if (m_settings.snappingEnabled()) {
+            entry.mode = PhosphorZones::AssignmentEntry::Snapping;
+            QString layoutId = m_settings.defaultLayoutId();
+            if (!layoutId.isEmpty() && layoutId != PhosphorZones::NoSnappingLayout) {
+                const QUuid uuid = QUuid::fromString(layoutId);
+                if (uuid.isNull() || !m_localLayoutManager || !m_localLayoutManager->layoutById(uuid)) {
+                    layoutId.clear();
+                }
+            }
+            entry.snappingLayout = layoutId;
+            return entry;
+        }
+        const QString algorithm = m_settings.autotileEnabled() ? m_settings.defaultAutotileAlgorithm() : QString();
+        if (!algorithm.isEmpty()) {
+            entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+            entry.tilingAlgorithm = algorithm;
+        }
+        return entry;
+    });
     connect(this, &SettingsController::screensChanged, this, &SettingsController::refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, &SettingsController::refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, &SettingsController::refreshRuleLabels);

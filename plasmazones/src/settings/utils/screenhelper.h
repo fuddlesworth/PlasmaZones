@@ -5,6 +5,7 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 #include <QObject>
+#include <QTimer>
 #include <QVariantList>
 
 namespace PlasmaZones {
@@ -26,6 +27,14 @@ class ScreenHelper : public QObject
 public:
     explicit ScreenHelper(ISettings* settings, QObject* parent = nullptr);
 
+    /// One map per screen, as PhosphorScreens::screenInfoListToVariantList
+    /// builds it, plus `pixelWidth` / `pixelHeight` (the size in device
+    /// pixels, present only when the daemon answered one) and
+    /// `pixelSizeKnown` (true when that size is the compositor's report or
+    /// the seeded one, the size last accepted for that monitor in this
+    /// session or an earlier one, which is when the daemon's rules see it,
+    /// and false for an estimate). `width` / `height` and `displayLabel` stay
+    /// logical.
     QVariantList screens() const;
 
     /**
@@ -51,6 +60,9 @@ public:
 
 public Q_SLOTS:
     void refreshScreens();
+    /// Coalesce a burst of daemon screen notifications into one
+    /// refreshScreens(), which is a blocking round trip per screen.
+    void scheduleRefreshScreens();
 
 Q_SIGNALS:
     void screensChanged();
@@ -69,6 +81,7 @@ private:
     ISettings* m_settings = nullptr;
     QVariantList m_screens;
     bool m_daemonUnavailable = false;
+    QTimer m_refreshTimer;
 };
 
 } // namespace PlasmaZones

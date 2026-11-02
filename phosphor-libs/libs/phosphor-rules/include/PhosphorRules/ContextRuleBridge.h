@@ -479,11 +479,11 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         }
         // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
         // leaf is ignored here — a flat mixed rule still yields its context
-        // projection, per the contract above. This includes the Mode,
-        // TiledWindowCount, ScreenOrientation, ActiveLayout and ColorScheme
-        // leaves: all five ARE context fields, but none is one of the three
-        // decomposed dimensions, so they are deliberately projected out of
-        // contextDimsOf. Callers that must not lose them gate on
+        // projection, per the contract above. This includes every other
+        // context leaf (Mode, TiledWindowCount, the screen-shape fields,
+        // ActiveLayout, ColorScheme): each IS a context field, but none is one
+        // of the three decomposed dimensions, so they are deliberately
+        // projected out of contextDimsOf. Callers that must not lose them gate on
         // pinsNonDimensionContextField first — contextAxisFor already does.
     }
     // If no context-equality leaf was matched, the input was either a
@@ -505,8 +505,9 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
 inline constexpr Field kContextDimensionFields[] = {Field::ScreenId, Field::VirtualDesktop, Field::Activity};
 
 /// True if @p match pins a context field that is NOT one of the three cascade
-/// dimensions — today @c Mode, @c TiledWindowCount, @c ScreenOrientation,
-/// @c ActiveLayout and @c ColorScheme. Such a match is more specific than the
+/// dimensions — any context field outside @ref kContextDimensionFields (Mode,
+/// TiledWindowCount, the screen orientation, width, height and aspect ratio,
+/// ActiveLayout, ColorScheme). Such a match is more specific than the
 /// (screen, desktop, activity) shape @c makeContextMatch emits, so it must not
 /// be treated as an exact-context assignment: the batch reader/writers and
 /// exact-rule upsert rebuild the context base from the decoded dims alone, which
@@ -551,8 +552,8 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     if (!match.isContextOnly()) {
         return ContextAxis::CatchAll;
     }
-    // A match that ALSO pins a non-dimension context field (Mode /
-    // TiledWindowCount / ScreenOrientation / ActiveLayout / ColorScheme) is not the
+    // A match that ALSO pins a non-dimension context field (any context field
+    // outside kContextDimensionFields) is not the
     // (screen, desktop, activity) shape makeContextMatch emits, so it is not an
     // exact-context assignment; treat it as CatchAll-axis so the batch
     // projections skip it. It still resolves normally through the evaluator,
@@ -638,8 +639,8 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
     if (!match.isContextOnly()) {
         return false;
     }
-    // A pinned non-dimension context leaf (Mode / TiledWindowCount /
-    // ScreenOrientation / ActiveLayout / ColorScheme) means the match is more specific than the
+    // A pinned non-dimension context leaf (any context field outside
+    // kContextDimensionFields) means the match is more specific than the
     // bare (screen, desktop, activity) shape, so it is NOT exact — see
     // contextAxisFor for why dropping it here would lose the leaf on rebuild.
     if (pinsNonDimensionContextField(match)) {

@@ -794,6 +794,33 @@ target_include_directories(test_engine_routing PRIVATE ${CMAKE_SOURCE_DIR}/plasm
 target_link_libraries(test_engine_routing PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_engine_routing COMMAND test_engine_routing)
 
+# The daemon's screen-reshape bookkeeping (ScreenReshapeTracker): when a
+# compositor pixel-size report applies, parks or is awaited, and the reshape
+# records that keep a verdict from being absorbed or applied twice. Compiles
+# the daemon source directly, like the seed filter. Links the
+# FakePhysicalScreenSource and plasmazones_core (for common/daemonscreenscale.h
+# and PhosphorScreens): the admit cases run admitPixelSizeReport over a real
+# ScreenManager's pending and accepted reports.
+add_executable(test_screen_reshape_tracker
+    daemon/test_screen_reshape_tracker.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/screenreshapetracker.cpp
+)
+target_include_directories(test_screen_reshape_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_screen_reshape_tracker PRIVATE pz_test_fake_screens Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_screen_reshape_tracker COMMAND test_screen_reshape_tracker)
+
+# The daemon's snapping gap-rule verdict record (SnapGapTracker): which screens
+# a verdict move restates, and that a context switch, a screen add or removal
+# and a repeat pass restate nothing. Compiles the daemon source directly, like
+# the reshape tracker.
+add_executable(test_snap_gap_tracker
+    daemon/test_snap_gap_tracker.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/snapgaptracker.cpp
+)
+target_include_directories(test_snap_gap_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_snap_gap_tracker PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_snap_gap_tracker COMMAND test_snap_gap_tracker)
+
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core,
 # so the three suites below link its sources from this library. The catalog TU
 # is not in it: the teardown suite does not need it, and an OBJECT library puts
@@ -1407,11 +1434,22 @@ target_include_directories(test_running_windows_decisions PRIVATE ${CMAKE_SOURCE
 add_test(NAME test_running_windows_decisions COMMAND test_running_windows_decisions)
 
 # The absolute rect of a virtual screen (plasmazoneseffect/virtualscreengeometry.h):
-# edges rounded, re-derived when its output moves (F806). Same header-only reach.
+# edges rounded, re-derived when its output moves (F806). Same header-only reach,
+# plus PhosphorScreens::Core for the daemon's VirtualScreenDef::absoluteGeometry,
+# which the cut is compared against.
 add_executable(test_virtual_screen_geometry ui/effect/test_virtual_screen_geometry.cpp)
-target_link_libraries(test_virtual_screen_geometry PRIVATE Qt6::Test Qt6::Core)
+target_link_libraries(test_virtual_screen_geometry PRIVATE Qt6::Test Qt6::Core PhosphorScreens::Core)
 target_include_directories(test_virtual_screen_geometry PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_virtual_screen_geometry COMMAND test_virtual_screen_geometry)
+
+# Which output pixel sizes the effect owes the daemon, and when the shape
+# verdicts drop (plasmazoneseffect/pixelsizedecisions.h): the report dedupe, the
+# clear on removal, a bridge restart and a refresh-only mode change. Same
+# header-only reach.
+add_executable(test_pixel_size_decisions ui/effect/test_pixel_size_decisions.cpp)
+target_link_libraries(test_pixel_size_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pixel_size_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_pixel_size_decisions COMMAND test_pixel_size_decisions)
 
 # Pure-logic test for the screen of a window filling a split output
 # (plasmazoneseffect/windowscreendecisions.h): engine, then restore rect, then
@@ -1556,6 +1594,12 @@ add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)
 add_executable(test_wta_known_desktops dbus/test_wta_known_desktops.cpp)
 target_link_libraries(test_wta_known_desktops PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_known_desktops COMMAND test_wta_known_desktops)
+
+# getScreenStates' tiledWindowCount key: present while a tiling engine runs on the screen, absent otherwise.
+add_executable(test_layout_adaptor_screen_states dbus/test_layout_adaptor_screen_states.cpp)
+target_link_libraries(test_layout_adaptor_screen_states PRIVATE pz_test_fake_screens)
+target_link_libraries(test_layout_adaptor_screen_states PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core PhosphorZones::PhosphorZones)
+add_test(NAME test_layout_adaptor_screen_states COMMAND test_layout_adaptor_screen_states)
 
 add_executable(test_wta_routing dbus/test_wta_routing.cpp)
 target_link_libraries(test_wta_routing PRIVATE pz_test_fake_screens)
@@ -3181,6 +3225,22 @@ target_link_libraries(test_animation_page_scope
         PhosphorAnimation::PhosphorAnimation
 )
 add_test(NAME test_animation_page_scope COMMAND test_animation_page_scope)
+
+# The settings app's cached getScreenStates answer: coalescing, request
+# numbering, the failed-call arm and publish-on-difference. The helper has no
+# D-Bus dependency, so the test drives it directly.
+add_executable(test_screen_states_cache
+    settings/test_screen_states_cache.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/screenstatescache.h
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/screenstatescache.cpp
+)
+target_include_directories(test_screen_states_cache PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_screen_states_cache
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+add_test(NAME test_screen_states_cache COMMAND test_screen_states_cache)
 
 # Search-catalogue advanced-only flags vs the QML that declares the tier. Reads
 # both trees as TEXT (no Qt Quick engine, no page construction), so it needs

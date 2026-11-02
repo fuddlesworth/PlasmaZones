@@ -237,6 +237,11 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         m_screenChangeHandler->scheduleClientAreaReport();
     }
 
+    // Each output's exact pixel size, which the daemon reads the screen-shape
+    // rule fields from. onScreenAdded ran for every output before the bridge
+    // was up, so its reports were dropped, and a restarted daemon holds none.
+    pushOutputPixelSizes();
+
     // Re-push cursor screen — use the cached effective screen ID (which includes
     // virtual screen IDs like "A/vs:0") so the daemon's shortcut handler resolves
     // to the correct virtual screen, not the physical monitor.
