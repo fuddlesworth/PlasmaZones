@@ -3,15 +3,17 @@
 
 /**
  * @file test_drag_activation.cpp
- * @brief Guards the two pure per-tick resolvers the WindowDragAdaptor decides
+ * @brief Guards the pure per-tick resolvers the WindowDragAdaptor decides
  *        drag trigger state with.
  *
  * resolveActivationActive() decides whether the snap overlay should be shown.
+ * resolveDragInsertActive() decides whether the strip or stack re-insert
+ * preview should be on, including the "always re-insert" inversion (#1162).
  * resolveHoldGrace() decides whether a physically-released hold-mode trigger
  * still counts as held, which is what lets a drop that lands just after the
- * button lifts still snap.
+ * button lifts still snap, or under always re-insert still float.
  *
- * Both live in src/dbus/windowdragadaptor/dragactivation.cpp so they can be
+ * These live in src/dbus/windowdragadaptor/dragactivation.cpp so they can be
  * exercised without standing up the adaptor + its compositor dependencies.
  * Pinning the activation table here means the always-active inversion (#249),
  * where the same activation triggers serve double duty as
@@ -167,6 +169,247 @@ private Q_SLOTS:
         const auto inverted = resolveActivationActive(false, true, /*alwaysActive=*/true, false, true);
         QVERIFY(!inverted.active); // latch=true in always-active mode → overlay off
         QVERIFY(inverted.nextActivationToggled); // latch unchanged
+    }
+
+    // ─── Drag re-insert (resolveDragInsertActive, discussion #1162) ───────
+    // Argument order: onEngineScreen, cancelled, alwaysOn, toggleMode,
+    // rawTriggerHeld, graceHeld, prevTriggerHeld, toggled, toggledInsert,
+    // reorderActive.
+
+    void insert_offEngineScreen_inactive_latchesKept()
+    {
+        // Off an engine screen nothing is active, and the latches come back
+        // untouched so a return with the trigger still down is not a press.
+        const auto d = resolveDragInsertActive(false, false, true, true, true, true, /*prev=*/true,
+                                               /*toggled=*/true, /*toggledInsert=*/true, /*reorder=*/true);
+        QVERIFY(!d.active);
+        QVERIFY(!d.suppressedByTrigger);
+        QVERIFY(d.nextPrevTriggerHeld);
+        QVERIFY(d.nextToggled);
+        QVERIFY(d.nextToggledInsert);
+    }
+
+    void insert_hold_triggerHeld_active()
+    {
+        const auto d = resolveDragInsertActive(true, false, false, false, true, true, false, false, false, false);
+        QVERIFY(d.active);
+        QVERIFY(!d.suppressedByTrigger);
+    }
+
+    void insert_hold_noTrigger_inactive()
+    {
+        const auto d = resolveDragInsertActive(true, false, false, false, false, false, false, false, false, false);
+        QVERIFY(!d.active);
+    }
+
+    void insert_hold_releasedInsideGrace_staysActive()
+    {
+        // Raw released, grace still holding: active, but the edge latch
+        // follows the raw state so a toggle-mode screen crossed into next
+        // sees the release.
+        const auto d = resolveDragInsertActive(true, false, false, false, /*raw=*/false, /*grace=*/true,
+                                               /*prev=*/true, false, false, false);
+        QVERIFY(d.active);
+        QVERIFY(!d.nextPrevTriggerHeld);
+    }
+
+    void insert_alwaysOn_noTrigger_active()
+    {
+        // The reporter's default: every drag re-inserts.
+        const auto d =
+            resolveDragInsertActive(true, false, /*alwaysOn=*/true, false, false, false, false, false, false, false);
+        QVERIFY(d.active);
+        QVERIFY(!d.suppressedByTrigger);
+    }
+
+    void insert_alwaysOn_hold_triggerHeld_keepsOut()
+    {
+        // The fix: under always-on a held trigger keeps the drag out, so the
+        // window drops as a floating one.
+        const auto d =
+            resolveDragInsertActive(true, false, true, false, /*raw=*/true, /*grace=*/true, false, false, false, false);
+        QVERIFY(!d.active);
+        QVERIFY(d.suppressedByTrigger);
+    }
+
+    void insert_alwaysOn_hold_releasedInsideGrace_staysOut()
+    {
+        // The release grace extends the keep-out: a trigger let go just
+        // before the button must not re-insert the window it was held to
+        // keep out. The reorder latch yields to it as it does to the press.
+        const auto d = resolveDragInsertActive(true, false, true, false, /*raw=*/false, /*grace=*/true, /*prev=*/true,
+                                               false, false, /*reorder=*/true);
+        QVERIFY(!d.active);
+        QVERIFY(d.suppressedByTrigger);
+    }
+
+    void insert_alwaysOn_hold_triggerReleased_reinserts()
+    {
+        const auto d =
+            resolveDragInsertActive(true, false, true, false, false, false, /*prev=*/true, false, false, false);
+        QVERIFY(d.active);
+        QVERIFY(!d.suppressedByTrigger);
+    }
+
+    void insert_alwaysOn_toggle_firstPress_keepsOut()
+    {
+        // Toggle mode is honoured under always-on now: the first tap keeps
+        // the drag out and the latch carries it past the release.
+        const auto press = resolveDragInsertActive(true, false, true, /*toggle=*/true, /*raw=*/true, true,
+                                                   /*prev=*/false, /*toggled=*/false, false, false);
+        QVERIFY(!press.active);
+        QVERIFY(press.suppressedByTrigger);
+        QVERIFY(press.nextToggled);
+        QVERIFY2(!press.nextToggledInsert, "the tap chose to keep the drag out");
+
+        const auto released = resolveDragInsertActive(true, false, true, true, false, false, press.nextPrevTriggerHeld,
+                                                      press.nextToggled, press.nextToggledInsert, false);
+        QVERIFY(!released.active);
+        QVERIFY(released.suppressedByTrigger);
+    }
+
+    void insert_alwaysOn_toggle_secondPress_reinserts()
+    {
+        const auto d = resolveDragInsertActive(true, false, true, true, /*raw=*/true, true, /*prev=*/false,
+                                               /*toggled=*/true, /*toggledInsert=*/false, false);
+        QVERIFY(d.active);
+        QVERIFY(d.nextToggled);
+        QVERIFY2(d.nextToggledInsert, "the second tap chose the insert again");
+    }
+
+    void insert_alwaysOn_toggle_defaultIsReinsert()
+    {
+        // A toggle latch starts each drag cleared, so a toggle setting left
+        // on does not hold every always-on drag out (the old reason toggle
+        // mode was ignored under always-on).
+        const auto d = resolveDragInsertActive(true, false, true, true, false, false, false, false, false, false);
+        QVERIFY(d.active);
+    }
+
+    /**
+     * The toggle latch is shared across engines, and a screen's default
+     * differs with always-on (insert off without it, on with it). The latch
+     * records the insert state the last tap chose, so a tap on one
+     * toggle-mode screen keeps its outcome on a screen with the other
+     * inversion instead of turning into its opposite.
+     */
+    void insert_toggleLatch_crossingIntoAlwaysOnKeepsTheInsert()
+    {
+        // Tapped on a screen without always-on: the preview is on.
+        const auto tapped = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, /*raw=*/true, true,
+                                                    /*prev=*/false, /*toggled=*/false, false, false);
+        QVERIFY(tapped.active);
+        QVERIFY(tapped.nextToggled);
+        QVERIFY(tapped.nextToggledInsert);
+
+        // Released, then crossed onto an always-on toggle-mode screen.
+        const auto crossed = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, false, false, true,
+                                                     tapped.nextToggled, tapped.nextToggledInsert, false);
+        QVERIFY2(crossed.active, "a tap that turned the insert on must not keep the drag out on the next screen");
+
+        // And back again with no tap in between: the tap still holds there.
+        const auto back = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, false,
+                                                  crossed.nextToggled, crossed.nextToggledInsert, false);
+        QVERIFY2(back.active, "a round trip must not lose the tap that turned the insert on");
+    }
+
+    void insert_toggleLatch_lastTapWinsAcrossScreens()
+    {
+        // Tapped on A (no always-on): insert on. Then two taps on B (always
+        // on): kept out, then the insert again. The last tap asked for the
+        // insert, so A shows it too, as it would with no taps on B.
+        const auto onA = resolveDragInsertActive(true, false, false, true, true, true, false, false, false, false);
+        const auto tap1 = resolveDragInsertActive(true, false, true, true, true, true, false, onA.nextToggled,
+                                                  onA.nextToggledInsert, false);
+        QVERIFY(!tap1.active);
+        const auto tap2 = resolveDragInsertActive(true, false, true, true, true, true, false, tap1.nextToggled,
+                                                  tap1.nextToggledInsert, false);
+        QVERIFY(tap2.active);
+        const auto backOnA = resolveDragInsertActive(true, false, false, true, false, false, true, tap2.nextToggled,
+                                                     tap2.nextToggledInsert, false);
+        QVERIFY2(backOnA.active, "the last tap asked for the insert, so A must show it");
+    }
+
+    void insert_toggleLatch_tapOnTheOtherScreenRewritesIt()
+    {
+        // A choice carried from a screen without always-on (insert) matches
+        // an always-on screen's default, so a tap there keeps the drag out,
+        // and the latch records that new choice.
+        const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, /*raw=*/true, true,
+                                               /*prev=*/false, /*toggled=*/true, /*toggledInsert=*/true, false);
+        QVERIFY(!d.active);
+        QVERIFY(d.suppressedByTrigger);
+        QVERIFY(d.nextToggled);
+        QVERIFY(!d.nextToggledInsert);
+    }
+
+    void insert_toggleLatch_crossingOutOfAlwaysOnKeepsTheDragOut()
+    {
+        // Kept out by a tap under always-on, then crossed onto a toggle-mode
+        // screen without it, where the default is already "not inserting".
+        const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, /*prev=*/false,
+                                               /*toggled=*/true, /*toggledInsert=*/false, false);
+        QVERIFY(!d.active);
+        QVERIFY(d.nextToggled);
+        QVERIFY(!d.nextToggledInsert);
+    }
+
+    void insert_toggleLatch_passesThroughAHoldModeScreen()
+    {
+        // A hold-mode screen never flips the latch, so a set latch and the
+        // choice it records survive it for the next toggle screen.
+        const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, /*toggle=*/false, false, false, false,
+                                               /*toggled=*/true, /*toggledInsert=*/true, false);
+        QVERIFY(d.nextToggled);
+        QVERIFY(d.nextToggledInsert);
+    }
+
+    void insert_reorderLatch_forcesPreview()
+    {
+        // A tiled window under Krohnkite reorder: on without any trigger.
+        const auto d = resolveDragInsertActive(true, false, false, false, false, false, false, false, false,
+                                               /*reorder=*/true);
+        QVERIFY(d.active);
+    }
+
+    void insert_reorderLatch_yieldsToKeepOutTrigger()
+    {
+        // Scrolling's always re-insert is also what sets the reorder latch
+        // for a tiled window, so the latch must give way to the trigger or a
+        // tiled window could never be dragged out as a floating one.
+        const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, false, /*raw=*/true, true, false, false,
+                                               false, /*reorder=*/true);
+        QVERIFY(!d.active);
+        QVERIFY(d.suppressedByTrigger);
+    }
+
+    void insert_reorderLatch_notInvertedWithoutAlwaysOn()
+    {
+        // Without always-on the trigger means "insert", so holding it next
+        // to the reorder latch cannot turn the preview off.
+        const auto d = resolveDragInsertActive(true, false, false, false, true, true, false, false, false, true);
+        QVERIFY(d.active);
+        QVERIFY(!d.suppressedByTrigger);
+    }
+
+    void insert_cancelled_winsOverInversion()
+    {
+        // Escape dismissed the re-insert. Under always-on with no trigger
+        // held the inversion alone would read "on", which would begin the
+        // dismissed preview again on the next tick.
+        const auto d = resolveDragInsertActive(true, /*cancelled=*/true, true, false, false, false, false, false, false,
+                                               /*reorder=*/true);
+        QVERIFY(!d.active);
+        QVERIFY(!d.suppressedByTrigger);
+    }
+
+    void insert_cancelled_stillTracksTheEdge()
+    {
+        // The latches keep following the input while cancelled, so the
+        // re-press that lifts the cancel is not mistaken for the old press.
+        const auto d =
+            resolveDragInsertActive(true, true, false, true, /*raw=*/false, false, /*prev=*/true, false, false, false);
+        QVERIFY(!d.nextPrevTriggerHeld);
     }
 
     // ─── Hold-mode release grace (resolveHoldGrace) ───────────────────────

@@ -31,7 +31,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Always re-insert on drag")
             searchAnchor: "scrollingAlwaysReinsertOnDrag"
-            description: i18n("Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button")
+            description: i18n("Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button. The trigger below then floats the window instead.")
 
             SettingsSwitch {
                 id: alwaysReinsertSwitch
@@ -44,15 +44,16 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: !alwaysReinsertSwitch.checked
-        }
+        SettingsSeparator {}
 
+        // Dual purpose, like the snapping activation triggers (#249): with
+        // "Always re-insert on drag" on, the same triggers keep a drag OUT of
+        // the strip so the window drops as a floating one (discussion #1162).
+        // The Toggle mode row below inverts with it.
         SettingsRow {
-            title: i18n("Hold to re-insert into strip")
+            title: alwaysReinsertSwitch.checked ? i18n("Hold to float instead") : i18n("Hold to re-insert into strip")
             searchAnchor: "scrollingHoldToReinsert"
-            description: i18n("Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.")
-            enabled: !alwaysReinsertSwitch.checked
+            description: alwaysReinsertSwitch.checked ? i18n("Hold a modifier or mouse button while dragging a window to float it instead of re-inserting it into the strip.") : i18n("Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.")
 
             ModifierAndMouseCheckBoxes {
                 width: TriggerLabels.editorPreferredWidth
@@ -70,37 +71,37 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: !alwaysReinsertSwitch.checked
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Toggle mode")
             searchAnchor: "scrollingTriggersToggleMode"
-            description: i18n("Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.")
-            enabled: !alwaysReinsertSwitch.checked
+            description: alwaysReinsertSwitch.checked ? i18n("Tap the trigger once to float the dragged window instead. Tap it again to re-insert it.") : i18n("Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.")
 
             SettingsSwitch {
                 id: insertToggleSwitch
 
                 checked: appSettings.scrollingDragInsertToggle
-                accessibleName: i18n("Toggle mode for re-insert into strip")
+                accessibleName: alwaysReinsertSwitch.checked ? i18n("Toggle mode for floating instead of re-inserting") : i18n("Toggle mode for re-insert into strip")
                 onToggled: function (newValue) {
                     appSettings.scrollingDragInsertToggle = newValue;
                 }
             }
         }
 
+        // Hold mode only, since toggle mode has no release to extend. With
+        // "Always re-insert on drag" the grace extends the keep-out instead,
+        // so the row inverts with the trigger row above.
         SettingsSeparator {
-            enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+            enabled: !insertToggleSwitch.checked
         }
 
         TriggerGraceRow {
             title: i18n("Release grace period")
             searchAnchor: "scrollingReleaseGracePeriod"
-            description: i18n("How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
-            accessibleName: i18n("Release grace period for re-insert into strip")
-            enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+            description: alwaysReinsertSwitch.checked ? i18n("How long a window stays out of the strip after the trigger is released, so a window dropped just after letting go of the trigger still floats. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.") : i18n("How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+            accessibleName: alwaysReinsertSwitch.checked ? i18n("Release grace period for floating instead of re-inserting") : i18n("Release grace period for re-insert into strip")
+            enabled: !insertToggleSwitch.checked
             minMs: root.settingsBridge.triggerGraceMsMin
             maxMs: root.settingsBridge.triggerGraceMsMax
             graceMs: appSettings.scrollingDragInsertGraceMs

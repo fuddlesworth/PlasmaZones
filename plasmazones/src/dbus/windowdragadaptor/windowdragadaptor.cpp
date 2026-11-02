@@ -179,12 +179,25 @@ QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const
     return result;
 }
 
+bool WindowDragAdaptor::hasBareAlwaysActive(const QVector<ParsedTrigger>& triggers)
+{
+    return std::any_of(triggers.cbegin(), triggers.cend(), [](const ParsedTrigger& pt) {
+        return pt.modifier == static_cast<int>(DragModifier::AlwaysActive) && pt.mouseButton == 0;
+    });
+}
+
+Qt::KeyboardModifiers WindowDragAdaptor::resolveReportedModifiers(int modifiers)
+{
+    return modifiers != 0 ? static_cast<Qt::KeyboardModifiers>(modifiers) : QGuiApplication::queryKeyboardModifiers();
+}
+
 bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
-                                       int mouseButtons, bool excludeSentinel) const
+                                       int mouseButtons, SentinelMatch sentinels) const
 {
     const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
     for (const auto& pt : triggers) {
-        if (excludeSentinel && pt.modifier == alwaysActive)
+        if (pt.modifier == alwaysActive
+            && (sentinels == SentinelMatch::SkipAll || (sentinels == SentinelMatch::SkipBare && pt.mouseButton == 0)))
             continue;
         const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
         const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;
@@ -330,11 +343,7 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
         // NOT unconditional — anyTriggerHeld ANDs the button in per tick, so
         // treating it as always-on here would make policy and per-tick
         // behaviour disagree; only the bare sentinel means "always".
-        return std::any_of(m_cachedScrollingDragInsertTriggers.cbegin(), m_cachedScrollingDragInsertTriggers.cend(),
-                           [](const ParsedTrigger& pt) {
-                               return pt.modifier == static_cast<int>(DragModifier::AlwaysActive)
-                                   && pt.mouseButton == 0;
-                           });
+        return hasBareAlwaysActive(m_cachedScrollingDragInsertTriggers);
     }
     return false;
 }
@@ -557,9 +566,9 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
         // indices were computed against the detach-emulated snapshot, so
         // they are valid against the strip begin just produced. A failed
         // begin falls through to the caller's float-drop. Deliberately NO
-        // isWindowTiled gate here, unlike the always-on reorder arms
-        // (beginDrag's eager begin and updateDragCursor's re-latch), which
-        // begin with no trigger held: a floating window dropped on a popup
+        // isWindowTiled gate here, unlike the reorder latch (seeded by
+        // beginDrag, re-latched by updateDragCursor), which begins with no
+        // trigger held: a floating window dropped on a popup
         // card is an EXPLICIT pick, and adopting it into the strip is exactly
         // what the pick asks for. The tiled gate exists to keep passive drags
         // of floating windows free, not to veto an aimed drop. dragMoved's
@@ -656,15 +665,16 @@ void WindowDragAdaptor::cancelSnap()
     // prev is seeded true so a trigger still physically held is not read as
     // a fresh rising edge (beginDrag's seed contract).
     m_dragInsertToggled = false;
+    m_dragInsertToggledInsert = false;
     m_prevDragInsertHeld = true;
     // Clearing the toggle is still not enough: under "always re-insert" the
-    // AlwaysActive sentinel reads as held on every tick, and a hold-mode
-    // trigger still down reads the same way, so the next tick would begin the
-    // preview again and the drop would commit it. This latch keeps the
-    // re-insert dismissed until a real trigger re-press (dragMoved), and the
-    // policy-flip re-latch honours it so a screen crossing cannot re-arm
-    // reorder either. The grace stamp goes too, or the release grace would
-    // read the trigger as held for its window.
+    // preview is on by default with no trigger held, and without it a
+    // hold-mode trigger still down keeps the preview on, so either way the
+    // next tick would begin the preview again and the drop would commit it.
+    // This latch keeps the re-insert dismissed until a real trigger re-press
+    // (dragMoved), and the policy-flip re-latch honours it so a screen
+    // crossing cannot re-arm reorder either. The grace stamp goes too, or the
+    // release grace would read the trigger as held for its window.
     m_dragInsertCancelled = true;
     m_dragInsertReleasedAfterCancel = false;
     m_dragInsertLastHeldMs = -1;
@@ -1085,6 +1095,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // branches that don't route through resetDragState.
     m_dragReorderActive = false;
     m_dragReorderAbandoned = false;
+    m_dragInsertEngineTicked = false;
     m_dragInsertCancelled = false;
     m_dragInsertReleasedAfterCancel = false;
     m_dragWindowExcludedFromSelector = false;
