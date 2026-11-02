@@ -83,25 +83,26 @@ struct DragInsertDecision
  * @param alwaysOn        The bare AlwaysActive sentinel is in the list.
  * @param toggleMode      The engine's toggle setting.
  * @param rawTriggerHeld  A trigger is physically held this tick. Under
- *                        @p alwaysOn it MUST come from the non-sentinel
- *                        entries only, since the sentinel matches every tick.
+ *                        @p alwaysOn it MUST leave out the bare sentinel,
+ *                        which matches every tick.
  * @param graceHeld       @p rawTriggerHeld extended by the hold-mode release
  *                        grace. The caller applies the grace in hold mode
  *                        only, so in toggle mode it equals the raw state.
  *                        Under @p alwaysOn the grace extends the keep-out.
  * @param prevTriggerHeld Last engine-screen tick's raw state.
  * @param toggled         The toggle latch. It is shared across engines and
- *                        means "diverges from this screen's default": insert
- *                        on without @p alwaysOn, kept out with it.
- * @param toggledAlwaysOn The @p alwaysOn the latch was last read under on a
- *                        toggle-mode screen. A set latch crossing onto a
- *                        toggle-mode screen with the other inversion is
- *                        cleared rather than read, since read as-is it would
- *                        turn the user's last tap into its opposite. Cleared
- *                        is right both ways: a tap that turned the insert on
- *                        lands on a screen whose default is already on, and a
- *                        tap that kept the drag out lands on one whose default
- *                        is already off.
+ *                        means "diverges from the default": insert on without
+ *                        always re-insert, kept out with it.
+ * @param toggledAlwaysOn The @p alwaysOn the latch was set under. On a
+ *                        screen with the other inversion a set latch reads
+ *                        as clear, since read as-is it would turn the user's
+ *                        last tap into its opposite. Clear is right both
+ *                        ways: a tap that turned the insert on lands on a
+ *                        screen whose default is already on, and a tap that
+ *                        kept the drag out lands on one whose default is
+ *                        already off. The latch is not rewritten by that
+ *                        read, so the tap holds again back on its own
+ *                        screen; only a tap on this screen rewrites it.
  * @param reorderActive   The drag-start reorder latch, which keeps the
  *                        preview on for a tiled window (Krohnkite reorder, or
  *                        scrolling's always re-insert). It yields to the

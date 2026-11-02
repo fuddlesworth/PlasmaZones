@@ -22,6 +22,9 @@
  */
 
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
@@ -73,6 +76,25 @@ public:
 };
 
 using namespace PlasmaZones;
+
+namespace {
+/// Whether any windowsTiled emission carries a geometry entry (one with an
+/// "x" key) for @p windowId, the engine re-emitting that window's tile rect.
+bool tiledEmissionsCarryGeometryFor(const QSignalSpy& spy, const QString& windowId)
+{
+    for (const QList<QVariant>& emission : spy) {
+        const QJsonArray entries = QJsonDocument::fromJson(emission.first().toString().toUtf8()).array();
+        for (const QJsonValue& entry : entries) {
+            const QJsonObject obj = entry.toObject();
+            if (obj.value(QLatin1String("windowId")).toString() == windowId && obj.contains(QLatin1String("x"))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
+
 using PlasmaZones::StubSettings;
 using PlasmaZones::StubZoneDetector;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -752,6 +774,34 @@ private Q_SLOTS:
         QVERIFY2(f.tiling->hasDragInsertPreview(), "the first tick begins the reorder preview");
         const PhosphorProtocol::DragOutcome drop = f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), 0, 0, false);
         QCOMPARE(drop.action, PhosphorProtocol::DragOutcome::NoOp);
+    }
+
+    // A reorder tile flicked within the effect's first-tick throttle (32 ms)
+    // reaches endDrag with no tick at all, however far it moved. The drop
+    // runs the begin and commit the tick never did, so the tile goes back to
+    // its slot and the engine re-emits its rect: nothing else does, since
+    // the engines leave a window alone when its drag mark clears. A flick
+    // onto another screen floats where it lands.
+    void activeDrag_reorderFlickWithNoTickReturnsTheTileOrFloatsOffScreen()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.tileThreeOnTheOtherScreen();
+        f.settings.setAutotileDragBehavior(AutotileDragBehavior::Reorder);
+        const QString w = QStringLiteral("t|B");
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 640, 0, 640, 1080, f.other, 0);
+        QSignalSpy tiled(f.tiling.get(), &PhosphorTileEngine::AutotileEngine::windowsTiled);
+        const PhosphorProtocol::DragOutcome flick =
+            f.adaptor->endDrag(w, f.inOther().x() + 400, f.inOther().y() + 200, 0, 0, false);
+        QCOMPARE(flick.action, PhosphorProtocol::DragOutcome::NoOp);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
+        QVERIFY2(tiledEmissionsCarryGeometryFor(tiled, w), "the flicked tile's slot rect must be re-emitted");
+
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 640, 0, 640, 1080, f.other, 0);
+        const PhosphorProtocol::DragOutcome away = f.adaptor->endDrag(w, f.inFirst().x(), f.inFirst().y(), 0, 0, false);
+        QCOMPARE(away.action, PhosphorProtocol::DragOutcome::ApplyFloat);
+        QVERIFY(!f.tiling->hasDragInsertPreview());
     }
 
     // A tile dragged under "always re-insert" with the keep-out trigger held

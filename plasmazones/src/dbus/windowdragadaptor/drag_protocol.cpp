@@ -20,6 +20,7 @@
 #include "core/platform/logging.h"
 #include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <QGuiApplication>
 #include <QTimer>
 
@@ -66,20 +67,23 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
-        // GRAB THE KEYBOARD, but only in reorder mode (here the Reorder drag
-        // behaviour, on the scrolling branch below its always re-insert).
+        // GRAB THE KEYBOARD, but only in reorder mode: here the Reorder drag
+        // behaviour, on the scrolling branch below its always re-insert.
         // Escape has to reach the daemon to cancel the preview, and without a
         // grab it reaches KWin's MoveResizeFilter instead and aborts the whole
         // move.
         //
-        // Scoped to reorderMode rather than every engine drag because that is
-        // where the preview runs with nothing held: in HOLD mode releasing the
-        // trigger already cancels the preview and lets the drag continue,
-        // while the reorder latch keeps it on from drag start (see dragMoved).
-        // Under always re-insert a held keep-out trigger is a second exit
-        // (#1162), but only where the user has bound one, so Escape still has
-        // to work. A grab swallows every key for the drag's duration, so it is
-        // not worth taking where a cheaper exit always exists.
+        // Scoped to reorderMode rather than every engine drag because the
+        // reorder latch keeps the preview on from drag start with nothing
+        // held (see dragMoved), while in HOLD mode releasing the trigger
+        // already cancels the preview and lets the drag continue. Under
+        // always re-insert a held keep-out trigger is a second exit (#1162),
+        // but only where the user has bound one, so Escape still has to work.
+        // A grab swallows every key for the drag's duration, so it is not
+        // worth taking where a cheaper exit always exists. Tiling's always
+        // re-insert does NOT reach here as reorderMode (effectiveReorderMode
+        // reads the drag behaviour only), so under the Float behaviour its
+        // preview runs with nothing held and takes no grab.
         //
         // This is the premise that expired: skipping the grab on engine
         // screens was correct when an engine drag had no overlay and no
@@ -277,7 +281,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // release and re-press to toggle.
     m_dragInsertToggled = false;
     m_dragInsertToggledAlwaysOn = false;
-    m_dragInsertKeptOut = false;
+    m_dragInsertEngineTicked = false;
     m_prevDragInsertHeld = true;
     m_dragInsertCancelled = false;
     m_dragInsertReleasedAfterCancel = false;
@@ -757,12 +761,11 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     }
 
     const PhosphorProtocol::DragBypassReason bypassReason = m_currentDragPolicy.bypassReason;
-    m_currentDragPolicy = {}; // next drag starts fresh
-    // Read before the reset below for the engine-owned arm: an armed reorder
-    // latch with no preview to settle is a drop no tick reached, unless the
-    // last tick was keeping the drag out (#1162).
+    // Read before the resets below for the engine-owned arm's reorder drop.
+    const QString policyScreenId = m_currentDragPolicy.screenId;
     const bool reorderArmed = m_dragReorderActive;
-    const bool keptOut = m_dragInsertKeptOut;
+    const bool engineTicked = m_dragInsertEngineTicked;
+    m_currentDragPolicy = {}; // next drag starts fresh
     // m_dragReorderActive lives for one drag only. Reset here (before the
     // various early-return branches below) so no branch has to remember.
     m_dragReorderActive = false;
@@ -836,8 +839,6 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // from a mid-drag screen crossing dies with the drag.
     switch (bypassReason) {
     case PhosphorProtocol::DragBypassReason::EngineOwnedScreen: {
-        // Read before the settle, which consumes the preview.
-        const bool previewLive = dragInsertPreviewEngine() != nullptr;
         // Drag-insert: if a preview is live ON THE RELEASE SCREEN (autotile
         // stack or scroll strip), commit it so the window takes its picked
         // slot on the next retile. The owning engine controls final
@@ -849,19 +850,32 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
             resetDragState();
             return outcome;
         }
-        // A tile in reorder mode whose drag no tick reached: the preview
-        // begins on the first tick (beginDrag), so a drop with no motion has
-        // none, and floating it would float the tile the user only clicked.
-        // It goes back to its slot, as a commit at its own slot would put it.
-        // Not when the last tick kept the drag
-        // out under always re-insert: that preview was cancelled on purpose
-        // and the drop is a float. A refused begin dropped the latch, so it
-        // floats too.
-        if (reorderArmed && !previewLive && !keptOut) {
-            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
-            hideOverlayAndSelector();
-            resetDragState();
-            return outcome;
+        // A tile in reorder mode whose drag no engine tick reached. The
+        // preview begins on the first tick (beginDrag), and the effect sends
+        // none for the first 32 ms of a move, so a click or a quick flick has
+        // no preview to settle, and floating it would float a tile the user
+        // never got to aim. It runs the begin and commit here instead: a
+        // commit with no target puts the window back in its slot and
+        // re-emits its rect, which is the only thing that does, since the
+        // engines deliberately leave a window alone when its drag mark
+        // clears. Only on the screen the drag started on, which is the one
+        // the latch was armed for. A flick onto another screen floats where
+        // it lands, as a preview cancelled at a screen mismatch does. Once a
+        // tick ran, the tick decided: a preview it began was settled above,
+        // and none means the trigger kept the drag out (#1162), the begin was
+        // refused, or the preview was cancelled since, all of which float.
+        if (reorderArmed && !engineTicked) {
+            PhosphorEngine::IPlacementEngine* startEngine = dragInsertEngineFor(policyScreenId);
+            if (startEngine
+                && PhosphorScreens::ScreenIdentity::screensMatch(policyScreenId,
+                                                                 resolveScreenAt(QPointF(cursorX, cursorY)).screenId)
+                && startEngine->beginDragInsertPreview(windowId, policyScreenId)
+                && settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
+                outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+                hideOverlayAndSelector();
+                resetDragState();
+                return outcome;
+            }
         }
         // Release screen is resolved plugin-side from the cursor position,
         // but we pass the cursor through so the daemon can log it. The
@@ -1070,10 +1084,9 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
             // (dragInsertPreviewEngine, not cursorEngine): on a cross-engine
             // crossing the live preview still belongs to the departing
             // engine, which is exactly the crossing this disjunct exists to
-            // keep latched. And once beginDrag's fallback abandoned reorder
-            // for this drag, the latch stays down — re-arming it here made
-            // dragMoved retry the failed preview every tick and re-emitted a
-            // policy contradicting the float fallback one tick after it.
+            // keep latched. And once dragMoved abandoned reorder for this drag
+            // over a refused begin, the latch stays down, or dragMoved would
+            // retry the refused begin every tick.
             // Escape's dismissal holds the same way (m_dragInsertCancelled):
             // re-latching on a crossing would force the re-insert Escape just
             // dismissed back on, and the drop would commit it.

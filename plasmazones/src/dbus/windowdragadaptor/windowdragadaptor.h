@@ -557,10 +557,11 @@ public:
      *        trigger list). Resolved by the caller because the static can't
      *        reach the registry or the per-drag trigger caches. True on an
      *        engine-owned screen clears immediateFloatOnStart, since the
-     *        reorder pipeline owns the drop. Under scrolling's always
-     *        re-insert a held keep-out trigger can still make that drop a
-     *        float (#1162), and the window then takes its float size only at
-     *        the drop, because the policy does not follow the trigger.
+     *        reorder pipeline owns the drop. Where the engine's re-insert
+     *        list also carries always re-insert, a held keep-out trigger can
+     *        still make that drop a float (#1162), and the window then takes
+     *        its float size only at the drop, because the policy does not
+     *        follow the trigger.
      * @param activeLayoutSuppressed Whether the screen's context has NO active
      *        zone layout because the default assignment is suppressed
      *        (LayoutRegistry::isContextActiveLayoutSuppressed — resolved by the
@@ -834,22 +835,23 @@ private:
     // screen at a time; the trigger LIST and toggle SETTING are selected per
     // tick by the engine owning the cursor screen).
     bool m_dragInsertToggled = false; // Current toggle state for drag-insert
-    // The always re-insert state m_dragInsertToggled was last read under on a
-    // toggle-mode screen. The latch means "insert on" without always re-insert
-    // and "kept out" with it, so resolveDragInsertActive clears it when it
-    // crosses onto a screen with the other meaning.
+    // The always re-insert state m_dragInsertToggled was set under. The latch
+    // means "insert on" without always re-insert and "kept out" with it, so
+    // resolveDragInsertActive reads it as clear on a screen with the other
+    // meaning, without writing it back.
     bool m_dragInsertToggledAlwaysOn = false;
-    // The last drag-insert tick's keep-out under always re-insert
-    // (DragInsertDecision::suppressedByTrigger). endDrag reads it to tell a
-    // drop that no tick reached, which puts a reorder tile back, from one the
-    // trigger kept out, which floats it. Reset by beginDrag and resetDragState.
-    bool m_dragInsertKeptOut = false;
+    // A dragMoved tick reached the drag-insert block over an engine screen
+    // this drag. endDrag reads it for a reorder tile: with no such tick the
+    // preview never began, so the drop runs the begin and commit itself;
+    // after one the tick has already decided. Reset by beginDrag and
+    // resetDragState.
+    bool m_dragInsertEngineTicked = false;
     bool m_prevDragInsertHeld = false; // Previous frame's drag-insert trigger state
     // Escape dismissed the re-insert for this drag (cancelSnap). While set,
     // dragMoved reads the drag-insert trigger as released and the policy-flip
     // re-latch leaves reorder down. Only a real trigger re-press clears it:
-    // a non-sentinel entry released (m_dragInsertReleasedAfterCancel) and
-    // pressed again on an engine screen. Reset by beginDrag and resetDragState.
+    // an entry other than the bare sentinel released
+    // (m_dragInsertReleasedAfterCancel) and pressed again on an engine screen. Reset by beginDrag and resetDragState.
     bool m_dragInsertCancelled = false;
     bool m_dragInsertReleasedAfterCancel = false;
     // Journal-diagnostic dedup for the "drag-insert tick:" line: first tick
@@ -895,7 +897,8 @@ private:
     // widened to "tiled OR a preview is live for this drag" (detach-once
     // un-tiles the dragged window while its preview lives). Cleared by
     // endDrag, clearPendingSnapDragState, cancelSnap, handleWindowClosed,
-    // and the shared resetDragState teardown.
+    // dragMoved on a refused preview begin, and the shared resetDragState
+    // teardown.
     bool m_dragReorderActive = false;
     // A preview begin the reorder latch asked for and the engine refused
     // (dragMoved) abandons reorder as a PER-DRAG decision: while set, the
@@ -1007,8 +1010,8 @@ private:
     QPoint m_lastDragCursorPos;
     /// The drag the timer was armed for. A tick is at most 16 ms from
     /// firing when a drag ends, which is long enough for the next drag's
-    /// first tick to begin its preview — and that tick would then nudge the NEW
-    /// strip with the OLD drag's parked cursor.
+    /// preview to begin on a modifier or button tick, and that tick would
+    /// then nudge the NEW strip with the OLD drag's parked cursor.
     QString m_dragScrollWindowId;
     void ensureDragScrollTimerRunning(const QString& windowId);
     void stopDragScrollTimer();

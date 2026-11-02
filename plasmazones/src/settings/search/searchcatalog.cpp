@@ -815,7 +815,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 // The row reads "Hold to float instead" under always re-insert.
                 // The ranker never matches a query longer than a keyword, so
                 // "float" alone misses a search for "floating".
-                PhosphorI18n::tr("float instead"), PhosphorI18n::tr("floating")});
+                PhosphorI18n::tr("float"), PhosphorI18n::tr("float instead"), PhosphorI18n::tr("floating")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingReleaseGracePeriod"),
@@ -982,8 +982,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Always re-insert on drag"), {PhosphorI18n::tr("stack"), PhosphorI18n::tr("insert")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("holdToReinsert"),
                PhosphorI18n::tr("Hold to re-insert into stack"),
-               {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("stack"), PhosphorI18n::tr("float instead"),
-                PhosphorI18n::tr("floating")});
+               {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("stack"), PhosphorI18n::tr("float"),
+                PhosphorI18n::tr("float instead"), PhosphorI18n::tr("floating")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("triggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("stack preview")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("releaseGracePeriod"),

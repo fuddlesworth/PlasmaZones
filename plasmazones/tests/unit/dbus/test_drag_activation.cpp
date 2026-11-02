@@ -11,9 +11,9 @@
  * preview should be on, including the "always re-insert" inversion (#1162).
  * resolveHoldGrace() decides whether a physically-released hold-mode trigger
  * still counts as held, which is what lets a drop that lands just after the
- * button lifts still snap.
+ * button lifts still snap, or under always re-insert still float.
  *
- * All three live in src/dbus/windowdragadaptor/dragactivation.cpp so they can be
+ * These live in src/dbus/windowdragadaptor/dragactivation.cpp so they can be
  * exercised without standing up the adaptor + its compositor dependencies.
  * Pinning the activation table here means the always-active inversion (#249),
  * where the same activation triggers serve double duty as
@@ -304,8 +304,24 @@ private Q_SLOTS:
         const auto crossed = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, false, false, true,
                                                      tapped.nextToggled, tapped.nextToggledAlwaysOn, false);
         QVERIFY2(crossed.active, "a tap that turned the insert on must not keep the drag out on the next screen");
-        QVERIFY(!crossed.nextToggled);
-        QVERIFY(crossed.nextToggledAlwaysOn);
+
+        // And back again with no tap in between: the tap still holds there.
+        const auto back = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, false,
+                                                  crossed.nextToggled, crossed.nextToggledAlwaysOn, false);
+        QVERIFY2(back.active, "a round trip must not lose the tap that turned the insert on");
+    }
+
+    void insert_toggleLatch_tapOnTheOtherScreenRewritesIt()
+    {
+        // A latch carried from a screen without always-on reads as clear on
+        // an always-on screen, so a tap there keeps the drag out, and the
+        // latch is rewritten in that screen's terms.
+        const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/true, true, /*raw=*/true, true,
+                                               /*prev=*/false, /*toggled=*/true, /*toggledAlwaysOn=*/false, false);
+        QVERIFY(!d.active);
+        QVERIFY(d.suppressedByTrigger);
+        QVERIFY(d.nextToggled);
+        QVERIFY(d.nextToggledAlwaysOn);
     }
 
     void insert_toggleLatch_crossingOutOfAlwaysOnKeepsTheDragOut()
@@ -315,8 +331,9 @@ private Q_SLOTS:
         const auto d = resolveDragInsertActive(true, false, /*alwaysOn=*/false, true, false, false, /*prev=*/false,
                                                /*toggled=*/true, /*toggledAlwaysOn=*/true, false);
         QVERIFY(!d.active);
-        QVERIFY(!d.nextToggled);
-        QVERIFY(!d.nextToggledAlwaysOn);
+        // Read as clear here, but carried unchanged for the way back.
+        QVERIFY(d.nextToggled);
+        QVERIFY(d.nextToggledAlwaysOn);
     }
 
     void insert_toggleLatch_passesThroughAHoldModeScreen()

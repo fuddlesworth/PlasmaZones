@@ -663,10 +663,9 @@ void WindowDragAdaptor::cancelSnap()
     // preview is on by default with no trigger held, and without it a
     // hold-mode trigger still down keeps the preview on, so either way the
     // next tick would begin the preview again and the drop would commit it.
-    // This latch keeps the
-    // re-insert dismissed until a real trigger re-press (dragMoved), and the
-    // policy-flip re-latch honours it so a screen crossing cannot re-arm
-    // reorder either. The grace stamp goes too, or the release grace would
+    // This latch keeps the re-insert dismissed until a real trigger re-press
+    // (dragMoved), and the policy-flip re-latch honours it so a screen
+    // crossing cannot re-arm reorder either. The grace stamp goes too, or the release grace would
     // read the trigger as held for its window.
     m_dragInsertCancelled = true;
     m_dragInsertReleasedAfterCancel = false;
@@ -1088,7 +1087,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // branches that don't route through resetDragState.
     m_dragReorderActive = false;
     m_dragReorderAbandoned = false;
-    m_dragInsertKeptOut = false;
+    m_dragInsertEngineTicked = false;
     m_dragInsertCancelled = false;
     m_dragInsertReleasedAfterCancel = false;
     m_dragWindowExcludedFromSelector = false;

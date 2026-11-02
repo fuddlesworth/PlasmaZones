@@ -527,6 +527,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             && m_contextResolver->isDisabled(m_contextResolver->handleFor(insertScreenId))) {
             insertEngine = nullptr;
         }
+        if (insertEngine) {
+            m_dragInsertEngineTicked = true;
+        }
         const bool onScrollingScreen = insertEngine && insertEngine == m_scrollEngine;
         const QVector<ParsedTrigger>& insertTriggers =
             onScrollingScreen ? m_cachedScrollingDragInsertTriggers : m_cachedAutotileDragInsertTriggers;
@@ -610,7 +613,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_prevDragInsertHeld = insertDecision.nextPrevTriggerHeld;
         m_dragInsertToggled = insertDecision.nextToggled;
         m_dragInsertToggledAlwaysOn = insertDecision.nextToggledAlwaysOn;
-        m_dragInsertKeptOut = insertDecision.suppressedByTrigger;
         const bool insertHeld = insertDecision.active;
 
         // Journal diagnostic, AFTER the resolve so it reports what the

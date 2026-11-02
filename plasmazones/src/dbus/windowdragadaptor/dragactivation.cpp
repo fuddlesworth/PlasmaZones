@@ -53,17 +53,18 @@ DragInsertDecision resolveDragInsertActive(bool onEngineScreen, bool cancelled, 
         return out;
     }
 
-    // A latch set under the other inversion is cleared on a toggle-mode
-    // screen (see the header). A hold-mode screen never reads the latch, so it
-    // passes through untouched along with the inversion it was set under.
-    const bool latchMeaningChanged = toggleMode && toggled && toggledAlwaysOn != alwaysOn;
-    const bool latch = toggled && !latchMeaningChanged;
+    // A latch set under the other inversion reads as clear here (see the
+    // header) but is not written back cleared, so the tap it records still
+    // holds once the drag returns to a screen with the inversion it was set
+    // under. Only a tap on this screen rewrites it, in this screen's terms. A
+    // hold-mode screen never flips the latch, so it passes through untouched.
+    const bool latch = toggled && toggledAlwaysOn == alwaysOn;
     // Toggle mode reads the raw state, since the grace never applies there;
     // hold mode reads the state the grace extended.
     const ActivationDecision decision =
         resolveActivationActive(toggleMode ? rawTriggerHeld : graceHeld, toggleMode, alwaysOn, prevTriggerHeld, latch);
-    out.nextToggled = decision.nextActivationToggled;
-    if (toggleMode) {
+    if (decision.nextActivationToggled != latch) {
+        out.nextToggled = decision.nextActivationToggled;
         out.nextToggledAlwaysOn = alwaysOn;
     }
     // The edge latch follows the RAW state on every engine-screen tick, not
