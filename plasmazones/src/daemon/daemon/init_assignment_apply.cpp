@@ -167,6 +167,19 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // opted-out screen among changedScreenIds needs no filtering here: its
     // layout resolves null downstream, so no window is moved on its account.
     m_windowTrackingAdaptor->resnapScreensToTheirLayouts(engineManagedScreens, changedScreenIds, currentDesktop());
+    // The resnap placed those screens' windows under their current gap verdict,
+    // so record it. A rule-driven apply runs inside reconcileActiveAssignments,
+    // whose gap pass would otherwise restate the same windows a second time.
+    QStringList resnappedScreens;
+    for (const QString& screenId : effectiveIds) {
+        if ((changedScreenIds.isEmpty() || changedScreenIds.contains(screenId))
+            && !engineManagedScreens.contains(screenId)) {
+            resnappedScreens.append(screenId);
+        }
+    }
+    m_snapGapTracker.refresh(resnappedScreens, [this](const QString& screenId) {
+        return snapGapVerdict(screenId);
+    });
     // Restore snap-float positions for windows this KCM apply released
     // from autotile — the buffer-based resnap above cannot cover
     // floating windows (see the helper).

@@ -789,6 +789,10 @@ void Daemon::stop()
     // The reshape records compare against that snapshot, so they go with it,
     // and the pixel-size report bookkeeping is rebuilt by the next start().
     m_reshapeTracker.reset();
+    // The gap verdicts were recorded against this session's windows. The next
+    // session's priming diff records them afresh, so its first reconcile has
+    // nothing stale to restate.
+    m_snapGapTracker.clear();
     // The per-screen scroll caps the scrolling pass resolves. Same per-session
     // shape as the derived sets above: rewritten by the next pass before any
     // read, but this hash is what decides whether a placementChanged arriving

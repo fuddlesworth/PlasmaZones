@@ -1169,6 +1169,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     if (m_snapAdaptor) {
         m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
+    // A survivor's new shape can also move a shape-keyed gap rule's verdict. The
+    // resnap above just placed this output's windows under the current gaps, so
+    // its screens are only recorded. Any other screen whose verdict moved is
+    // restated.
+    restateSnapGapChanges(QSet<QString>(affectedScreenIds.cbegin(), affectedScreenIds.cend()));
 
     // Trigger debounced geometry recalculation for the rest of the system
     // (overlays, panel requery, autotile retile). Reuse the same debounced
@@ -1238,6 +1243,10 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     if (m_snapAdaptor) {
         m_snapAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
+    // Same gap pass as the topology handler: this output's windows were just
+    // placed under the current gaps, so only another screen's moved verdict is
+    // restated.
+    restateSnapGapChanges(QSet<QString>(affectedScreenIds.cbegin(), affectedScreenIds.cend()));
     // The scroll engine subscribes to no ScreenManager signal of its own
     // (unlike autotile's virtualScreenRegionsChanged handler), so its
     // affected strips must be retiled here or their columns keep stale

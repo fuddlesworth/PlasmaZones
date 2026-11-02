@@ -809,6 +809,18 @@ target_include_directories(test_screen_reshape_tracker PRIVATE ${CMAKE_SOURCE_DI
 target_link_libraries(test_screen_reshape_tracker PRIVATE pz_test_fake_screens Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_screen_reshape_tracker COMMAND test_screen_reshape_tracker)
 
+# The daemon's snapping gap-rule verdict record (SnapGapTracker): which screens
+# a verdict move restates, and that a context switch, a screen add or removal
+# and a repeat pass restate nothing. Compiles the daemon source directly, like
+# the reshape tracker.
+add_executable(test_snap_gap_tracker
+    daemon/test_snap_gap_tracker.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/snapgaptracker.cpp
+)
+target_include_directories(test_snap_gap_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_snap_gap_tracker PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_snap_gap_tracker COMMAND test_snap_gap_tracker)
+
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core,
 # so the three suites below link its sources from this library. The catalog TU
 # is not in it: the teardown suite does not need it, and an OBJECT library puts

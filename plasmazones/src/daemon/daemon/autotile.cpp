@@ -18,6 +18,7 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -719,6 +720,13 @@ QSet<QString> Daemon::diffActiveAssignments()
     }
     // Replace wholesale so screens that went away drop out of the snapshot.
     m_activeAssignmentByScreen = std::move(next);
+    // Every screen add and removal and every desktop or activity switch ends in
+    // this diff, so the gap verdicts follow the same screen set and contexts
+    // here. A rebase reports nothing and leaves a same-context verdict as it
+    // was recorded, so a move stays for restateSnapGapChanges to find.
+    m_snapGapTracker.rebase(effectiveIds, [this](const QString& screenId) {
+        return snapGapVerdict(screenId);
+    });
     // A context that just became the tiling opt-out frees its snapped windows in place (autotile_none_float_owner).
     WindowTrackingInternal::releaseOptOutZones(m_windowTrackingAdaptor, changed);
     // Mirror the fresh snapshot onto the bus-facing adaptor and broadcast the
@@ -799,13 +807,11 @@ void Daemon::reconcileActiveAssignments()
     // preserved snap-ZONE half (the KCM apply below drains it without
     // applying). Put those windows back on their recorded zones.
     flushPendingSnapZoneRestores();
-    if (changed.isEmpty()) {
-        return;
-    }
     // Snapping screens resnap through the same assignmentChangesApplied handler
     // the KCM batch uses, so rule-driven and assignment-driven changes run
-    // identical code. Gated on `changed` because only an assignment-id change
-    // moves windows.
+    // identical code. Gated on `changed` (applyChangedAssignments is a no-op for
+    // an empty set) because only an assignment-id change moves windows to new
+    // zones.
     //
     // Emitted for THIS set explicitly rather than staged into the adaptor's
     // m_changedScreenIds: that buffer is the bus client's save batch, and every
@@ -818,6 +824,55 @@ void Daemon::reconcileActiveAssignments()
     // middle of a KCM batch does not release that client's screenLayoutChanged
     // suppression out from under it.
     applyChangedAssignments(changed);
+    // A gap rule edit, a colour-scheme flip or a reshape under a shape-keyed gap
+    // rule can move a snapping screen's gaps with no assignment change, and its
+    // snapped windows keep the gaps they were placed with until restated. The
+    // apply above records the screens it laid out (handleAssignmentChangesApplied),
+    // so they are not restated a second time.
+    restateSnapGapChanges();
+}
+
+void Daemon::restateSnapGapChanges(const QSet<QString>& alreadyPlaced)
+{
+    // Nothing is recorded when nothing can restate: the move stays in the
+    // tracker for the next pass instead of being taken and lost.
+    if (!m_snapAdaptor || !m_screenManager || !m_layoutManager || m_shuttingDown) {
+        return;
+    }
+    const QStringList moved =
+        m_snapGapTracker.takeChanges(m_screenManager->effectiveScreenIds(), [this](const QString& screenId) {
+            return snapGapVerdict(screenId);
+        });
+    QStringList toRestate;
+    for (const QString& screenId : moved) {
+        if (!alreadyPlaced.contains(screenId)) {
+            toRestate.append(screenId);
+        }
+    }
+    if (toRestate.isEmpty()) {
+        return;
+    }
+    qCInfo(lcDaemon) << "Snapping gap rule verdict moved, restating screens=" << toRestate;
+    // A re-statement batch like the settings gap path (m_gapResnapTimer): no OSD,
+    // no Snap Assist. reapplySnapZones keeps it to the screens snapping runs on,
+    // so a tiled screen's frozen snap zones are left as memory (F469).
+    m_snapAdaptor->reapplySnapZones(toRestate, /*restatement=*/true);
+}
+
+SnapGapTracker::Verdict Daemon::snapGapVerdict(const QString& screenId) const
+{
+    SnapGapTracker::Verdict verdict;
+    verdict.desktop = currentDesktopForScreen(screenId);
+    verdict.activity = currentActivity();
+    if (m_layoutManager) {
+        // The snapping mode and the screen's current context, as
+        // DaemonGeometryResolver::contextGapOverrideFor resolves it for a snap
+        // commit. The config per-monitor gaps it merges underneath are left
+        // out: their changes restate through m_gapResnapTimer.
+        verdict.gaps = GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+            screenId, verdict.desktop, verdict.activity, QStringLiteral("snapping")));
+    }
+    return verdict;
 }
 
 void Daemon::applyChangedAssignments(const QSet<QString>& changed)

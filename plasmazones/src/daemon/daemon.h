@@ -33,6 +33,7 @@
 
 #include "daemon/daemon_fwd.h"
 #include "daemon/daemon/screenreshapetracker.h"
+#include "daemon/daemon/snapgaptracker.h"
 
 namespace PlasmaZones {
 
@@ -783,11 +784,34 @@ private:
      * id, and it force-retiles the already-active autotile screens for exactly
      * that case. Only the resnap / OSD apply, and the controller and layout
      * filter sync after it (@ref applyChangedAssignments), are gated on the
-     * result. Suppressed while @ref m_suppressAssignmentReconcile is set, so
-     * this file's own bulk assignment writers can flip N rules without a full
-     * reconcile per rule.
+     * result. A snapping gap-rule verdict moves snapped windows with no
+     * assignment change, so every call ends in @ref restateSnapGapChanges,
+     * which restates the snapping screens whose verdict moved and that the
+     * apply did not just lay out. Suppressed while
+     * @ref m_suppressAssignmentReconcile is set, so this file's own bulk
+     * assignment writers can flip N rules without a full reconcile per rule.
      */
     void reconcileActiveAssignments();
+
+    /**
+     * @brief Restate the snapped windows of every screen whose snapping
+     *        gap-rule verdict moved since @ref m_snapGapTracker last recorded it.
+     *
+     * The rule-driven twin of the settings gap restatement (m_gapResnapTimer):
+     * a no-OSD SnapAdaptor::reapplySnapZones batch, scoped to the screens whose
+     * verdict moved. reapplySnapZones itself keeps it to the screens snapping
+     * runs on. Screens in @p alreadyPlaced are recorded without a restatement,
+     * for a caller that has just put their windows back under the current
+     * verdict itself. Run at the end of @ref reconcileActiveAssignments and of
+     * both virtual-screen handlers. Records nothing while there is no snap
+     * adaptor or the daemon is stopping, so a move is not dropped unrestated.
+     */
+    void restateSnapGapChanges(const QSet<QString>& alreadyPlaced = {});
+
+    /// What @ref m_snapGapTracker reads for a screen: its snapping gap-rule
+    /// verdict in its current desktop and activity, resolved as
+    /// DaemonGeometryResolver resolves it for a snap commit.
+    SnapGapTracker::Verdict snapGapVerdict(const QString& screenId) const;
 
     /**
      * @brief Queue @ref reconcileActiveAssignments for the next event-loop pass.
@@ -949,6 +973,10 @@ private:
      * reconcileActiveAssignments (with apply) and, with the result discarded, to
      * refresh the snapshot after a context switch or a legacy apply so a later
      * rule edit doesn't falsely re-resnap those screens.
+     *
+     * Also rebases @ref m_snapGapTracker onto the same screen set and the
+     * desktop and activity each screen shows, without reporting a move, so a
+     * context switch is never read as a gap verdict change.
      */
     QSet<QString> diffActiveAssignments();
 
@@ -977,7 +1005,10 @@ private:
      * out with a different shape and so a different assignment verdict: the
      * screens that existed before and after and whose verdict moved are applied
      * (@ref diffSurvivingAssignments), ahead of the stored-zone resnap, while
-     * new ids are primed silently.
+     * new ids are primed silently. The same reshape can move a snapping
+     * gap-rule verdict: the stored-zone resnap re-places this output's windows
+     * under the current gaps, and @ref restateSnapGapChanges then records them
+     * and restates any other screen whose verdict moved.
      */
     void onVirtualScreensReconfigured(const QString& physicalScreenId);
 
@@ -994,7 +1025,10 @@ private:
      * double-pass users observed on VS swap/rotate). The one exception is a
      * resize that moves a virtual screen's assignment verdict (its shape is its
      * region's share of the output): those screens are re-derived and applied
-     * before the resnap, which costs that change a second retile.
+     * before the resnap, which costs that change a second retile. A resize that
+     * moves a snapping gap-rule verdict needs nothing extra for this output,
+     * whose resnap places its windows under the current gaps, and ends in
+     * @ref restateSnapGapChanges like the topology handler.
      */
     void onVirtualScreenRegionsChanged(const QString& physicalScreenId);
 
@@ -1725,6 +1759,13 @@ private:
     // handleAssignmentChangesApplied, which skips those screens' cards, and cleared
     // when the reconcile that read it ends.
     ScreenReshapeTracker m_reshapeTracker{reshapeTrackerLookups()};
+
+    // The snapping gap-rule verdict each screen's snapped windows were laid out
+    // under (see SnapGapTracker). Rebased by diffActiveAssignments, so it follows
+    // the screen set and the desktop and activity in view, refreshed for the
+    // screens handleAssignmentChangesApplied lays out, and read by
+    // restateSnapGapChanges, which restates the screens whose verdict moved.
+    SnapGapTracker m_snapGapTracker;
 
     // Compression latch for the deferred context overlay refresh
     // (scheduleContextOverlayRefresh, fed by the colour-scheme flip and screen-shape
