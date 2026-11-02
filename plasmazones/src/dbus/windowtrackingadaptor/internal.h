@@ -322,17 +322,18 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     if (settings) {
         query.colorScheme = settings->colorSchemeToken();
     }
-    // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
-    // are intentionally NOT stamped here: the window metadata does not carry the
-    // window's screen geometry / active layout, and this daemon-side query feeds the
-    // open-path Float / Restore / placement resolvers only. The effect's live
-    // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
-    // a rule pairing one of those with a window property resolves there but not on
-    // this path. Callers that DO know more pin what they know on top of the
-    // query this builds. Stamping the screen-derived trio (ScreenId,
-    // ActiveLayout, ScreenOrientation — via stampScreenContext):
+    // Screen-derived context fields (ScreenId, Mode, ActiveLayout and the screen
+    // shape) are intentionally NOT stamped here: the window metadata does not
+    // carry the window's screen, its shape or its active layout, and this
+    // daemon-side query feeds the open-path Float / Restore / placement resolvers
+    // only. The effect's live per-window query (ruleQueryFor) stamps ScreenId,
+    // Mode and the screen shape, so a rule pairing one of those with a window
+    // property resolves there but not on this path. Callers that DO know more pin
+    // what they know on top of the query this builds. Stamping the screen-derived
+    // fields (ScreenId, ActiveLayout, ScreenOrientation, ScreenWidth,
+    // ScreenHeight, ScreenAspectRatio — via stampScreenContext):
     // placementZonesByRule, applyOpenDesktopRouting, applyOpenScreenRouting,
-    // applyOpenRoutingForTiling. Stamping the trio AND the derived Mode:
+    // applyOpenRoutingForTiling. Stamping those AND the derived Mode:
     // shouldFloatByRule,
     // scrollOpenRuleParams, shouldRestoreSizeOnUnsnap and
     // shouldUnfloatFallbackToZone, all four of which resolve UNCACHED for that

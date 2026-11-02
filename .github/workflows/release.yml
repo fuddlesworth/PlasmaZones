@@ -405,11 +405,18 @@ jobs:
       matrix:
         # Fedora 44 is the earliest release whose repos carry Plasma 6.7
         # (KF 6.26 / Qt 6.10 / KWin 6.7), the PlasmaZones build baseline.
+        # One build per release: an RPM only loads against the KWin and Qt it was built on.
         include:
           - fedora: 44
             arch: x86_64
             runner: ubuntu-latest
           - fedora: 44
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - fedora: 45
+            arch: x86_64
+            runner: ubuntu-latest
+          - fedora: 45
             arch: aarch64
             runner: ubuntu-24.04-arm
     container:
@@ -1019,7 +1026,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          CHANNELS=(arch debian-unstable fedora-44 opensuse-tumbleweed)
+          CHANNELS=(arch debian-unstable fedora-44 fedora-45 opensuse-tumbleweed)
           for dir in artifacts/kwin-baseline-*/; do
               found="${dir#artifacts/kwin-baseline-}"
               found="${found%/}"
@@ -1105,6 +1112,8 @@ jobs:
             echo '```bash'
             echo "# Fedora 44"
             echo "sudo dnf install plasmazones-${VERSION}-*.fc44.x86_64.rpm"
+            echo "# Fedora 45"
+            echo "sudo dnf install plasmazones-${VERSION}-*.fc45.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (OBS):**"

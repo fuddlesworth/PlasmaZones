@@ -492,12 +492,23 @@ void Daemon::stop()
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setTiledWindowCountProvider({});
         m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setScreenPixelSizeProvider({});
         m_layoutManager->setColorSchemeProvider({});
         m_layoutManager->setCurrentVirtualDesktopProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
         m_layoutManager->setDefaultScrollingTemplateProvider({});
         m_layoutManager->setScrollingTemplateStore(nullptr);
+    }
+    // The layout adaptor's twin of the registry's tiled-count provider
+    // (getScreenStates' tiledWindowCount) captures `this` and reads the
+    // engines the same way, and the adaptor is a Qt child that outlives them.
+    if (m_layoutAdaptor) {
+        m_layoutAdaptor->setTiledWindowCountProvider({});
+        // A screen-states comparison queued before stop() would run after it
+        // and announce a teardown's half-state. m_shuttingDown keeps any new
+        // one from being queued.
+        m_layoutAdaptor->cancelScreenStatesCheck();
     }
 
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
@@ -748,8 +759,8 @@ void Daemon::stop()
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
-    // Its colour-scheme twin, same shape and same reasoning.
-    m_colorSchemeRefreshPending = false;
+    // Its overlay-refresh twin, same shape and same reasoning.
+    m_contextOverlayRefreshPending = false;
     // And the tab-colour broadcast latch, same shape (its single shot gates on m_shuttingDown).
     m_scrollTabColorsBroadcastPending = false;
     // Per-session restore staging: entries computed against the pre-stop
@@ -775,6 +786,13 @@ void Daemon::stop()
     // otherwise still count as "already seen" a session later.
     m_activeAssignmentByScreen.clear();
     m_lastAnnouncedTemplateByScreen.clear();
+    // The reshape records compare against that snapshot, so they go with it,
+    // and the pixel-size report bookkeeping is rebuilt by the next start().
+    m_reshapeTracker.reset();
+    // The gap verdicts were recorded against this session's windows. The next
+    // session's priming diff records them afresh, so its first reconcile has
+    // nothing stale to restate.
+    m_snapGapTracker.clear();
     // The per-screen scroll caps the scrolling pass resolves. Same per-session
     // shape as the derived sets above: rewritten by the next pass before any
     // read, but this hash is what decides whether a placementChanged arriving

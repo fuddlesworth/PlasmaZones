@@ -442,6 +442,67 @@ private Q_SLOTS:
         QVERIFY(!expr.isValid());
     }
 
+    void testValidation_numericLeafValueMustBeANumber_data()
+    {
+        QTest::addColumn<QVariant>("value");
+        QTest::addColumn<bool>("valid");
+        // Evaluation reads the value through toInt(), which answers 0 for
+        // anything it cannot convert, so each rejected value below would
+        // otherwise compare as 0 and `ScreenWidth GreaterThan` it would match
+        // every screen.
+        QTest::addRow("word") << QVariant(QStringLiteral("abc")) << false;
+        QTest::addRow("empty string") << QVariant(QString()) << false;
+        QTest::addRow("bool") << QVariant(true) << false;
+        QTest::addRow("null") << QVariant::fromValue(nullptr) << false;
+        QTest::addRow("invalid") << QVariant() << false;
+        QTest::addRow("trailing junk") << QVariant(QStringLiteral("2560px")) << false;
+        QTest::addRow("long long past int") << QVariant(qlonglong(5000000000LL)) << false;
+        QTest::addRow("unsigned past int") << QVariant(qulonglong(3000000000ULL)) << false;
+        // Pins validity only. Which rejection it logs is untested because this
+        // suite mutes the org.phosphor.rule.* categories.
+        QTest::addRow("numeric string past int") << QVariant(QStringLiteral("5000000000")) << false;
+        // The accepted shapes: the integral variants, a whole double (JSON's
+        // only number), and a string that parses as an int in full.
+        QTest::addRow("int") << QVariant(2560) << true;
+        QTest::addRow("long long") << QVariant(qlonglong(2560)) << true;
+        QTest::addRow("unsigned") << QVariant(2560U) << true;
+        QTest::addRow("unsigned long long") << QVariant(qulonglong(2560)) << true;
+        QTest::addRow("whole double") << QVariant(2560.0) << true;
+        QTest::addRow("numeric string") << QVariant(QStringLiteral("2560")) << true;
+        QTest::addRow("negative numeric string") << QVariant(QStringLiteral("-1")) << true;
+    }
+
+    void testValidation_numericLeafValueMustBeANumber()
+    {
+        QFETCH(QVariant, value);
+        QFETCH(bool, valid);
+        QCOMPARE(MatchExpression::makeLeaf(Field::ScreenWidth, Operator::GreaterThan, value).isValid(), valid);
+        QCOMPARE(MatchExpression::makeLeaf(Field::Pid, Operator::Equals, value).isValid(), valid);
+    }
+
+    void testValidation_numericLeafFromJsonRejectsNonNumber()
+    {
+        // The same gate through the store's own ingress: a hand-edited
+        // rules.json carrying a non-number value is refused, and a JSON integer
+        // (which Qt may hand back as a qlonglong rather than a double) is kept.
+        const auto leafJson = [](const QJsonValue& value) {
+            QJsonObject obj;
+            obj.insert(QStringLiteral("field"), QStringLiteral("screenWidth"));
+            obj.insert(QStringLiteral("op"), QStringLiteral("greaterThan"));
+            obj.insert(QStringLiteral("value"), value);
+            return obj;
+        };
+        const auto validFromJson = [&leafJson](const QJsonValue& value) {
+            const auto expr = MatchExpression::fromJson(leafJson(value));
+            return expr.has_value() && expr->isValid();
+        };
+        QVERIFY(!validFromJson(QJsonValue(QStringLiteral("abc"))));
+        QVERIFY(!validFromJson(QJsonValue(true)));
+        QVERIFY(!validFromJson(QJsonValue(QJsonValue::Null)));
+        QVERIFY(validFromJson(QJsonValue(2560)));
+        QVERIFY(validFromJson(QJsonValue(QStringLiteral("2560"))));
+    }
+
     void testValidation_rejectsAppIdMatchesOnNonAppId()
     {
         const auto expr = MatchExpression::makeLeaf(Field::WindowClass, Operator::AppIdMatches, QStringLiteral("x"));

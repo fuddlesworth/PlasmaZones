@@ -482,7 +482,11 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
     // defeat the equality.
     const QVariant canonicalDefault = def->validator ? def->validator(def->defaultValue) : def->defaultValue;
     {
-        auto g = d->backend->group(group);
+        // The PERSISTED view: every decision below is about what the file
+        // holds. Through group() a read-only overlay (JsonBackend::setOverlay)
+        // would answer, and a value equal to the overlay's would be skipped as
+        // "already stored" and never reach disk.
+        auto g = d->backend->persistedGroup(group);
         const bool present = g->hasKey(key);
         if (coerced == canonicalDefault) {
             if (!present) {
@@ -544,9 +548,10 @@ void Store::reset(const QString& group, const QString& key)
     }
     // Scope the group handle like write() does: a changed() slot that writes
     // re-entrantly would otherwise hit the backend's single-active-group guard
-    // while this handle is still alive.
+    // while this handle is still alive. Persisted view, as in write(): reset
+    // deletes what the file holds, and an overlay value is not that.
     {
-        auto g = d->backend->group(group);
+        auto g = d->backend->persistedGroup(group);
         if (!g->hasKey(key)) {
             // Key isn't on disk, so the read path already returns the default.
             // Skipping the delete avoids dirtying the backend on
@@ -572,7 +577,7 @@ void Store::resetGroup(const QString& group)
     // doesn't hit the backend's single-active-group guard.
     QStringList resetKeys;
     {
-        auto g = d->backend->group(group);
+        auto g = d->backend->persistedGroup(group);
         for (const KeyDef& def : *it) {
             // Skip absent keys for the same reason as reset() — otherwise
             // resetGroup() on a pristine install dirties the backend with no
@@ -744,7 +749,10 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                     value = converted;
                 }
             }
-            // Pre-compare against the OBSERVABLE value: under sparse
+            // Pre-compare against the stored value AS OBSERVED (through the
+            // validator, as readVariant would answer it). The persisted view,
+            // as in write(): an overlay value equal to the incoming one is not
+            // on disk, and skipping on it would drop the import. Under sparse
             // persistence a frozen default is present on disk yet reads as
             // the default, and handing it straight to write() would silently
             // PRUNE it — a file mutation with no observable change that
@@ -763,9 +771,14 @@ bool Store::importFromJson(const QJsonObject& snapshot)
             const bool structuredKey =
                 def.expectedType == QMetaType::QVariantMap || def.expectedType == QMetaType::QVariantList;
             bool mayShortCircuit = true;
-            if (structuredKey) {
-                auto g = d->backend->group(git.key());
-                mayShortCircuit = !g->hasKey(def.key) || storedBlobIsWellFormed(*g, def.key, def.expectedType);
+            QVariant stored;
+            {
+                // Released before write() below opens its own handle.
+                auto g = d->backend->persistedGroup(git.key());
+                if (structuredKey) {
+                    mayShortCircuit = !g->hasKey(def.key) || storedBlobIsWellFormed(*g, def.key, def.expectedType);
+                }
+                stored = readVariantAs(*g, def.key, def.defaultValue, def.expectedType);
             }
             if (mayShortCircuit) {
                 // Accepted trade: this skip also declines to re-spell a
@@ -774,7 +787,8 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                 // save() flush loop canonicalizes it anyway, and an import
                 // must not dirty the backend for a spelling-only change.
                 const QVariant incoming = def.validator ? def.validator(value) : value;
-                if (incoming == readVariant(git.key(), def.key)) {
+                const QVariant observedStored = def.validator ? def.validator(stored) : stored;
+                if (incoming == observedStored) {
                     continue;
                 }
             }

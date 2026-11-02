@@ -18,6 +18,7 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -691,6 +692,9 @@ QSet<QString> Daemon::diffActiveAssignments()
         // resolves to the same snapping id and is correctly ignored.
         ActiveAssignmentSnapshot snapshot;
         snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        // The shape the verdict above was resolved under, for the shape
+        // handlers to compare against (ScreenReshapeTracker::noteReshaped).
+        snapshot.shapeToken = screenShapeToken(screenId);
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
@@ -716,6 +720,13 @@ QSet<QString> Daemon::diffActiveAssignments()
     }
     // Replace wholesale so screens that went away drop out of the snapshot.
     m_activeAssignmentByScreen = std::move(next);
+    // Every screen add and removal and every desktop or activity switch ends in
+    // this diff, so the gap verdicts follow the same screen set and contexts
+    // here. A rebase reports nothing and leaves a same-context verdict as it
+    // was recorded, so a move stays for restateSnapGapChanges to find.
+    m_snapGapTracker.rebase(effectiveIds, [this](const QString& screenId) {
+        return snapGapVerdict(screenId);
+    });
     // A context that just became the tiling opt-out frees its snapped windows in place (autotile_none_float_owner).
     WindowTrackingInternal::releaseOptOutZones(m_windowTrackingAdaptor, changed);
     // Mirror the fresh snapshot onto the bus-facing adaptor and broadcast the
@@ -731,12 +742,29 @@ QSet<QString> Daemon::diffActiveAssignments()
             activeIds.insert(it.key(), it.value().assignmentId);
         }
         m_layoutAdaptor->publishActiveAssignments(activeIds, changed);
+        // Every edge that moves a getScreenStates field other than the tiled
+        // count (a desktop or activity switch, a screen add or removal, an
+        // assignment apply, a rule reconcile) ends in a diff here, including
+        // the ones that leave every assignment id where it was, so the
+        // screen-states check is queued from this one place. The tiled count
+        // queues its own (init_engines.cpp). Not once stop() has begun,
+        // which cancels a queued one.
+        if (!m_shuttingDown) {
+            m_layoutAdaptor->scheduleScreenStatesCheck();
+        }
     }
     return changed;
 }
 
 void Daemon::reconcileActiveAssignments()
 {
+    // The screens onCompositorPixelSizeChanged and the screenGeometryChanged
+    // handler marked silent are for this pass only, whichever way it ends, the suppressed early return below included:
+    // a later reconcile that applies the same verdict was not asked to keep
+    // quiet.
+    const auto silentScope = qScopeGuard([this] {
+        m_reshapeTracker.clearSilent();
+    });
     // Bulk-write suppression (m_suppressAssignmentReconcile, daemon.h). The
     // assignment writers in this file flip N rules in a row and each write emits
     // RuleStore::rulesChanged synchronously; reconciling per rule would run a
@@ -751,7 +779,12 @@ void Daemon::reconcileActiveAssignments()
     if (m_suppressAssignmentReconcile) {
         return;
     }
-    const QSet<QString> changed = diffActiveAssignments();
+    QSet<QString> changed = diffActiveAssignments();
+    // A screen whose shape changed since the last reconcile counts when its
+    // verdict differs from the one it had before the change, even if a diff
+    // between the two (a screen add, a layout list change) already folded the
+    // new verdict into the snapshot and the diff above came back empty for it.
+    changed.unite(m_reshapeTracker.takeVerdictChanges());
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
     // only tracks the active snapping-layout uuid / "autotile:<algo>" id). These
@@ -774,13 +807,11 @@ void Daemon::reconcileActiveAssignments()
     // preserved snap-ZONE half (the KCM apply below drains it without
     // applying). Put those windows back on their recorded zones.
     flushPendingSnapZoneRestores();
-    if (changed.isEmpty()) {
-        return;
-    }
     // Snapping screens resnap through the same assignmentChangesApplied handler
     // the KCM batch uses, so rule-driven and assignment-driven changes run
-    // identical code. Gated on `changed` because only an assignment-id change
-    // moves windows.
+    // identical code. Gated on `changed` (applyChangedAssignments is a no-op for
+    // an empty set) because only an assignment-id change moves windows to new
+    // zones.
     //
     // Emitted for THIS set explicitly rather than staged into the adaptor's
     // m_changedScreenIds: that buffer is the bus client's save batch, and every
@@ -792,9 +823,170 @@ void Daemon::reconcileActiveAssignments()
     // that applyAssignmentChanges() performs, so a rule edit landing in the
     // middle of a KCM batch does not release that client's screenLayoutChanged
     // suppression out from under it.
-    if (m_layoutAdaptor) {
-        m_layoutAdaptor->applyAssignmentChangesFor(changed);
+    applyChangedAssignments(changed);
+    // A gap rule edit, a colour-scheme flip or a reshape under a shape-keyed gap
+    // rule can move a snapping screen's gaps with no assignment change, and its
+    // snapped windows keep the gaps they were placed with until restated. The
+    // apply above records the screens it laid out (handleAssignmentChangesApplied),
+    // so they are not restated a second time.
+    restateSnapGapChanges();
+}
+
+void Daemon::restateSnapGapChanges(const QSet<QString>& alreadyPlaced)
+{
+    // Nothing is recorded when nothing can restate: the move stays in the
+    // tracker for the next pass instead of being taken and lost.
+    if (!m_snapAdaptor || !m_screenManager || !m_layoutManager || m_shuttingDown) {
+        return;
     }
+    const QStringList moved =
+        m_snapGapTracker.takeChanges(m_screenManager->effectiveScreenIds(), [this](const QString& screenId) {
+            return snapGapVerdict(screenId);
+        });
+    QStringList toRestate;
+    for (const QString& screenId : moved) {
+        if (!alreadyPlaced.contains(screenId)) {
+            toRestate.append(screenId);
+        }
+    }
+    if (toRestate.isEmpty()) {
+        return;
+    }
+    qCInfo(lcDaemon) << "Snapping gap rule verdict moved, restating screens=" << toRestate;
+    // A re-statement batch like the settings gap path (m_gapResnapTimer): no OSD,
+    // no Snap Assist. reapplySnapZones keeps it to the screens snapping runs on,
+    // so a tiled screen's frozen snap zones are left as memory (F469).
+    m_snapAdaptor->reapplySnapZones(toRestate, /*restatement=*/true);
+}
+
+SnapGapTracker::Verdict Daemon::snapGapVerdict(const QString& screenId) const
+{
+    SnapGapTracker::Verdict verdict;
+    verdict.desktop = currentDesktopForScreen(screenId);
+    verdict.activity = currentActivity();
+    if (m_layoutManager) {
+        // The snapping mode and the screen's current context, as
+        // DaemonGeometryResolver::contextGapOverrideFor resolves it for a snap
+        // commit. The config per-monitor gaps it merges underneath are left
+        // out: their changes restate through m_gapResnapTimer.
+        verdict.gaps = GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+            screenId, verdict.desktop, verdict.activity, QStringLiteral("snapping")));
+    }
+    return verdict;
+}
+
+void Daemon::applyChangedAssignments(const QSet<QString>& changed)
+{
+    if (changed.isEmpty() || !m_layoutAdaptor) {
+        return;
+    }
+    m_layoutAdaptor->applyAssignmentChangesFor(changed);
+    // The apply resnaps and announces, but the controller's current layout,
+    // the global active layout and the layout filter still describe the old
+    // verdict, so the cycle shortcut, zone detection and an open cheatsheet's
+    // mode filter would act on it. The context-switch handlers resync through
+    // the same call; the activeLayoutChanged it could fire is blocked inside.
+    syncModeFromAssignments();
+}
+
+QString Daemon::screenShapeToken(const QString& screenId) const
+{
+    if (!m_layoutManager) {
+        return QString();
+    }
+    return PhosphorZones::LayoutRegistry::screenShapeKeyToken(m_layoutManager->screenShape(screenId));
+}
+
+ScreenReshapeTracker::Lookups Daemon::reshapeTrackerLookups()
+{
+    ScreenReshapeTracker::Lookups lookups;
+    lookups.snapshot = [this](const QString& screenId) -> std::optional<ScreenReshapeTracker::SnapshotEntry> {
+        const auto snapshot = m_activeAssignmentByScreen.constFind(screenId);
+        if (snapshot == m_activeAssignmentByScreen.constEnd()) {
+            return std::nullopt;
+        }
+        return ScreenReshapeTracker::SnapshotEntry{snapshot->assignmentId, snapshot->shapeToken};
+    };
+    lookups.shapeToken = [this](const QString& screenId) {
+        return screenShapeToken(screenId);
+    };
+    return lookups;
+}
+
+QSet<QString> Daemon::diffSurvivingAssignments(const QSet<QString>& knownBefore)
+{
+    QSet<QString> changed = diffActiveAssignments();
+    changed.unite(m_reshapeTracker.takeVerdictChanges());
+    for (auto it = changed.begin(); it != changed.end();) {
+        it = knownBefore.contains(*it) && m_activeAssignmentByScreen.contains(*it) ? std::next(it) : changed.erase(it);
+    }
+    return changed;
+}
+
+std::optional<int> Daemon::tiledWindowCountForScreen(const QString& screenId) const
+{
+    // const overloads throughout, as intent: a non-creating lookup that
+    // returns nullptr when the screen has no tiling state, so a
+    // TiledWindowCount predicate stays inert there instead of matching on a
+    // reported 0. (Both overloads are non-creating today — see
+    // AutotileEngine::stateForScreen in autotileengine/facade.cpp — so the
+    // as_const is a statement of intent, not the thing preventing a
+    // create-on-read.) Both tiling-family engines are consulted so a
+    // TiledWindowCount rule works on scrolling screens too. Picked by LIVE
+    // claim, not fixed order: a lingering state on an engine the screen has
+    // since left would shadow the owning engine's count with a stale one.
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+        if (const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId)) {
+            return state->tiledWindowCount();
+        }
+    }
+    if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
+        if (const PhosphorEngine::IPlacementState* state = std::as_const(*m_scrollEngine).stateForScreen(screenId)) {
+            return state->tiledWindowCount();
+        }
+    }
+    return std::nullopt;
+}
+
+void Daemon::scheduleReconcileActiveAssignments()
+{
+    if (m_reconcileAssignmentsPending) {
+        return;
+    }
+    m_reconcileAssignmentsPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_reconcileAssignmentsPending = false;
+        // A trigger landing in the same event-loop turn as stop() leaves this
+        // single-shot queued past teardown; without the gate a non-empty diff
+        // would drive a full assignment-apply pass on a stopped daemon
+        // (m_layoutAdaptor is Qt-parented and outlives the per-sender
+        // connection sweep).
+        if (m_shuttingDown) {
+            return;
+        }
+        reconcileActiveAssignments();
+    });
+}
+
+// Defined beside scheduleReconcileActiveAssignments rather than with the overlay
+// wiring because the callers treat the two as one pair: the colour-scheme flip
+// and the screen-shape handlers re-drive the overlay's context verdicts with
+// the assignment ones. (rulesChanged refreshes the overlay through its own
+// connection in init_engines.cpp.)
+void Daemon::scheduleContextOverlayRefresh()
+{
+    if (m_contextOverlayRefreshPending) {
+        return;
+    }
+    m_contextOverlayRefreshPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_contextOverlayRefreshPending = false;
+        if (m_shuttingDown || !m_overlayService) {
+            return;
+        }
+        m_overlayService->refreshContextLockState();
+        m_overlayService->refreshOverlayPropertiesIfShown();
+    });
 }
 
 /**

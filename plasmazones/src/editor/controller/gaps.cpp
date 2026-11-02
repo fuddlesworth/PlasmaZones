@@ -12,6 +12,7 @@
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../config/configdefaults.h"
+#include "../../common/daemonscreenscale.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -100,8 +101,7 @@ void EditorController::setUseFullScreenGeometryDirect(bool enabled)
     m_useFullScreenGeometry = enabled;
     // The area zones occupy grows or shrinks by the panels, and the
     // reference fixed zones are drawn against is that area, so it moves with
-    // it, the bounds override included.
-    refreshFixedBoundsOverride(currentLayoutJson());
+    // it.
     markUnsaved();
     Q_EMIT useFullScreenGeometryChanged();
     republishTargetScreenSize(previous);
@@ -131,16 +131,8 @@ void EditorController::setFixedGeometryInDevicePixelsDirect(bool enabled)
         ensureTargetScreenScale();
     }
     // The fixed zones keep their numbers and change unit, so the reference
-    // they are drawn against moves: the device-pixel scaling below, and the
-    // bounds override, which was measured in the old unit and can come or go
-    // (a device-pixel layout that fills a scaled screen overflows it read as
-    // logical pixels). The override is re-derived from the zones as they
-    // stand, not restored from before the toggle, on undo and redo alike: it
-    // is a function of the zones, the unit and the screen, and the zones may
-    // have been edited since. So toggling twice returns the unit but can pin
-    // a different override than the layout had, which matches what a save
-    // and reload of those zones would show.
-    refreshFixedBoundsOverride(currentLayoutJson());
+    // they are drawn against moves by the device-pixel scaling, and the
+    // zones with it.
     markUnsaved();
     Q_EMIT fixedGeometryInDevicePixelsChanged();
     republishTargetScreenSize(previous);
@@ -187,31 +179,26 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 
 QSize EditorController::targetScreenSize() const
 {
-    const QSizeF logical = targetLogicalScreenSizeF();
+    const QSize logical = targetLogicalScreenSize();
     if (!m_fixedGeometryInDevicePixels || m_targetScreenScale <= 0.0) {
-        return logical.toSize();
+        return logical;
     }
     // Device pixels per logical pixel on each axis. The daemon's pixelSize
     // for the target's full rect fixes the ratio so the full area maps onto
     // exactly that many device pixels. It is used only when it agrees with
-    // the scale to within a couple of device pixels over the full rect, which
-    // rejects a size measured over a different rect (a virtual screen whose
-    // own geometry the daemon could not give, so the full size below is the
-    // whole monitor). Without it, or from a daemon older than the key, the
-    // ratio is the scale itself.
+    // the scale over the full rect by the daemon's own test
+    // (pixelSizeMatchesLogicalSize), which rejects a size measured over a
+    // different rect (a virtual screen whose own geometry the daemon could
+    // not give, so the full size below is the whole monitor). Without it, or
+    // from a daemon older than the key, the ratio is the scale itself.
     qreal ratioX = m_targetScreenScale;
     qreal ratioY = m_targetScreenScale;
     const QSize full = targetFullLogicalScreenSize();
-    if (m_targetScreenPixelSize.isValid() && !full.isEmpty()) {
-        const qreal tolerance = m_targetScreenScale + 1.0;
-        if (qAbs(m_targetScreenPixelSize.width() - full.width() * m_targetScreenScale) <= tolerance
-            && qAbs(m_targetScreenPixelSize.height() - full.height() * m_targetScreenScale) <= tolerance) {
-            ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
-            ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
-        }
+    if (pixelSizeMatchesLogicalSize(m_targetScreenPixelSize, full, m_targetScreenScale)) {
+        ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
+        ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
     }
-    // The device pixels the logical size covers on the target output,
-    // rounded once from the unrounded logical size.
+    // The device pixels the logical size covers on the target output.
     return QSize(qRound(logical.width() * ratioX), qRound(logical.height() * ratioY));
 }
 
@@ -230,28 +217,22 @@ QSize EditorController::targetFullLogicalScreenSize() const
 
 QSize EditorController::targetLogicalScreenSize() const
 {
-    return targetLogicalScreenSizeF().toSize();
-}
-
-QSizeF EditorController::targetLogicalScreenSizeF() const
-{
-    // A layout whose fixed zones overflow the area below pins the reference
-    // to that overflow (refreshFixedBoundsOverride), so the canvas shows every
-    // fixed zone instead of squashing the ones past the edge. A layout that
-    // fits is drawn against the live area, whatever size it was authored for.
-    if (m_layoutBoundsOverride.isValid()) {
-        return m_layoutBoundsOverride;
-    }
+    // Always the live area, whatever size the layout was authored for, so a
+    // canvas pixel is a screen pixel in fullscreen editing and the windowed
+    // canvas is that same picture scaled. Fixed zones that overflow the area
+    // draw past the canvas edge, where the daemon clips them at the screen
+    // edge, rather than the whole layout being shrunk to fit a canvas that
+    // then no longer matches the screen (issue #1167).
     const QSize full = targetFullLogicalScreenSize();
     // Zones occupy the usable area unless the layout covers the full screen,
     // which is the area the canvas shows and the daemon lays fixed zones out
     // in, so it is the area their numbers are measured against.
     if (m_useFullScreenGeometry) {
-        return QSizeF(full);
+        return full;
     }
     const int width = full.width() - m_insetLeft - m_insetRight;
     const int height = full.height() - m_insetTop - m_insetBottom;
-    return (width > 0 && height > 0) ? QSizeF(width, height) : QSizeF(full);
+    return (width > 0 && height > 0) ? QSize(width, height) : full;
 }
 
 int EditorController::insetLeft() const
@@ -288,12 +269,8 @@ void EditorController::setInsets(int left, int top, int right, int bottom)
     // zones are drawn against unless the layout covers the full screen. They
     // land asynchronously from refreshUsableAreaInsets(), after a screen
     // switch, a change to the target screen's geometry or a panel moving on
-    // it, so this is where that reference, and the bounds override measured
-    // against it, catch up.
+    // it, so this is where that reference catches up.
     if (!m_useFullScreenGeometry) {
-        if (m_editorMode == ModeLayout) {
-            refreshFixedBoundsOverride(currentLayoutJson());
-        }
         republishTargetScreenSize(previous);
     }
 }

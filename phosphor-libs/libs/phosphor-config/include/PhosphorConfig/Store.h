@@ -122,6 +122,13 @@ public:
     /// freezes a default. The read path answers absence with the schema
     /// default, making the two indistinguishable to consumers — and letting
     /// a later default retune reach every store that has no explicit value.
+    ///
+    /// Over a backend with a read-only layer (@c JsonBackend::setOverlay),
+    /// reads see the layer but @c write, @c reset, @c resetGroup and
+    /// @c importFromJson decide against what is persisted
+    /// (@c IBackend::persistedGroup). A value equal to the layer's is still
+    /// written, and @c changed reports the persisted change even while the
+    /// layer keeps the value reads observe where it was.
     void write(const QString& group, const QString& key, const QVariant& value);
 
     /// Reset one key to its schema default. No-op when the key is undeclared.
@@ -147,7 +154,8 @@ public:
 
     /// Produce a JSON snapshot of every declared key's current value. Useful
     /// for "export settings" UIs and dotfile sync. Keys absent from the
-    /// backing store are emitted with their schema default.
+    /// backing store are emitted with their schema default. The values are
+    /// the ones reads observe, so a @c JsonBackend overlay is included.
     QJsonObject exportToJson() const;
 
     /// Produce a JSON snapshot of every declared key's SCHEMA DEFAULT,

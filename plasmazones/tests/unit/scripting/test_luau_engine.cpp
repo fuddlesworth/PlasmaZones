@@ -25,6 +25,9 @@ private Q_SLOTS:
     void happyPathAndMarshalling();
     void marshalRoundTrip();
     void marshalDeepNesting();
+    void marshalCutsSelfReferencingTable();
+    void marshalBoundsSharedSubtableFanOut();
+    void marshalBoundsRepeatedStringBytes();
     void preludeGlobals();
     void preludeCompileErrorSurfaces();
     void watchdogKillsInfiniteLoopAndRecovers();
@@ -151,6 +154,112 @@ void TestLuauEngine::marshalDeepNesting()
     QCOMPARE(items.size(), 2);
     QCOMPARE(items.at(0).toMap().value(QStringLiteral("leaf")).toInt(), 9);
     QCOMPARE(items.at(1).toInt(), 2);
+    engine.releaseModule(handle);
+}
+
+void TestLuauEngine::marshalCutsSelfReferencingTable()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // Three references to the table itself: without a cycle cut the walk
+    // branches three ways at each of the MaxDepth levels and never finishes.
+    const int handle = engine.loadModule(QStringLiteral("cycle"), R"LUA(
+        return {
+            run = function()
+                local t = { name = "root" }
+                t.self = t
+                t.a = t
+                t.b = { up = t, leaf = 1 }
+                return t
+            end,
+        }
+    )LUA");
+    QVERIFY(handle >= 0);
+
+    const auto out = engine.callModule(handle, QStringLiteral("run"), {}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+    const QVariantMap r = out.result.toMap();
+    QCOMPARE(r.value(QStringLiteral("name")).toString(), QStringLiteral("root"));
+    QVERIFY(!r.value(QStringLiteral("self")).isValid());
+    QVERIFY(!r.value(QStringLiteral("a")).isValid());
+    const QVariantMap b = r.value(QStringLiteral("b")).toMap();
+    QCOMPARE(b.value(QStringLiteral("leaf")).toInt(), 1);
+    QVERIFY(!b.value(QStringLiteral("up")).isValid());
+    engine.releaseModule(handle);
+}
+
+void TestLuauEngine::marshalBoundsSharedSubtableFanOut()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // No cycle, but each level references the level below twice: the
+    // converted tree has 2^depth leaves although the Lua heap holds 30 tables.
+    const int handle = engine.loadModule(QStringLiteral("fanout"), R"LUA(
+        return {
+            run = function()
+                local x = { 1 }
+                for _ = 1, 30 do
+                    x = { a = x, b = x }
+                end
+                return x
+            end,
+        }
+    )LUA");
+    QVERIFY(handle >= 0);
+
+    QElapsedTimer timer;
+    timer.start();
+    const auto out = engine.callModule(handle, QStringLiteral("run"), {}, 200);
+    // Over the node budget: an error, never a truncated table or a nil that
+    // reads as a valid empty answer.
+    QCOMPARE(out.status, LuauEngine::CallStatus::Error);
+    QVERIFY(!out.result.isValid());
+    QVERIFY2(out.message.contains(QStringLiteral("too large")), qPrintable(out.message));
+    QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+    engine.releaseModule(handle);
+}
+
+void TestLuauEngine::marshalBoundsRepeatedStringBytes()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // Well under the node budget and the heap cap: one 1 MiB string, referenced
+    // 128 times. Converted, each reference is its own copy, 128 MiB of text.
+    const int handle = engine.loadModule(QStringLiteral("strings"), R"LUA(
+        return {
+            run = function()
+                local s = string.rep("x", 1024 * 1024)
+                local t = {}
+                for i = 1, 128 do
+                    t[i] = s
+                end
+                return t
+            end,
+            small = function()
+                local s = string.rep("y", 1024 * 1024)
+                return { s, s }
+            end,
+        }
+    )LUA");
+    QVERIFY(handle >= 0);
+
+    const auto out = engine.callModule(handle, QStringLiteral("run"), {}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Error);
+    QVERIFY(!out.result.isValid());
+    QVERIFY2(out.message.contains(QStringLiteral("too large")), qPrintable(out.message));
+
+    // A large string that a result holds a few times still converts.
+    const auto small = engine.callModule(handle, QStringLiteral("small"), {}, 200);
+    QCOMPARE(small.status, LuauEngine::CallStatus::Ok);
+    const QVariantList list = small.result.toList();
+    QCOMPARE(list.size(), 2);
+    QCOMPARE(list.at(1).toString().size(), 1024 * 1024);
     engine.releaseModule(handle);
 }
 

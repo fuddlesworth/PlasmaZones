@@ -25,11 +25,13 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned, locked }` from `RuleController.monitorOverview(screens)`,
-    /// which emits a tile for every screen. A screen with no pinned rules carries
-    /// `assigned: false` and renders a "Not assigned" caption; `locked` is true
-    /// when a LockContext rule pins the monitor's layout; the property only
-    /// stays `undefined` if no overview payload is supplied at all.
+    /// assigned, locked }` from `RuleController.monitorOverview(screens,
+    /// screenStates)`, which emits a tile for every screen and describes what
+    /// the staged rules do to it in its current state. A screen no rule
+    /// applies to carries `assigned: false` and renders a "Not assigned"
+    /// caption; `locked` is true when the winning LockContext rule locks the
+    /// monitor's layout; the property only stays `undefined` if no overview
+    /// payload is supplied at all.
     property var tileData: undefined
     /// True when this tile is the active monitor filter.
     property bool selected: false

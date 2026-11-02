@@ -404,7 +404,13 @@ private Q_SLOTS:
                                // back to 0x0FFF passed while every scrolling
                                // strip's structure stopped persisting across a
                                // restart.
-                               PhosphorPlacement::WindowTrackingService::DirtyScrollStrips}) {
+                               PhosphorPlacement::WindowTrackingService::DirtyScrollStrips,
+                               // The two remaining bits that gate a save block
+                               // of their own: the desktop ids the session last
+                               // saw and each monitor's last reported pixel
+                               // size, the next start's seeds.
+                               PhosphorPlacement::WindowTrackingService::DirtyKnownDesktops,
+                               PhosphorPlacement::WindowTrackingService::DirtyScreenPixelSizes}) {
             QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
         }
     }

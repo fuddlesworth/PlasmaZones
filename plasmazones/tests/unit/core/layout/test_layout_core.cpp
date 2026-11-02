@@ -571,11 +571,12 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Fixed-zone reference geometry (editor canvas reference — discussion #593)
+    // Fixed-zone reference geometry (preview and save reference, discussion #593)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // The editor canvas scales fixed zones by its reference size, so the
-    // reference must match the live screen unless the fixed zones overflow it.
+    // Layout previews and the saved relative copy normalize fixed zones by this
+    // reference, so it must match the live screen unless the fixed zones
+    // overflow it.
     // fixedZoneReferenceGeometry() encodes that rule: keep the recalc
     // (screen) geometry when the fixed-zone bounding box fits inside it.
     void testLayout_fixedZoneReference_partialZonesKeepScreen()

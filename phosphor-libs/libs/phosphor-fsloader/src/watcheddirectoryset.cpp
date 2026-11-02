@@ -4,6 +4,8 @@
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
+#include "nearestexistingancestor_p.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -697,61 +699,18 @@ void WatchedDirectorySet::attachWatcherForDir(const QString& directory)
         // tree materialises — consumers should call `requestRescan()`
         // after creating the directory structure.
         //
-        // Resolve symlinks at the bottom of the chain via
-        // canonicalPath(). A pathological symlink loop
-        // (`/a/b -> /a`) would otherwise make the while loop below
-        // climb forever as `next != ancestor` every iteration.
-        // canonicalPath() returns empty on unresolvable chains, which
-        // the first guard below catches.
-        QString ancestor = info.canonicalPath();
-        // On Linux, `canonicalPath()` on a non-existent target returns
-        // the platform-dependent degenerate form `"."` (current dir)
-        // rather than an empty string when no ancestor in the chain
-        // exists. Treat both forms as "no canonical resolution" —
-        // otherwise the climb below terminates immediately on
-        // `QDir(".").exists()` (the cwd trivially exists) and we end
-        // up installing a watcher on the process's current directory,
-        // which is both incorrect and a serious foot-gun.
-        if (ancestor.isEmpty() || ancestor == QLatin1String(".")) {
-            // Target path has no canonical form (doesn't exist and
-            // neither does any ancestor). Fall back to the textual
-            // absolute path — the climb still terminates because we
-            // bound it below.
-            ancestor = info.absolutePath();
-        }
-        // Bounded climb — defense in depth against pathological
-        // symlink topologies where even canonicalPath() resolution
-        // left residual loops (shouldn't happen on Linux / macOS
-        // since canonicalPath already collapses symlinks, but
-        // cheap insurance). 32 levels is deeper than any sane
-        // filesystem layout.
-        constexpr int kMaxClimb = 32;
-        int climbed = 0;
-        while (!ancestor.isEmpty() && !QDir(ancestor).exists()) {
-            if (++climbed > kMaxClimb) {
-                qCWarning(lcWatcher) << "attachWatcherForDir: climb exceeded" << kMaxClimb << "levels for target"
-                                     << directory << "— aborting watcher installation";
-                return;
-            }
-            const QString next = QFileInfo(ancestor).absolutePath();
-            if (next == ancestor) {
-                break; // reached root
-            }
-            ancestor = next;
-        }
-        if (ancestor.isEmpty() || !QDir(ancestor).exists()) {
+        // The climb is shared with `WatchedFileSet` (see
+        // `nearestExistingAncestor` for why it is lexical and bounded). It
+        // returns the cleaned form, so the parent-set equality check below
+        // never holds one ancestor under two spellings, and it keeps symlink
+        // identity at the ancestor level (callers may have deliberately
+        // pointed at a symlinked location).
+        const QString ancestor = detail::nearestExistingAncestor(targetKey);
+        if (ancestor.isEmpty()) {
             qCDebug(lcWatcher) << "attachWatcherForDir: no existing ancestor for" << directory
                                << "— call requestRescan() after creating the directory tree.";
             return;
         }
-        // Canonicalise the ancestor path — cleanPath collapses trailing
-        // slashes and "/./" segments so the parent-set equality check
-        // doesn't duplicate the same ancestor under two spellings. We
-        // don't call canonicalPath() here to preserve symlink identity
-        // at the ancestor level (callers may have deliberately pointed
-        // at a symlinked location) — cleanPath is the right level of
-        // normalisation.
-        ancestor = QDir::cleanPath(ancestor);
         if (isForbiddenWatchRoot(ancestor)) {
             qCDebug(lcWatcher) << "Refusing to watch forbidden ancestor" << ancestor << "for target" << directory
                                << "— call requestRescan() after creating the directory tree.";

@@ -10,9 +10,14 @@
  * context resolvers that share the same priority-wins, per-slot-composition
  * model: gaps (including the per-monitor override), orientation and
  * active-layout stamping (including the scrolling template's prefixed
- * ActiveLayout stamp), autotile tiling params, scrolling context params, and
- * the exactContextEntry pair pinning the settings UI's explicit-versus-resolved
- * discriminator, including its deliberate blindness to a rule's enabled flag.
+ * ActiveLayout stamp), the screen shape (device-pixel size and aspect ratio:
+ * the assignment it drives, every resolver's cache following a mode change,
+ * the refusal of a negated shape leaf while the size is unknown, and a virtual
+ * screen's fallback retry still asking about the virtual screen, for its shape
+ * and its tiled-window count), autotile tiling params, scrolling context
+ * params, and the exactContextEntry pair pinning the settings UI's
+ * explicit-versus-resolved discriminator, including its deliberate blindness
+ * to a rule's enabled flag.
  *
  * The overlay, lock, per-mode gap routing, negation-polarity and specificity
  * halves live in the sibling test_rule_cascade_overlay_lock.cpp, split off at
@@ -24,11 +29,13 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QStringList>
 #include <QTest>
 #include <QUuid>
 #include <limits>
 
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
@@ -144,6 +151,512 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
         // Unknown geometry → orientation empty → rule inert (no false match).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-3"), 0, QString()).isEmpty());
+    }
+
+    // ─── Screen size drives the layout assignment and follows a mode change ───
+    // The discussion #1145 case: one monitor whose split mode halves it, from a
+    // full 32:9 mode to a 16:9 half, should get a different layout in each.
+    // A ScreenAspectRatio rule must win the assignment over the monitor's plain
+    // assignment rule through priority, and the cached assignment must follow a
+    // live mode change with no rule-set revision bump (the size rides the key).
+    void testContextScreenSize_drivesAssignmentAndFollowsModeChange()
+    {
+        // Declared BEFORE the fixture: the provider captures it by reference and
+        // the registry holding that provider is torn down with the fixture, so
+        // the size has to outlive it.
+        std::optional<QSize> size = QSize(5120, 1440);
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setScreenPixelSizeProvider([&size](const QString& screenId) -> std::optional<QSize> {
+            return screenId == QLatin1String("DP-1") ? size : std::nullopt;
+        });
+
+        const QString fullWidthLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        const QString halfWidthLayout = QStringLiteral("{22222222-2222-2222-2222-222222222222}");
+        const PWR::Rule monitorRule = shapeAssignmentRule(
+            100, PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+            fullWidthLayout);
+        const PWR::Rule halfWidthRule = shapeAssignmentRule(
+            500,
+            PWR::MatchExpression::makeAll(
+                {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+                 PWR::MatchExpression::makeLeaf(PWR::Field::ScreenAspectRatio, PWR::Operator::Equals,
+                                                QStringLiteral("16:9"))}),
+            halfWidthLayout);
+        QVERIFY(f.store->setAllRules({monitorRule, halfWidthRule}));
+        const auto layoutOnDp1 = [&f]() {
+            return f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout;
+        };
+
+        // Full width: 32:9, the aspect rule does not match, the monitor rule wins.
+        QCOMPARE(layoutOnDp1(), fullWidthLayout);
+
+        // The split mode halves the monitor. Same rule set, no revision bump:
+        // only the size moved, and the cached verdict must follow it.
+        size = QSize(2560, 1440);
+        QCOMPARE(layoutOnDp1(), halfWidthLayout);
+
+        // Unknown size, straight from the half-width verdict, so a stale cache
+        // hit would answer the half-width layout here. The aspect ratio is
+        // empty, the rule stays inert, and the monitor rule wins again.
+        size = std::nullopt;
+        QCOMPARE(layoutOnDp1(), fullWidthLayout);
+
+        // Known again, then back to full width.
+        size = QSize(2560, 1440);
+        QCOMPARE(layoutOnDp1(), halfWidthLayout);
+        size = QSize(5120, 1440);
+        QCOMPARE(layoutOnDp1(), fullWidthLayout);
+
+        // The numeric fields gate a non-assignment resolver too, through the
+        // Int operators: a narrow-mode gap.
+        PWR::Rule narrowGap = shapeContextRule(
+            400, PWR::MatchExpression::makeLeaf(PWR::Field::ScreenWidth, PWR::Operator::LessThan, 3000),
+            {shapeValueAction(PWR::ActionType::SetInnerGap, 7)});
+        QVERIFY(f.store->setAllRules({narrowGap}));
+
+        size = QSize(2560, 1440);
+        const PhosphorZones::ContextGapOverride narrow =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(narrow.innerGap.has_value());
+        QCOMPARE(*narrow.innerGap, 7);
+        size = QSize(5120, 1440);
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
+        // A screen the provider does not know has no width, so the rule is inert.
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+
+        // A HEIGHT-only change must reach the cache key too. Start from a
+        // matching short screen, then grow only its height past the bound: a
+        // key that folded the width alone would hand back the stale gap.
+        PWR::Rule shortGap = shapeContextRule(
+            400, PWR::MatchExpression::makeLeaf(PWR::Field::ScreenHeight, PWR::Operator::LessThan, 1300),
+            {shapeValueAction(PWR::ActionType::SetInnerGap, 9)});
+        QVERIFY(f.store->setAllRules({shortGap}));
+        size = QSize(2560, 1080);
+        const PhosphorZones::ContextGapOverride shortScreen =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(shortScreen.innerGap.has_value());
+        QCOMPARE(*shortScreen.innerGap, 9);
+        size = QSize(2560, 1440);
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
+        size = QSize(2560, 1080);
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).innerGap.has_value());
+    }
+
+    // ─── Every context resolver follows a size change ─────────────────────
+    // One rule per resolver, all keyed on the same aspect leaf, then the size
+    // is moved under them with no rule-set revision bump. The cached
+    // resolvers (assignment, gap, lock, default assignment, OSD, drag selector
+    // and overlay) can only follow through the size folded into their keys,
+    // and the uncached tiling and scrolling param resolvers through their
+    // per-call read. The steps include a HEIGHT-only change (2560x1440 to
+    // 2560x1080), so a key folding the width alone would show up as a stale
+    // verdict.
+    void testContextScreenSize_everyResolverFollowsSizeChange()
+    {
+        std::optional<QSize> size = QSize(5120, 1440);
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setScreenPixelSizeProvider([&size](const QString& screenId) -> std::optional<QSize> {
+            return screenId == QLatin1String("DP-1") ? size : std::nullopt;
+        });
+        QVERIFY(f.store->setAllRules(oneShapeRulePerResolver(PWR::MatchExpression::makeLeaf(
+            PWR::Field::ScreenAspectRatio, PWR::Operator::Equals, QStringLiteral("16:9")))));
+
+        const struct
+        {
+            std::optional<QSize> size;
+            bool applied;
+            const char* label;
+        } steps[] = {
+            {QSize(5120, 1440), false, "32:9"},
+            {QSize(2560, 1440), true, "16:9"},
+            {QSize(2560, 1080), false, "height-only change to 21:9"},
+            {QSize(2560, 1440), true, "16:9 again"},
+            {std::nullopt, false, "unknown"},
+            {QSize(1920, 1080), true, "another 16:9 mode"},
+            {QSize(0, 1080), false, "zero width is unknown"},
+            {QSize(1920, 1080), true, "16:9 after zero width"},
+            {QSize(-1920, 1080), false, "negative width is unknown"},
+        };
+        for (const auto& step : steps) {
+            size = step.size;
+            verifyEveryResolver(f, step.applied, step.label);
+            if (QTest::currentTestFailed()) {
+                return;
+            }
+        }
+    }
+
+    // ─── A negated shape leaf waits for a known size ─────────────────────
+    // While the size is unknown the width and height read back absent and the
+    // aspect ratio empty, which makes a positive leaf false and would make a
+    // NEGATED one match every screen. Every resolver must refuse a rule
+    // negating a shape field the query cannot answer, and admit the same rule
+    // once the size is known (where the negation is a legitimate "not 32:9").
+    void testContextScreenSize_negatedLeafRefusedWhileSizeUnknown()
+    {
+        std::optional<QSize> size;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setScreenPixelSizeProvider([&size](const QString& screenId) -> std::optional<QSize> {
+            return screenId == QLatin1String("DP-1") ? size : std::nullopt;
+        });
+
+        const PWR::MatchExpression notSuperUltrawide = PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(
+            PWR::Field::ScreenAspectRatio, PWR::Operator::Equals, QStringLiteral("32:9"))});
+        QVERIFY(f.store->setAllRules(oneShapeRulePerResolver(notSuperUltrawide)));
+        const struct
+        {
+            std::optional<QSize> size;
+            bool applied;
+            const char* label;
+        } aspectSteps[] = {
+            {std::nullopt, false, "unknown before any report"},
+            {QSize(2560, 1440), true, "16:9 is not 32:9"},
+            {QSize(5120, 1440), false, "32:9"},
+            {std::nullopt, false, "unknown again"},
+            {QSize(0, 1440), false, "zero width is unknown"},
+            {QSize(2560, 1440), true, "16:9 after zero width"},
+        };
+        for (const auto& step : aspectSteps) {
+            size = step.size;
+            verifyEveryResolver(f, step.applied, step.label);
+            if (QTest::currentTestFailed()) {
+                return;
+            }
+        }
+
+        // The numeric fields carry the same guard: "not wider than 3000".
+        const PWR::MatchExpression notWide = PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenWidth, PWR::Operator::GreaterThan, 3000)});
+        QVERIFY(f.store->setAllRules(oneShapeRulePerResolver(notWide)));
+        size = std::nullopt;
+        verifyEveryResolver(f, false, "negated width, size unknown");
+        if (QTest::currentTestFailed()) {
+            return;
+        }
+        size = QSize(2560, 1440);
+        verifyEveryResolver(f, true, "negated width, 2560 wide");
+        if (QTest::currentTestFailed()) {
+            return;
+        }
+
+        // And the orientation: unknown while neither the size nor the
+        // orientation provider answers, admitted once either does.
+        const PWR::MatchExpression notPortrait = PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(
+            PWR::Field::ScreenOrientation, PWR::Operator::Equals, QStringLiteral("portrait"))});
+        QVERIFY(f.store->setAllRules(oneShapeRulePerResolver(notPortrait)));
+        size = std::nullopt;
+        verifyEveryResolver(f, false, "negated orientation, nothing known");
+        if (QTest::currentTestFailed()) {
+            return;
+        }
+        f.registry->setScreenOrientationProvider([](const QString& screenId) -> std::optional<QString> {
+            return screenId == QLatin1String("DP-1") ? std::optional<QString>(QStringLiteral("landscape"))
+                                                     : std::nullopt;
+        });
+        // No rule-set edit: the orientation token rides every key, so the
+        // provider's first answer is a fresh entry rather than a cached refusal.
+        verifyEveryResolver(f, true, "negated orientation, provider says landscape");
+    }
+
+    // ─── A known size decides the orientation ────────────────────────────
+    // The orientation comes from the reported size whenever that size is
+    // known, so a rotation reaches the rules as one change even if the
+    // orientation provider (geometry-derived, and possibly a step behind)
+    // disagrees. The provider answers only while the size is unknown, and a
+    // non-positive size counts as unknown.
+    void testContextScreenSize_knownSizeDecidesOrientation()
+    {
+        std::optional<QSize> size = QSize(1080, 1920);
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setScreenOrientationProvider([](const QString&) -> std::optional<QString> {
+            return QStringLiteral("landscape");
+        });
+        f.registry->setScreenPixelSizeProvider([&size](const QString&) -> std::optional<QSize> {
+            return size;
+        });
+        QVERIFY(f.store->setAllRules(
+            {shapeContextRule(400,
+                              PWR::MatchExpression::makeLeaf(PWR::Field::ScreenOrientation, PWR::Operator::Equals,
+                                                             QStringLiteral("portrait")),
+                              {shapeValueAction(PWR::ActionType::SetInnerGap, 11)})}));
+        const auto portraitGap = [&f]() {
+            return f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).innerGap.has_value();
+        };
+
+        // Taller than wide: portrait, whatever the provider says.
+        QVERIFY(portraitGap());
+        // A square screen is landscape, the same rule the daemon's provider uses.
+        size = QSize(1920, 1920);
+        QVERIFY(!portraitGap());
+        // Unknown and non-positive sizes fall back to the provider's landscape.
+        size = std::nullopt;
+        QVERIFY(!portraitGap());
+        size = QSize(0, 1920);
+        QVERIFY(!portraitGap());
+        size = QSize(1080, 1920);
+        QVERIFY(portraitGap());
+    }
+
+    // ─── A virtual screen's fallback retry still asks about the virtual screen ─
+    // A virtual screen with no assignment of its own inherits its physical
+    // screen's through a fallback retry on the physical id. That retry swaps
+    // the id rules are matched against, never the screen a shape condition
+    // describes: a "32:9" rule with no screen pin must not apply to a 16:9
+    // half of a 32:9 panel just because the retry ran on the panel's id, or
+    // the layout would follow the panel while the gap and lock resolvers
+    // (which have no retry) followed the half.
+    void testContextScreenSize_virtualScreenRetryKeepsItsOwnShape()
+    {
+        const QString physical = QStringLiteral("DP-1");
+        const QString virtualHalf = QStringLiteral("DP-1/vs:0");
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setScreenPixelSizeProvider(
+            [physical, virtualHalf](const QString& screenId) -> std::optional<QSize> {
+                if (screenId == physical) {
+                    return QSize(5120, 1440);
+                }
+                if (screenId == virtualHalf) {
+                    return QSize(2560, 1440);
+                }
+                return std::nullopt;
+            });
+
+        const QString panelLayout = QStringLiteral("{33333333-3333-3333-3333-333333333333}");
+        const QString halfLayout = QStringLiteral("{44444444-4444-4444-4444-444444444444}");
+        const QString monitorLayout = QStringLiteral("{55555555-5555-5555-5555-555555555555}");
+        // A super-ultrawide rule with no screen pin, at the top priority.
+        const PWR::Rule panelRule =
+            shapeAssignmentRule(600,
+                                PWR::MatchExpression::makeLeaf(PWR::Field::ScreenAspectRatio, PWR::Operator::Equals,
+                                                               QStringLiteral("32:9")),
+                                panelLayout);
+        QVERIFY(f.store->setAllRules({panelRule}));
+
+        // Positive control: the panel itself is 32:9 and takes the rule.
+        QCOMPARE(f.registry->assignmentEntryForScreen(physical, 0, QString()).snappingLayout, panelLayout);
+        // The 16:9 half misses on its own id, retries on the physical id, and
+        // must still be judged as 16:9: the default answers.
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()),
+                 QStringLiteral("{provider-snap-default}"));
+
+        // The retry still inherits what the physical screen PINS: a plain
+        // monitor rule reaches the half, and a 16:9 rule pinned to the physical
+        // id matches there too, because its shape leaf is asked about the half.
+        const PWR::Rule monitorRule = shapeAssignmentRule(
+            100, PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, physical), monitorLayout);
+        QVERIFY(f.store->setAllRules({panelRule, monitorRule}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, monitorLayout);
+        QCOMPARE(f.registry->assignmentEntryForScreen(physical, 0, QString()).snappingLayout, panelLayout);
+
+        const PWR::Rule pinnedHalfRule = shapeAssignmentRule(
+            500,
+            PWR::MatchExpression::makeAll(
+                {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, physical),
+                 PWR::MatchExpression::makeLeaf(PWR::Field::ScreenAspectRatio, PWR::Operator::Equals,
+                                                QStringLiteral("16:9"))}),
+            halfLayout);
+        QVERIFY(f.store->setAllRules({panelRule, monitorRule, pinnedHalfRule}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, halfLayout);
+        QCOMPARE(f.registry->assignmentEntryForScreen(physical, 0, QString()).snappingLayout, panelLayout);
+    }
+
+    // ─── A virtual screen's fallback retry keeps its own tiled-window count ──
+    // The count gets the shape's treatment: read once for the virtual screen and
+    // handed to the retry on the physical id. On a split monitor the tiling
+    // engines track the virtual screens, so the physical id has no count of its
+    // own, and a retry that asked for it would see "unknown". A positive count
+    // leaf would then never match and a negated one would match every count.
+    // Every public entry point that runs the fallback chain is driven here:
+    // the assignment entry and id, the rules-visible active layout, and
+    // hasMatchingAssignmentRule, which is private and observed through
+    // isContextActiveLayoutSuppressed in the closing phase.
+    void testTiledWindowCount_virtualScreenRetryKeepsItsOwnCount()
+    {
+        const QString physical = QStringLiteral("DP-1");
+        const QString virtualHalf = QStringLiteral("DP-1/vs:0");
+        // Declared BEFORE the fixture: the providers capture them by reference
+        // and the registry holding them is torn down with the fixture.
+        std::optional<int> virtualCount = 3;
+        bool suppressDefault = false;
+        QStringList askedAbout;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+        f.registry->setDefaultAssignmentSuppressedProvider([&suppressDefault]() {
+            return suppressDefault;
+        });
+        f.registry->setTiledWindowCountProvider(
+            [&virtualCount, &askedAbout, virtualHalf](const QString& screenId, int,
+                                                      const QString&) -> std::optional<int> {
+                askedAbout.append(screenId);
+                return screenId == virtualHalf ? virtualCount : std::nullopt;
+            });
+
+        const QString countLayout = QStringLiteral("{99999999-9999-9999-9999-999999999999}");
+        const PWR::MatchExpression pinnedToPhysical =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, physical);
+        const PWR::MatchExpression moreThanOne =
+            PWR::MatchExpression::makeLeaf(PWR::Field::TiledWindowCount, PWR::Operator::GreaterThan, 1);
+        const PWR::MatchExpression atMostOne = PWR::MatchExpression::makeNone({moreThanOne});
+
+        // A positive count rule pinned to the physical id: the half has three
+        // tiled windows, so the retry must match on the half's count.
+        QVERIFY(f.store->setAllRules(
+            {shapeAssignmentRule(500, PWR::MatchExpression::makeAll({pinnedToPhysical, moreThanOne}), countLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()), countLayout);
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()), countLayout);
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+
+        // Each public entry point reads the count once and threads that one
+        // reading through its retries and its inner resolvers. A layer that
+        // read it again would ask twice here, and on a retry would ask about
+        // the physical id.
+        const auto asksOnce = [&askedAbout, virtualHalf](const auto& call) {
+            askedAbout.clear();
+            call();
+            return askedAbout == QStringList{virtualHalf};
+        };
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->assignmentEntryForScreen(virtualHalf, 0, QString());
+        }));
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->assignmentIdForScreen(virtualHalf, 0, QString());
+        }));
+        QVERIFY(asksOnce([&f, virtualHalf]() {
+            f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString());
+        }));
+
+        // The negated form: "at most one tiled window". Three is more than one,
+        // so the rule must not match, and the default answers. A count read for
+        // the physical id would be unknown, and the negation would match.
+        QVERIFY(f.store->setAllRules(
+            {shapeAssignmentRule(500, PWR::MatchExpression::makeAll({pinnedToPhysical, atMostOne}), countLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()),
+                 QStringLiteral("{provider-snap-default}"));
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()),
+                 QStringLiteral("{provider-snap-default}"));
+
+        // Positive control for the negated rule: with one tiled window it
+        // matches, through the same retry, with no rule-set revision bump.
+        virtualCount = 1;
+        QCOMPARE(f.registry->assignmentEntryForScreen(virtualHalf, 0, QString()).snappingLayout, countLayout);
+        QCOMPARE(f.registry->rulesVisibleActiveLayoutId(virtualHalf, 0, QString()), countLayout);
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+
+        // hasMatchingAssignmentRule. With the default suppressed, an
+        // algorithm-only rule yields no active layout id, so
+        // isContextActiveLayoutSuppressed falls through to asking whether any
+        // assignment rule matches: a match keeps the context live, a miss
+        // leaves it suppressed. The rule is pinned to the physical id, so only
+        // the retry can match it.
+        suppressDefault = true;
+        const auto algorithmOnlyRule = [](const PWR::MatchExpression& match) {
+            PWR::RuleAction algorithm;
+            algorithm.type = QString(PWR::ActionType::SetTilingAlgorithm);
+            algorithm.params.insert(QString(PWR::ActionParam::Algorithm), QStringLiteral("bsp"));
+            return shapeContextRule(500, match, {algorithm});
+        };
+        QVERIFY(
+            f.store->setAllRules({algorithmOnlyRule(PWR::MatchExpression::makeAll({pinnedToPhysical, moreThanOne}))}));
+        virtualCount = 3;
+        QCOMPARE(f.registry->assignmentIdForScreen(virtualHalf, 0, QString()), QString());
+        QVERIFY(!f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        virtualCount = 1;
+        QVERIFY(f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+
+        QVERIFY(
+            f.store->setAllRules({algorithmOnlyRule(PWR::MatchExpression::makeAll({pinnedToPhysical, atMostOne}))}));
+        virtualCount = 3;
+        QVERIFY(f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        virtualCount = 1;
+        QVERIFY(!f.registry->isContextActiveLayoutSuppressed(virtualHalf, 0, QString()));
+        QVERIFY2(!askedAbout.contains(physical), qPrintable(askedAbout.join(QLatin1Char(','))));
+    }
+
+    // ─── A connector-name caller is asked about once, and a VS id as given ──
+    // tiledWindowCount asks the provider again under the stable identifier when
+    // a connector name gets no answer, because the tiling engines track screens
+    // by stable id. A connector with no distinct stable form (no connected
+    // output carries "NO-SUCH-OUTPUT", so idForName hands the name back) must
+    // not be asked twice, and a virtual-screen id, which is never a connector
+    // name, must never be rewritten.
+    //
+    // This pins only that no-double-ask guard and the virtual-screen
+    // pass-through. The positive re-ask (a connector name answered nullopt,
+    // then asked again under a distinct stable id that yields the count)
+    // cannot be reached offscreen: idForName returns a name unchanged when no
+    // connected output carries it, and the offscreen platform's screens carry
+    // no EDID, so their stable id is the connector name itself.
+    void testTiledWindowCount_unknownScreenIsAskedOnlyAsGiven()
+    {
+        QStringList askedAbout;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setTiledWindowCountProvider(
+            [&askedAbout](const QString& screenId, int, const QString&) -> std::optional<int> {
+                askedAbout.append(screenId);
+                return std::nullopt;
+            });
+
+        const QString connector = QStringLiteral("NO-SUCH-OUTPUT");
+        QCOMPARE(PhosphorScreens::ScreenIdentity::idForName(connector), connector);
+        f.registry->assignmentIdForScreen(connector, 0, QString());
+        QCOMPARE(askedAbout, QStringList{connector});
+
+        askedAbout.clear();
+        const QString virtualId = QStringLiteral("NO-SUCH-OUTPUT/vs:0");
+        f.registry->assignmentIdForScreen(virtualId, 0, QString());
+        QCOMPARE(askedAbout, QStringList{virtualId});
+    }
+
+    // ─── A desktop-pinned assignment and a shape rule compete on priority ──
+    // A shape rule is a non-dimension context rule: it carries no desktop and
+    // wins or loses against a desktop-pinned assignment purely on priority,
+    // in both orders. Without both orders a resolver that always preferred
+    // the narrower context (or always the shape rule) would pass.
+    void testContextScreenSize_desktopPinVersusShapeRuleByPriority()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setScreenPixelSizeProvider([](const QString&) -> std::optional<QSize> {
+            return QSize(2560, 1440);
+        });
+        const QString desktopLayout = QStringLiteral("{66666666-6666-6666-6666-666666666666}");
+        const QString shapeLayout = QStringLiteral("{77777777-7777-7777-7777-777777777777}");
+        const PWR::MatchExpression sixteenByNine = PWR::MatchExpression::makeLeaf(
+            PWR::Field::ScreenAspectRatio, PWR::Operator::Equals, QStringLiteral("16:9"));
+        const auto desktopRule = [&desktopLayout](int priority) {
+            return CRB::makeAssignmentRule(QString(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("snapping"),
+                                           desktopLayout, QString(), priority, QString());
+        };
+
+        // Desktop pin above the shape rule: desktop 2 takes the pin, desktop 1
+        // (no pin) takes the shape rule.
+        QVERIFY(f.store->setAllRules({desktopRule(500), shapeAssignmentRule(400, sixteenByNine, shapeLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 2, QString()).snappingLayout,
+                 desktopLayout);
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 1, QString()).snappingLayout,
+                 shapeLayout);
+
+        // Shape rule above the desktop pin: it wins on desktop 2 as well.
+        QVERIFY(f.store->setAllRules({desktopRule(400), shapeAssignmentRule(500, sixteenByNine, shapeLayout)}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 2, QString()).snappingLayout,
+                 shapeLayout);
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 1, QString()).snappingLayout,
+                 shapeLayout);
     }
 
     // ─── ActiveLayout is stamped onto the non-assignment resolvers, gates rules,
@@ -809,6 +1322,87 @@ private Q_SLOTS:
             f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
         QVERIFY(dp1User.innerGap.has_value());
         QCOMPARE(*dp1User.innerGap, 20);
+    }
+
+    // Plain members, not test slots: they take parameters.
+private:
+    static constexpr QLatin1StringView kShapeLayout{"{88888888-8888-8888-8888-888888888888}"};
+
+    static PWR::RuleAction shapeValueAction(QLatin1StringView type, const QJsonValue& value)
+    {
+        PWR::RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(PWR::ActionParam::Value), value);
+        return a;
+    }
+
+    static PWR::Rule shapeContextRule(int priority, const PWR::MatchExpression& match,
+                                      const QList<PWR::RuleAction>& actions)
+    {
+        PWR::Rule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("screen-shape rule");
+        r.enabled = true;
+        r.priority = priority;
+        r.match = match;
+        r.actions = actions;
+        return r;
+    }
+
+    static PWR::Rule shapeAssignmentRule(int priority, const PWR::MatchExpression& match, const QString& layout)
+    {
+        return shapeContextRule(priority, match,
+                                CRB::makeAssignmentActions(QStringLiteral("snapping"), layout, QString(), QString()));
+    }
+
+    /// One rule per context resolver, all sharing @p match and each carrying
+    /// only that resolver's action, so a resolver whose filter or key is wrong
+    /// fails on its own line in verifyEveryResolver.
+    static QList<PWR::Rule> oneShapeRulePerResolver(const PWR::MatchExpression& match)
+    {
+        PWR::RuleAction shader;
+        shader.type = QString(PWR::ActionType::OverrideOverlayShader);
+        shader.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("shape-glow"));
+        return {
+            shapeAssignmentRule(400, match, QString(kShapeLayout)),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::SetInnerGap, 13)}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::LockContext, true)}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::DefaultLayoutAssignment, true)}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::SetOsdEnabled, false)}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::SetDragSelectorEnabled, false)}),
+            shapeContextRule(400, match, {shader}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::SetMaxWindows, 3)}),
+            shapeContextRule(400, match, {shapeValueAction(PWR::ActionType::SetScrollDefaultColumnWidth, 0.75)}),
+        };
+    }
+
+    /// Require every context resolver on DP-1 to have applied (or not) the
+    /// rule oneShapeRulePerResolver gave it. Fails through QVERIFY2, so the
+    /// caller checks QTest::currentTestFailed() after each call.
+    static void verifyEveryResolver(RegistryFixture& f, bool applied, const char* step)
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const auto where = [step](const char* resolver) {
+            return QStringLiteral("%1 at step \"%2\"").arg(QLatin1String(resolver), QLatin1String(step));
+        };
+        QVERIFY2((f.registry->assignmentEntryForScreen(screen, 0, QString()).snappingLayout == kShapeLayout) == applied,
+                 qPrintable(where("assignment")));
+        QVERIFY2(f.registry->resolveContextGaps(screen, 0, QString()).innerGap.has_value() == applied,
+                 qPrintable(where("gap")));
+        QVERIFY2(f.registry->resolveContextLocked(screen, 0, QString()) == applied, qPrintable(where("lock")));
+        QVERIFY2(f.registry->resolveContextDefaultAssignment(screen, 0, QString()).has_value() == applied,
+                 qPrintable(where("default assignment")));
+        QVERIFY2(f.registry->resolveContextOsdEnabled(screen, 0, QString()).has_value() == applied,
+                 qPrintable(where("OSD")));
+        QVERIFY2(f.registry->resolveContextDragSelectorEnabled(screen, 0, QString()).has_value() == applied,
+                 qPrintable(where("drag selector")));
+        QVERIFY2(f.registry->resolveContextOverlay(screen, 0, QString()).shaderId.has_value() == applied,
+                 qPrintable(where("overlay")));
+        QVERIFY2(f.registry->resolveContextTilingParams(screen, 0, QString()).maxWindows.has_value() == applied,
+                 qPrintable(where("tiling params")));
+        QVERIFY2(f.registry->resolveContextScrollingParams(screen, 0, QString()).defaultColumnWidth.has_value()
+                     == applied,
+                 qPrintable(where("scrolling params")));
     }
 };
 

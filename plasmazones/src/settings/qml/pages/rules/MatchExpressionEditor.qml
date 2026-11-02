@@ -48,6 +48,10 @@ ColumnLayout {
     required property real widestOperatorTextWidth
     /// True when this node may be removed (the root cannot).
     property bool removable: false
+    /// The whole rule's match. The root's own node by default; each nested
+    /// editor is handed its parent's, so every leaf sees the full rule (a
+    /// screen-size condition names the size of the monitor the rule pins).
+    property var ruleMatch: matchEditor.node
     /// Nesting level of this node, 0 at the root. Mirrors the `depth` argument
     /// `MatchExpression::fromJsonAtDepth` recurses with, so the gate below
     /// speaks the same units the parser does.
@@ -182,6 +186,7 @@ ColumnLayout {
             appSettings: matchEditor.appSettings
             fieldOptions: matchEditor.matchFieldOptions
             widestOperatorTextWidth: matchEditor.widestOperatorTextWidth
+            ruleMatch: matchEditor.ruleMatch
             // The root leaf has no enclosing group, so nothing handles
             // removeRequested there and the trash button would be inert.
             removable: matchEditor.removable
@@ -363,6 +368,9 @@ ColumnLayout {
                                     }),
                                     "widestOperatorTextWidth": Qt.binding(function () {
                                         return matchEditor.widestOperatorTextWidth;
+                                    }),
+                                    "ruleMatch": Qt.binding(function () {
+                                        return matchEditor.ruleMatch;
                                     }),
                                     "removable": true,
                                     "depth": matchEditor.depth + 1

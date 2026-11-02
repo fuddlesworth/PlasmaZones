@@ -167,6 +167,19 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // opted-out screen among changedScreenIds needs no filtering here: its
     // layout resolves null downstream, so no window is moved on its account.
     m_windowTrackingAdaptor->resnapScreensToTheirLayouts(engineManagedScreens, changedScreenIds, currentDesktop());
+    // The resnap placed those screens' windows under their current gap verdict,
+    // so record it. A rule-driven apply runs inside reconcileActiveAssignments,
+    // whose gap pass would otherwise restate the same windows a second time.
+    QStringList resnappedScreens;
+    for (const QString& screenId : effectiveIds) {
+        if ((changedScreenIds.isEmpty() || changedScreenIds.contains(screenId))
+            && !engineManagedScreens.contains(screenId)) {
+            resnappedScreens.append(screenId);
+        }
+    }
+    m_snapGapTracker.refresh(resnappedScreens, [this](const QString& screenId) {
+        return snapGapVerdict(screenId);
+    });
     // Restore snap-float positions for windows this KCM apply released
     // from autotile — the buffer-based resnap above cannot cover
     // floating windows (see the helper).
@@ -182,6 +195,17 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // so a SetOsdEnabled context rule can force a card past an off toggle on
     // one monitor without opening every other.
     for (const auto& osd : std::as_const(osdEntries)) {
+        // A screen settling on the compositor's first pixel-size report, on
+        // the stand-in a cleared report leaves, or on a stand-in that moved
+        // while it awaits that report (Daemon::onCompositorPixelSizeChanged,
+        // the screenGeometryChanged handler) is resnapped above but gets no
+        // card: the change is the monitor's real size replacing a stand-in,
+        // or one stand-in replacing another, not something the user did.
+        // Ahead of the template-ledger drop below, because no card replaces
+        // the one it last announced.
+        if (m_reshapeTracker.isSilent(osd.screenId)) {
+            continue;
+        }
         // Every card this loop can still show for the screen replaces whatever
         // it announced last, so drop the recorded template up front and let the
         // scrolling arms below re-record it. Leaving it would make the NEXT
@@ -297,6 +321,15 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             if (layout)
                 showLayoutOsd(layout, osd.screenId);
         }
+    }
+
+    // A screen whose shape changed before this apply was just laid out under
+    // its current verdict, so a pending reshape record for it is spent: left
+    // in place, the next reconcile would resnap and announce it a second time.
+    if (changedScreenIds.isEmpty()) {
+        m_reshapeTracker.clearRecords();
+    } else {
+        m_reshapeTracker.dropRecords(changedScreenIdsList);
     }
 
     // Refresh the active-assignment snapshot to what was just applied,
