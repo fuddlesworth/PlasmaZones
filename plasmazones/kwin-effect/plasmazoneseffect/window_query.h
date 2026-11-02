@@ -132,7 +132,9 @@ QSize outputPixelSize(const KWin::LogicalOutput* output);
 /// screen alike once the daemon has accepted the report. It keeps a report
 /// pending until the report agrees with its own geometry for that output, and
 /// until then answers from the size it saved for that monitor last session,
-/// when it has one.
+/// when it has one. A screen whose scale the daemon cannot measure (no geometry
+/// sensor) has nothing to check the report against, so it takes the report at
+/// once.
 void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize);
 
 } // namespace PlasmaZones

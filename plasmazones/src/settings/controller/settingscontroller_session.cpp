@@ -38,6 +38,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
+#include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QFontDatabase>
@@ -656,21 +657,26 @@ void SettingsController::scheduleScreenStatesRefresh()
 
 void SettingsController::refreshScreenStates()
 {
-    // The call carries D-Bus's auto-start flag, so asking a stopped daemon
-    // would start it, and a focus change or the Rules page coming into view
-    // is no reason to. The runningChanged handler schedules a re-read once
-    // the daemon is up. Checked here rather than per trigger so a burst
-    // folded by the cache costs one check.
+    // A focus change or the Rules page coming into view is no reason to
+    // start a stopped daemon, so the call is not made while it is down. The
+    // runningChanged handler schedules a re-read once the daemon is up.
+    // Checked here rather than per trigger so a burst folded by the cache
+    // costs one check. No unit test drives this gate because constructing
+    // a SettingsController needs a session bus.
     if (!m_daemonController.isRunning()) {
         return;
     }
+    // The daemon can still leave the bus between that check and delivery, so
+    // the message itself also refuses to start it. ClientHelpers::asyncCall
+    // leaves D-Bus's auto-start flag set, hence the message is built here.
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getScreenStates"));
+    message.setAutoStartService(false);
     // Numbered before the call so a reply to an older request, still in
     // flight, is dropped rather than overwriting a newer answer.
     const quint64 request = m_screenStatesCache.beginRequest();
-    auto* watcher = new QDBusPendingCallWatcher(
-        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                   QStringLiteral("getScreenStates")),
-        this);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, request](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         const QDBusMessage reply = w->reply();

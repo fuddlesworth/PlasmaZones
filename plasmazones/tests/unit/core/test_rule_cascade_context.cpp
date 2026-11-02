@@ -591,10 +591,17 @@ private Q_SLOTS:
     // ─── A connector-name caller is asked about once, and a VS id as given ──
     // tiledWindowCount asks the provider again under the stable identifier when
     // a connector name gets no answer, because the tiling engines track screens
-    // by stable id. A connector with no distinct stable form (the offscreen
-    // platform's screens have no EDID, so idForName hands the name back) must
+    // by stable id. A connector with no distinct stable form (no connected
+    // output carries "NO-SUCH-OUTPUT", so idForName hands the name back) must
     // not be asked twice, and a virtual-screen id, which is never a connector
     // name, must never be rewritten.
+    //
+    // This pins only that no-double-ask guard and the virtual-screen
+    // pass-through. The positive re-ask (a connector name answered nullopt,
+    // then asked again under a distinct stable id that yields the count)
+    // cannot be reached offscreen: idForName returns a name unchanged when no
+    // connected output carries it, and the offscreen platform's screens carry
+    // no EDID, so their stable id is the connector name itself.
     void testTiledWindowCount_unknownScreenIsAskedOnlyAsGiven()
     {
         QStringList askedAbout;

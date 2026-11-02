@@ -323,6 +323,8 @@ void ScreenManager::destroyGeometrySensor(const QString& screenName)
     // PENDING report stays (see setCompositorPixelSize). Not announced, as
     // nothing reads an untracked screen's size.
     m_acceptedPixelSizes.remove(screenName);
+    // A sensor created for the connector later maps afresh.
+    m_mappedScaleSensors.remove(screenName);
 }
 
 void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
@@ -628,18 +630,34 @@ qreal ScreenManager::logicalScale(QScreen* screen) const
 
 bool ScreenManager::eventFilter(QObject* watched, QEvent* event)
 {
-    if (event && event->type() == QEvent::DevicePixelRatioChange) {
+    const bool scaleChange = event && event->type() == QEvent::DevicePixelRatioChange;
+    const bool expose = event && event->type() == QEvent::Expose;
+    if (scaleChange || expose) {
         // Reverse-resolve the sensor to its screen rather than capturing the
         // name: the map is small (one entry per output) and a captured name
         // would need its own teardown to stay honest.
         for (auto it = m_geometrySensors.constBegin(); it != m_geometrySensors.constEnd(); ++it) {
-            if (it.value() == watched) {
-                const PhysicalScreen screen = trackedScreenByName(it.key());
+            if (it.value() != watched) {
+                continue;
+            }
+            const PhysicalScreen screen = trackedScreenByName(it.key());
+            if (scaleChange) {
                 if (screen.isValid()) {
                     Q_EMIT logicalScaleChanged(screen);
                 }
-                break;
+            } else if (it.value()->isExposed() && !m_mappedScaleSensors.contains(it.key())) {
+                // The first expose follows the compositor's first configure,
+                // and KWin settles the surface's preferred scale before that
+                // (see isLogicalScaleSensorMapped), so the scale the sensor
+                // carries now is the compositor's. A scale change event alone
+                // would miss an integer output, whose real scale is the
+                // fallback's and so never changes.
+                m_mappedScaleSensors.insert(it.key());
+                if (screen.isValid()) {
+                    Q_EMIT logicalScaleSensorMapped(screen);
+                }
             }
+            break;
         }
     }
     // Never filtered: the sensor still needs the event.
@@ -743,7 +761,11 @@ void ScreenManager::setCompositorPixelSize(const QString& connectorName, const Q
 void ScreenManager::acceptCompositorPixelSize(const QString& connectorName)
 {
     PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
-    if (connectorName.isEmpty()) {
+    // An untracked connector has no screen to answer for. Its report stays
+    // pending, for the host to accept once the connector's screen arrives,
+    // and the accepted store holds only tracked connectors, as
+    // destroyGeometrySensor keeps it.
+    if (connectorName.isEmpty() || !trackedScreenByName(connectorName).isValid()) {
         return;
     }
     // A pending clear drops the accepted report, so the screen falls back to
@@ -782,6 +804,12 @@ bool ScreenManager::hasLogicalScaleSensor(const PhysicalScreen& screen) const
     // mapped or not. logicalScale reads it only once it is mapped, and the
     // eventFilter announces the scale it maps with.
     return !m_geometrySensors.value(screen.name).isNull();
+}
+
+bool ScreenManager::isLogicalScaleSensorMapped(const PhysicalScreen& screen) const
+{
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    return hasLogicalScaleSensor(screen) && m_mappedScaleSensors.contains(screen.name);
 }
 
 void ScreenManager::seedPixelSize(const QString& physicalScreenId, const QSize& pixelSize)

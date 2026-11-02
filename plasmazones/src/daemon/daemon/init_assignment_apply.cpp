@@ -182,12 +182,14 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // so a SetOsdEnabled context rule can force a card past an off toggle on
     // one monitor without opening every other.
     for (const auto& osd : std::as_const(osdEntries)) {
-        // A screen settling on the compositor's first pixel-size report, or
-        // on the stand-in a cleared report leaves
-        // (Daemon::onCompositorPixelSizeChanged), is resnapped above but gets
-        // no card: the change is the monitor's real size replacing a stand-in,
-        // not something the user did. Ahead of the template-ledger drop below,
-        // because no card replaces the one it last announced.
+        // A screen settling on the compositor's first pixel-size report, on
+        // the stand-in a cleared report leaves, or on a stand-in that moved
+        // while it awaits that report (Daemon::onCompositorPixelSizeChanged,
+        // the screenGeometryChanged handler) is resnapped above but gets no
+        // card: the change is the monitor's real size replacing a stand-in,
+        // or one stand-in replacing another, not something the user did.
+        // Ahead of the template-ledger drop below, because no card replaces
+        // the one it last announced.
         if (m_reshapeTracker.isSilent(osd.screenId)) {
             continue;
         }

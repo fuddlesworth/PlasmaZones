@@ -55,7 +55,7 @@ using PhosphorRules::RuleAction;
 
 /// The device-pixel size of @p screen (a `SettingsController::screens` map)
 /// when the daemon's rules see one: the compositor's report, or the seeded
-/// size, the one last reported for that monitor in this session or an
+/// size, the one last accepted for that monitor in this session or an
 /// earlier one (`pixelSizeKnown`). The estimate the daemon's getScreenInfo
 /// carries before either exists is not one, so it answers nullopt here.
 std::optional<QSize> knownPixelSizeOf(const QVariantMap& screen)
@@ -299,8 +299,9 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // The windowless context query the daemon's assignment cascade builds
         // for this screen: desktop, activity and tiled-window count from the
         // daemon's own getScreenStates answer, the colour scheme, and the
-        // screen shape. With no state entry (daemon down) the desktop reads 0
-        // and the activity empty.
+        // screen shape. While the daemon is down the tiles keep the last states
+        // seen. Only when it never ran during this session is there no state
+        // entry, and then the desktop reads 0 and the activity empty.
         PhosphorRules::WindowQuery query;
         query.screenId = screenId;
         const auto stateIt = stateById.constFind(screenId);
@@ -325,10 +326,16 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // included, as the daemon's retry does.
         std::optional<PhosphorZones::LayoutRegistry::RuleSlotResolution> slots =
             PhosphorZones::LayoutRegistry::resolveRuleSlots(evaluator, query);
+        // The monitor's id when the slots came from that retry, so the rule
+        // count below can judge the monitor's rules too.
+        QString retriedPhysicalId;
         if (!slots && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             PhosphorRules::WindowQuery physicalQuery = query;
             physicalQuery.screenId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
             slots = PhosphorZones::LayoutRegistry::resolveRuleSlots(evaluator, physicalQuery);
+            if (slots) {
+                retriedPhysicalId = physicalQuery.screenId;
+            }
         }
         // The entry is built the way LayoutRegistry::resolveAssignmentEntry
         // builds it: the engine-mode rule's entry, or the global default when
@@ -382,7 +389,11 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // excludes a monitor rather than addressing it. Evaluating the match
         // settles which screens the condition names, ignoring case as the
         // engine does, so a "starts with" monitor rule counts on every screen
-        // it matches.
+        // it matches. When the slots came from the physical-id retry, a rule
+        // also counts when its match holds with the monitor's id in place of
+        // this screen's, the shape and state still this screen's, mirroring
+        // how the slots resolved: those rules are the ones giving this screen
+        // its layout.
         //
         // DisableEngine is the one action the daemon does not run through the
         // evaluator. A monitor is disabled iff its id appears in
@@ -406,17 +417,26 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // The daemon's check is a per-mode UNION, not a single-winner slot:
         // every disable rule whose token equals the mode it was asked about
         // counts, so priority plays no part and every token is collected.
+        // Only a rule holding for this screen's own id feeds it: the daemon's
+        // monitor gate (Settings::isMonitorDisabled) matches the screen's id
+        // and its connector form, never a virtual screen's monitor.
         query.mode = ruleModeToken(entry.mode);
+        PhosphorRules::WindowQuery retriedQuery = query;
+        retriedQuery.screenId = retriedPhysicalId;
         int ruleCount = 0;
         QSet<QString> disabledEngineModes;
         for (const Rule& rule : ruleSet.rules()) {
-            if (!rule.enabled || !rule.match.isContextOnly() || !namesScreenPositively(rule.match)
-                || !rule.match.evaluate(query)) {
+            if (!rule.enabled || !rule.match.isContextOnly() || !namesScreenPositively(rule.match)) {
+                continue;
+            }
+            const bool holdsForScreen = rule.match.evaluate(query);
+            if (!holdsForScreen && (retriedPhysicalId.isEmpty() || !rule.match.evaluate(retriedQuery))) {
                 continue;
             }
             ++ruleCount;
             const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
-            if (disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match)) {
+            if (holdsForScreen && disableMode.has_value()
+                && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match)) {
                 disabledEngineModes.insert(*disableMode);
             }
         }

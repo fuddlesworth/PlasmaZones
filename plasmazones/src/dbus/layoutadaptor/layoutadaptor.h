@@ -109,10 +109,11 @@ public:
     /// than a display name can move: every active-assignment diff (which the
     /// desktop and activity switches, screen adds and removals,
     /// virtual-screen changes, assignment applies and rule reconciles all
-    /// run) and every change of a tiling screen's tiled-window count. Nothing
-    /// queues it for a layout rename or an algorithm or template reload,
-    /// which move only the names. Coalesced, so a burst in one turn compares
-    /// once. Not a bus slot.
+    /// run) and every change of a tiling screen's tiled-window count. No call
+    /// exists for a display name alone: a layout list change or a template
+    /// reload queues it only through the assignment diff its handler runs,
+    /// and an algorithm reload not at all. Coalesced, so a burst in one turn
+    /// compares once. Not a bus slot.
     void scheduleScreenStatesCheck();
 
     /// Drop a comparison @ref scheduleScreenStatesCheck queued and has not
@@ -522,9 +523,11 @@ Q_SIGNALS:
      * algorithmName, scrollingTemplateName), including the ones no other
      * signal reports on its own: a screen's virtual desktop or the activity
      * moving while its resolved layout stays the same, and the live
-     * tiled-window count of a tiling screen. A layout rename or an algorithm
-     * or template reload moves only a name and does not fire it, though a
-     * comparison queued for another reason carries a moved name along.
+     * tiled-window count of a tiling screen. A change that moves only a name
+     * (a layout rename, an algorithm or template reload) is not guaranteed to
+     * fire it. It may, because a comparison that runs for any reason, the
+     * assignment diff a layout list change or a template reload runs
+     * included, carries a moved name along.
      * Carries nothing, so a subscriber re-reads getScreenStates. Coalesced per
      * event-loop pass and compared against the previous answer (see
      * @ref scheduleScreenStatesCheck), so it fires once per real change, and

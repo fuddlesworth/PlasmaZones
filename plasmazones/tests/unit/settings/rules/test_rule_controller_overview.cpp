@@ -916,7 +916,7 @@ void TestRuleControllerOverview::monitorOverviewVirtualScreenFallsBackToMonitorR
 {
     // A virtual screen no rule names takes its monitor's assignment, as the
     // daemon's resolveWithScreenFallback retries the physical id. The rule
-    // names the monitor, not this screen, so it does not count here.
+    // that gives it that layout counts on its tile.
     RuleController controller;
     QVERIFY(!addRule(controller, leafJson(QStringLiteral("screenId"), QStringLiteral("equals"), QStringLiteral("DP-1")),
                      assignActions(QStringLiteral("snapping"), QStringLiteral("setSnappingLayout"),
@@ -926,7 +926,7 @@ void TestRuleControllerOverview::monitorOverviewVirtualScreenFallsBackToMonitorR
     const QVariantMap tile = tileFor(controller.monitorOverview({screenJson(virtualId)}), virtualId);
     QCOMPARE(tile.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
     QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
-    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
 }
 
 void TestRuleControllerOverview::monitorOverviewVirtualScreenJudgesMonitorRulesByItsOwnShape()
@@ -934,7 +934,10 @@ void TestRuleControllerOverview::monitorOverviewVirtualScreenJudgesMonitorRulesB
     // A monitor split into a wide and a narrow virtual screen: both inherit
     // the monitor's rules through the physical-id retry, and the retry judges
     // a screen-size condition against each virtual screen's own size, as the
-    // daemon's does. Only the wide one takes the wide layout.
+    // daemon's does. Only the wide one takes the wide layout. Each tile counts
+    // the monitor rules whose match holds for it, so the rule that gives it
+    // its layout always counts: both rules on the wide screen, only the
+    // unconditional one on the narrow screen.
     RuleController controller;
     QVERIFY(!addRule(controller,
                      QVariantMap{
@@ -956,6 +959,8 @@ void TestRuleControllerOverview::monitorOverviewVirtualScreenJudgesMonitorRulesB
         controller.monitorOverview({screenJson(wideId, 3840, 1440), screenJson(narrowId, 1280, 1440)});
     QCOMPARE(tileFor(overview, wideId).value(QStringLiteral("layoutName")).toString(), QStringLiteral("wide"));
     QCOMPARE(tileFor(overview, narrowId).value(QStringLiteral("layoutName")).toString(), QStringLiteral("standard"));
+    QCOMPARE(tileFor(overview, wideId).value(QStringLiteral("ruleCount")).toInt(), 2);
+    QCOMPARE(tileFor(overview, narrowId).value(QStringLiteral("ruleCount")).toInt(), 1);
 }
 
 void TestRuleControllerOverview::monitorOverviewEstimatedSizeIsUnknown()

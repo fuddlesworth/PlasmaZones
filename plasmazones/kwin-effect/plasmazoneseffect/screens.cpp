@@ -640,19 +640,50 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     return;
                 }
 
-                const QString json = reply.value();
-                QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-                if (!doc.isObject()) {
+                // A reply the effect cannot use drops the monitor's definitions, so its
+                // windows resolve to the physical screen rather than to subdivisions
+                // the daemon does not hold.
+                const auto dropDefs = [&]() {
                     const bool removed = self->m_virtualScreenDefs.remove(physicalScreenId) > 0;
                     if (removed) {
                         self->reresolveTrackedScreens();
                     }
                     countdownVsGate();
                     restoreReadyIfLive(removed);
+                };
+
+                const QString json = reply.value();
+                QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+                if (!doc.isObject()) {
+                    dropDefs();
                     return;
                 }
 
-                QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
+                const QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
+                QList<VirtualScreenReply> replies;
+                replies.reserve(screens.size());
+                for (const QJsonValue& val : screens) {
+                    const QJsonObject obj = val.toObject();
+                    const QJsonObject region = obj.value(QLatin1String("region")).toObject();
+                    replies.append(VirtualScreenReply{
+                        obj.value(QLatin1String("id")).toString(), obj.value(QLatin1String("index")).toInt(-1),
+                        QRectF(region.value(QLatin1String("x")).toDouble(), region.value(QLatin1String("y")).toDouble(),
+                               region.value(QLatin1String("width")).toDouble(),
+                               region.value(QLatin1String("height")).toDouble())});
+                }
+
+                // Admitted whole or not at all, on the daemon's own terms
+                // (VirtualScreenConfig::isValid). Keeping the screens that pass and
+                // dropping one that fails would leave the output part covered, and
+                // the rect cannot decide a screen either, since
+                // absoluteVirtualScreenRect floors every side at one pixel and would
+                // admit a zero-width region as a 1x1 screen.
+                if (!virtualScreenConfigIsAdmitted(physicalScreenId, replies)) {
+                    qCWarning(lcEffect) << "fetchVirtualScreenConfig: refusing the virtual screens for"
+                                        << physicalScreenId << "as a config the daemon would not hold";
+                    dropDefs();
+                    return;
+                }
 
                 // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
                 //
@@ -696,30 +727,16 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
 
                 QVector<EffectVirtualScreenDef> defs;
-                for (const QJsonValue& val : screens) {
-                    QJsonObject obj = val.toObject();
-                    QJsonObject region = obj.value(QLatin1String("region")).toObject();
-
+                defs.reserve(replies.size());
+                for (const VirtualScreenReply& screen : std::as_const(replies)) {
                     EffectVirtualScreenDef def;
-                    def.id = obj.value(QLatin1String("id")).toString();
-
+                    def.id = screen.id;
                     // The absolute geometry is cut from the fractional region within the
                     // physical screen. No physGeom.isValid() test: the arm above returns
                     // on an invalid physGeom now, so a guard here would be dead and would
                     // re-imply that an invalid one reaches this loop. The region is kept
                     // so an output that moves re-derives the rect (onScreenAdded).
-                    def.region =
-                        QRectF(region.value(QLatin1String("x")).toDouble(), region.value(QLatin1String("y")).toDouble(),
-                               region.value(QLatin1String("width")).toDouble(),
-                               region.value(QLatin1String("height")).toDouble());
-                    // Admitted on the daemon's own terms (VirtualScreenDef::isValid):
-                    // a virtual id and a region inside the output. The rect cannot
-                    // decide it, since absoluteVirtualScreenRect floors every side at
-                    // one pixel and would admit a zero-width region as a 1x1 screen.
-                    const bool virtualId = PhosphorIdentity::VirtualScreenId::isVirtual(def.id);
-                    if (!virtualId || !virtualScreenRegionIsValid(def.region)) {
-                        continue;
-                    }
+                    def.region = screen.region;
                     def.geometry = absoluteVirtualScreenRect(def.region, physGeom);
                     defs.append(def);
                 }

@@ -588,10 +588,14 @@ private Q_SLOTS:
         QCOMPARE(mgr.pendingPixelSize(QStringLiteral("DP-1")).value_or(QSize()), QSize(2560, 1440));
 
         // A report for an output the manager has not seen yet is held pending
-        // and answers once the output arrives and the host accepts it.
+        // and answers once the output arrives and the host accepts it. An
+        // accept before the output arrives is a no-op, so the output does not
+        // turn up already answering a report nobody checked against it.
         QSignalSpy pendingSpy(&mgr, &ScreenManager::compositorPixelSizeChanged);
         mgr.setCompositorPixelSize(QStringLiteral("HDMI-A-1"), QSize(1920, 1080));
         QCOMPARE(pendingSpy.count(), 1);
+        mgr.acceptCompositorPixelSize(QStringLiteral("HDMI-A-1"));
+        QCOMPARE(acceptedSpy.count(), 0);
         fake.addScreen(QStringLiteral("HDMI-A-1"), QRect(3413, 0, 1920, 1080), QStringLiteral("Dell:U27:1"));
         QVERIFY(!mgr.pixelSize(QStringLiteral("Dell:U27:1")).has_value());
         mgr.acceptCompositorPixelSize(QStringLiteral("HDMI-A-1"));
@@ -623,7 +627,8 @@ private Q_SLOTS:
     }
 
     // A synthetic screen has no geometry sensor, so its logical scale stays
-    // the fallback for good, which a host gating reports needs to know.
+    // the fallback for good, which a host gating reports needs to know, and
+    // no sensor of it ever maps.
     void testSyntheticScreenHasNoScaleSensor()
     {
         FakePhysicalScreenSource fake;
@@ -635,6 +640,8 @@ private Q_SLOTS:
         QVERIFY(screen.isValid());
         QVERIFY(!mgr.hasLogicalScaleSensor(screen));
         QVERIFY(!mgr.hasLogicalScaleSensor(PhysicalScreen()));
+        QVERIFY(!mgr.isLogicalScaleSensorMapped(screen));
+        QVERIFY(!mgr.isLogicalScaleSensorMapped(PhysicalScreen()));
     }
 };
 

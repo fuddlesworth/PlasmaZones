@@ -48,6 +48,15 @@ inline constexpr qreal MaxPlausibleScreenScale = 8.0;
 /// a coarse integer scale standing in for a fractional one, and another
 /// monitor's size all land outside. False for an empty size and a
 /// non-positive scale.
+///
+/// A monitor whose mode lands within the tolerance of another's still passes
+/// for it. When one replaces another on the same connector and the QScreen
+/// change arrives first, the outgoing monitor's report, still pending, is
+/// checked against the incoming monitor's geometry and accepted if the two
+/// are that close (a 1366x768 panel for a 1360x768 one at scale 1), and
+/// stands until the incoming monitor's own report replaces it. The size, the
+/// scale and the geometry are all a client sees of either monitor, so
+/// nothing here can tell the two apart.
 inline bool pixelSizeMatchesLogicalSize(const QSize& pixelSize, const QSize& logical, qreal scale)
 {
     if (pixelSize.isEmpty() || logical.isEmpty() || !(scale > 0.0)) {
@@ -74,8 +83,9 @@ inline bool pixelSizeMatchesLogicalSize(const QSize& pixelSize, const QSize& log
 /// region's share), or an invalid size when the reply carries none, as a
 /// daemon older than the key answers. The daemon publishes the output's mode
 /// as the compositor reported it, once the report agrees with the screen
-/// (@ref pixelSizeMatchesLogicalSize), or until then the size last accepted
-/// for that monitor, in this session or an earlier one. With neither
+/// (@ref pixelSizeMatchesLogicalSize), or at once on a screen whose scale the
+/// daemon cannot measure, or until then the size last accepted for that
+/// monitor, in this session or an earlier one. With neither
 /// it estimates the size as the logical size times the scale, rounded, which
 /// can miss the mode by a pixel on a fractional scale. The reply's
 /// pixelSizeSource says which of the three the size is.

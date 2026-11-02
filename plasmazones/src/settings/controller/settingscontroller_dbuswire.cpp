@@ -111,7 +111,7 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     // layout, whether a desktop switch, a rule edit or an assignment edit
     // moved it, where screenLayoutChanged reports only assignment edits.
     // screenStatesChanged reports a change to any field getScreenStates
-    // answers, so a desktop or activity switch that keeps the layout and a
+    // answers except the display names, so a desktop or activity switch that keeps the layout and a
     // change in a screen's tiled-window count arrive too. All three re-read
     // the cached screen states the Rules page's monitor tiles evaluate
     // against. The Rules page coming into view and the window regaining

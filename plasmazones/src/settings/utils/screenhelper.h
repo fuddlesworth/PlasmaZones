@@ -31,7 +31,7 @@ public:
     /// builds it, plus `pixelWidth` / `pixelHeight` (the size in device
     /// pixels, present only when the daemon answered one) and
     /// `pixelSizeKnown` (true when that size is the compositor's report or
-    /// the seeded one, the size last reported for that monitor in this
+    /// the seeded one, the size last accepted for that monitor in this
     /// session or an earlier one, which is when the daemon's rules see it,
     /// and false for an estimate). `width` / `height` and `displayLabel` stay
     /// logical.

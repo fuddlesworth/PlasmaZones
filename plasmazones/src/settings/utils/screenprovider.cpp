@@ -94,7 +94,7 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                     // (an older daemon) leaves pixelSize invalid. The size is
                     // known, as the daemon's rules see it, only when it is the
                     // compositor's report or the seeded one, the size last
-                    // reported for that monitor in this session or an earlier
+                    // accepted for that monitor in this session or an earlier
                     // one. An estimate is kept for display but not known.
                     const QJsonObject pixelSize = jsonObj.value(JsonKeys::PixelSize).toObject();
                     const QSize devicePixels(pixelSize.value(::PhosphorZones::ZoneJsonKeys::Width).toInt(),

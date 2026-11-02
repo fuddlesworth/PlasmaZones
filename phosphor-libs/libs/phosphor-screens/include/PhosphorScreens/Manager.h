@@ -371,7 +371,8 @@ public:
      * already matches the pending one. A real change emits
      * @ref acceptedPixelSizeChanged. Accepting a report that confirms the
      * seed is a change too: @ref pixelSize answers the same, but
-     * @ref isPixelSizeReported flips.
+     * @ref isPixelSizeReported flips. A no-op too for a connector the
+     * manager does not track: its report stays pending.
      *
      * The accepted report is dropped, without a signal, when the manager's
      * own QScreen for the connector goes away: it was accepted for the
@@ -400,6 +401,22 @@ public:
      * good, and no later signal improves it.
      */
     bool hasLogicalScaleSensor(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Whether @p screen's geometry sensor has mapped, so
+     *        @ref logicalScale answers the compositor's own scale for it.
+     *
+     * True from the sensor's first expose, which follows the compositor's
+     * first configure of its layer surface. KWin settles a layer surface's
+     * preferred scale when it creates the surface's window, ahead of that
+     * configure, so by the expose the sensor carries the real scale, on an
+     * integer output as on a fractional one. Before it, @ref logicalScale may still
+     * answer the coarse QScreen fallback, which a different monitor's mode
+     * can agree with. @ref logicalScaleSensorMapped announces the change.
+     * False for a screen with no sensor (@ref hasLogicalScaleSensor), and
+     * again once the sensor is destroyed.
+     */
+    bool isLogicalScaleSensorMapped(const PhysicalScreen& screen) const;
 
 Q_SIGNALS:
     void screenAdded(const PhysicalScreen& screen);
@@ -460,14 +477,23 @@ Q_SIGNALS:
     /// accept moved the accepted report (@ref acceptCompositorPixelSize), or
     /// a seed change altered the answer for a screen with no accepted
     /// report. An accept that confirms the seed fires it too, because
-    /// @ref isPixelSizeReported has flipped. Appended last among the signals.
+    /// @ref isPixelSizeReported has flipped.
     void acceptedPixelSizeChanged(const QString& connectorName);
+
+    /// @p screen's geometry sensor mapped (@ref isLogicalScaleSensorMapped):
+    /// from now on @ref logicalScale answers the compositor's scale for it.
+    /// Fires once per sensor, whether or not the scale differs from the
+    /// fallback, so a host waiting on the real scale hears of an integer
+    /// output too, where @ref logicalScaleChanged may never fire. Appended
+    /// last among the signals.
+    void logicalScaleSensorMapped(const PhysicalScreen& screen);
 
 protected:
     /// Watches the geometry sensors for @c QEvent::DevicePixelRatioChange,
     /// which is the only notice Qt gives that a window's per-surface scale
     /// moved — @c QWindow has no changed signal for it. Emits
-    /// @ref logicalScaleChanged for the sensor's screen.
+    /// @ref logicalScaleChanged for the sensor's screen. Also watches for the
+    /// sensor's first expose, and emits @ref logicalScaleSensorMapped then.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private Q_SLOTS:
@@ -589,6 +615,11 @@ private:
     // Dropped per connector on the manager's own screen removal
     // (destroyGeometrySensor) and wholesale on stop().
     QHash<QString, QSize> m_acceptedPixelSizes;
+
+    // Connector names whose geometry sensor has mapped
+    // (isLogicalScaleSensorMapped). Set by eventFilter on the sensor's first
+    // expose, dropped with the sensor in destroyGeometrySensor.
+    QSet<QString> m_mappedScaleSensors;
 };
 
 } // namespace PhosphorScreens

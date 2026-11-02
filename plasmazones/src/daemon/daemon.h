@@ -796,8 +796,9 @@ private:
      * triggers in one turn reconciles once, and gated on m_shuttingDown. Used
      * by the inputs that move an assignment verdict without an explicit
      * assignment write and can wait a turn: a rule-set change, a colour-scheme
-     * flip, and a logical geometry change that reshaped a screen whose pixel
-     * size is unknown. An applied compositor pixel-size report reconciles
+     * flip, a logical geometry change that reshaped a screen whose pixel size
+     * is unknown, and a seed change that reshaped a screen whose report is
+     * parked. An applied compositor pixel-size report reconciles
      * synchronously instead (@ref onCompositorPixelSizeChanged), and the two virtual-screen
      * handlers apply their own diff.
      */
@@ -835,14 +836,18 @@ private:
      * ScreenReshapeTracker::evaluateReport) describes a mode the daemon's
      * geometry does not show yet, a monitor that replaced the tracked one on
      * the same connector, or a scale still at its coarse start-up fallback.
+     * A report on a screen whose scale sensor has not mapped is not checked
+     * at all, because that fallback can pass a different monitor's mode.
      * Accepting it then would resnap into the new verdict's zones over a
      * stale logical rect, and would save and seed the size under the
      * outgoing monitor's identifier. So such a report is PARKED: it stays
      * pending, and nothing reads it, so no shape, verdict, window or OSD moves
-     * on its account. The screenGeometryChanged and logicalScaleChanged
-     * handlers call this again for a parked connector, and a screen add
-     * evaluates its connector's report afresh (@ref admitPixelSizeReport), so
-     * it applies once the screen catches up. Another connector's apply, and
+     * on its account. A shape the evaluation's trigger moved (a seed change)
+     * is still noted and reconciled a turn later. The screenGeometryChanged,
+     * logicalScaleChanged and logicalScaleSensorMapped handlers call this
+     * again for a parked connector, and a screen add evaluates its
+     * connector's report afresh (@ref admitPixelSizeReport), so it applies
+     * once the screen catches up. Another connector's apply, and
      * the reconcile it runs, cannot move a parked screen: that screen's shape
      * still reads the size accepted before the report.
      *
@@ -863,9 +868,9 @@ private:
      * OSD, as does the reshape an accepted clear causes: each replaces a
      * stand-in with the real size or the other way round, which is the screen
      * settling, not a change the user made. Logins trace as: the seed serves
-     * until a report is accepted; a report checked against the coarse
-     * integer scale is parked until logicalScaleChanged brings the real one,
-     * then applies silently. A daemon restart under a running effect gets
+     * until a report is accepted; a report evaluated before the output's
+     * scale sensor maps is parked until logicalScaleSensorMapped brings the
+     * real scale, then applies silently. A daemon restart under a running effect gets
      * every output's report again when the bridge registers, or finds it
      * already pending at start-up, and applies it the same way. Bookkeeping
      * in @ref m_reshapeTracker.
@@ -882,7 +887,9 @@ private:
      * active-assignment snapshot and the handler's own diff resolves them
      * with whatever size is in force, and as the first step of
      * @ref onCompositorPixelSizeChanged. A parked report is left pending.
-     * Returns the tracker's verdict.
+     * The work is PlasmaZones::admitPixelSizeReport's, over this daemon's
+     * ScreenManager and with the window-tracking adaptor's session state as
+     * the persist sink. Returns the tracker's verdict.
      */
     ScreenReshapeTracker::ReportVerdict admitPixelSizeReport(const QString& connectorName);
 

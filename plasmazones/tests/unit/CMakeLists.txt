@@ -799,15 +799,14 @@ add_test(NAME test_engine_routing COMMAND test_engine_routing)
 # records that keep a verdict from being absorbed or applied twice. Compiles
 # the daemon source directly, like the seed filter. Links the
 # FakePhysicalScreenSource and plasmazones_core (for common/daemonscreenscale.h
-# and PhosphorScreens): the two-connector case runs the tracker over a real
+# and PhosphorScreens): the admit cases run admitPixelSizeReport over a real
 # ScreenManager's pending and accepted reports.
 add_executable(test_screen_reshape_tracker
     daemon/test_screen_reshape_tracker.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/screenreshapetracker.cpp
 )
 target_include_directories(test_screen_reshape_tracker PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
-target_link_libraries(test_screen_reshape_tracker PRIVATE pz_test_fake_screens)
-target_link_libraries(test_screen_reshape_tracker PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+target_link_libraries(test_screen_reshape_tracker PRIVATE pz_test_fake_screens Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_screen_reshape_tracker COMMAND test_screen_reshape_tracker)
 
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core,

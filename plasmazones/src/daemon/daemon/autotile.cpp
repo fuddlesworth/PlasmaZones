@@ -750,8 +750,8 @@ QSet<QString> Daemon::diffActiveAssignments()
 
 void Daemon::reconcileActiveAssignments()
 {
-    // The screens onCompositorPixelSizeChanged marked silent are for this pass
-    // only, whichever way it ends, the suppressed early return below included:
+    // The screens onCompositorPixelSizeChanged and the screenGeometryChanged
+    // handler marked silent are for this pass only, whichever way it ends, the suppressed early return below included:
     // a later reconcile that applies the same verdict was not asked to keep
     // quiet.
     const auto silentScope = qScopeGuard([this] {

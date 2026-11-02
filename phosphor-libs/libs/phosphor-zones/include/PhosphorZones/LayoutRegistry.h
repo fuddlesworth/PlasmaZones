@@ -301,7 +301,8 @@ public:
      *
      * The provider is asked about the screen a public resolver was called
      * with, once per resolver call. A composite such as
-     * @ref isContextActiveLayoutSuppressed runs two resolvers and so asks
+     * @ref isContextActiveLayoutSuppressed runs up to two resolvers (it
+     * returns early when the first finds an active layout) and so asks up to
      * twice. A virtual screen that falls back to its physical screen's
      * assignment keeps its own count on that retry, so the provider is never
      * asked about the physical id on the virtual screen's behalf. When it

@@ -458,6 +458,8 @@ private Q_SLOTS:
         QTest::addRow("trailing junk") << QVariant(QStringLiteral("2560px")) << false;
         QTest::addRow("long long past int") << QVariant(qlonglong(5000000000LL)) << false;
         QTest::addRow("unsigned past int") << QVariant(qulonglong(3000000000ULL)) << false;
+        // Pins validity only. Which rejection it logs is untested because this
+        // suite mutes the org.phosphor.rule.* categories.
         QTest::addRow("numeric string past int") << QVariant(QStringLiteral("5000000000")) << false;
         // The accepted shapes: the integral variants, a whole double (JSON's
         // only number), and a string that parses as an int in full.

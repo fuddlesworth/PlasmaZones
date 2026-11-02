@@ -207,9 +207,8 @@ public:
     /// written, so a consumer compares them ignoring case, as the rule
     /// engine's Equals does. The one walk: the model exposes it as
     /// `ScreenIdsRole` (the Rules page's monitor filter), and
-    /// `RuleController::monitorOverview` (which rules a tile counts) and
     /// `RuleController::screenSizeHint` (which monitors the editor's note
-    /// names) read it too.
+    /// names) reads it too.
     static QStringList screenIdsOf(const PhosphorRules::MatchExpression& match);
 
     /// Display label for an action type id that no built-in label covers —

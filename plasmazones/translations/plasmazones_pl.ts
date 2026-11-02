@@ -10298,7 +10298,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="938"/>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="474"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="494"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="160"/>
         <source>Scrolling (no template)</source>
         <translation>Przewijanie (brak szablonu)</translation>
@@ -23598,19 +23598,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="445"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="465"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="205"/>
         <source>Snapping (no layout)</source>
         <translation>Przyciąganie (brak układu)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="452"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="472"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <source>Tiling (no algorithm)</source>
         <translation>Kafelkowanie (brak algorytmu)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="543"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="563"/>
         <source>%1 is %2 × %3 pixels right now, which is closest to %4.</source>
         <comment>monitor name, its width and height in device pixels, then its aspect ratio</comment>
         <translation type="unfinished"></translation>

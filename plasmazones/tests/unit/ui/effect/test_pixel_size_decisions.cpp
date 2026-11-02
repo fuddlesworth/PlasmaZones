@@ -37,14 +37,6 @@ void apply(QHash<QString, QSize>& daemon, const QList<Report>& reports)
     }
 }
 
-// The removal's call, when it owes one, applied after every earlier report.
-void applyRemoval(QHash<QString, QSize>& daemon, const RemovalOutcome& removal)
-{
-    if (removal.report) {
-        apply(daemon, {*removal.report});
-    }
-}
-
 } // namespace
 
 class TestPixelSizeDecisions : public QObject
@@ -160,9 +152,12 @@ private Q_SLOTS:
     }
 
     // A monitor swapped on the same port: KWin adds the new output before it
-    // removes the old one, and the flush the add queued can report the new
-    // size before the removal runs. A clear for the connector would then land
-    // after that report and wipe it at the daemon, so the removal owes a flush
+    // removes the old one, and the add queues a flush. When the removal runs
+    // in the same turn, that flush has not run yet
+    // (removalBeforeTheAddsFlushReportsTheLiveSize). This models the other
+    // order, where the flush has already reported the new size by the time
+    // the removal runs. A clear for the connector would land after that report
+    // and wipe it at the daemon, so the removal sends nothing and owes a flush
     // instead, which re-reads the live output.
     void removalWithALiveConnectorKeepsTheLiveReport()
     {
@@ -175,20 +170,18 @@ private Q_SLOTS:
         const RemovalOutcome removal = ledger.remove(true, DP1, true);
         QVERIFY(!removal.report.has_value());
         QVERIFY(removal.flushOwed);
-        // Whatever the removal sends lands after the live output's report.
-        applyRemoval(daemon, removal);
-        QCOMPARE(daemon.value(DP1), QSize(2560, 1440));
 
         // The owed flush finds the daemon already holding the live size.
         QVERIFY(ledger.flush(true, {output(DP1, QSize(2560, 1440))}).reports.isEmpty());
         QCOMPARE(daemon.value(DP1), QSize(2560, 1440));
     }
 
-    // The same swap with a monitor of the same size. Its report was deduped,
-    // and a clear would un-record the connector's sent size, so a later flush
-    // would send it again. Nothing would queue that flush, though: the add's
-    // flush already ran and the live output's mode never moves. The owed flush
-    // is the one that would be missing.
+    // The same swap with a monitor of the same size, in the same order. Its
+    // report was deduped, and a clear would have dropped the size at the
+    // daemon and un-recorded the connector's sent size. Nothing would queue a
+    // flush to send it again, though: the add's flush already ran and the live
+    // output's mode never moves. The owed flush is the one that would be
+    // missing, and it finds the daemon holding the live size.
     void removalWithALiveSameSizeConnectorKeepsTheReport()
     {
         Ledger ledger;
@@ -199,11 +192,31 @@ private Q_SLOTS:
         const RemovalOutcome removal = ledger.remove(true, DP1, true);
         QVERIFY(!removal.report.has_value());
         QVERIFY(removal.flushOwed);
-        applyRemoval(daemon, removal);
-        QCOMPARE(daemon.value(DP1), QSize(3840, 2160));
 
         QVERIFY(ledger.flush(true, {output(DP1, QSize(3840, 2160))}).reports.isEmpty());
         QCOMPARE(daemon.value(DP1), QSize(3840, 2160));
+    }
+
+    // The swap with the removal in the same turn as the add, so the add's
+    // queued flush has not run and the daemon still holds the old monitor's
+    // size. The removal sends nothing and owes a flush, which collapses with
+    // the queued one, and that flush reports the live output's size.
+    void removalBeforeTheAddsFlushReportsTheLiveSize()
+    {
+        Ledger ledger;
+        QHash<QString, QSize> daemon;
+        apply(daemon, ledger.flush(true, {output(DP1, QSize(3840, 2160))}).reports);
+
+        const RemovalOutcome removal = ledger.remove(true, DP1, true);
+        QVERIFY(!removal.report.has_value());
+        QVERIFY(removal.flushOwed);
+
+        const FlushOutcome flushed = ledger.flush(true, {output(DP1, QSize(2560, 1440))});
+        QCOMPARE(flushed.reports.size(), 1);
+        QVERIFY(flushed.reports.at(0) == (Report{DP1, QSize(2560, 1440)}));
+        QVERIFY(flushed.shapeChanged);
+        apply(daemon, flushed.reports);
+        QCOMPARE(daemon.value(DP1), QSize(2560, 1440));
     }
 
     // KWin's placeholder output stands in while every monitor is off and

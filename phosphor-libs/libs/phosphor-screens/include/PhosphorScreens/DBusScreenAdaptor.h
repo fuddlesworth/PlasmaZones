@@ -71,9 +71,9 @@ public Q_SLOTS:
     /// screen's size in device pixels, for a virtual screen its own region's
     /// share. `pixelSize` is ScreenManager::pixelSize: the output's mode as
     /// the compositor reported it (setPixelSizeFromKWin) once the host
-    /// accepted the report, or until then the
-    /// size the host seeded, which is the size last reported for that
-    /// monitor, in this session or an earlier one. With neither it is
+    /// accepted the report, or until then the size the host seeded, which is
+    /// the size last accepted for that monitor, in this session or an earlier
+    /// one. With neither it is
     /// estimated as the logical size times the scale, rounded, which lands on
     /// the mode or within a pixel of it once the scale is the real one.
     /// `pixelSizeSource` names which of the three it is: "reported",

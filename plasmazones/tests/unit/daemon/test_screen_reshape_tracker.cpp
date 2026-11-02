@@ -7,8 +7,9 @@
 // connector across the orders a report and its QScreen change can arrive in,
 // and the reshape records that keep a verdict from being absorbed or applied
 // twice. Each case drives the repeat its fix exists for. The last cases run the
-// tracker over a real ScreenManager, whose pending reports are what keeps a
-// parked connector out of another connector's apply.
+// daemon's admit step (admitPixelSizeReport) over a real ScreenManager, whose
+// pending reports are what keeps a parked connector out of another
+// connector's apply.
 
 #include <QHash>
 #include <QObject>
@@ -37,22 +38,32 @@ namespace {
 
 const QString Dp1 = QStringLiteral("DP-1");
 
-/// 2560x1440 at 150 % is a 1707x960 logical screen.
+/// 2560x1440 at 150 % is a 1707x960 logical screen, measured by a mapped
+/// sensor.
 Facts consistentReport()
 {
     return Facts{.tracked = true,
                  .pendingSize = QSize(2560, 1440),
                  .logicalSize = QSize(1707, 960),
                  .logicalScale = 1.5,
-                 .scaleSensor = true};
+                 .scaleSensor = true,
+                 .scaleSensorMapped = true};
 }
 
-/// The same report against the coarse integer scale a sensor not mapped yet
-/// leaves in force.
+/// The same report against a scale it does not agree with.
 Facts inconsistentReport()
 {
     Facts facts = consistentReport();
     facts.logicalScale = 2.0;
+    return facts;
+}
+
+/// The same report before the screen's sensor has mapped, while the scale is
+/// still the coarse integer fallback.
+Facts unmappedReport()
+{
+    Facts facts = inconsistentReport();
+    facts.scaleSensorMapped = false;
     return facts;
 }
 
@@ -188,14 +199,15 @@ private Q_SLOTS:
         QVERIFY(!tracker.isParked(Dp1));
     }
 
-    // Login: the report is checked against the coarse start-up scale and
+    // Login: the report arrives before the output's sensor maps and is
     // parked, the screen stays awaited meanwhile, and the report applies
-    // silently once the real scale makes it agree.
-    void loginCoarseScale_parksAndAppliesSilently()
+    // silently once the map brings the real scale.
+    void loginUnmappedSensor_parksAndAppliesSilently()
     {
         ScreenReshapeTracker tracker = makeTracker();
         tracker.screenAdded(Dp1);
-        QCOMPARE(tracker.evaluateReport(Dp1, inconsistentReport()).action, Action::Park);
+        QCOMPARE(tracker.evaluateReport(Dp1, unmappedReport()).action, Action::Park);
+        QVERIFY(tracker.isParked(Dp1));
         QVERIFY(tracker.isAwaitingFirstReport(Dp1));
 
         const auto applied = tracker.evaluateReport(Dp1, consistentReport());
@@ -295,15 +307,14 @@ private Q_SLOTS:
 
     // A screen with no geometry sensor keeps the coarse scale for good, and
     // no scale change would ever evaluate a parked report again, so its
-    // report applies unchecked. One whose sensor exists but has not mapped is
-    // still checked, because the map announces the real scale.
+    // report applies unchecked.
     void sensorlessScreen_appliesUnchecked()
     {
         ScreenReshapeTracker tracker = makeTracker();
         tracker.screenAdded(Dp1);
         QCOMPARE(tracker.evaluateReport(Dp1, inconsistentReport()).action, Action::Park);
 
-        Facts sensorless = inconsistentReport();
+        Facts sensorless = unmappedReport();
         sensorless.scaleSensor = false;
         const auto applied = tracker.evaluateReport(Dp1, sensorless);
         QCOMPARE(applied.action, Action::Apply);
@@ -312,15 +323,51 @@ private Q_SLOTS:
         QVERIFY(!tracker.isParked(Dp1));
     }
 
+    // A screen whose sensor exists but has not mapped parks every report
+    // unchecked, even one the coarse fallback scale agrees with. A 5K monitor
+    // at 200 % and a 4K one at 150 % share a 2560x1440 logical size, and the
+    // 4K's fallback is the integer ceiling 2, so the outgoing 5K's report
+    // passes the check against the incoming 4K. Once the sensor maps, the
+    // real 1.5 rejects it, and the 4K's own report applies as its first.
+    void unmappedSensor_parksAReportTheFallbackWouldPass()
+    {
+        ScreenReshapeTracker tracker = makeTracker();
+        tracker.screenAdded(Dp1);
+        Facts stale{.tracked = true,
+                    .pendingSize = QSize(5120, 2880),
+                    .logicalSize = QSize(2560, 1440),
+                    .logicalScale = 2.0,
+                    .scaleSensor = true,
+                    .scaleSensorMapped = false};
+        QVERIFY(pixelSizeMatchesLogicalSize(stale.pendingSize, stale.logicalSize, stale.logicalScale));
+        const auto parked = tracker.evaluateReport(Dp1, stale);
+        QCOMPARE(parked.action, Action::Park);
+        QVERIFY(!parked.persist);
+        QVERIFY(tracker.isParked(Dp1));
+
+        // The map brings 1.5, against which the 5K's report disagrees.
+        stale.scaleSensorMapped = true;
+        stale.logicalScale = 1.5;
+        QCOMPARE(tracker.evaluateReport(Dp1, stale).action, Action::Park);
+
+        Facts own = stale;
+        own.pendingSize = QSize(3840, 2160);
+        const auto applied = tracker.evaluateReport(Dp1, own);
+        QCOMPARE(applied.action, Action::Apply);
+        QVERIFY(applied.silent);
+        QVERIFY(applied.persist);
+    }
+
     // ─── Over a real ScreenManager ──────────────────────────────────────
 
-    // Two monitors dock at once. DP-1 is fractional and its sensor has not
-    // mapped, so its report is checked against the coarse scale and parks;
-    // DP-2's agrees and applies. The parked report is still PENDING in the
-    // manager, so DP-1's shape keeps reading its seed: DP-2's apply records
-    // only DP-2, and the verdict changes the reconcile after it takes leave
-    // DP-1 alone. DP-1 moves only at its own accept, once the real scale
-    // arrives, and silently, as the screen settling.
+    // Two monitors dock at once. DP-1's sensor has not mapped, so its report
+    // parks; DP-2's is measured and agrees, so it applies. The parked report
+    // is still PENDING in the manager, so DP-1's shape keeps reading its
+    // seed: DP-2's apply records only DP-2, and the verdict changes the
+    // reconcile after it takes leave DP-1 alone. DP-1 moves only at its own
+    // accept, once its sensor maps, and silently, as the screen settling.
+    // Only an applied report is re-seeded and persisted, under its own
+    // monitor's identifier.
     void parkedConnector_isNotAppliedByAnotherConnectorsApply()
     {
         const QString dp2 = QStringLiteral("DP-2");
@@ -345,22 +392,21 @@ private Q_SLOTS:
         m_snapshot.insert(idA, {QStringLiteral("layout-a"), QStringLiteral("1920x1080")});
         m_snapshot.insert(idB, {QStringLiteral("layout-b"), QStringLiteral("1920x1080")});
 
-        // Daemon::admitPixelSizeReport's glue: the pending report against the
-        // tracked screen, accepted on Apply. A synthetic screen has no QScreen
-        // to give a scale, so the test supplies the one the daemon would read.
-        const auto admit = [&](const QString& connector, qreal scale) {
-            const PhosphorScreens::PhysicalScreen screen = mgr.physicalScreenFor(connector);
-            Facts facts;
-            facts.tracked = screen.isValid();
-            facts.pendingSize = mgr.pendingPixelSize(connector).value_or(QSize());
-            facts.logicalSize = screen.geometry.size();
-            facts.logicalScale = scale;
-            facts.scaleSensor = true;
-            const ScreenReshapeTracker::ReportVerdict verdict = tracker.evaluateReport(connector, facts);
-            if (verdict.action == Action::Apply) {
-                mgr.acceptCompositorPixelSize(connector);
-            }
-            return verdict;
+        // What the daemon's sink would save.
+        QHash<QString, QSize> persisted;
+        const PixelSizePersistSink persist = [&persisted](const QString& screenIdentifier, const QSize& pixelSize) {
+            persisted.insert(screenIdentifier, pixelSize);
+        };
+        // A synthetic screen has no QScreen and no sensor, so the test
+        // supplies the scale the daemon would read and whether its sensor has
+        // mapped.
+        const auto admit = [&](const QString& connector, qreal scale, bool mapped) {
+            return admitPixelSizeReport(tracker, mgr, connector, persist,
+                                        [scale, mapped](const PhosphorScreens::PhysicalScreen&, Facts& facts) {
+                                            facts.logicalScale = scale;
+                                            facts.scaleSensor = true;
+                                            facts.scaleSensorMapped = mapped;
+                                        });
         };
 
         tracker.screenAdded(Dp1);
@@ -368,12 +414,15 @@ private Q_SLOTS:
         mgr.setCompositorPixelSize(Dp1, QSize(2560, 1440));
         mgr.setCompositorPixelSize(dp2, QSize(3840, 2160));
 
-        QCOMPARE(admit(Dp1, 2.0).action, Action::Park);
-        QCOMPARE(admit(dp2, 2.0).action, Action::Apply);
+        QCOMPARE(admit(Dp1, 2.0, false).action, Action::Park);
+        QCOMPARE(admit(dp2, 2.0, true).action, Action::Apply);
 
-        // The parked report reads nowhere.
+        // The parked report reads nowhere and is saved nowhere.
         QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(1920, 1080));
+        QVERIFY(!mgr.isPixelSizeReported(idA));
         QCOMPARE(mgr.pixelSize(idB).value_or(QSize()), QSize(3840, 2160));
+        QVERIFY(mgr.isPixelSizeReported(idB));
+        QCOMPARE(persisted, (QHash<QString, QSize>{{idB, QSize(3840, 2160)}}));
         QCOMPARE(tracker.noteReshaped({idA, idB}), QStringList{idB});
         QVERIFY(!tracker.hasRecord(idA));
 
@@ -382,12 +431,67 @@ private Q_SLOTS:
         m_snapshot.insert(idB, {QStringLiteral("layout-b-4k"), QStringLiteral("3840x2160")});
         QCOMPARE(tracker.takeVerdictChanges(), QSet<QString>{idB});
 
-        // The real scale arrives for DP-1: its report applies now, silently.
-        const ScreenReshapeTracker::ReportVerdict settled = admit(Dp1, 1.5);
+        // DP-1's sensor maps with the real scale: its report applies now,
+        // silently, and is saved under DP-1's monitor.
+        const ScreenReshapeTracker::ReportVerdict settled = admit(Dp1, 1.5, true);
         QCOMPARE(settled.action, Action::Apply);
         QVERIFY(settled.silent);
         QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(persisted.value(idA), QSize(2560, 1440));
         QCOMPARE(tracker.noteReshaped({idA, idB}), QStringList{idA});
+
+        // The re-seed is what a replug of the same monitor reads until a
+        // report is accepted for it again.
+        fake.removeScreen(Dp1);
+        fake.addScreen(Dp1, QRect(0, 0, 1707, 960), idA);
+        QVERIFY(!mgr.isPixelSizeReported(idA));
+        QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(2560, 1440));
+    }
+
+    // The admit step's other arms. A report for a connector the manager does
+    // not track is ignored and left pending, with nothing accepted or saved.
+    // A cleared report on a tracked one is accepted, so the screen falls back
+    // to its seed, and nothing is saved for it.
+    void admit_untrackedIsIgnoredAndAClearIsAccepted()
+    {
+        const QString idA = QStringLiteral("Dell:U27:1");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(Dp1, QRect(0, 0, 1920, 1080), idA);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        mgr.seedPixelSize(idA, QSize(1920, 1080));
+        ScreenReshapeTracker tracker = makeTracker();
+        int persistCalls = 0;
+        const PixelSizePersistSink persist = [&persistCalls](const QString&, const QSize&) {
+            ++persistCalls;
+        };
+
+        const QString hdmi = QStringLiteral("HDMI-A-1");
+        mgr.setCompositorPixelSize(hdmi, QSize(2560, 1440));
+        QCOMPARE(admitPixelSizeReport(tracker, mgr, hdmi, persist).action, Action::Ignore);
+        QCOMPARE(mgr.pendingPixelSize(hdmi).value_or(QSize()), QSize(2560, 1440));
+        QCOMPARE(persistCalls, 0);
+
+        // A synthetic screen has no sensor, so without a scale reader its
+        // report applies unchecked, read from the manager alone.
+        tracker.screenAdded(Dp1);
+        mgr.setCompositorPixelSize(Dp1, QSize(3840, 2160));
+        const ScreenReshapeTracker::ReportVerdict applied = admitPixelSizeReport(tracker, mgr, Dp1, persist);
+        QCOMPARE(applied.action, Action::Apply);
+        QVERIFY(applied.persist);
+        QCOMPARE(persistCalls, 1);
+        QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(3840, 2160));
+
+        mgr.setCompositorPixelSize(Dp1, QSize());
+        const ScreenReshapeTracker::ReportVerdict cleared = admitPixelSizeReport(tracker, mgr, Dp1, persist);
+        QCOMPARE(cleared.action, Action::Apply);
+        QVERIFY(cleared.silent);
+        QVERIFY(!cleared.persist);
+        QCOMPARE(persistCalls, 1);
+        QVERIFY(!mgr.isPixelSizeReported(idA));
+        // The seed now holds what was accepted before the clear.
+        QCOMPARE(mgr.pixelSize(idA).value_or(QSize()), QSize(3840, 2160));
     }
 
     // ─── Reshape records ────────────────────────────────────────────────

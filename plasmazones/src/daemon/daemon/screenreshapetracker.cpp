@@ -5,6 +5,9 @@
 
 #include "common/daemonscreenscale.h"
 
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/PhysicalScreen.h>
+
 #include <iterator>
 #include <utility>
 
@@ -90,14 +93,16 @@ ScreenReshapeTracker::ReportVerdict ScreenReshapeTracker::evaluateReport(const Q
         verdict.silent = true;
         return verdict;
     }
-    // Unchecked without a sensor: see the declaration.
-    const bool consistent =
-        !facts.scaleSensor || pixelSizeMatchesLogicalSize(facts.pendingSize, facts.logicalSize, facts.logicalScale);
+    // Applied unchecked without a sensor, parked unchecked before it maps:
+    // see the declaration.
+    const bool consistent = !facts.scaleSensor
+        || (facts.scaleSensorMapped
+            && pixelSizeMatchesLogicalSize(facts.pendingSize, facts.logicalSize, facts.logicalScale));
     if (!consistent) {
         // A mode the logical geometry has not caught up with, another monitor
-        // on the same connector, or a scale still at its coarse fallback until
-        // the sensor maps. The awaited state stays as it is, so the report
-        // applies as the first one when it does apply.
+        // on the same connector, or a sensor that has not mapped. The awaited
+        // state stays as it is, so the report applies as the first one when
+        // it does apply.
         m_parkedReports.insert(connectorName);
         verdict.action = ReportAction::Park;
         return verdict;
@@ -153,6 +158,58 @@ void ScreenReshapeTracker::reset()
     m_awaitingFirstReport.clear();
     m_parkedReports.clear();
     m_silentScreens.clear();
+}
+
+ScreenReshapeTracker::ReportVerdict admitPixelSizeReport(ScreenReshapeTracker& tracker,
+                                                         PhosphorScreens::ScreenManager& screens,
+                                                         const QString& connectorName,
+                                                         const PixelSizePersistSink& persist,
+                                                         const ReportScaleReader& readScale)
+{
+    // A report for an output the host does not track yet (the compositor and
+    // the host see an output arrive in no fixed order) is left to that
+    // output's add, which evaluates it against the screen it then has.
+    const PhosphorScreens::PhysicalScreen screen = screens.physicalScreenFor(connectorName);
+    ScreenReshapeTracker::ReportFacts facts;
+    facts.tracked = screen.isValid() && !screen.identifier.isEmpty();
+    // The PENDING report: nothing reads it until it is accepted below, so a
+    // report this call parks moves no rule, no verdict and no seed.
+    const QSize pendingSize = screens.pendingPixelSize(connectorName).value_or(QSize());
+    if (facts.tracked) {
+        facts.pendingSize = pendingSize;
+        facts.logicalSize = screen.geometry.size();
+        if (readScale) {
+            readScale(screen, facts);
+        } else {
+            facts.logicalScale = screens.logicalScale(screen);
+            facts.scaleSensor = screens.hasLogicalScaleSensor(screen);
+            facts.scaleSensorMapped = screens.isLogicalScaleSensorMapped(screen);
+        }
+    }
+    const ScreenReshapeTracker::ReportVerdict verdict = tracker.evaluateReport(connectorName, facts);
+    if (verdict.action != ScreenReshapeTracker::ReportAction::Apply) {
+        return verdict;
+    }
+    // The report (or the clear) becomes what ScreenManager::pixelSize answers
+    // for this screen, the registry's shape provider and getScreenInfo
+    // included, before the caller notes the reshape it causes.
+    screens.acceptCompositorPixelSize(connectorName);
+    if (verdict.persist) {
+        // What the compositor reports now is next session's seed, and this
+        // session's too: re-seeding a monitor with an accepted report answers
+        // nothing new (an accepted report outranks a seed, so the manager
+        // stays silent), but it is what a replug of the same monitor reads
+        // until a report is accepted for it again. Only this screen's, under
+        // its own identifier, and only once the report agrees with it: another
+        // connector's report may be parked, describing a monitor that has not
+        // arrived. The host merges, so a monitor unplugged now keeps the size
+        // it last had.
+        screens.seedPixelSize(screen.identifier, pendingSize);
+        if (persist) {
+            persist(screen.identifier, pendingSize);
+        }
+    }
+    return verdict;
 }
 
 } // namespace PlasmaZones

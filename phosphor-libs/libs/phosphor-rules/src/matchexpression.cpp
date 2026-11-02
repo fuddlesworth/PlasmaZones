@@ -295,7 +295,8 @@ bool MatchExpression::isValid() const
             break;
         case QMetaType::QString: {
             // Parsed wider than int so a well-formed number outside int range
-            // is reported as out of range rather than as not a number.
+            // (within 64 bits) is reported as out of range rather than as not
+            // a number.
             bool ok = false;
             const qlonglong v = m_predicate.value.toString().toLongLong(&ok);
             if (!ok) {

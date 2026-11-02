@@ -482,12 +482,12 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
     // The manager's answer is the one the daemon's own readers use: the
     // compositor's report of the output's mode once the host accepted it (a
     // Wayland client never sees the mode itself, because wl_output's mode
-    // event stays inside the QPA plugin), or until then the host's seed (for the PlasmaZones
-    // daemon, the size last reported for that monitor, in this session or an
-    // earlier one), with a virtual screen answering its region's share. With neither, this is
-    // estimated as the logical size times the scale above, rounded, which
-    // keeps the layout editor working before the first report and without a
-    // manager. The compositor made the logical size by dividing the mode by
+    // event stays inside the QPA plugin), or until then the host's seed (for
+    // the PlasmaZones daemon, the size last accepted for that monitor, in
+    // this session or an earlier one), with a virtual screen answering its
+    // region's share. With neither, this is estimated as the logical size
+    // times the scale above, rounded, which keeps the layout editor working
+    // before the first report and without a manager. The compositor made the logical size by dividing the mode by
     // that scale, so the estimate lands on the mode or within a pixel of it,
     // but only once the scale is the real one: before the output's sensor
     // maps, the coarse fallback makes it wrong. screenGeometryChanged

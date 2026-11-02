@@ -240,9 +240,9 @@ inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String PixelSize{"pixelSize"};
-// Where pixelSize came from: "reported" (the compositor's report), "seeded"
-// (the size last reported for that monitor, in this session or an earlier
-// one) or "estimated" (logical size times scale). The daemon's rules see a
+// Where pixelSize came from: "reported" (the compositor's report, once the
+// daemon accepted it), "seeded" (the size last accepted for that monitor, in
+// this session or an earlier one) or "estimated" (logical size times scale). The daemon's rules see a
 // size only for the first two.
 inline constexpr QLatin1String PixelSizeSource{"pixelSizeSource"};
 inline constexpr QLatin1String PixelSizeSourceReported{"reported"};

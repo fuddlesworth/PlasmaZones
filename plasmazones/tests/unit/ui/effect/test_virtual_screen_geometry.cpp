@@ -9,8 +9,9 @@
  *        the same region re-derived on an output that moved follows it (F806).
  *        Also the virtual screen's device-pixel size, the share the
  *        screen-shape rule fields read, and parity with the daemon's
- *        VirtualScreenDef::absoluteGeometry, clamps included, and the regions
- *        the effect admits matching the ones VirtualScreenDef::isValid admits.
+ *        VirtualScreenDef::absoluteGeometry, clamps included, and the screens
+ *        and configs the effect admits matching the ones
+ *        VirtualScreenDef::isValid and VirtualScreenConfig::isValid admit.
  */
 
 #include "plasmazoneseffect/virtualscreengeometry.h"
@@ -20,8 +21,25 @@
 #include <QTest>
 
 using PlasmaZones::absoluteVirtualScreenRect;
+using PlasmaZones::VIRTUAL_SCREEN_TOLERANCE;
+using PlasmaZones::virtualScreenConfigIsAdmitted;
+using PlasmaZones::virtualScreenDefIsAdmitted;
 using PlasmaZones::virtualScreenPixelSize;
 using PlasmaZones::virtualScreenRegionIsValid;
+using PlasmaZones::VirtualScreenReply;
+
+Q_DECLARE_METATYPE(QList<VirtualScreenReply>)
+
+namespace {
+
+const QString DP1 = QStringLiteral("DP-1");
+
+VirtualScreenReply screen(int index, const QRectF& region)
+{
+    return VirtualScreenReply{PhosphorIdentity::VirtualScreenId::make(DP1, index), index, region};
+}
+
+} // namespace
 
 class TestVirtualScreenGeometry : public QObject
 {
@@ -159,33 +177,115 @@ private Q_SLOTS:
         QCOMPARE(virtualScreenPixelSize(region, physical.size()), daemonPixels.size());
     }
 
-    // The effect admits exactly the regions the daemon's
-    // VirtualScreenDef::isValid admits, tolerance edges included. A zero or
-    // negative side is refused although the rect cut from it would floor at
-    // one pixel.
-    void admitsTheDaemonsRegions_data()
+    // The effect admits exactly the screens the daemon's
+    // VirtualScreenDef::isValid admits, tolerance edges included, on both axes.
+    // A zero or negative side is refused although the rect cut from it would
+    // floor at one pixel, and so is an id that is not a virtual one.
+    void admitsTheDaemonsScreens_data()
     {
+        QTest::addColumn<QString>("id");
         QTest::addColumn<QRectF>("region");
-        QTest::newRow("left half") << QRectF(0.0, 0.0, 0.5, 1.0);
-        QTest::newRow("sliver") << QRectF(0.5, 0.0, 0.0001, 1.0);
-        QTest::newRow("far edge inside tolerance") << QRectF(0.5, 0.0, 0.5009, 1.0);
-        QTest::newRow("far edge past tolerance") << QRectF(0.5, 0.0, 0.5011, 1.0);
-        QTest::newRow("origin inside tolerance") << QRectF(-0.0009, 0.0, 0.5, 1.0);
-        QTest::newRow("origin past tolerance") << QRectF(-0.0011, 0.0, 0.5, 1.0);
-        QTest::newRow("zero width") << QRectF(0.5, 0.0, 0.0, 1.0);
-        QTest::newRow("zero height") << QRectF(0.0, 0.5, 1.0, 0.0);
-        QTest::newRow("negative width") << QRectF(0.5, 0.0, -0.25, 1.0);
-        QTest::newRow("bottom past tolerance") << QRectF(0.0, 0.5, 1.0, 0.6);
+        const QString vs0 = QStringLiteral("DP-1/vs:0");
+        QTest::newRow("left half") << vs0 << QRectF(0.0, 0.0, 0.5, 1.0);
+        QTest::newRow("sliver") << vs0 << QRectF(0.5, 0.0, 0.0001, 1.0);
+        QTest::newRow("far edge inside tolerance") << vs0 << QRectF(0.5, 0.0, 0.5009, 1.0);
+        QTest::newRow("far edge past tolerance") << vs0 << QRectF(0.5, 0.0, 0.5011, 1.0);
+        QTest::newRow("origin inside tolerance") << vs0 << QRectF(-0.0009, 0.0, 0.5, 1.0);
+        QTest::newRow("origin past tolerance") << vs0 << QRectF(-0.0011, 0.0, 0.5, 1.0);
+        QTest::newRow("top inside tolerance") << vs0 << QRectF(0.0, -0.0009, 1.0, 0.5);
+        QTest::newRow("top past tolerance") << vs0 << QRectF(0.0, -0.0011, 1.0, 0.5);
+        QTest::newRow("bottom inside tolerance") << vs0 << QRectF(0.0, 0.5, 1.0, 0.5009);
+        QTest::newRow("zero width") << vs0 << QRectF(0.5, 0.0, 0.0, 1.0);
+        QTest::newRow("zero height") << vs0 << QRectF(0.0, 0.5, 1.0, 0.0);
+        QTest::newRow("negative width") << vs0 << QRectF(0.5, 0.0, -0.25, 1.0);
+        QTest::newRow("bottom past tolerance") << vs0 << QRectF(0.0, 0.5, 1.0, 0.6);
+        QTest::newRow("physical id") << QStringLiteral("DP-1") << QRectF(0.0, 0.0, 0.5, 1.0);
+        QTest::newRow("empty id") << QString() << QRectF(0.0, 0.0, 0.5, 1.0);
+        QTest::newRow("separator without a physical id") << QStringLiteral("/vs:0") << QRectF(0.0, 0.0, 0.5, 1.0);
     }
 
-    void admitsTheDaemonsRegions()
+    void admitsTheDaemonsScreens()
     {
+        QFETCH(QString, id);
         QFETCH(QRectF, region);
         PhosphorScreens::VirtualScreenDef def;
-        def.id = QStringLiteral("DP-1/vs:0");
-        def.physicalScreenId = QStringLiteral("DP-1");
+        def.id = id;
+        def.physicalScreenId = DP1;
         def.region = region;
-        QCOMPARE(virtualScreenRegionIsValid(region), def.isValid());
+        QCOMPARE(virtualScreenDefIsAdmitted(id, region), def.isValid());
+    }
+
+    // The effect's tolerance is the daemon's.
+    void toleranceIsTheDaemons()
+    {
+        QCOMPARE(VIRTUAL_SCREEN_TOLERANCE, PhosphorScreens::VirtualScreenDef::Tolerance);
+    }
+
+    // The effect admits exactly the configs the daemon's
+    // VirtualScreenConfig::isValid admits, judged from what the reply carries,
+    // and refuses a whole config for one bad screen.
+    void admitsTheDaemonsConfigs_data()
+    {
+        QTest::addColumn<QList<VirtualScreenReply>>("screens");
+        const QRectF left(0.0, 0.0, 0.5, 1.0);
+        const QRectF right(0.5, 0.0, 0.5, 1.0);
+        const qreal third = 1.0 / 3.0;
+        QTest::newRow("no screens") << QList<VirtualScreenReply>{};
+        QTest::newRow("halves") << QList<VirtualScreenReply>{screen(0, left), screen(1, right)};
+        QTest::newRow("thirds") << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, third, 1.0)),
+                                                             screen(1, QRectF(third, 0.0, third, 1.0)),
+                                                             screen(2, QRectF(2.0 * third, 0.0, third, 1.0))};
+        QTest::newRow("indices out of order") << QList<VirtualScreenReply>{screen(1, left), screen(0, right)};
+        QTest::newRow("one screen") << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 1.0, 1.0))};
+        QTest::newRow("one bad region") << QList<VirtualScreenReply>{screen(0, left),
+                                                                     screen(1, QRectF(0.5, 0.0, 0.0, 1.0))};
+        QTest::newRow("one physical id") << QList<VirtualScreenReply>{screen(0, left),
+                                                                      VirtualScreenReply{DP1, 1, right}};
+        QTest::newRow("id for another index")
+            << QList<VirtualScreenReply>{screen(0, left), VirtualScreenReply{QStringLiteral("DP-1/vs:2"), 1, right}};
+        QTest::newRow("id for another output")
+            << QList<VirtualScreenReply>{screen(0, left), VirtualScreenReply{QStringLiteral("DP-2/vs:1"), 1, right}};
+        QTest::newRow("negative index") << QList<VirtualScreenReply>{
+            screen(0, left), VirtualScreenReply{QStringLiteral("DP-1/vs:-1"), -1, right}};
+        QTest::newRow("duplicate screen") << QList<VirtualScreenReply>{screen(0, left), screen(0, right)};
+        QTest::newRow("overlap") << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 0.6, 1.0)),
+                                                              screen(1, QRectF(0.4, 0.0, 0.6, 1.0))};
+        QTest::newRow("overlap inside tolerance")
+            << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 0.5005, 1.0)), screen(1, right)};
+        QTest::newRow("gap") << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 0.4, 1.0)), screen(1, right)};
+        QTest::newRow("gap inside tolerance")
+            << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 0.4995, 1.0)), screen(1, right)};
+        QTest::newRow("stacked") << QList<VirtualScreenReply>{screen(0, QRectF(0.0, 0.0, 1.0, 0.5)),
+                                                              screen(1, QRectF(0.0, 0.5, 1.0, 0.5))};
+    }
+
+    void admitsTheDaemonsConfigs()
+    {
+        QFETCH(QList<VirtualScreenReply>, screens);
+        PhosphorScreens::VirtualScreenConfig config;
+        config.physicalScreenId = DP1;
+        for (const VirtualScreenReply& reply : std::as_const(screens)) {
+            PhosphorScreens::VirtualScreenDef def;
+            def.id = reply.id;
+            def.physicalScreenId = DP1;
+            def.index = reply.index;
+            def.region = reply.region;
+            config.screens.append(def);
+        }
+        QCOMPARE(virtualScreenConfigIsAdmitted(DP1, screens),
+                 PhosphorScreens::VirtualScreenConfig::isValid(config, DP1, 0));
+    }
+
+    // The rows above agree with the daemon either way. These pin which way, so
+    // a helper and a daemon that drifted together still fail.
+    void configVerdicts()
+    {
+        QVERIFY(virtualScreenConfigIsAdmitted(DP1, {}));
+        QVERIFY(virtualScreenConfigIsAdmitted(
+            DP1, {screen(0, QRectF(0.0, 0.0, 0.5, 1.0)), screen(1, QRectF(0.5, 0.0, 0.5, 1.0))}));
+        QVERIFY(!virtualScreenConfigIsAdmitted(
+            DP1, {screen(0, QRectF(0.0, 0.0, 0.5, 1.0)), screen(1, QRectF(0.5, 0.0, 0.0, 1.0))}));
+        QVERIFY(!virtualScreenConfigIsAdmitted(DP1, {screen(0, QRectF(0.0, 0.0, 1.0, 1.0))}));
     }
 
     // The zero-width region the filter refuses would otherwise be cut as a
