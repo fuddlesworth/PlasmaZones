@@ -10,11 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.5.4] - 2026-11-02
+
 ### Added
 
 - **Keep a window floating while "Always re-insert on drag" is on**: with always re-insert turned on for scrolling or tiling, every drag put the window back into the strip or stack, so a floating window could not be moved without being taken in again. The re-insert trigger now works the other way round while always re-insert is on. Hold it, or tap it in toggle mode, and the dragged window floats instead. If you move windows with the same key as the trigger, such as Alt, pick a different trigger. ([#1162](https://github.com/fuddlesworth/PlasmaZones/discussions/1162))
 - **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 - **Rules can tell a monitor's resolutions apart**: rules gain Screen width, Screen height and Screen aspect ratio conditions, so one monitor can get a different layout or tiling algorithm at a different resolution. A super-ultrawide whose split mode halves its width can keep one layout for each mode. The width and height are the monitor's own pixels before display scaling, and the rule editor shows each pinned monitor's current size under the condition. ([#1145](https://github.com/fuddlesworth/PlasmaZones/discussions/1145), [#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
+- **Fedora 45 packages**: each release now carries Fedora 45 RPMs for x86_64 and aarch64 next to the Fedora 44 ones. An RPM only loads against the KWin it was built with, so every Fedora release needs a build of its own. Thanks @jtbrough. ([#1177](https://github.com/fuddlesworth/PlasmaZones/pull/1177))
 
 ### Fixed
 
@@ -26,6 +29,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Gap rules reach windows that are already snapped**: a rule that sets a snapping screen's gaps only applied to windows snapped after it changed, so editing it, switching colour scheme, or a monitor changing to a size the rule tests left the snapped windows on the old gaps until each was snapped again. They now move to the new gaps straight away, the way they do when you change the gap settings. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
 - **The rules page's monitor tiles show what applies right now**: a tile showed the first rule naming its monitor even when that rule also asked for an orientation, colour scheme or window count the monitor did not have, and it ignored a rule that set only a layout. Each tile now works out the layout, lock and rule count the way the daemon does, against the monitor's current state and the rules as you are editing them. ([#1165](https://github.com/fuddlesworth/PlasmaZones/pull/1165))
 - **The editor shows fixed zones that don't fit the screen where they really land**: a layout of fixed-size zones bigger than the screen was shrunk in the editor to fit its canvas, so it looked as if it fit while PlasmaZones placed its zones past the screen edge. The editor now draws every fixed zone at its true size and position, pixel for pixel when you edit in fullscreen and scaled to the window otherwise, so a zone that runs off the screen runs off the canvas too. ([#1167](https://github.com/fuddlesworth/PlasmaZones/issues/1167), [#1171](https://github.com/fuddlesworth/PlasmaZones/pull/1171))
+- **COPR rebuilds reach dnf**: when a KWin update made PlasmaZones republish a release, the COPR package kept the version and revision of the one before it, so dnf never offered the rebuilt package and the KWin effect stayed unloaded on the new KWin. From 3.5.4 on, a rebuild carries its revision in the package and dnf upgrades to it. ([#1178](https://github.com/fuddlesworth/PlasmaZones/discussions/1178), [#1180](https://github.com/fuddlesworth/PlasmaZones/pull/1180))
+- **A tiling algorithm or shader pack can no longer stall PlasmaZones**: reading back what a tiling algorithm returned had no time or size limit, so an algorithm that returned a table holding itself, or one long piece of text referenced many times over, could hang the daemon or run it out of memory. Such a result is now refused as an error, the same as an algorithm that fails. A shader pack could also include any readable file on the system by giving its full path, or a file large enough to stall KWin while the pack loaded. An include by full path is now refused, and so is an included file over 1 MiB or a shader that grows too large once its includes are filled in. ([#1175](https://github.com/fuddlesworth/PlasmaZones/pull/1175), [#1176](https://github.com/fuddlesworth/PlasmaZones/pull/1176), [#1181](https://github.com/fuddlesworth/PlasmaZones/pull/1181))
 
 ## [3.5.3] - 2026-10-24
 
@@ -2770,7 +2775,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.4...HEAD
+[3.5.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.3...v3.5.4
 [3.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.2...v3.5.3
 [3.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.0...v3.5.1
