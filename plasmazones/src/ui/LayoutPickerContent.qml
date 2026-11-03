@@ -21,15 +21,15 @@ import org.plasmazones.common as QFZCommon
  * properties written by C++ (snapassist.cpp showLayoutPicker) onto the
  * instance via bindings.
  *
- * Phase 5: surface lifecycle + show/hide animations are driven entirely
- * by PhosphorAnimationLayer::SurfaceAnimator (registered for
- * PhosphorRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
- * profiles). PhosphorLayer::Surface handles `Qt.WindowTransparentForInput`
- * on the underlying QWindow during the hide cycle, and OverlayService::
- * showLayoutPicker / hideLayoutPicker drive the picker slot's animated
- * show/hide (hideLayoutPicker → ShellHost::hideSlot); the shell
- * wl_surface's map state is managed separately by
- * syncPassiveShellSurfaceState.
+ * Show/hide animations are driven entirely by
+ * PhosphorAnimationLayer::SurfaceAnimator (registered for
+ * PhosphorRoles::LayoutPicker with the `popup.layoutPicker.show` /
+ * `popup.layoutPicker.hide` profiles). OverlayService::showLayoutPicker /
+ * hideLayoutPicker drive the picker slot's animated show/hide
+ * (hideLayoutPicker → ShellHost::hideSlot). The shell wl_surface's map
+ * state and its `Qt.WindowTransparentForInput` flag are set separately, by
+ * ShellHost::syncSurfaceState through syncPassiveShellSurfaceState, which
+ * leaves the shell click-through once the picker slot's hide leg completes.
  *
  * This Item only owns:
  *   - Data properties written by C++ (layouts, activeLayoutId, locked, …)
@@ -49,17 +49,17 @@ Item {
     // call moveSelection() / confirmSelection() on the host slot via
     // QMetaObject::invokeMethod, driven by KGlobalAccel registrations.
     // Escape is dismissed via the daemon's KGlobalAccel cancel-overlay
-    // shortcut — KWin's wlr-layer-shell does not deliver keyboard events
-    // to this layer surface in our Qt/KWin combination, so a QML
-    // `Shortcut { sequence: "Escape" }` would never fire (verified via
-    // Keys.onPressed diagnostic). See start.cpp's layoutPickerRequested
-    // handler, which calls WindowDragAdaptor::ensureCancelOverlayShortcut
-    // -Registered() so the picker piggybacks on cancelSnap()'s existing
-    // Escape grab. cancelSnap() dismisses the picker first when visible.
+    // shortcut. The picker deliberately leaves the keyboard with the focused
+    // window (the shell holds KeyboardInteractivity::None while it is up), so
+    // a QML `Shortcut { sequence: "Escape" }` never fires here. The picker's
+    // show handler in daemon/shortcuts_wiring.cpp calls
+    // WindowDragAdaptor::ensureCancelOverlayShortcutRegistered() so the picker
+    // piggybacks on cancelSnap()'s Escape grab.
+    // cancelSnap() dismisses the picker first when visible.
 
     id: root
 
-    // Layout data (array of layout objects with id, name, zones, category, autoAssign)
+    // Layout data (array of layout objects with id, displayName, zones, category, autoAssign)
     property var layouts: []
     property string activeLayoutId: ""
     // The reserved scrolling-template id whose card stands for "no template".
@@ -100,10 +100,10 @@ Item {
     property bool locked: false
     /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
     /// clicks during the hide-animation fade-out window (the shell stays
-    /// mapped and briefly input-accepting while shaders or animations
-    /// are enabled — effects-gated keepMappedOnHide) can fire
-    /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
-    /// lands at the QWindow level. Without this, C++ re-runs the dismiss
+    /// mapped and input-accepting until the slot's hide leg completes) can
+    /// fire `dismissRequested` more than once before
+    /// `Qt.WindowTransparentForInput` lands at the QWindow level. Without
+    /// this, C++ re-runs the dismiss
     /// path (hideLayoutPicker) for an already-dismissed picker per
     /// spurious click. No writer resets it: the host slot's Loader
     /// re-instantiates this component on every show, so the latch starts
@@ -137,8 +137,11 @@ Item {
     // separate card here would widen the grid for a card that is not in it.
     // Floored at one column because a Templates screen with an empty store
     // has no grid cards at all, and Grid expects a positive column count.
-    readonly property int gridColumns: Math.max(1, Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5))))))
-    readonly property int gridRows: gridColumns > 0 ? Math.ceil(gridCount / gridColumns) : 0
+    // Capped by maxGridColumns so the frame never grows wider than the
+    // surface: only the card area's vertical axis scrolls, so columns past
+    // the screen edge could not be reached at all.
+    readonly property int gridColumns: Math.max(1, Math.min(maxGridColumns, gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5))))))
+    readonly property int gridRows: Math.ceil(gridCount / gridColumns)
     // Card dimensions
     readonly property int previewWidth: metrics.previewWidth
     readonly property int previewHeight: Math.round(previewWidth / safeAspectRatio)
@@ -154,11 +157,17 @@ Item {
     /// edge. Floored at one card so a very short screen still shows something
     /// scrollable rather than collapsing to nothing.
     readonly property int maxCardsHeight: Math.max(root.cardHeight, root.height - titleLabel.height - metrics.paddingSide * 3 - metrics.containerPadding * 2)
+    /// How many card columns fit across the surface, by the same budget the
+    /// height uses: the frame adds containerPadding to the card area, and a
+    /// further containerPadding keeps it off the screen edge. Floored at one
+    /// so a very narrow screen still shows a column, which then scrolls.
+    readonly property int maxGridColumns: Math.max(1, Math.floor((root.width - metrics.containerPadding * 2 + root.cardSpacing) / (root.cardWidth + root.cardSpacing)))
 
     // Internal signals — host Window re-emits to its public signals.
     signal layoutSelected(string layoutId)
-    /// User-initiated dismiss request (backdrop click, Escape, in-flight
-    /// race). The shell host re-emits it as `layoutPickerDismissRequested`,
+    /// User-initiated dismiss request (backdrop click or its accessible
+    /// press action). Escape never comes through here, it is a global
+    /// accelerator (see the keyboard note at the top). The shell host re-emits it as `layoutPickerDismissRequested`,
     /// which wirePassiveShellSlots (shellhost_bridge.cpp) connects to
     /// OverlayService::onLayoutPickerDismissRequested → hideLayoutPicker
     /// → ShellHost::hideSlot (animator-driven slot-hide). Same shape as
@@ -202,7 +211,12 @@ Item {
         // guessing the edge would move focus sideways on a vertical press.
         let col = onNoneRow ? Math.floor(root.gridColumns / 2) : selectedIndex % root.gridColumns;
         let row = onNoneRow ? root.gridRows : Math.floor(selectedIndex / root.gridColumns);
-        col = (col + dx + root.gridColumns) % root.gridColumns;
+        // A sideways move wraps within the row's real width, so a partial
+        // last row wraps both ways. Wrapping by the full column count and
+        // clamping afterwards let Left wrap there while Right stuck on the
+        // last card.
+        const rowWidth = (dy === 0 && !onNoneRow) ? Math.min(root.gridColumns, root.gridCount - row * root.gridColumns) : root.gridColumns;
+        col = (col + dx + rowWidth) % rowWidth;
         row = (row + dy + totalRows) % totalRows;
         if (row === root.gridRows) {
             // The extra row: only the None card lives there. Scrolled from
@@ -252,7 +266,7 @@ Item {
         if (root.hasNoneRow && root.selectedIndex === root.layoutCount - 1) {
             itemHeight = noneRow.height;
             itemY = cards.height - itemHeight;
-        } else if (root.gridColumns > 0) {
+        } else {
             itemY = Math.floor(root.selectedIndex / root.gridColumns) * (root.cardHeight + root.cardSpacing);
         }
         if (itemY < cardScroll.contentY)
@@ -267,14 +281,26 @@ Item {
     // stationary pointer; hover also already implies the card is on screen, so
     // it has nothing to reveal.
     //
-    // This deferral is a separate mechanism and has to stay. The initial
-    // selection comes from the binding above, which never passes through
-    // moveSelection, and it resolves before the cards are laid out, so an
-    // immediate call would run against a contentHeight of zero and do
-    // nothing. On the next tick it is what opens the picker already scrolled
-    // to the active card when that card is past the fold — the whole point of
-    // highlighting it.
-    Component.onCompleted: Qt.callLater(root._ensureSelectionVisible)
+    // The open-time reveal is a separate mechanism and has to stay. The
+    // initial selection comes from the binding above, which never passes
+    // through moveSelection, and it resolves before the cards are laid out,
+    // so a call at completion would run against a contentHeight of zero and
+    // do nothing. The Grid lays the cards out in a polish pass, and the shell
+    // is usually unmapped when the picker opens, so that pass waits for the
+    // remap and can land well after the next event-loop turn. So the reveal
+    // runs once the card area first has a height, from cardScroll's
+    // contentHeight change, with the deferred call covering a layout that was
+    // already done. It is what opens the picker already scrolled to the
+    // active card when that card is past the fold.
+    property bool _initialRevealPending: true
+    function _revealInitialSelection() {
+        if (!_initialRevealPending || cardScroll.contentHeight <= 0)
+            return;
+
+        _initialRevealPending = false;
+        root._ensureSelectionVisible();
+    }
+    Component.onCompleted: Qt.callLater(root._revealInitialSelection)
 
     /// A layout's position in the FULL model, by id. The cards are drawn from
     /// two containers now (the grid, and the None card's own row), so a
@@ -391,10 +417,20 @@ Item {
             anchors.top: titleLabel.bottom
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
-            width: cards.width
+            // Widened by the scroll bar while it is shown, so the bar sits
+            // beside the right-hand column instead of over its edge and its
+            // selection border.
+            width: cards.width + (interactive ? cardScrollBar.width : 0)
             height: Math.min(cards.height, root.maxCardsHeight)
             contentWidth: cards.width
             contentHeight: cards.height
+            // Deferred rather than called inline: height is bound to the same
+            // cards.height, and this handler can run before that binding has
+            // caught up.
+            onContentHeightChanged: {
+                if (root._initialRevealPending)
+                    Qt.callLater(root._revealInitialSelection);
+            }
             // Both gated on actually overflowing: an unclipped Flickable that
             // fits lets the cards' selection halo paint outside its bounds as
             // before, and a non-interactive one cannot swallow a press meant
@@ -406,6 +442,8 @@ Item {
             // it off the ordinary case where everything fits, matching the
             // clip and interactive gates above.
             ScrollBar.vertical: ScrollBar {
+                id: cardScrollBar
+
                 policy: ScrollBar.AsNeeded
             }
 
@@ -468,16 +506,16 @@ Item {
 
             required property var modelData
 
-            property var layoutData: modelData
+            readonly property var layoutData: modelData
             readonly property int modelIndex: root.indexOfLayoutId(layoutData.id)
-            property bool isSelected: modelIndex === root.selectedIndex
-            property bool isActive: layoutData.id === root.activeLayoutId
+            readonly property bool isSelected: modelIndex === root.selectedIndex
+            readonly property bool isActive: layoutData.id === root.activeLayoutId
             // Suppressed while locked: every input path bails on `locked`
             // (moveSelection, confirmSelection, the click below), so a card
             // that lights up under the pointer would be advertising an
             // interaction the picker will not perform. Pairs with the cursor
             // on cardMouse.
-            property bool isHovered: cardMouse.containsMouse && !root.locked
+            readonly property bool isHovered: cardMouse.containsMouse && !root.locked
 
             width: root.cardWidth
             height: root.cardHeight
@@ -506,6 +544,10 @@ Item {
 
             QFZCommon.LayoutCard {
                 anchors.fill: parent
+                // The delegate above is the accessible Button for this card;
+                // LayoutCard's own Pane node would announce the same name a
+                // second time.
+                Accessible.ignored: true
                 layoutData: layoutCard.layoutData
                 isActive: layoutCard.isActive
                 isSelected: layoutCard.isSelected
@@ -567,7 +609,8 @@ Item {
                 visible: root.locked && !layoutCard.isActive
                 z: 100
                 color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                radius: Kirigami.Units.largeSpacing
+                // LayoutCard's card radius, so the dim follows the card's corners.
+                radius: Kirigami.Units.gridUnit
 
                 Kirigami.Icon {
                     anchors.centerIn: parent

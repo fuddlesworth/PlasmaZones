@@ -203,6 +203,19 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // mis-classifies (Steam / CEF child surfaces) without journal noise.
     logWindowDiagnostics(w, "windowAdded");
 
+    // The daemon's overlay shell maps a fresh layer surface on every overlay
+    // show, and KWin types a layer surface with an unknown scope as a Normal
+    // window. The stock open/close built-ins (scale, fade, glide) would then
+    // animate the whole transparent output-sized window, with a forced blur
+    // behind it, on every show and hide. Holding WindowAddedGrabRole makes them
+    // skip it, and slotWindowClosed takes WindowClosedGrabRole the same way.
+    // Neither is released: our own animation filter rejects this class, so no
+    // transition of ours ever owns the window, and it dies on unmap.
+    const bool ownOverlayShell = isOwnPassthroughOverlayClass(w->windowClass());
+    if (ownOverlayShell) {
+        w->setData(KWin::WindowAddedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
+    }
+
     // Wired exactly once per window: this slot is the only caller that sees
     // windows opened after the effect loaded, and setupWindowConnections
     // carries an m_wiredWindows guard behind that. See the ordering invariant on the
@@ -264,8 +277,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Sync floating state for this window from daemon
     // This ensures windows that were floating when closed remain floating when reopened
     // Use full windowId so daemon can do per-instance lookup with appId fallback
+    // Not for the overlay shell, which is never tiled or floated and would send
+    // the query on every overlay show.
     QString windowId = getWindowId(w);
-    m_navigationHandler->syncFloatingStateForWindow(windowId);
+    if (!ownOverlayShell) {
+        m_navigationHandler->syncFloatingStateForWindow(windowId);
+    }
 
     // Decorate the new window immediately, open transition or not. The old
     // slot-fight hazard is gone: reconcileDecorationShader defers the
@@ -369,6 +386,12 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         // Same entry-guard rule as slotWindowAdded: getWindowId, frameGeometry
         // and w->window() below all deref unguarded.
         return;
+    }
+
+    // The close half of slotWindowAdded's grab on the daemon's overlay shell.
+    // No refWindow: nothing here keeps the window painting after this slot.
+    if (isOwnPassthroughOverlayClass(w->windowClass())) {
+        w->setData(KWin::WindowClosedGrabRole, QVariant::fromValue(static_cast<void*>(this)));
     }
 
     // Release keyboard grab if the dragged window was closed
@@ -724,6 +747,13 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId)
 {
     if (!w) {
+        return;
+    }
+
+    // pushWindowMetadata never registers the daemon's overlay shell, so there
+    // is nothing for the daemon to clean up, and the shell closes on every
+    // overlay hide.
+    if (isOwnPassthroughOverlayClass(w->windowClass())) {
         return;
     }
 

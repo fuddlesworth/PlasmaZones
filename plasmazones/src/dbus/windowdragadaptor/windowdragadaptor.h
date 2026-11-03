@@ -935,7 +935,7 @@ private:
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
     // (trigger released, but the drag is still live). Windows stay alive;
     // only the shader output is cleared. Cleared when the overlay shows zones
-    // again (refreshFromIdle) or when the drag ends.
+    // again (refreshFromIdle) or when the drag ends, which hides the overlay.
     bool m_overlayIdled = false;
     bool m_zoneSelectorShown = false;
     // Tracks which (virtual) screen the selector is currently shown on, so we

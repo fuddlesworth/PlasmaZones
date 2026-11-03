@@ -23,6 +23,7 @@
 #include <PhosphorOverlay/phosphoroverlay_export.h>
 
 #include <QHash>
+#include <QMetaObject>
 #include <QString>
 
 class QQuickWindow;
@@ -103,6 +104,16 @@ private:
     PhosphorLayer::Surface* m_shellSurface = nullptr;
     QQuickWindow* m_shellWindow = nullptr;
     QScreen* m_physScreen = nullptr;
+    /// First-frame tracking for the keyboard grab (see
+    /// ShellHost::syncSurfaceState). m_surfaceStateWatch arms
+    /// m_firstFrameWatch whenever the surface enters State::Shown, i.e. maps,
+    /// and the first presented frame after that clears
+    /// m_awaitingFirstFrame and sends a grab the sync deferred. Both
+    /// connections are dropped by destroyShell.
+    QMetaObject::Connection m_surfaceStateWatch;
+    QMetaObject::Connection m_firstFrameWatch;
+    bool m_awaitingFirstFrame = false;
+    bool m_keyboardGrabDeferred = false;
 };
 
 } // namespace PhosphorOverlay

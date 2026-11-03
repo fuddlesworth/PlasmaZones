@@ -8,12 +8,12 @@
  * Owns:
  *   - show / showAtPosition - entry points to make the zone overlay visible,
  *     resolving the cursor's screen and consulting per-VS disabled state
- *   - hide / toggle - symmetric counterparts; hide() destroys overlay
- *     windows rather than hiding them (Vulkan swapchain re-init issue)
+ *   - hide / toggle - symmetric counterparts; hide() runs each main-overlay
+ *     slot's hide leg and unloads its content, and the shell unmaps once no
+ *     slot is visible
  *   - setIdleForDragPause / refreshFromIdle / applyIdleStateForCursor -
- *     drag-mode pause that blanks shader output without tearing down the
- *     QQuickWindows (avoids per-screen Vulkan teardown stalls during
- *     modifier-key thrashing in a drag).
+ *     mid-drag pause that blanks shader output while the slots stay visible,
+ *     so modifier-key thrashing in a drag never maps and unmaps the shell.
  */
 
 #include "internal.h"
@@ -165,8 +165,8 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             if (m_overlayIdled) {
-                // A trigger-show arriving while warm-idled (a drag-end kept the
-                // windows alive but blanked: zones=[], shader + CAVA quiesced).
+                // A trigger-show arriving while warm-idled (a mid-drag trigger
+                // release blanked the slots: zones=[], shader + CAVA quiesced).
                 // applyIdleStateForCursor() alone only flips _idled, so it would
                 // un-blank the slot but leave it showing the empty zone data with
                 // a frozen shader. refreshFromIdle() clears m_overlayIdled,
@@ -207,9 +207,9 @@ void OverlayService::hide()
     // on every re-show, which would make each show visually identical
     // (cycle-restart) rather than continuing the animation in place.
 
-    // Post-shell-migration: the shell wl_surface stays mapped across
-    // hide/show cycles (its lifecycle is managed by destroyPassiveShell,
-    // not per-overlay-toggle). Drive the main-overlay slot's
+    // Post-shell-migration: the shell wl_surface outlives this hide (it
+    // is destroyed only by destroyPassiveShell, not per-overlay-toggle,
+    // and unmaps only once no slot is visible). Drive the main-overlay slot's
     // configured hide leg via the SurfaceAnimator so the slot fades
     // out cleanly and the next show() can fade-in. dismissOverlayWindow
     // also clears the per-screen "main overlay active" sentinel
@@ -244,18 +244,17 @@ void OverlayService::toggle()
 
 void OverlayService::setIdleForDragPause()
 {
-    // Blank the overlay's shader output without destroying QQuickWindows.
-    // The heavy hide() path pays a ~QQuickWindow Vulkan teardown per screen
-    // which blocks the main thread on the scene graph render thread - and
-    // with modifier-key thrashing during a drag we ended up paying that cost
-    // many times per second, stalling D-Bus dispatch long enough for
-    // kwin-effect's endDrag to time out and the user to see multi-second lag.
+    // Blank the overlay's shader output for a mid-drag trigger release while
+    // the drag goes on. hide() would run each slot's hide leg and unload its
+    // content, and once no slot is visible the shell unmaps, so modifier-key
+    // thrashing during a drag would map and unmap the shell and rebuild the
+    // content many times per second.
     //
-    // Here we only clear the per-window QML properties that drive the shader
-    // (zones, zoneCount, highlights). Windows, Vulkan swap chains, and layer
-    // surfaces stay alive. On the next activation tick, refreshFromIdle()
-    // re-pushes the current zone data - cheap because the labels-texture
-    // build is hash-cached on unchanged inputs.
+    // Here we only clear the per-slot QML properties that drive the shader
+    // (zones, zoneCount, highlights). The slots stay visible, so the shell
+    // stays mapped. On the next activation tick, refreshFromIdle() re-pushes
+    // the current zone data - cheap because the labels-texture build is
+    // hash-cached on unchanged inputs. Drag end calls hide(), not this.
     if (!m_visible) {
         return;
     }
@@ -299,13 +298,11 @@ void OverlayService::setIdleForDragPause()
     // data until refreshFromIdle() is called."
     m_zoneDataDirty = false;
 
-    // Real drag-end routes here too (the QQuickWindows are kept alive to dodge
-    // an NVIDIA teardown deadlock — see WindowDragAdaptor), so without this the
-    // 60 Hz shader render loop + CAVA would run for the daemon's whole lifetime
-    // after the first drag. Mark idle and schedule a grace-period quiesce: a
-    // quick re-trigger (modifier thrash) cancels it via refreshFromIdle() and
-    // keeps everything warm; a genuine rest stops the render loop + CAVA after
-    // the grace window. The windows stay alive, so no teardown cost on resume.
+    // A layout-suppressed or inactive cursor screen idles here too and can
+    // hold the idle for as long as the cursor stays on it. Mark idle and
+    // schedule a grace-period quiesce: a quick re-trigger (modifier thrash)
+    // cancels it via refreshFromIdle() and keeps everything warm, and a longer
+    // idle stops the 60 Hz render loop + CAVA after the grace window.
     m_overlayIdled = true;
     scheduleIdleQuiesce();
 }
@@ -365,8 +362,8 @@ void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, b
     // - showOnAllMonitors=true  → all overlays un-idled (all VSes active)
     // - showOnAllMonitors=false → only activeEffectiveId un-idled
     // - activeEffectiveId empty → all overlays idled (no active VS -
-    //   used by setIdleForDragPause when drag-end hasn't chosen a next
-    //   cursor position yet, or when the cursor sits on a disabled VS)
+    //   used by refreshFromIdle when the remembered screen is inactive or
+    //   unset, or when the cursor sits on a disabled VS)
     //
     // The write is idempotent: QML property binding only re-evaluates
     // when the value actually changes, so flipping _idled on a window

@@ -132,11 +132,12 @@ public:
      * is therefore NOT a reliable signal for "currently shown" because it
      * stays `true` while the surface is logically Hidden under
      * `Qt::WindowTransparentForInput`. This helper is the right answer
-     * for both lifecycles: keep-mapped surfaces consult Surface state
-     * (false during the transparent-for-input span); destroy-on-hide
-     * surfaces are simply gone from the consumer's tracking when hidden,
-     * so the call site never reaches isLogicallyShown() on a destroyed
-     * Surface.
+     * for every lifecycle: keep-mapped surfaces consult Surface state
+     * (false during the transparent-for-input span); unmap-on-hide surfaces
+     * that stay alive across hides agree with `window()->isVisible()`;
+     * destroy-on-hide surfaces are simply gone from the consumer's tracking
+     * when hidden, so the call site never reaches isLogicallyShown() on a
+     * destroyed Surface.
      */
     [[nodiscard]] bool isLogicallyShown() const noexcept;
 

@@ -443,11 +443,12 @@ void ShaderEffect::releaseIdleGraphicsResources()
     //     behind it is Qt-version-dependent (the qCDebug line in the job is
     //     the field check); a real frame removes the doubt.
     // update() requests a frame through the normal damage path. While the
-    // surface is mapped (keepMappedOnHide — which is effects-gated, so with
-    // visual effects disabled the hidden surface is unmapped and the frame
-    // waits for the next show) the compositor grants it, the render thread
-    // runs once, and both the layer drop and the queued job apply. One extra
-    // composited frame of an invisible overlay, once per idle grace.
+    // window is exposed the compositor grants it, the render thread runs once,
+    // and both the layer drop and the queued job apply: one extra composited
+    // frame of an idle item, once per call. A hidden window renders no frame,
+    // and the threaded render loop deletes the queued job unrun. Its hide has
+    // already run the sceneGraphAboutToStop hook above, which released the
+    // node's resources, so only the layer drop waits for the next show.
     win->update();
 }
 

@@ -193,6 +193,13 @@ public:
         return m_cursorHidden;
     }
 
+    /// The output the pass draws on, i.e. the one under the pointer's history.
+    /// Null before the first pointer event and after a reset.
+    KWin::LogicalOutput* output() const
+    {
+        return m_output;
+    }
+
     /// Tell the pass who else in this effect draws its own copy of the cursor
     /// while holding KWin's hide (the strip pass, in practice). Consulted by
     /// cursorSpriteGone(): a raised hide counter with no such owner is a

@@ -380,7 +380,11 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
 
 void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
 {
-    if (!mayReserveScreenEdge(w)) {
+    // The daemon's own overlay shell passes mayReserveScreenEdge (an unmovable
+    // Normal-typed Wayland window) but never reserves space, and it maps and
+    // unmaps with every overlay show, so tracking it would push a work-area
+    // report on each one. Excluded here and in onWindowClosed alike.
+    if (!mayReserveScreenEdge(w) || PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
         return;
     }
     // A panel mapped (or was already mapped at effect startup). KWin reserves
@@ -397,7 +401,7 @@ void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
 
 void ScreenChangeHandler::onWindowClosed(KWin::EffectWindow* w)
 {
-    if (!mayReserveScreenEdge(w)) {
+    if (!mayReserveScreenEdge(w) || PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
         return;
     }
     // A panel closed — its strut is freed and KWin grows the work area.

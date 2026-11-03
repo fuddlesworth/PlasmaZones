@@ -322,9 +322,9 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::ScrollDropIndicator, []() { });
-    // Re-derive the surface's input state after Surface::show() cleared the
-    // transparent-input flag. This slot contributes no region of its own, so
-    // the sync is what keeps the shell click-through for the rest of the drag.
+    // Re-derive the surface's input state now that the slot is visible. This
+    // slot is not modal, so the sync keeps the shell click-through for the
+    // rest of the drag unless a modal slot is up alongside it.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 }
 

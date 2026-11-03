@@ -116,17 +116,13 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 createOverlayWindow(vsId, screen, vsGeom);
                 updateOverlayWindow(vsId, screen);
                 const auto& vsState = m_screenStates.value(vsId);
+                // No Surface::show() here: this path makes no slot visible,
+                // so the shell stays unmapped until a slot's own show path
+                // maps it. ensurePassiveShellFor (via createOverlayWindow)
+                // already set the input flag from the modal slots.
                 if (vsState.overlayPhysScreen && vsState.shell) {
                     if (auto* window = vsState.shell->shellWindow()) {
                         assertWindowOnScreen(window, screen, vsGeom);
-                        if (vsState.shell->shellSurface() && !vsState.shell->shellSurface()->isLogicallyShown()) {
-                            vsState.shell->shellSurface()->show();
-                            // Surface::show() clears Qt::WindowTransparentForInput.
-                            // Re-assert the input region based on current modal-slot
-                            // state so a hot-plug add on a screen with no modal
-                            // slot up doesn't leave the shell click-eating.
-                            syncPassiveShellSurfaceState(vsId);
-                        }
                     }
                 }
             }
@@ -136,13 +132,10 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
+        // No Surface::show(), for the reason given in the branch above.
         if (pState.overlayPhysScreen && pState.shell) {
             if (auto* window = pState.shell->shellWindow()) {
                 assertWindowOnScreen(window, screen, screen->geometry());
-                if (pState.shell->shellSurface() && !pState.shell->shellSurface()->isLogicallyShown()) {
-                    pState.shell->shellSurface()->show();
-                    syncPassiveShellSurfaceState(physScreenId);
-                }
             }
         }
     }

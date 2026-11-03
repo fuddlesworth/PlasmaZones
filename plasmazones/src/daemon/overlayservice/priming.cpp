@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Surface render-pipeline prime / cancel-prime helpers. Wires a
-// fire-once frameSwapped-driven hide for newly-created surfaces so the
-// Vulkan swapchain + QML scene-graph have walked at least one frame
-// before the user-triggered show path takes over.
+// Surface render-pipeline prime / cancel-prime helpers. Shows a
+// newly-created surface and wires a fire-once frameSwapped hand-back to the
+// slot-driven sync, so the QML scene has rendered once before the
+// user-triggered show path takes over.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -148,10 +148,16 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
             QObject::disconnect(connIt.value());
             m_primingFrameConnections.erase(connIt);
         }
-        // Only hide if the user hasn't already taken over the surface
-        // (cancelSurfacePrime would have removed us from the set).
+        // Only hand back if the user hasn't already taken over the surface
+        // (cancelSurfacePrime would have removed us from the set). The
+        // hand-back is the slot-driven sync, not a bare hide(): with no slot
+        // visible it unmaps, and a slot a missed cancel let through keeps the
+        // shell mapped instead of being unmapped under the user. The bare hide
+        // is only for a surface no screen state owns.
         if (m_primingSurfaces.remove(guard.data())) {
-            guard->hide();
+            if (!syncPassiveShellSurfaceStateForSurface(guard.data())) {
+                guard->hide();
+            }
         }
     });
     m_primingFrameConnections.insert(surface, frameConn);

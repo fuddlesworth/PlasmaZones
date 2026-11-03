@@ -413,8 +413,8 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
             continue;
         }
         // Look through the daemon's own passthrough overlay surface — it is
-        // full-screen and always topmost, so a bail here would kill FFM whenever
-        // an overlay is up (mirrors the autotile FFM guard). The interactive
+        // full-screen and topmost while mapped, so a bail here would kill FFM
+        // whenever an overlay is up (mirrors the autotile FFM guard). The interactive
         // editor is NOT looked through: it falls to the not-snapped bail below,
         // so FFM leaves focus on it instead of stealing to a snapped window.
         if (PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
