@@ -131,6 +131,7 @@ set(PZ_SHARED_LIB_NAMES
     "libPhosphorEngine"
     "libPhosphorFsLoader"
     "libPhosphorGeometry"
+    "libPhosphorIpc"
     "libPhosphorLayer"
     "libPhosphorLayoutApi"
     "libPhosphorOverlay"
@@ -162,7 +163,6 @@ set(PZ_SHARED_LIB_NAMES
     # point of the by-name design.
     "libPhosphorTheme"
     "libPhosphorPopout"
-    "libPhosphorIpc"
     "libPhosphorShell"
     "libPhosphorServiceIconTheme"
     "libPhosphorServiceSni"

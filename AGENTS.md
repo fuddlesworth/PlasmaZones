@@ -285,11 +285,11 @@ Layer enforcement is on (`.moon/workspace.yml`): an application tier may not dep
 The tree is four product tiers plus repo-level support directories. Each tier has its own `CMakeLists.txt` (entered from the root one) and its own `moon.yml` project.
 ```
 phosphor-libs/           — tier 1: core LGPL libraries
-  libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, service-idle, ...
+  libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, ipc, service-idle, ...
   data/schemas/          — JSON schemas the libraries compile in
   extern/                — vendored Luau + valijson tarballs
 phosphor-shell-libs/     — tier 2: shell libraries (BUILD_PHOSPHOR_SHELL)
-  libs/phosphor-*/       — theme, popout, ipc, phosphor-shell*, phosphor-service-* (all but idle)
+  libs/phosphor-*/       — theme, popout, phosphor-shell*, phosphor-service-* (all but idle)
   examples/              — demos and CLI acceptance harnesses
 phosphor-shell/          — tier 3: the shell binary (BUILD_PHOSPHOR_SHELL)
   src/                   — shell process controllers and transports
