@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Phosphor shell libraries: the theme, popout and IPC foundation, the
+# Phosphor shell libraries: the theme and popout foundation, the
 # Phosphor.* QML surfaces, and the per-domain system service libraries.
 # Entered from the root CMakeLists only when BUILD_PHOSPHOR_SHELL is ON, so
 # the per-subdirectory `if(BUILD_PHOSPHOR_SHELL)` blocks below are redundant
@@ -9,13 +9,13 @@
 # reads as declaring its own precondition; do not take their presence as
 # evidence that this file is reachable with the flag off.
 #
-# Order matters: phosphor-shell links theme/popout/ipc, so they precede it.
+# Order matters: phosphor-shell links theme/popout, so they precede it.
+# phosphor-ipc is a tier-1 library in phosphor-libs, declared before this tier.
 # icontheme is consumed by sni and notifications, so it configures first
 # among the services.
 
 add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
 add_subdirectory(libs/phosphor-popout)  # central popout coordinator (lifetime, focus, scope arbitration)
-add_subdirectory(libs/phosphor-ipc)     # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
 add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
 add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
 add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets

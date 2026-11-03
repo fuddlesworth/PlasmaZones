@@ -3,8 +3,8 @@
 
 # phosphor-ipc
 
-> Typed JSON-over-Unix-socket invocation channel for
-> phosphor-shell. Lets compositor keybinds, external scripts, and
+> Typed JSON-over-Unix-socket invocation channel for Phosphor
+> applications such as phosphor-shell. Lets compositor keybinds, external scripts, and
 > other shells drive Phosphor actions by verb (`phosphorctl call
 > launcher.toggle`) without rebuilding the existing D-Bus surface.
 

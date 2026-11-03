@@ -7,11 +7,11 @@
 # QCommandLineParser / QJsonDocument / QLocalSocket, all of which
 # are idiomatic across the codebase already, so the binary follows
 # the project's "no vendoring" policy without dragging Go / Rust
-# tooling in. Reuses libs/phosphor-ipc's IpcProtocol.h to keep the
+# tooling in. Reuses phosphor-libs/libs/phosphor-ipc's IpcProtocol.h to keep the
 # wire format authoritative across server + client TUs (mirrors the
 # phosphor-protocol-shared-between-server-and-client precedent).
 
-# Floor pinned to 6.6 so it matches libs/phosphor-ipc/CMakeLists.txt;
+# Floor pinned to 6.6 so it matches phosphor-libs/libs/phosphor-ipc/CMakeLists.txt;
 # without an explicit floor a downstream consumer building against an
 # older Qt6 could link this CLI against a library compiled with a
 # newer Qt6 ABI.
