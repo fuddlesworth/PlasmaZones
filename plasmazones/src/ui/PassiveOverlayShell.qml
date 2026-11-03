@@ -21,21 +21,21 @@ import org.plasmazones.common as QFZCommon
  *     blocks the faster one's. With every passive overlay riding the
  *     shell's single window, all per-content animations share one
  *     polishAndSync — no inter-content contention.
- *   - The QML scene and its scene-graph pipelines are built once at
- *     daemon start (the prime in wirePassiveShellSlots) and survive
+ *   - The QML scene is built once per shell, when the shell is created
+ *     (the prime in wirePassiveShellSlots), and the QML items survive
  *     every unmap. syncPassiveShellSurfaceState unmaps the wl_surface
  *     once all slots are hidden, because an idle mapped shell on the
- *     Overlay layer blocks KWin's direct scanout of fullscreen windows
- *     (see createWarmedOsdSurface). A show after an unmap pays the
- *     remap and swapchain rebuild, not the cold-pipeline cost.
+ *     Overlay layer blocks KWin's direct scanout of fullscreen windows.
+ *     A show after an unmap pays a new layer surface and swapchain, and
+ *     every shader item re-reads its source and rebuilds its GPU
+ *     resources (see createWarmedOsdSurface for the full list).
  *
- * This shell is the kbd-None grouping. Modal kbd-Exclusive overlays
- * (snap-assist, layout picker) historically lived in their own per-show
- * wl_surfaces because layer-shell binds keyboard interactivity at first
- * commit and KWin doesn't re-evaluate it on already-mapped surfaces.
- * The unified shell hosts them in THIS same shell with kbd routed via
- * global accelerators (KGlobalAccel) instead — see the modal slots hosted
- * in PassiveOverlayModalSlots.qml (instantiated below as `modalSlots`).
+ * This shell is kbd-None except while the cheatsheet holds
+ * KeyboardInteractivity::Exclusive for its search field. Snap assist and
+ * the layout picker are modal for the pointer but leave the keyboard with
+ * the focused window on purpose, and answer to global accelerators
+ * (KGlobalAccel) instead — see the modal slots hosted in
+ * PassiveOverlayModalSlots.qml (instantiated below as `modalSlots`).
  *
  * C++ side accesses each slot Item via the `osdSlotItem` (etc.) alias
  * exposed on this Window root; property writes target the slot Item
@@ -72,9 +72,11 @@ Window {
     readonly property Item snapAssistSlotItem: modalSlots.snapAssistSlotItem
     /// Layout-picker slot Item — SurfaceAnimator target for picker
     /// show/hide. Modal kbd (Return/Enter/arrows/Escape) routes via
-    /// KGlobalAccel ad-hoc registrations made by start.cpp on the
-    /// matching show/dismiss signals — the shell is kbd-None so QML
-    /// Shortcuts can't fire here.
+    /// KGlobalAccel ad-hoc registrations (WindowDragAdaptor's
+    /// ensureLayoutPickerNavShortcutsRegistered and
+    /// ensureCancelOverlayShortcutRegistered, called from daemon/shortcuts_wiring.cpp)
+    /// — the shell stays kbd-None for the picker, so QML Shortcuts can't
+    /// fire here.
     readonly property Item layoutPickerSlotItem: modalSlots.layoutPickerSlotItem
     /// Zone-selector slot Item — SurfaceAnimator target for selector
     /// show/hide. Per-VS positioning via the slot's anchors.fill: parent
@@ -83,10 +85,10 @@ Window {
     /// Main zone overlay slot Item — displays zones during window drag.
     readonly property alias mainOverlaySlotItem: mainOverlaySlot
     /// Cheatsheet slot Item — SurfaceAnimator target for the shortcut
-    /// cheatsheet's show/hide. Display-only modal card; Escape routes via
-    /// a dedicated KGlobalAccel ad-hoc grab made by start.cpp on the
-    /// matching show/dismiss signals — the shell is kbd-None so QML
-    /// Shortcuts can't fire here.
+    /// cheatsheet's show/hide. Escape routes via a dedicated KGlobalAccel
+    /// ad-hoc grab bound inside Daemon::toggleCheatsheet (daemon/cheatsheet.cpp).
+    /// The search field types through the shell's Exclusive keyboard grab,
+    /// which the daemon holds only while the cheatsheet is up.
     readonly property Item cheatsheetSlotItem: modalSlots.cheatsheetSlotItem
     /// Scroll drag drop-indicator slot Item — outlines the slot a dragged
     /// window would land in while a scrolling drag re-insert is armed.
@@ -97,8 +99,8 @@ Window {
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — only the
-    /// slot's opacity animates; the shell unmaps after it only if no
-    /// other slot is visible).
+    /// slot runs its configured hide transition; the shell unmaps after
+    /// it only if no other slot is visible).
     signal osdDismissRequested
     /// Forwarded from snap-assist's `windowSelected` signal — host wires
     /// to onSnapAssistWindowSelected.
@@ -114,11 +116,13 @@ Window {
     /// primary Escape goes via the dedicated ad-hoc grab).
     signal cheatsheetDismissRequested
 
-    // Qt::WindowTransparentForInput is driven imperatively by C++ from
-    // syncPassiveShellSurfaceState (via Surface::show()/hide(), which
-    // unmaps the surface once no slot is visible) — while no modal slot
-    // is up the shell's wl_surface input region is set empty so clicks
-    // pass through.
+    // Qt::WindowTransparentForInput is driven imperatively by C++:
+    // ShellHost::syncSurfaceState, reached from
+    // syncPassiveShellSurfaceState, sets it directly whenever no modal slot
+    // is visible, so clicks pass through. Surface::show()/hide() only map
+    // and unmap this shell and never touch the flag. The input region
+    // itself is always the whole surface; the flag alone decides whether
+    // the surface takes input.
     // Driving it from a QML flags binding here would race the C++
     // path: a slot visibility change triggers BOTH a binding
     // re-evaluation that calls QQuickWindow::setFlags AND the C++
@@ -142,8 +146,9 @@ Window {
     // `cardCenterClip.y` landed above clip-y = -1, rendering the OSD
     // card above the screen top with the bottom partially cut off.
     // Leaving the size to C++ entirely closes the race.
-    // Start hidden; first per-content show flips visible=true. The
-    // wl_surface unmaps again once all slots are hidden.
+    // Start hidden. The render-pipeline prime maps it once at creation,
+    // then each per-content show maps it again, and the wl_surface unmaps
+    // once all slots are hidden.
     visible: false
 
     Item {
@@ -287,8 +292,9 @@ Window {
         // SurfaceAnimator drives this Item's opacity. Start at 0 so the
         // first paint pre-show doesn't flash the OSD at full opacity.
         opacity: 0
-        // Toggled true on first show by C++ side. Stays true thereafter
-        // (animator drives the visible fade via opacity). A QPointer<Item>
+        // Set true by C++ on each show and false when the hide leg
+        // completes (onOsdSlotHideCompleted), which is what lets the shell
+        // unmap once no other slot is visible. A QPointer<Item>
         // referencing this slot survives across show cycles.
         visible: false
         // Catch typos in C++ mode writes ("layout-OSD" / "navigation_osd" / …)

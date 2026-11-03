@@ -104,14 +104,10 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // here would leave the latch stale across bypass drags (same hazard the
     // autotile drag-insert latch and m_modifierConflictWarned avoid).
     m_overlayShown = false;
-    // m_overlayIdled is NOT reset here. The previous drag's end sets it:
-    // a normal drop (hideOverlayAndSelector) leaves it true because the
-    // shader overlay was idled rather than destroyed — dragMoved's first
-    // activationActive tick will see idled=true and call refreshFromIdle()
-    // to repopulate zones. A destructive cleanup (hideOverlayAndClearZoneState
-    // on compositor reconnect / window-closed / context-disabled) leaves
-    // it false because the overlay window is gone and showAtPosition on
-    // the next tick will recreate it fresh.
+    // m_overlayIdled is NOT reset here. Every drag-end path
+    // (hideOverlayAndSelector, hideOverlayAndClearZoneState) hides the
+    // overlay and clears it, so showAtPosition on the next activation tick
+    // shows the overlay fresh.
     m_zoneSelectorShown = false;
     m_zoneSelectorShownOn.clear();
     // Strip popup card exclusion: the popup must never render the window
@@ -324,12 +320,11 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     // Fast path: if overlay isn't shown and zone state is already clear, skip all work.
     //
     // NOTE the asymmetry with clearOverlayForTriggerRelease()'s fast path:
-    // this method is the full-destroy variant (called from drag end /
-    // compositor reconnect / window closed), so it keys on m_overlayShown,
-    // not m_overlayIdled. When idled, m_overlayShown is true by design
-    // (the window is still alive), so we correctly proceed to the real
-    // hide() call and destroy — which is what the idle state's consumers
-    // want at real drag end anyway.
+    // this method is the full-hide variant (compositor reconnect / window
+    // closed / context disabled mid-drag), so it keys on m_overlayShown,
+    // not m_overlayIdled. An overlay idled by a mid-drag trigger release
+    // still has m_overlayShown true, so it correctly proceeds to the real
+    // hide() call.
     if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
         return;
     }

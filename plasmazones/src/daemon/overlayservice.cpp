@@ -175,9 +175,9 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
 
     QVulkanInstance* externalVulkanInstance = nullptr;
 #if QT_CONFIG(vulkan)
-    // Guarded: the screen-signal wiring below explicitly tolerates a null
-    // application object, so this read must too — an unguarded qApp deref
-    // here contradicted that tolerance three hundred lines apart.
+    // Guarded so a null application object reaches the qFatal in the
+    // screen-signal wiring below, with its diagnostic, instead of crashing
+    // on this read first.
     if (qApp) {
         externalVulkanInstance = qApp->property(PlasmaZones::PVulkanInstanceProperty).value<QVulkanInstance*>();
     }
@@ -470,7 +470,6 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(LayerSurfaceParams pa
     cfg.role = std::move(params.role);
     cfg.contentUrl = std::move(params.qmlUrl);
     cfg.screen = params.screen;
-    cfg.windowProperties = std::move(params.windowProperties);
     cfg.anchorsOverride = std::move(params.anchorsOverride);
     cfg.marginsOverride = std::move(params.marginsOverride);
     cfg.animateRoot = params.animateRoot;
@@ -499,10 +498,11 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     //
     // Cost is real but bearable: a fullscreen swapchain runs ~25 MB at 4K
     // on the NVIDIA proprietary stack, vs ~tens of KB for the content-
-    // sized warm-up. With one notification surface per effective screen
-    // (~1-6 in typical setups), that's ~25-150 MB. Damage tracking keeps
-    // the per-frame cost negligible while idle: a fullscreen surface with
-    // a small centred card only repaints the card region.
+    // sized warm-up. That is paid only while the shell is mapped, once per
+    // effective screen with a slot up; an unmapped shell releases its
+    // swapchain. Damage tracking keeps the per-frame cost low while mapped:
+    // a fullscreen surface with a small centred card only repaints the card
+    // region.
     QRect screenGeom;
     if (!screenId.isEmpty() && m_screenManager) {
         screenGeom = m_screenManager->screenGeometry(screenId);
@@ -534,9 +534,33 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
 
     // The shell unmaps whenever no slot is visible (keepMappedOnHide left at
     // its false default). syncPassiveShellSurfaceState only drives the hide
-    // once the LAST slot's own hide leg has completed, so no fade-out is cut
-    // short; what an unmap costs is a remap and swapchain rebuild on the next
-    // show.
+    // once the LAST slot's own hide leg has completed, so a fade-out runs to
+    // its end. The unmap lands in the same tick as the leg's completion, so
+    // the leg's terminal frame is never presented, which only shows for a
+    // shader leg that ends away from transparent.
+    //
+    // The unmap itself blocks the GUI thread briefly: Qt's threaded render
+    // loop waits for the render thread to acknowledge the hide and to
+    // release the swapchain before QWindow::hide() returns.
+    //
+    // What an unmap costs on the next show:
+    //   - a new layer surface and swapchain. The slot's transition clock
+    //     starts at beginShow, before that surface's first buffer lands
+    //     (measured at a median of 8 ms), so the first frame or so of a show
+    //     after an unmap is never presented.
+    //   - the scene graph's GPU resources. Qt's threaded render loop emits
+    //     sceneGraphAboutToStop on every hide, and every ShaderEffect in the
+    //     shell releases its node and re-reads its shader source on the next
+    //     show. The compiled shader comes from the filename cache, so that is
+    //     file I/O and pipeline creation, not a recompile. The QML items
+    //     themselves persist.
+    //   - a new KWin window. Stock open/close effects would animate it, which
+    //     the kwin-effect prevents by grabbing both roles on its own overlay
+    //     windows. KWin also ends Show Desktop when a window maps, so any
+    //     overlay shown during a desktop peek ends the peek, as an app window
+    //     opening would. That is accepted. And KWin raises the new window to
+    //     the top of the Overlay layer, so each show stacks the shell above
+    //     any other Overlay-layer client mapped since.
     //
     // It must not stay mapped while idle. The shell is a transparent,
     // output-sized surface on the wlr Overlay layer, above every toplevel,
@@ -570,8 +594,8 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
 
     // Post-shell-migration: per-content auto-dismiss is wired through the shell
     // window's per-slot signals (`osdDismissRequested`, `snapAssistDismissRequested`,
-    // `layoutPickerDismissRequested`, `cheatsheetDismissRequested`), each routed by
-    // ensurePassiveShellFor to a slot-specific animator-driven hide rather than a
+    // `layoutPickerDismissRequested`, `cheatsheetDismissRequested`), each connected by
+    // wirePassiveShellSlots to a slot-specific animator-driven hide rather than a
     // whole-surface hide. There's no generic `dismissRequested` signal on
     // PassiveOverlayShell.qml anymore - wiring one would unmap the shell on any
     // per-slot auto-dismiss timer.
@@ -842,9 +866,9 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
 void OverlayService::hideDisabledAndRefresh()
 {
     // Hide overlay + zone-selector slots on screens where the current
-    // context is disabled. Post-shell-migration the wl_surface stays
-    // mapped (managed by destroyPassiveShell on hot-plug, not per
-    // context-toggle); each per-content slot fades out via its
+    // context is disabled. Post-shell-migration the shell surface outlives
+    // the toggle (it is destroyed only by destroyPassiveShell, and unmaps
+    // once no slot is visible); each per-content slot fades out via its
     // configured hide leg. dismissOverlayWindow / hideZoneSelectorSlotOnScreen
     // both clear the per-screen sentinel on completion.
     // The zone selector / layout picker is gated ONLY by the disabled list (it

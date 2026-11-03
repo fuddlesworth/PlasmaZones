@@ -12,11 +12,12 @@
  *   - beginShow fires on Hidden→Shown with the right Surface + rootItem
  *   - beginHide fires on Shown→Hidden
  *   - cancel fires on the Surface being destroyed mid-flight
- *   - cancel fires on supersession (show-while-hiding, hide-while-showing)
+ *   - cancel fires on supersession (show-while-hiding, show-while-shown)
  *   - keepMappedOnHide preserves QQuickWindow visibility across hide
  *   - SurfaceConfig.keepMappedOnHide=false (default) calls window->hide()
- *   - animateRoot=false skips the root legs and the unmap warning but
- *     still dispatches cancel
+ *   - animateRoot=false skips the root legs and the unmap warning, in both
+ *     hide lifecycles, still dispatches cancel on the Hidden/Shown edges,
+ *     and does not cancel on a redundant show of a Shown surface
  */
 
 #include <PhosphorLayer/PhosphorLayer.h>
@@ -28,9 +29,9 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
-#include <QSignalSpy>
 #include <QTest>
 
+#include <memory>
 #include <vector>
 
 using namespace PhosphorLayer;
@@ -142,18 +143,17 @@ private Q_SLOTS:
         auto* surface = f.create(buildConfig(s.primary()));
         surface->show();
 
-        // Should see exactly one Show call. cancel-before-show does fire if
-        // the impl decides to clear an in-flight hide (it does), so we
-        // tolerate a leading Cancel and verify the Show is present.
-        bool sawShow = false;
+        // show() always dispatches cancel(surface) before its beginShow, so a
+        // leading Cancel is expected; exactly one Show must follow it.
+        int shows = 0;
         for (const auto& call : anim.m_calls) {
             if (call.kind == RecordingAnimator::Call::Kind::Show) {
                 QCOMPARE(call.surface, surface);
                 QVERIFY(call.rootItem);
-                sawShow = true;
+                ++shows;
             }
         }
-        QVERIFY(sawShow);
+        QCOMPARE(shows, 1);
     }
 
     /// Hide must call beginHide with the same Surface and rootItem.
@@ -197,7 +197,7 @@ private Q_SLOTS:
     }
 
     /// keepMappedOnHide=true: Surface::hide() leaves the QQuickWindow visible
-    /// (Phase-5 always-mapped lifecycle for OSDs/popups). The library still
+    /// (the always-mapped lifecycle). The library still
     /// flips Qt::WindowTransparentForInput so the still-mapped surface stops
     /// intercepting clicks.
     void keepMapped_hide_preserves_window_visible()
@@ -332,9 +332,8 @@ private Q_SLOTS:
         surface->show();
         QCOMPARE(surface->state(), Surface::State::Shown);
 
-        // Emit dismissed() via the same string-based connect the daemon's
-        // osd.cpp uses to wire QML dismissTimer.dismissRequested →
-        // surface->hide().
+        // Emit fire() through a string-based connect, the only form a
+        // QML-declared signal can use to reach surface->hide().
         SignalEmitter emitter;
         const bool connected = QObject::connect(&emitter, SIGNAL(fire()), surface, SLOT(hide()));
         QVERIFY2(connected, "string-based connect to Surface::hide must succeed");
@@ -353,11 +352,11 @@ private Q_SLOTS:
         RecordingAnimator anim;
         SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
 
-        Surface* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/true));
+        std::unique_ptr<Surface> surface(f.create(buildConfig(s.primary(), /*keepMapped=*/true)));
         surface->show();
         anim.m_calls.clear();
 
-        delete surface;
+        surface.reset();
 
         bool sawCancel = false;
         for (const auto& call : anim.m_calls) {
@@ -369,9 +368,9 @@ private Q_SLOTS:
     }
 
     /// animateRoot=false: show and hide never reach beginShow / beginHide,
-    /// so the root item is left alone, while the window still maps and
-    /// unmaps and cancel still fires on each transition (it retires the
-    /// consumer's own per-item animations keyed on the surface).
+    /// while the window still maps and unmaps and cancel still fires on each
+    /// transition (it retires the consumer's own per-item animations keyed on
+    /// the surface).
     void animateRootOff_skips_root_legs_but_still_cancels()
     {
         MockTransport t;
@@ -382,7 +381,6 @@ private Q_SLOTS:
         auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
         surface->show();
         QVERIFY(surface->window()->isVisible());
-        QCOMPARE(surface->window()->contentItem()->opacity(), 1.0);
         surface->hide();
         QCOMPARE(surface->state(), Surface::State::Hidden);
         QVERIFY(!surface->window()->isVisible());
@@ -397,6 +395,49 @@ private Q_SLOTS:
         }
         // One per transition: show, hide, show.
         QCOMPARE(cancels, 3);
+    }
+
+    /// animateRoot=false under the keep-mapped lifecycle: hide() leaves the
+    /// window mapped and click-through and dispatches no root leg either way,
+    /// so the gate in the keep-mapped branch is covered as well as the one in
+    /// the unmapping branch.
+    void animateRootOff_keepMapped_hide_skips_root_leg()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/true, /*animateRoot=*/false));
+        surface->show();
+        anim.m_calls.clear();
+        surface->hide();
+
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+        QVERIFY(surface->window()->isVisible());
+        QVERIFY(surface->window()->flags().testFlag(Qt::WindowTransparentForInput));
+        QCOMPARE(anim.m_calls.size(), std::size_t(1));
+        QCOMPARE(anim.m_calls.front().kind, RecordingAnimator::Call::Kind::Cancel);
+    }
+
+    /// animateRoot=false: a redundant show() on a Shown surface has no root
+    /// leg to supersede, so it must not cancel either. A cancel there would
+    /// freeze the consumer's own in-flight item legs and drop their
+    /// completions, the case that strands a slot visible under a shell.
+    void animateRootOff_redundant_show_does_not_cancel()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        RecordingAnimator anim;
+        SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
+
+        auto* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
+        surface->show();
+        anim.m_calls.clear();
+        surface->show();
+
+        QCOMPARE(surface->state(), Surface::State::Shown);
+        QVERIFY(anim.m_calls.empty());
     }
 
     /// animateRoot=false with the unmapping lifecycle has no root fade for
@@ -439,11 +480,12 @@ private Q_SLOTS:
         RecordingAnimator anim;
         SurfaceFactory f(depsWithAnimator(&t, &s, &anim));
 
-        Surface* surface = f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false));
+        std::unique_ptr<Surface> surface(
+            f.create(buildConfig(s.primary(), /*keepMapped=*/false, /*animateRoot=*/false)));
         surface->show();
         anim.m_calls.clear();
 
-        delete surface;
+        surface.reset();
 
         QCOMPARE(anim.m_calls.size(), std::size_t(1));
         QCOMPARE(anim.m_calls.front().kind, RecordingAnimator::Call::Kind::Cancel);

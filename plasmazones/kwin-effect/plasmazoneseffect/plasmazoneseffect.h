@@ -680,8 +680,9 @@ private:
      *        surface ("plasmazonesd") by window class.
      *
      * The focus-follows-mouse stacking walks look THROUGH this surface to the
-     * real user window beneath, because it is full-screen, permanently topmost,
-     * and never holds keyboard focus (PR #517 / discussion #461 #3). The
+     * real user window beneath, because it is full-screen, topmost while mapped,
+     * and takes keyboard focus only for the cheatsheet's search field (PR #517 /
+     * discussion #461 #3). The
      * interactive editor is intentionally excluded so FFM treats it as a real
      * occluder and leaves focus on it.
      */

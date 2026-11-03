@@ -884,44 +884,29 @@ void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
 
 void WindowDragAdaptor::hideOverlayAndSelector()
 {
-    // Drag-end: idle the shader overlay instead of destroying it.
+    // Drag-end: hide the zone overlay for real, so the per-screen overlay
+    // shell can unmap once its hide leg completes.
     //
-    // Destroying the overlay QQuickWindow here used to pay a ~QQuickWindow
-    // teardown that routes through QRhi::~QRhi → vkDestroyDevice. On the
-    // NVIDIA proprietary driver that call can deadlock in the driver's
-    // internal mutex cycle between its Vulkan and GL/EGL backends (NVIDIA
-    // devtalk 319139 / 195793 / 366254, wgpu discussion #9092) — the
-    // symptom is an ~18 s main-thread stall per drop because
-    // vkDestroyDevice blocks in pthread_cond_timedwait until the driver's
-    // internal fence timeout fires. d797b9c3 (phase-a L1) already
-    // eliminated the same stall for mid-drag modifier thrash by routing
-    // trigger-release through setIdleForDragPause(); this extends the
-    // same treatment to real drag-end so the shader overlay's lifetime
-    // is bound to daemon lifetime, not drag lifetime.
+    // This used to idle the overlay instead (setIdleForDragPause), because
+    // hide() once destroyed the overlay QQuickWindow and that teardown could
+    // deadlock in vkDestroyDevice on the NVIDIA driver. hide() destroys no
+    // window now: the overlay is a slot in the passive shell, and hide() runs
+    // the slot's hide leg and unloads its content. The idle variant left the
+    // slot visible, and a visible slot keeps the shell mapped, so after the
+    // first drag a transparent output-sized surface sat on the Overlay layer
+    // for the rest of the session and blocked direct scanout of fullscreen
+    // windows (Discussion #1169).
     //
-    // Next-drag resume: dragMoved's first activationActive tick sees
-    // m_overlayIdled == true and calls refreshFromIdle() to re-push
-    // zone data via updateZonesForAllWindows() — cheap because L2's
-    // labels-texture hash cache skips the sparse glyph-tile payload rebuild
-    // when inputs are unchanged. m_overlayShown stays true because the
-    // underlying QQuickWindow + wl_surface are still alive.
-    //
-    // Destructive teardown is still needed for real lifecycle events
-    // (compositor reconnect, dragged-window-closed, context/autotile
-    // disabled mid-drag) — those route through hideOverlayAndClearZoneState
-    // instead, which still calls OverlayService::hide().
-    bool didIdle = false;
+    // Mid-drag trigger release still idles (clearOverlayForTriggerRelease),
+    // so modifier thrash during a drag never maps and unmaps the shell. The
+    // next drag starts from m_overlayShown == false and shows the overlay
+    // fresh through showAtPosition.
     if (m_overlayShown && m_overlayService) {
-        m_overlayService->setIdleForDragPause();
-        m_overlayIdled = true;
-        didIdle = true;
+        m_overlayService->hide();
+        m_overlayShown = false;
     }
+    m_overlayIdled = false;
 
-    // PhosphorZones::Zone selector (different QQuickWindow, also Vulkan-backed) is
-    // still destroyed on hide. It only shows when the user hovers a
-    // configured selector trigger, so it's not in the drop-then-activate
-    // hot path that triggers the NVIDIA deadlock. Revisit if selector
-    // usage also hangs.
     if (m_zoneSelectorShown && m_overlayService) {
         m_zoneSelectorShown = false;
         m_zoneSelectorShownOn.clear();
@@ -929,19 +914,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     }
     if (m_overlayService) {
         m_overlayService->clearSelectedZone();
-        // clearHighlight() is skipped on the idle path because
-        // setIdleForDragPause() already wrote highlightedZoneId /
-        // highlightedZoneIds / highlightedCount on every overlay window
-        // AND set m_zoneDataDirty = false to protect the blank state.
-        // Calling clearHighlight() here would redundantly re-write the
-        // same properties AND flip m_zoneDataDirty back to true — the
-        // next shader-timer tick (overlayservice/shader.cpp's
-        // `updateShaderUniforms` m_zoneDataDirty branch) would then re-run
-        // updateZonesForAllWindows() and repopulate the zones, leaving
-        // the overlay visibly showing zones after drag-end.
-        if (!didIdle) {
-            m_overlayService->clearHighlight();
-        }
+        m_overlayService->clearHighlight();
     }
 
     if (m_zoneDetector) {
@@ -1102,13 +1075,9 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_lastLoggedAdoptionRefused = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
-    // m_overlayIdled is intentionally NOT cleared here. Each drag-end
-    // hide helper sets it explicitly: hideOverlayAndSelector → true
-    // (shader overlay idled, not destroyed — window alive across the
-    // drag boundary so dragMoved's refreshFromIdle can repopulate it);
-    // hideOverlayAndClearZoneState → false (destructive teardown).
-    // Clearing it here would clobber the idled=true state set by the
-    // drop path and break the next drag's refreshFromIdle trigger.
+    // m_overlayIdled is not cleared here. Both drag-end hide helpers
+    // (hideOverlayAndSelector, hideOverlayAndClearZoneState) hide the
+    // overlay and clear it themselves.
     // m_snapAssistPendingWindowId / m_snapAssistPendingScreenId are
     // intentionally NOT cleared here. The normal drop path in drop.cpp
     // sets those IDs immediately before calling resetDragState, then

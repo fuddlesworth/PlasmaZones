@@ -223,6 +223,11 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
             *modalScreenId = newKey;
         }
     }
+    // Every other slot's hide completion resolves its key through its slot
+    // item when it fires (currentKeyForSlotItem), so it finds the migrated
+    // state on its own. The drop indicator's completion is keyed by screen
+    // and generation instead, and needs the repair below.
+    //
     // A hide in flight under oldKey cannot simply have its bit dropped. The
     // animator's track is keyed by {surface, item}, neither of which the rekey
     // touches, so the completion still fires — and it captured oldKey and the

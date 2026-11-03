@@ -342,16 +342,12 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     m_snapAssistScreenId = resolvedId;
     m_snapAssistVisible = true;
     if (!prevScreenId.isEmpty()) {
-        m_shellHost->hideSlot(prevScreenId, PhosphorSlotKeys::SnapAssist(), [this, prevScreenId]() {
-            onSnapAssistSlotHideCompleted(prevScreenId);
+        const auto prevIt = m_screenStates.constFind(prevScreenId);
+        const QPointer<QQuickItem> prevSlot = prevIt != m_screenStates.constEnd() ? prevIt->snapAssistSlot() : nullptr;
+        m_shellHost->hideSlot(prevScreenId, PhosphorSlotKeys::SnapAssist(), [this, prevScreenId, prevSlot]() {
+            onSnapAssistSlotHideCompleted(currentKeyForSlotItem(prevSlot, prevScreenId));
         });
     }
-
-    // Hide the zone selector for the specific virtual screen where snap
-    // assist is showing - selectors on adjacent VS of the same physical
-    // monitor stay visible. Reset cursor state first so a re-show after
-    // dismiss doesn't tick edge-scroll on stale drag-time cursor coords.
-    hideZoneSelectorSlotOnScreen(resolvedId);
 
     // Resize the shell window to the target screen geometry (matches
     // OSD path's sizeOsdToScreen). The shell is shared with OSD,
@@ -380,6 +376,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::SnapAssist, []() { });
+    // Hide the zone selector for the specific virtual screen where snap
+    // assist is showing - selectors on adjacent VS of the same physical
+    // monitor stay visible. Reset cursor state first so a re-show after
+    // dismiss doesn't tick edge-scroll on stale drag-time cursor coords.
+    // After the snap-assist slot is visible, for the reason finishOsdShow
+    // gives: a synchronous selector completion must not find the shell with
+    // no visible slot and unmap it under the incoming show.
+    hideZoneSelectorSlotOnScreen(resolvedId);
     // Snap-assist is modal - needs input for click-to-select. The
     // sync re-evaluates the input region now that the modal slot is
     // visible so `Qt::WindowTransparentForInput` flips off.
@@ -647,8 +651,12 @@ void OverlayService::hideSnapAssist()
     // "live"; re-checking the same conditions here defeated that completion
     // whenever the shell surface was already gone (compositor-loss
     // recovery), leaving the selector permanently hidden mid-drag.
-    m_shellHost->hideSlot(screenId, PhosphorSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
-        onSnapAssistSlotHideCompleted(effectiveId);
+    // Resolved through the slot item at completion time: a rekey can move the
+    // state to a new key while the leg runs (see currentKeyForSlotItem).
+    const auto stateIt = m_screenStates.constFind(screenId);
+    const QPointer<QQuickItem> slotItem = stateIt != m_screenStates.constEnd() ? stateIt->snapAssistSlot() : nullptr;
+    m_shellHost->hideSlot(screenId, PhosphorSlotKeys::SnapAssist(), [this, effectiveId = screenId, slotItem]() {
+        onSnapAssistSlotHideCompleted(currentKeyForSlotItem(slotItem, effectiveId));
     });
 
     // Zone-selector restore is owned by onSnapAssistSlotHideCompleted -
@@ -732,6 +740,13 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
+    // Same gate as pickerConfirmSelection. The slot keeps the pointer grab for
+    // its whole fade-out, and hideSnapAssist clears m_snapAssistVisible and the
+    // screen id on its first edge, so a click on a card after dismissal would
+    // otherwise snap a window onto whichever screen the consumer falls back to.
+    if (!m_snapAssistVisible) {
+        return;
+    }
     // Resolve screen id from the active snap-assist screen.
     Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, m_snapAssistScreenId);
 }
@@ -810,19 +825,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         hideSnapAssist();
     }
 
-    // Hide the zone selector on this VS to avoid overlap. Runs only after
-    // every bail above (shell + layouts validated), so a failed request can
-    // never leave the drag-time zone selector stuck hidden — same
-    // bails-first ordering contract as showSnapAssist.
-    //
-    // This ordering has the selector re-show churn showSnapAssist documents at
-    // length: the hideSnapAssist above can run its completion inline, which
-    // re-shows the selector while m_layoutPickerVisible is still false. The call
-    // below hides it again only WHEN SNAP ASSIST SAT ON THIS SCREEN, because it
-    // hides on resolvedId alone — a re-show on another screen stands. The Escape
-    // grab repairs itself the same way, through the re-register after this
-    // function returns.
-    hideZoneSelectorSlotOnScreen(resolvedId);
+    // The zone selector on this VS is hidden further down, once the picker
+    // slot is visible (see the hideZoneSelectorSlotOnScreen call after the
+    // picker's beginShow).
 
     // The picker is a singleton across screens: with the new target fully
     // validated (shell + layouts), dismiss it on the previous screen before
@@ -849,16 +854,21 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     m_layoutPickerScreenId = resolvedId;
     m_layoutPickerVisible = true;
     if (!prevPickerScreenId.isEmpty()) {
-        m_shellHost->hideSlot(prevPickerScreenId, PhosphorSlotKeys::LayoutPicker(), [this, prevPickerScreenId]() {
-            onLayoutPickerSlotHideCompleted(prevPickerScreenId);
-        });
+        const auto prevIt = m_screenStates.constFind(prevPickerScreenId);
+        const QPointer<QQuickItem> prevSlot =
+            prevIt != m_screenStates.constEnd() ? prevIt->layoutPickerSlot() : nullptr;
+        m_shellHost->hideSlot(prevPickerScreenId, PhosphorSlotKeys::LayoutPicker(),
+                              [this, prevPickerScreenId, prevSlot]() {
+                                  onLayoutPickerSlotHideCompleted(currentKeyForSlotItem(prevSlot, prevPickerScreenId));
+                              });
     }
 
     const QString activeId = activeLayoutIdForScreen(resolvedId);
 
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+    // Same 0.25-4.0 policy as LayoutPickerContent's safeAspectRatio.
+    aspectRatio = qBound(0.25, aspectRatio, 4.0);
 
     auto* slot = state->layoutPickerSlot();
     auto* shellSurface = state->shell->shellSurface();
@@ -922,6 +932,22 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::LayoutPicker, []() { });
+    // Hide the zone selector on this VS to avoid overlap. Runs only after
+    // every bail above (shell + layouts validated), so a failed request can
+    // never leave the drag-time zone selector stuck hidden — same
+    // bails-first ordering contract as showSnapAssist. And after the picker
+    // slot is visible, for the reason finishOsdShow gives: a synchronous
+    // selector completion must not find the shell with no visible slot and
+    // unmap it under the incoming show.
+    //
+    // This ordering has the selector re-show churn showSnapAssist documents at
+    // length: the hideSnapAssist above can run its completion inline, which
+    // re-shows the selector while m_layoutPickerVisible is still false. This
+    // call hides it again only WHEN SNAP ASSIST SAT ON THIS SCREEN, because it
+    // hides on resolvedId alone — a re-show on another screen stands. The Escape
+    // grab repairs itself the same way, through the re-register after this
+    // function returns.
+    hideZoneSelectorSlotOnScreen(resolvedId);
     // Layout picker is modal - needs input for click-to-select.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 
@@ -953,8 +979,12 @@ void OverlayService::hideLayoutPicker()
     // benign-no-op completion is what resets the slot and restores the zone
     // selector, and a caller-side guard defeated it on the exact branches
     // (dead shell surface) it exists for.
-    m_shellHost->hideSlot(screenId, PhosphorSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
-        onLayoutPickerSlotHideCompleted(effectiveId);
+    // Resolved through the slot item at completion time: a rekey can move the
+    // state to a new key while the leg runs (see currentKeyForSlotItem).
+    const auto stateIt = m_screenStates.constFind(screenId);
+    const QPointer<QQuickItem> slotItem = stateIt != m_screenStates.constEnd() ? stateIt->layoutPickerSlot() : nullptr;
+    m_shellHost->hideSlot(screenId, PhosphorSlotKeys::LayoutPicker(), [this, effectiveId = screenId, slotItem]() {
+        onLayoutPickerSlotHideCompleted(currentKeyForSlotItem(slotItem, effectiveId));
     });
 
     // Zone-selector restore is owned by onLayoutPickerSlotHideCompleted -
@@ -994,6 +1024,14 @@ void OverlayService::onLayoutPickerDismissRequested()
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)
 {
+    // Same gate as pickerConfirmSelection. The slot keeps the pointer grab for
+    // its whole fade-out, so a card click after Escape or a backdrop dismiss,
+    // or the second click of a double-click, still reaches here. hideLayoutPicker
+    // has already cleared the bound screen by then, and applying the pick would
+    // apply a layout the user cancelled, on whatever screen is current.
+    if (!m_layoutPickerVisible) {
+        return;
+    }
     qCInfo(lcOverlay) << "Layout picker selected=" << layoutId;
     // Capture the bound screen BEFORE the hide clears it — the consumer
     // re-binds the layout controller to this screen so the pick cannot

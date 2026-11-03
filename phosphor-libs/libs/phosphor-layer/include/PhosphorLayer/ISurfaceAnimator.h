@@ -43,8 +43,9 @@ class Surface;
  *
  * ## Contract
  * Implementations must call `onComplete` exactly once per hook
- * invocation. Failing to do so will strand the Surface in a transient
- * visibility state and eventually trigger a warning + forced transition.
+ * invocation. The library passes a no-op completion today and makes its
+ * own state transitions synchronously, so nothing in it waits on the
+ * call yet; a future version may.
  */
 class PHOSPHORLAYER_EXPORT ISurfaceAnimator
 {
@@ -61,14 +62,15 @@ public:
     /**
      * @brief Begin a show transition for @p surface.
      *
-     * The Surface has just become visible (Hidden → Shown). The animator
+     * The Surface has just become visible (Hidden → Shown), or is being
+     * re-shown while already Shown, which replays the transition. The animator
      * can mutate @p rootItem (opacity, scale, y-offset) and drive an
      * animation. Invoke @p onComplete when the transition finishes; the
      * library uses this as a no-op today but a future version may defer
      * compositor sync until the completion signal arrives.
      *
      * Not dispatched for a surface whose SurfaceConfig::animateRoot is
-     * false. cancel() still is.
+     * false. cancel() still is, except on a re-show of a Shown surface.
      */
     virtual void beginShow(Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete) = 0;
 
@@ -86,9 +88,11 @@ public:
      */
     virtual void beginHide(Surface* surface, QQuickItem* rootItem, CompletionCallback onComplete) = 0;
 
-    /// Interrupt any in-flight animation for @p surface. Called when the
-    /// Surface is destroyed or the animation is superseded by an opposite
-    /// transition (show-while-hiding).
+    /// Interrupt every in-flight animation for @p surface, on any item, not
+    /// only the root. Called when the Surface is destroyed, on every
+    /// Shown → Hidden hide, and on every show() before its beginShow. Under
+    /// SurfaceConfig::animateRoot=false a re-show of a Shown surface skips
+    /// it, since there is no root leg to supersede.
     virtual void cancel(Surface* surface) = 0;
 };
 

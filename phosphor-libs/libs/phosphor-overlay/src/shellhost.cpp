@@ -99,11 +99,12 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
         // a transport reattach.
         //
         // Note this refreshes what the state REPORTS, not where the surface
-        // actually sits: the layer surface's output and its baked anchors were
-        // fixed at attach time. A consumer reading physScreen() to decide
-        // which monitor a shell belongs to is reading the most recent claim,
-        // which is only the truth because every path that genuinely moves a
-        // shell between monitors destroys and recreates it.
+        // sits now. A shell that unmaps on hide gets a new layer surface on
+        // its next show, which takes its output from the window's screen and
+        // re-reads its anchors and margins, so a mapped surface reflects the
+        // placement as of its last map. physScreen() is still the truth for a
+        // live shell because screen removal destroys the shell before any
+        // remap could land it elsewhere.
         it.value()->m_physScreen = physScreen;
         it.value()->m_shellWindow = it.value()->m_shellSurface->window();
         return it.value();
@@ -141,6 +142,44 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
     state->m_shellWindow = surface->window();
     state->m_physScreen = physScreen;
 
+    // First-frame tracking for syncSurfaceState's keyboard grab. Installed
+    // before the post-create callback, which may show the surface at once.
+    // The lambdas hold the state object, not the key: rekey moves the entry
+    // to a new key but keeps the object, and destroyShell disconnects both
+    // before the surface goes.
+    QObject::disconnect(state->m_surfaceStateWatch);
+    state->m_surfaceStateWatch = connect(
+        surface, &PhosphorLayer::Surface::stateChanged, this, [this, state](PhosphorLayer::Surface::State newState) {
+            QObject::disconnect(state->m_firstFrameWatch);
+            state->m_firstFrameWatch = {};
+            state->m_awaitingFirstFrame = (newState == PhosphorLayer::Surface::State::Shown);
+            if (!state->m_awaitingFirstFrame) {
+                // A hide (or failure) cancels a grab still waiting to land.
+                state->m_keyboardGrabDeferred = false;
+                return;
+            }
+            if (!state->m_shellWindow) {
+                state->m_awaitingFirstFrame = false;
+                return;
+            }
+            // frameSwapped is emitted on the render thread, so this is queued
+            // onto the host's thread.
+            state->m_firstFrameWatch = connect(state->m_shellWindow, &QQuickWindow::frameSwapped, this, [state]() {
+                QObject::disconnect(state->m_firstFrameWatch);
+                state->m_firstFrameWatch = {};
+                state->m_awaitingFirstFrame = false;
+                if (!state->m_keyboardGrabDeferred) {
+                    return;
+                }
+                state->m_keyboardGrabDeferred = false;
+                if (state->m_shellSurface) {
+                    if (auto* handle = state->m_shellSurface->transport()) {
+                        handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
+                    }
+                }
+            });
+        });
+
     if (m_postCreateCallback) {
         m_postCreateCallback(screenId, *state);
     }
@@ -170,14 +209,24 @@ void ShellHost::destroyShell(const QString& screenId)
         m_preDestroyCallback(screenId);
     }
 
+    // A keyboard grab still waiting for its first frame must not land on a
+    // surface that is being torn down, and the watches must not outlive it.
+    QObject::disconnect(state->m_surfaceStateWatch);
+    QObject::disconnect(state->m_firstFrameWatch);
+    state->m_surfaceStateWatch = {};
+    state->m_firstFrameWatch = {};
+    state->m_awaitingFirstFrame = false;
+    state->m_keyboardGrabDeferred = false;
+
     if (state->m_shellSurface) {
-        // Hand the keyboard back before the teardown rather than relying on
-        // the surface's destruction to do it. deleteLater defers the actual
-        // destroy to the next event-loop pass, and until then the compositor
-        // still has an exclusive grab pointed at a surface that is on its way
-        // out. Ordering the release here makes the hand-back deterministic
-        // instead of a side effect of when the loop next turns. Null handle
-        // means the surface never attached, so there is nothing to release.
+        // Withdraw the keyboard request before the teardown rather than
+        // leaving it to the surface's destruction. deleteLater defers the
+        // actual destroy to the next event-loop pass, and a compositor that
+        // honours a runtime drop to None releases the grab now. KWin does
+        // not: it never deactivates a window whose interactivity drops, so
+        // under KWin focus moves on only when the surface is destroyed. Null
+        // handle means the surface never attached, so there is nothing to
+        // release.
         if (auto* handle = state->m_shellSurface->transport()) {
             handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
         }
@@ -201,27 +250,26 @@ void ShellHost::syncSurfaceState(const QString& screenId, const SurfaceStateWant
     // wants.visible transition. The behavior in each direction depends on
     // the SurfaceConfig the consumer registered:
     //
-    //   show()  - maps the wl_surface, warms the RHI, fires the
-    //             animator's attach callbacks. Always runs on
-    //             false→true.
+    //   show()  - maps the wl_surface (a fresh layer surface after an
+    //             unmap). Always runs on false→true.
     //
-    //   hide()  - under keepMappedOnHide=true the wl_surface stays
-    //             mapped (the animator drives root opacity to 0 and
-    //             the window goes click-through); under
-    //             keepMappedOnHide=false the wl_surface is unmapped
-    //             synchronously. Consumers that need the shell to
-    //             stop being composited every frame when idle opt
-    //             into the latter at creation time.
+    //   hide()  - under the default keepMappedOnHide=false the wl_surface
+    //             is unmapped synchronously, so an idle shell is not
+    //             composited at all. Under keepMappedOnHide=true it stays
+    //             mapped and goes click-through, and only a root-animated
+    //             surface fades its root to 0.
     //
     // A shell whose slots carry every visible transition should also set
     // SurfaceConfig::animateRoot=false, or Surface::show()/hide() run the
     // animator's root leg on the whole window on top of the slots' own.
     // Surface still dispatches ISurfaceAnimator::cancel on both edges,
     // and that retires every animation keyed on the surface, slot tracks
-    // included. It disturbs nothing here only because of when the edges
-    // fire: show() runs on the first slot to appear and hide() after the
-    // last slot's hide leg has completed, so no slot track is in flight
-    // at either point.
+    // included, without running their completions. It is harmless only
+    // under an ordering the consumer owns: every slot show path calls
+    // Surface::show() itself BEFORE dispatching the slot's beginShow (the
+    // show() branch below would otherwise cancel a leg that had just
+    // started), and wants.visible goes false only after the last slot's
+    // hide leg has completed, so no slot track is in flight at the hide.
     //
     // The Qt::WindowTransparentForInput toggle below is independent
     // of show/hide and flips directly on every input-grab transition
@@ -283,11 +331,25 @@ void ShellHost::syncSurfaceState(const QString& screenId, const SurfaceStateWant
     // role's own KeyboardInteractivity::None is the correct value to attach
     // with anyway, and after it has detached, where there is no compositor-
     // side grab left to release.
+    //
+    // A grab asked for before the surface has presented its first frame
+    // since it last mapped is held back until that frame. Whoever mapped it
+    // (this sync, or the consumer calling Surface::show() itself just before)
+    // the request would otherwise reach the compositor with the first buffer,
+    // and KWin then decides activation the way it does for any new window,
+    // under focus-stealing prevention: at Extreme the surface never gets
+    // focus, and at Medium or High it does not when the active window sits
+    // on another output, so the keys go to the app the user just left. Sent
+    // after the first frame it is a runtime change on a mapped surface, which
+    // KWin activates unconditionally for the Top and Overlay layers. The
+    // first-frame watch installed in ensureShell sends it. Every sync
+    // re-decides, so the last sync's answer always wins.
+    const bool wantGrab = wants.visible && wants.keyboardGrabbing;
+    s.m_keyboardGrabDeferred = wantGrab && s.m_awaitingFirstFrame;
     if (auto* handle = s.m_shellSurface->transport()) {
-        const auto wantKeyboard = (wants.visible && wants.keyboardGrabbing)
-            ? PhosphorLayer::KeyboardInteractivity::Exclusive
-            : PhosphorLayer::KeyboardInteractivity::None;
-        handle->setKeyboardInteractivity(wantKeyboard);
+        handle->setKeyboardInteractivity((wantGrab && !s.m_keyboardGrabDeferred)
+                                             ? PhosphorLayer::KeyboardInteractivity::Exclusive
+                                             : PhosphorLayer::KeyboardInteractivity::None);
     }
 }
 

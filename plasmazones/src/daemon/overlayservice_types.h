@@ -165,7 +165,6 @@ struct LayerSurfaceParams
     // -Wmissing-field-initializers warning on designated-init call sites
     // that omit these. (For `QUrl` / `Role` above the same is true; we
     // just want one consistent style across the struct.)
-    QVariantMap windowProperties = {}; ///< Applied as dynamic properties before QML loads.
     std::optional<PhosphorLayer::Anchors> anchorsOverride =
         std::nullopt; ///< Overrides the role's anchors (virtual-screen positioning).
     std::optional<QMargins> marginsOverride =
@@ -184,8 +183,8 @@ struct LayerSurfaceParams
 
 /**
  * @brief Everything OverlayService::prepareLayoutOsdWindow resolves for an
- *        OSD show: the shell window/surface/slot, the backing physical
- *        screen, the (virtual-screen-aware) geometry, its clamped aspect
+ *        OSD show: the shell window/surface/slot, the (virtual-screen-aware)
+ *        geometry, its clamped aspect
  *        ratio and the effective screen id the per-screen context lookups
  *        must use. Returned as std::optional (nullopt = preparation failed),
  *        replacing the earlier seven-out-parameter signature — same

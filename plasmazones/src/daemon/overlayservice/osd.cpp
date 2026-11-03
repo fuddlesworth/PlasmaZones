@@ -103,7 +103,9 @@ std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(co
     prep.aspectRatio = (prep.screenGeom.height() > 0)
         ? static_cast<qreal>(prep.screenGeom.width()) / prep.screenGeom.height()
         : (16.0 / 9.0);
-    prep.aspectRatio = qBound(0.5, prep.aspectRatio, 4.0);
+    // The 0.25-4.0 policy LayoutOsdContent's safeAspectRatio mirrors, so a
+    // rotated 21:9 (about 0.43) keeps its real shape instead of a 1:2 box.
+    prep.aspectRatio = qBound(0.25, prep.aspectRatio, 4.0);
 
     return prep;
 }
@@ -111,9 +113,24 @@ std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(co
 void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
                                    const QRect& screenGeom, const QString& effectiveScreenId)
 {
+    sizeOsdToScreen(window, screenGeom);
+    // Disarm the render-pipeline prime first so its queued hand-back doesn't
+    // race this real show - see primeSurfaceRenderPipeline.
+    cancelSurfacePrime(surface);
+    // Only the slot animates. Map the wl_surface via Surface::show()
+    // (idempotent while another slot holds it mapped; the shell unmaps
+    // whenever no slot is visible - see createWarmedOsdSurface).
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
+    osdSlot->setVisible(true);
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
     // Force-hide any zone selector on this screen so a fading-out selector doesn't
-    // stack translucently behind the incoming OSD. Slot-level animator hide; the
-    // shell surface stays Shown for the OSD that follows.
+    // stack translucently behind the incoming OSD. Slot-level animator hide.
+    // AFTER the OSD slot is visible: with animations off the selector's hide
+    // completes synchronously and re-syncs the shell, and with the selector as the
+    // only visible slot that sync would unmap the shell just before the OSD
+    // remapped it.
     //
     // Deliberately here rather than in prepareLayoutOsdWindow. Most callers refuse
     // before they prepare, but showNavigationOsd refuses AFTER (its dedup and
@@ -123,25 +140,11 @@ void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface*
     // to complete one, while showZoneSelector early-returns on the still-set visible
     // flag. The slot then stayed hidden for the rest of the drag.
     hideZoneSelectorSlotOnScreen(effectiveScreenId);
-    sizeOsdToScreen(window, screenGeom);
-    // Disarm the render-pipeline prime first so its queued hide doesn't
-    // race this real show - see primeSurfaceRenderPipeline.
-    cancelSurfacePrime(surface);
-    // Only the slot's opacity animates. Map the wl_surface via
-    // Surface::show() (idempotent while another slot holds it mapped; the
-    // shell unmaps whenever no slot is visible - see
-    // createWarmedOsdSurface).
-    if (!surface->isLogicallyShown()) {
-        surface->show();
-    }
-    osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
-    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
-    // OSD slots don't grab input (they auto-dismiss; keeping the input
-    // region active for the OSD's lifetime would block clicks on every
-    // background window for several seconds). Re-evaluate the input
-    // region now that the OSD slot is visible - `syncPassiveShellSurfaceState`
-    // counts only modal slots toward `anyInputGrabbing`.
+    // OSD slots don't grab input (they auto-dismiss; keeping the input region
+    // active for the OSD's lifetime would block clicks on every background
+    // window for several seconds). Re-sync now that the OSD slot is visible:
+    // the sync sets Qt::WindowTransparentForInput from the modal slots alone
+    // (`anyInputGrabbing`).
     syncPassiveShellSurfaceStateForSurface(surface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
 }
@@ -558,8 +561,10 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 //       surface state.
 // Once no slot is visible the next syncSurfaceState unmaps the shell's
 // wl_surface (see createWarmedOsdSurface). Pre-warmed by
-// warmUpNotifications and reused for the daemon's lifetime;
-// destroyPassiveShell only fires on screen-removal / shutdown.
+// warmUpNotifications and reused while its screen lives:
+// destroyPassiveShell runs on screen removal and virtual-screen
+// reconfiguration, and the destructor tears shells down through ShellHost
+// directly.
 
 // Hot-plug hook installed by warmUpNotifications. The single
 // ensureOsdScreenAddedConnected / ensurePassiveShellFor / wirePassiveShellSlots /
@@ -592,9 +597,12 @@ void OverlayService::onOsdDismissRequested()
     if (!state || !state->shell || !state->shell->shellSurface() || !state->osdSlot()) {
         return;
     }
-    m_shellHost->hideSlot(matchedId, PhosphorSlotKeys::Osd(), [this, effectiveId = matchedId]() {
-        onOsdSlotHideCompleted(effectiveId);
-    });
+    // Resolved through the slot item at completion time: a rekey can move the
+    // state to a new key while the leg runs (see currentKeyForSlotItem).
+    m_shellHost->hideSlot(matchedId, PhosphorSlotKeys::Osd(),
+                          [this, effectiveId = matchedId, slotItem = QPointer<QQuickItem>(state->osdSlot())]() {
+                              onOsdSlotHideCompleted(currentKeyForSlotItem(slotItem, effectiveId));
+                          });
 }
 
 void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
@@ -663,8 +671,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // the physical id - can clear stale dedup state on screen replug.
     //
     // The dedup state is updated only after we've decided to actually
-    // show - see the matching m_lastNavigation* writes below near
-    // navSurface->show(). A bail-out path further down (no layout,
+    // show - see the matching m_lastNavigation* writes below, after the
+    // finishOsdShow call. A bail-out path further down (no layout,
     // no notification window, etc.) must NOT poison the dedup state,
     // otherwise a failed show silently swallows the next legitimate call
     // within 200 ms.
@@ -825,8 +833,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     finishOsdShow(window, navSurface, osdSlot, navScreenGeom, effectiveId);
 
-    // Update dedup state AFTER the Surface::show() + restartDismissTimer
-    // dispatch. Every early-return above this point is a "no OSD shown"
+    // Update dedup state AFTER finishOsdShow (the show and the
+    // restartDismissTimer dispatch). Every early-return above this point is a "no OSD shown"
     // outcome that must not poison the next call's dedup window - keeping
     // the writes here means a bail-out (no physScreen, no notification
     // window, no layout/zones, etc.) leaves dedup state untouched and the
@@ -844,8 +852,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                       << "highlightedZones=" << highlightedZoneIds;
 }
 
-// hideNavigationOsd removed together with hideLayoutOsd - see the comment
-// block above warmUpNotifications() for the rationale. The m_lastNavigation*
+// hideNavigationOsd removed together with hideLayoutOsd - see the dismiss-path
+// comment block above onOsdDismissRequested for the rationale. The m_lastNavigation*
 // dedup state is cleared implicitly by the 200 ms timeout check in
 // showNavigationOsd() itself (the OSD's ~1000 ms dismiss timer is far
 // longer than the dedup window, so any dismiss is always past the

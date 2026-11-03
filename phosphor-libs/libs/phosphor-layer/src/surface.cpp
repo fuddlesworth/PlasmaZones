@@ -84,12 +84,14 @@ public:
         , m_deps(std::move(deps))
     {
         // The "animator + keepMappedOnHide=false" combination is legitimate
-        // for consumers that destroy on hide (snap-assist style) and use the
-        // animator only for the show fade. A blanket constructor warning
-        // would false-positive for that pattern; the actual misuse — calling
-        // Surface::hide() expecting a visible fade-out under the unmap-on-
-        // hide policy — is detected at the hide call site (gated on
-        // m_hideFootgunWarned for once-per-surface diagnostics).
+        // in two shapes: a consumer that destroys on hide and uses the
+        // animator only for the show fade, and an animateRoot=false surface
+        // (a slot shell) that unmaps on hide after its own items have faded.
+        // A blanket constructor warning would false-positive for both; the
+        // actual misuse — calling Surface::hide() expecting a visible
+        // root fade-out under the unmap-on-hide policy — is detected at the
+        // hide call site, gated on animateRoot and on m_hideFootgunWarned for
+        // once-per-surface diagnostics.
         // Subscribe to screen-removal so we never hand the transport a dangling
         // QScreen* after a hot-unplug. When the attached screen disappears we
         // null m_config.screen; the next finishAttach() falls back to the
@@ -315,6 +317,10 @@ private:
                         // Window stays Qt-visible for the surface's entire
                         // lifetime (so the Vulkan swapchain survives).
                         //
+                        // Skipped under animateRoot=false, where the
+                        // consumer owns the hidden visual and this branch
+                        // only flips input transparency.
+                        //
                         // No-op completion callback. We've already
                         // transitioned synchronously below; the animator's
                         // onComplete is reserved for future
@@ -453,7 +459,15 @@ private:
             //     rapid re-trigger (e.g. user switches layout while the
             //     OSD's fade-in is in progress) doesn't double-drive the
             //     same property.
-            animator().cancel(m_q);
+            // Under animateRoot=false there is no root leg for a Shown → Shown
+            // re-show to supersede, and cancel retires every track keyed on
+            // the surface, so it would only freeze the consumer's own per-item
+            // legs and drop their completions. A redundant show() is therefore
+            // a true no-op there. Hidden → Shown still cancels, as the
+            // SurfaceConfig::animateRoot doc describes.
+            if (m_config.animateRoot || m_state != State::Shown) {
+                animator().cancel(m_q);
+            }
 
             // Dispatch beginShow BEFORE m_window->show(). runLeg sets the
             // target's opacity (and optionally scale) to the computed
@@ -701,8 +715,8 @@ private:
         // synchronously deletes the Surface from a non-failure stateChanged
         // slot would UAF on completeCreate before we ever return here —
         // a local QPointer guard at this layer cannot reach inside
-        // instantiateFromComponent's tail. The contract documented at
-        // Surface.h:185 (`stateChanged` → use `deleteLater()` for
+        // instantiateFromComponent's tail. The contract documented on
+        // Surface::failed / stateChanged in Surface.h (`stateChanged` → use `deleteLater()` for
         // non-failure transitions; `failed`/`screenLost` are deferred and
         // always delete-safe) is therefore load-bearing for synchronous
         // deletes — we deliberately do NOT add a misleading half-defense

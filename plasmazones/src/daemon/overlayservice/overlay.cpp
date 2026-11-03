@@ -296,11 +296,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
     // Phase 2 - DISMISS. Every remaining m_screenStates entry whose key is
     // not in targetSet is either a different physical monitor we're switching
-    // away from, or a leftover from a removed/excluded screen. Hide
-    // non-shader overlays (cheap, no Vulkan churn - mirrors the 9e0cb05f
-    // "hide-not-destroy" policy dismissOverlayWindow uses)
-    // and destroy shader overlays (QSGRenderNode pipelines are bound to the
-    // per-window QRhi context, so destroy-on-hide is mandatory there).
+    // away from, or a leftover from a removed/excluded screen. Dismiss each
+    // one through dismissOverlayWindow, the same path for shader and
+    // rectangle overlays: the slot runs its hide leg and unloads its content,
+    // and no window is destroyed.
     const QStringList allKeys = m_screenStates.keys();
     for (const QString& key : allKeys) {
         if (targetSet.contains(key)) {
@@ -347,6 +346,11 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             auto* shellSurface = shellState->shellSurface();
             auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {
+                // createOverlayWindow may have just built this shell, whose
+                // prime is still armed. Disarm it before the slot shows, as
+                // every other slot show path does, or its hand-back on the
+                // first frame would cancel this slot's show leg.
+                cancelSurfacePrime(shellSurface);
                 if (!shellSurface->isLogicallyShown()) {
                     shellSurface->show();
                 }
@@ -453,11 +457,12 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         startShaderAnimation();
     }
 
-    // With one overlay per VS, every overlay was just show()n above.
-    // Apply per-window idle state: in single-monitor mode, only the
-    // cursor's VS is un-idled; all others stay idle (content.visible=false,
-    // Qt.WindowTransparentForInput set). In showOnAllMonitors mode, all
-    // overlays are un-idled simultaneously.
+    // With one overlay per VS, every target's main-overlay slot was just made
+    // visible above. Apply per-slot idle state: in single-monitor mode, only
+    // the cursor's VS is un-idled; all others stay idle (content.visible=false,
+    // the slot itself still visible, so those shells stay mapped and blank
+    // until the drag ends). In showOnAllMonitors mode, all overlays are
+    // un-idled simultaneously.
     applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
 
     if (!wasVisible) {
@@ -977,32 +982,36 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // a stale onComplete callback racing the next show.
     auto* shellSurface = it->shell ? it->shell->shellSurface() : nullptr;
     if (shellSurface) {
-        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
-            auto sit = m_screenStates.find(screenIdCopy);
-            if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
-                return;
-            }
-            QObject::disconnect(sit->overlayGeomConnection);
-            sit->overlayGeomConnection = {};
-            sit->overlayPhysScreen = nullptr;
-            sit->overlayGeometry = QRect();
-            // Release the labels payload (the sparse glyph-tile ZoneLabelTexture)
-            // the persistent slot property would otherwise keep resident for the
-            // whole session while hidden (the wallpaper reset is symmetric only -
-            // its image is pinned by ShaderRegistry's static cache; see
-            // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
-            // updateLabelsTextureForWindow to rebuild on the next show()
-            // instead of short-circuiting on the now-1x1 placeholder (which
-            // would render no labels). The trade is one ZoneLabelTextureBuilder
-            // rebuild per drag-start vs. the sparse glyph-tile payload held idle
-            // per screen; the warm drag-pause path (setIdleForDragPause) is
-            // untouched and keeps the texture warm mid-drag.
-            releaseOverlaySlotTextures(sit->mainOverlaySlot());
-            sit->labelsTextureHash = 0;
-            writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
-            sit->mainOverlaySlot()->setVisible(false);
-            syncPassiveShellSurfaceState(screenIdCopy);
-        });
+        // Resolved through the slot item at completion time: a rekey can move
+        // the state to a new key while the leg runs (see currentKeyForSlotItem).
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::MainOverlay(),
+                              [this, issuedId = screenId, slotItem = QPointer<QQuickItem>(slot)]() {
+                                  const QString screenIdCopy = currentKeyForSlotItem(slotItem, issuedId);
+                                  auto sit = m_screenStates.find(screenIdCopy);
+                                  if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
+                                      return;
+                                  }
+                                  QObject::disconnect(sit->overlayGeomConnection);
+                                  sit->overlayGeomConnection = {};
+                                  sit->overlayPhysScreen = nullptr;
+                                  sit->overlayGeometry = QRect();
+                                  // Release the labels payload (the sparse glyph-tile ZoneLabelTexture)
+                                  // the persistent slot property would otherwise keep resident for the
+                                  // whole session while hidden (the wallpaper reset is symmetric only -
+                                  // its image is pinned by ShaderRegistry's static cache; see
+                                  // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
+                                  // updateLabelsTextureForWindow to rebuild on the next show()
+                                  // instead of short-circuiting on the now-1x1 placeholder (which
+                                  // would render no labels). The trade is one ZoneLabelTextureBuilder
+                                  // rebuild per drag-start vs. the sparse glyph-tile payload held idle
+                                  // per screen; the warm drag-pause path (setIdleForDragPause) is
+                                  // untouched and keeps the texture warm mid-drag.
+                                  releaseOverlaySlotTextures(sit->mainOverlaySlot());
+                                  sit->labelsTextureHash = 0;
+                                  writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
+                                  sit->mainOverlaySlot()->setVisible(false);
+                                  syncPassiveShellSurfaceState(screenIdCopy);
+                              });
     } else {
         // No shell surface - fall back to the immediate-toggle path so
         // the slot at least lands in the right state. Should not

@@ -137,6 +137,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     if (!m_daemonGate.serviceRegistered) {
         return;
     }
+    // The daemon's own overlay shell is never a placement target, and it maps
+    // a new window on every overlay show. notifyWindowClosed skips it the same
+    // way, so the registry never holds an entry for it.
+    if (isOwnPassthroughOverlayClass(w->windowClass())) {
+        return;
+    }
     const QString instanceId = getWindowInstanceId(w);
     if (instanceId.isEmpty()) {
         return;
@@ -514,11 +520,12 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
 bool PlasmaZonesEffect::isOwnPassthroughOverlayClass(const QString& windowClass)
 {
     // The daemon's overlay layer-shell surface (windowClass "plasmazonesd")
-    // covers the whole autotile monitor and is permanently topmost, but it is a
-    // non-interactive passthrough surface that never holds keyboard focus. The
+    // covers the whole monitor and is topmost while it is mapped, which is
+    // whenever any overlay is up. It is a passthrough surface that holds
+    // keyboard focus only while the cheatsheet types into it. The
     // focus-follows-mouse stacking walk must look THROUGH it to the real window
-    // beneath, or FFM bails on every cursor move once any OSD/snap-preview/
-    // layout-picker has been shown (discussion #461 #3 / PR #517).
+    // beneath, or FFM bails on every cursor move while any OSD/snap-preview/
+    // layout-picker is shown (discussion #461 #3 / PR #517).
     //
     // The editor (windowClass "plasmazones-editor") is deliberately NOT here:
     // it is an interactive fullscreen xdg-shell toplevel the user works in, not

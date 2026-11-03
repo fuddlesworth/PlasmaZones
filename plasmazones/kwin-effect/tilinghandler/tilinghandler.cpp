@@ -239,8 +239,8 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
             continue;
         }
         // Look through the daemon's own passthrough overlay surface — it is
-        // full-screen and always topmost on the autotile monitor, so the bail
-        // below would otherwise kill FFM forever (discussion #461 #3). The
+        // full-screen and topmost whenever an overlay is up, so the bail below
+        // would otherwise kill FFM for as long as it is mapped (discussion #461 #3). The
         // editor is deliberately NOT looked through here: it is an interactive
         // fullscreen window, so it falls to the occluder bail below and FFM
         // leaves focus on it rather than stealing to the tiled window beneath.

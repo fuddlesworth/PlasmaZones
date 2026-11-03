@@ -168,13 +168,16 @@ public:
     /// the Surface state machine in both directions: show() on
     /// false→true, hide() on true→false. The behavior of hide() is
     /// governed by the SurfaceConfig the consumer registered:
-    /// keepMappedOnHide=true keeps the wl_surface mapped (animator
-    /// drives root opacity to 0); keepMappedOnHide=false unmaps the
-    /// wl_surface synchronously so the shell stops being composited
-    /// when idle. The shell surface's role typically has no animator
-    /// Config registered, so per-surface cancel/beginHide collapse
-    /// to no-ops and do not interfere with per-slot animator state
-    /// (which lives on different keys).
+    /// keepMappedOnHide=false (the default) unmaps the wl_surface
+    /// synchronously so the shell stops being composited when idle;
+    /// keepMappedOnHide=true keeps it mapped and click-through. A shell
+    /// whose slots carry their own transitions should set
+    /// SurfaceConfig::animateRoot=false. Either way Surface's show and
+    /// hide edges cancel EVERY animator track keyed on the shell surface,
+    /// slot tracks included, without running their completions. So the
+    /// consumer must call Surface::show() itself before dispatching a
+    /// slot's beginShow, and must only report @c wants.visible false once
+    /// every slot's hide leg has completed.
     ///
     /// @c wants.inputGrabbing - true when at least one modal slot
     /// (consumer-defined; Phosphor today: snap-assist, layout picker and the
@@ -211,6 +214,16 @@ public:
     ///
     /// Gated on @c wants.visible for the same reason the input flag is: an
     /// invisible surface must never hold the session's keyboard.
+    ///
+    /// While the surface has not yet presented a frame since it last mapped
+    /// (whether this call or the consumer's own Surface::show() mapped it),
+    /// the Exclusive request is held until that frame, then sent as a
+    /// runtime change. Arriving with the first buffer, KWin would decide
+    /// activation under its focus-stealing prevention and could leave the
+    /// keyboard with the window the user came from. Every call re-decides,
+    /// and a hide drops a request still waiting. Releasing to None is
+    /// cosmetic under KWin, which moves focus on only when the surface
+    /// unmaps.
     ///
     /// Per-screen, with no cross-screen arbitration: this call reads and
     /// writes one screen's state and nothing else. When the keyboard-grabbing

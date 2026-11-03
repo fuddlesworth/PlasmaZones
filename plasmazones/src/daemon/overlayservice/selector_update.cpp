@@ -153,9 +153,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // currently has NO live consumer. The slot's screenAspectRatio is declared
     // on PassiveOverlayShell but ZoneSelectorContent never reads it, and the OSD
     // and picker contents read their OWN slots' copies, written by osd.cpp and
-    // snapassist.cpp at qBound(0.5, …, 4.0) — so this 0.25 floor is not the
-    // operative one for them either. Kept as the declared 0.25–4.0 policy the
-    // QML safeAspectRatio guards mirror, not because anything reads it today.
+    // snapassist.cpp under the same 0.25–4.0 clamp. Kept as that declared
+    // policy, which the QML safeAspectRatio guards mirror, not because
+    // anything reads it today.
     aspectRatio = qBound(0.25, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
