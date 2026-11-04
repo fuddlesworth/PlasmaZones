@@ -26,7 +26,8 @@
 #include <QThread>
 #include <QVariant>
 
-#include <sys/stat.h> // umask
+#include <sys/stat.h> // umask, lstat
+#include <unistd.h> // getuid
 
 namespace PhosphorIpc {
 
@@ -56,6 +57,28 @@ constexpr int MaxFramesPerReadyRead = 64;
 // the stream resets the counter; we only close on sustained
 // garbage, not on a one-off bad line.
 constexpr int MaxConsecutiveMalformedFrames = 16;
+
+// Whether @p path is a socket that a crashed router of this user left:
+// a socket file of this user that refuses a connection. Only a refusal
+// proves that nothing listens. A listener whose backlog is full (its
+// process busy) does not answer the probe in time and reports no
+// error, and a file that is not a socket also refuses: neither may be
+// removed.
+bool isStaleSocket(const QString& path)
+{
+    struct stat info{};
+    if (::lstat(QFile::encodeName(path).constData(), &info) != 0 || !S_ISSOCK(info.st_mode)
+        || info.st_uid != ::getuid()) {
+        return false;
+    }
+    QLocalSocket probe;
+    probe.connectToServer(path);
+    if (probe.waitForConnected(200)) {
+        probe.abort();
+        return false;
+    }
+    return probe.error() == QLocalSocket::ConnectionRefusedError;
+}
 
 // RAII scope for the ::umask process-global. We use ::umask to
 // force a 0600 mode on the socket file at create time (atomic, no
@@ -121,12 +144,12 @@ bool IpcRouter::start(const QString& socketPath)
         return false;
     }
     // Try to bind first. If listen() fails because a stale socket
-    // file from a crashed previous run is sitting there, probe with
-    // a quick connect, if nothing's listening, the path is dead
-    // and we can safely remove + retry. If a live process IS
-    // listening, the connect succeeds and we leave the path alone
-    // (refuse to start). This avoids the "clobber a live listener
-    // on the same path" bug a blind unlink would cause.
+    // file from a crashed previous run is sitting there, remove it
+    // and retry. A path is stale only when isStaleSocket() says so:
+    // a live listener, also a busy one, and a file that is not a
+    // socket keep the path, and start() fails. This avoids the
+    // "clobber a live listener on the same path" bug a blind unlink
+    // would cause.
     m_server = std::make_unique<QLocalServer>(this);
     // We do NOT use setSocketOptions(UserAccessOption) here: that
     // option makes QLocalServer auto-unlink any existing socket
@@ -150,21 +173,9 @@ bool IpcRouter::start(const QString& socketPath)
     if (!initialBound) {
         const QString initialError = m_server->errorString();
         bool removedStale = false;
-        if (QFile::exists(resolved)) {
-            // Probe via a fresh QLocalSocket: if a live router is
-            // listening, the kernel-level connect handshake
-            // completes near-instantly. If nothing's listening,
-            // connect returns ECONNREFUSED and waitForConnected
-            // reports false, only THEN do we unlink the stale
-            // file and retry.
-            QLocalSocket probe;
-            probe.connectToServer(resolved);
-            const bool aliveListener = probe.waitForConnected(200);
-            probe.abort();
-            if (!aliveListener) {
-                QFile::remove(resolved);
-                removedStale = true;
-            }
+        if (isStaleSocket(resolved)) {
+            QFile::remove(resolved);
+            removedStale = true;
         }
         bool retryBound = false;
         if (removedStale) {
