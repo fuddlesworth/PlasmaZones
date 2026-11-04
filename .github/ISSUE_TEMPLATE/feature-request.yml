@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Feature request
+description: Suggest something new or a change to how something works
+title: '[Feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please search the open and closed issues first, in case it has been asked for already.
+
+        The support report below is required. It shows how your setup is configured, which often decides how a request fits in.
+  - type: textarea
+    id: request
+    attributes:
+      label: What you'd like
+      description: The feature or change, as you'd use it.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What it solves
+      description: The problem it fixes or what it would let you do that you can't now.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Optional. Workarounds or other approaches you considered.
+  - type: textarea
+    id: report
+    attributes:
+      label: Support report
+      description: |
+        Run `plasmazones-report` in a terminal and drag the `.tar.gz` file it names here. It is written to `/tmp` (or `$TMPDIR`) with home paths redacted, but it still contains window titles, your rule patterns and the model and serial number of your monitors, so look it over before posting it.
+        If the command fails because PlasmaZones isn't running, paste its output here along with the output of `journalctl --user -b -t plasmazonesd`.
+      placeholder: Drop the plasmazones-report .tar.gz file here
+    validations:
+      required: true
