@@ -6,10 +6,12 @@
 #include "tilinghandler/centringdecisions.h"
 
 using PlasmaZones::CentringDecisions::commandStillInTile;
+using PlasmaZones::CentringDecisions::decorationChangeMovesTileMinimum;
 
 /**
  * @brief The centring pass's witness: whether the window's commanded origin
- *        still belongs to the tile its centring target names (F536).
+ *        still belongs to the tile its centring target names (F536), and
+ *        whether a decoration change is reported as the tile's minimum.
  */
 class TestCentringDecisions : public QObject
 {
@@ -62,6 +64,28 @@ private Q_SLOTS:
     {
         QVERIFY(commandStillInTile(zone(), QPointF(99.0, 49.0)));
         QVERIFY(commandStillInTile(zone(), QPointF(99.5, 50.0)));
+    }
+
+    // A tile at rest: a decoration change (a title-bar rule, a theme switch)
+    // moves the frame minimum the engine models, and is reported.
+    void decorationChange_restoredWindow_reported()
+    {
+        QVERIFY(decorationChangeMovesTileMinimum(/*requestedMaximized=*/false, /*maximizeOwnedByTiling=*/false));
+    }
+
+    // The user maximized a tile with borderless maximized windows on, so KWin
+    // took the title bar off. Reporting the smaller minimum re-tiled the screen
+    // and that batch cleared the maximize (discussion #1182).
+    void decorationChange_userMaximize_notReported()
+    {
+        QVERIFY(!decorationChangeMovesTileMinimum(/*requestedMaximized=*/true, /*maximizeOwnedByTiling=*/false));
+    }
+
+    // A monocle stack or a column maximized to the edges keeps its maximize in
+    // the tile, so the borderless decoration is the tile's and is reported.
+    void decorationChange_tilingMaximize_reported()
+    {
+        QVERIFY(decorationChangeMovesTileMinimum(/*requestedMaximized=*/true, /*maximizeOwnedByTiling=*/true));
     }
 };
 

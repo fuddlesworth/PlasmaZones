@@ -32,8 +32,8 @@ scripts/nested-kwin/regression/run.sh --out DIR --build build-nounity all
   `NAME.kwin.log`, `NAME.daemon.log`, `NAME.session.log`, and `summary.txt`.
 - Exit status: 0 all passed, 1 a probe failed, 2 none failed but one or more could not stage.
 - Needs the build tree (`build/bin`), `qdbus6`, `gdbus`, `dbus-monitor`, `kscreen-doctor`, python3 with
-  GTK4 bindings (PyGObject), PySide6 for `f345-caption-push`, `f1154`, `f1156` and `f1157` (with
-  its xcb platform plugin for `f1157`), and Xwayland for flag X. Flag F probes
+  GTK4 bindings (PyGObject), PySide6 for `f345-caption-push`, `f1154`, `f1156`, `f1157` (with
+  its xcb platform plugin for `f1157`) and `f1182`, and Xwayland for flag X. Flag F probes
   use `fakeinput/`, which run.sh builds into `<build>/regression-fakeinput` (Qt6 Gui and KWayland).
 
 Flags in the table: X Xwayland, N KWin's permission checks off, F the fakeinput tool (implies N),
@@ -186,6 +186,7 @@ one whose daemon died or was replaced.
 | f1157-x11-column-answer / -scaled | 1, XS | an X11 window that keeps resizing itself wider than its column is put back once, then learned, and its column widens to it; the -scaled row runs at output scale 1.25 and fails, saying so, when the frame never reads settled through rounding alone (F337) |
 | f1170-shell-unmaps-after-drag | 1, F | the daemon's overlay shell, mapped while a snapping drag holds the trigger, is unmapped again 3 s after the drop |
 | f1170-cheatsheet-focus-fsp | 1 | with focus-stealing prevention at Extreme, the cheatsheet's shell becomes the active window when its show maps the shell, and nothing stays mapped after it closes |
+| f1182-user-maximize-borderless | 1 | with KWin's borderless maximized windows on, a tile the user maximizes stays maximized and reports no minimum, its restore lands back at the tile, and a monocle maximize still reports the minimum without the title bar |
 | fdrag-float-keeps-size | 1, FS | with column width and window height on "Window decides", a resized floating window drag-inserted into the strip with the trigger held is a column at its size on both axes (the drop indicator, the popup drop and the adopted arm are not staged) |
 | fsplash-sibling-size-scroll / -tile / -snap | 1, S | a splash under the minimum window size that closes before its app's main window opens does not hand the main window its frame: on scrolling and tiling it is a column or a tile, on snapping it opens at its own size |
 | fresize-centred-edge | 1, FS | under Center focused column Always, two Meta+right drags of a lone column's left edge each land that edge at the release and grow the column by twice the drag; with Center short columns on, a drag of its bottom edge up and one of its top edge down each land that edge at the release and shrink the column by twice the drag |

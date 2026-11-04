@@ -816,7 +816,9 @@ public:
     /// @p w's decoration changed, which moves its declared minimum as a frame
     /// size (declaredMinSize): re-report it through the change-gated writer,
     /// only for a window the engine holds a minimum for (the announce seeds the
-    /// cache). Defined in framecentering.cpp.
+    /// cache), and not while a maximize the user made holds the window
+    /// (CentringDecisions::decorationChangeMovesTileMinimum). Defined in
+    /// framecentering.cpp.
     void noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QString& windowId);
     /// Forget that the daemon lacks reportCommittedSize: a new daemon session may
     /// have it. Called at daemon teardown and from the bring-up drain.
