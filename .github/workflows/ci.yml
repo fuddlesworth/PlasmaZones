@@ -103,7 +103,10 @@ jobs:
       - name: Pick the CI image
         id: image
         run: |
-          set -uo pipefail
+          # +e explicitly: Actions runs this as `bash -e`, and a failed lookup
+          # (403 for a package that is private or does not exist yet) must fall
+          # through to the fallback below, not fail the job.
+          set +e -uo pipefail
           repo="${GITHUB_REPOSITORY_OWNER,,}/plasmazones-ci"
           token=$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r .token)
           digest=$(curl -fsSI \
