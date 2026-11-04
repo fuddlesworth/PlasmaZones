@@ -233,12 +233,14 @@ ctest --test-dir build --output-on-failure
 # config paths, `.pragma library` inside Qt's 128-byte window in QML .js
 # libraries (see QML Style), the plain-prose rules on the user-facing strings it
 # can reach, that packaging/debian/copyright still declares every file's real
-# license and copyright holders, and that a chain-resolved shader param's
+# license and copyright holders, that a chain-resolved shader param's
 # DESCRIPTION reads identically on every pack that offers it (the twenty
 # roundBottomCorners copies; the check and its data live in
-# scripts/conventions_shared_text.py). Stdlib only, spread over six files:
-# the entry point plus conventions_dep5.py, conventions_prose.py,
-# conventions_shared_text.py, conventions_selftest.py and
+# scripts/conventions_shared_text.py), and that every packaging recipe repeats
+# the third-party pins of cmake/PhosphorDependencies.cmake exactly (the dep-pins
+# rule, in scripts/conventions_dep_pins.py). Stdlib only, spread over seven
+# files: the entry point plus conventions_dep5.py, conventions_dep_pins.py,
+# conventions_prose.py, conventions_shared_text.py, conventions_selftest.py and
 # conventions_selftest_rules.py.
 #
 # It also enforces one PRECONDITION that is not a rule and that --rules cannot
