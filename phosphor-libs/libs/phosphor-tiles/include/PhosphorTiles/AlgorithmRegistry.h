@@ -83,7 +83,7 @@ public:
 
     // ─── ITileAlgorithmRegistry implementation ─────────────────────────────
 
-    void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm) override;
+    bool registerAlgorithm(const QString& id, TilingAlgorithm* algorithm) override;
     bool unregisterAlgorithm(const QString& id) override;
     TilingAlgorithm* algorithm(const QString& id) const override;
     QStringList availableAlgorithms() const override;

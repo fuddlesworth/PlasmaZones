@@ -633,8 +633,17 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        if (!reusedExisting) {
-            m_registry->registerAlgorithm(scriptId, algo.release());
+        // The registry refuses ids it reserves or cannot carry (`none`, the
+        // `autotile:` prefix, characters outside its id charset) and deletes
+        // the algorithm. A refused script must stay out of m_scriptIdToPath
+        // and the stamps, exactly like the collisions above: otherwise it
+        // counts toward MaxScripts and the loaded count while nothing is
+        // registered under its id.
+        if (!reusedExisting && !m_registry->registerAlgorithm(scriptId, algo.release())) {
+            qCWarning(PhosphorTiles::lcTilesLib).nospace() << "Script '" << fullPath << "' declares id '" << scriptId
+                                                           << "' which the algorithm registry refused — skipped";
+            m_refusedFilePaths.insert(fullPath);
+            continue;
         }
         m_scriptIdToPath[scriptId] = fullPath;
         m_scriptStamps.insert(

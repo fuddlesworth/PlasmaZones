@@ -10,6 +10,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tiling algorithm settings open on a value they can show**: an algorithm's on/off or choice setting whose declared default was not a real true or false, or not one of its own choices, opened in Settings as a switch that read as on whatever it said, or as a list with nothing picked. Such a default now falls back to off, or to the first choice.
+- **A tiling algorithm with a reserved id no longer counts as loaded**: a user algorithm that declared an id PlasmaZones keeps for itself, such as `none`, was refused but still counted toward the script limit, and deleting its file later announced a change to every open view. It is now skipped like any other refused script.
+
 ## [3.5.4] - 2026-11-02
 
 ### Added

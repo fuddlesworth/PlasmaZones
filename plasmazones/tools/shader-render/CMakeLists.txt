@@ -80,6 +80,15 @@ target_include_directories(plasmazones-shader-render PRIVATE
     ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/rendering
 )
 
+# The data tree of the checkout this binary was built from. The tool probes the
+# cwd first (the tree you are editing, which may be another worktree), and this
+# absolute path next, so a run from build/ or the scratchpad still renders the
+# working tree instead of silently falling back to the installed packs, or
+# failing with "layout not found" when nothing is installed.
+target_compile_definitions(plasmazones-shader-render PRIVATE
+    PZ_SHADER_RENDER_SOURCE_DATA_DIR="${CMAKE_SOURCE_DIR}/plasmazones/data"
+)
+
 target_compile_features(plasmazones-shader-render PRIVATE cxx_std_20)
 
 # Don't install by default — this is a developer tool, not a

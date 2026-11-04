@@ -70,8 +70,8 @@ Common flags:
 | `--fps` | `30` | frame rate (drives `iTime` advancement) |
 | `--out` | `<id>.webm` | output path; extension picks the format |
 | `--audio-mode` | `sine` | one of `silent`, `sine`, `noise`, `sweep` |
-| `--shader-dir` | `plasmazones/data/overlays/` (or `data/overlays/` when run from inside `plasmazones/`), then the XDG data dirs | where to find shader bundles |
-| `--layout-dir` | `plasmazones/data/layouts/`, then the XDG data dirs | where to find layout JSONs |
+| `--shader-dir` | `plasmazones/data/overlays/` (or `data/overlays/` when run from inside `plasmazones/`), then the overlays of the checkout the binary was built from, then the XDG data dirs | where to find shader bundles |
+| `--layout-dir` | the same order for `layouts/` | where to find layout JSONs |
 | `--still-highlight` | `0` (cycling) | pin one zone, by its zone number, as the only highlighted zone |
 | `--pointer` | off | render a pointer pack: `--shader-dir` defaults to `plasmazones/data/pointer/` and a synthetic pointer drives the pointer uniform tail |
 | `--pointer-heading` | `0` | direction the synthetic pointer travels, degrees clockwise from screen right |

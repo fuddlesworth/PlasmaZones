@@ -123,6 +123,22 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
             finiteNumber(m, QStringLiteral("default"), def) ? std::clamp(def, d.minValue, d.maxValue) : d.minValue;
     }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
+    // The settings page hands the default to its control unchanged whenever no
+    // value is saved (TilingAlgorithmController::customParamsForAlgorithm), so a
+    // bool or enum default must already be a value that control accepts. A bool
+    // default that is not a real Luau boolean (a string "false", a number, a
+    // table) would reach a QML switch as a truthy non-bool, and an enum default
+    // outside `options` leaves the combo box with no valid selection. Like the
+    // number default above, anything else falls back to a value that is always
+    // valid: false, or the first option.
+    if (d.type == QLatin1String("bool")) {
+        const QVariant def = m.value(QStringLiteral("default"));
+        d.defaultValue = def.typeId() == QMetaType::Bool ? def.toBool() : false;
+    } else if (d.type == QLatin1String("enum")) {
+        const QVariant def = m.value(QStringLiteral("default"));
+        const bool known = def.typeId() == QMetaType::QString && d.enumOptions.contains(def.toString());
+        d.defaultValue = known ? def.toString() : (d.enumOptions.isEmpty() ? QString() : d.enumOptions.constFirst());
+    }
     return d;
 }
 

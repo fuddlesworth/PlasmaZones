@@ -384,6 +384,63 @@ private Q_SLOTS:
         QCOMPARE(removalSpy.count(), 1);
     }
 
+    /// A script whose declared id the REGISTRY refuses (the reserved `none`,
+    /// the `autotile:` prefix, a character outside the id charset) must be
+    /// kept out of the loader's bookkeeping, like a built-in collision. It
+    /// used to be recorded as loaded although nothing was registered under its
+    /// id, so it counted toward MaxScripts, and deleting the file later looked
+    /// like a real change: a spurious algorithmsChanged and an unregister of an
+    /// id that was never there.
+    void testRegistryRefusedIdIsNotRecordedAsLoaded()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+        QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
+        QDir().mkpath(algoDir);
+
+        QVERIFY(!writeScript(algoDir, QStringLiteral("kept.luau"), validScript(QStringLiteral("Kept"))).isEmpty());
+        QStringList refusedPaths;
+        for (const QString& id : {QStringLiteral("none"), QStringLiteral("autotile:bsp"), QStringLiteral("bad id")}) {
+            const QString file = QStringLiteral("refused-%1.luau").arg(refusedPaths.size());
+            const QString body = QStringLiteral(
+                                     "local pluau = pluau\n"
+                                     "return pluau.algorithm {\n"
+                                     "    metadata = { id = \"%1\", name = \"Refused\", description = \"Test\" },\n"
+                                     "    tile = function(ctx)\n"
+                                     "        return { { x = 0, y = 0, width = 100, height = 100 } }\n"
+                                     "    end,\n"
+                                     "}\n")
+                                     .arg(id);
+            refusedPaths.append(writeScript(algoDir, file, body));
+            QVERIFY(!refusedPaths.constLast().isEmpty());
+        }
+
+        qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
+        qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
+
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+        loader->scanAndRegister(PhosphorFsLoader::LiveReload::Off);
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:kept")));
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("none")));
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("autotile:bsp")));
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("bad id")));
+
+        // Removing the refused files removes nothing the loader had loaded, so
+        // the rescan must not announce a change.
+        for (const QString& path : std::as_const(refusedPaths)) {
+            QVERIFY(QFile::remove(path));
+        }
+        QSignalSpy spy(&*loader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged);
+        loader->scanAndRegister(PhosphorFsLoader::LiveReload::Off);
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:kept")));
+    }
+
     /// Regression guard: passing `LiveReload::Off` disables the
     /// background watcher and gives the caller a one-shot scan.
     /// Verifies the new optional parameter on `scanAndRegister`
