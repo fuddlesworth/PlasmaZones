@@ -117,12 +117,17 @@ public:
         ArgCountMismatch,
         ArgConvertFailed,
         InvokeFailed,
+        // The method ran and failed through IpcCallContext::sendErrorReply.
+        // The error message is the target's.
+        CallFailed,
     };
 
     // Synchronously invoke target.fn(args). Returns the function's
     // return value as a QVariant; on failure returns an invalid
     // QVariant and populates the optional outcome / message
     // out-params. Pass nullptr if the caller doesn't need them.
+    // A target that inherits IpcCallContext runs the method as a wire
+    // call, and can fail it with sendErrorReply (CallFailed).
     QVariant invoke(const QString& target, const QString& fn, const QVariantList& args,
                     InvokeOutcome* outcome = nullptr, QString* errorMessage = nullptr);
 

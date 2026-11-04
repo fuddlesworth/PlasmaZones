@@ -6,6 +6,7 @@
 // that exposes a few Q_INVOKABLE methods. Socket-level wire roundtrips
 // live in test_phosphor_ipc_e2e.cpp.
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcRouter.h>
 #include <PhosphorIpc/IpcTarget.h>
 
@@ -71,6 +72,68 @@ private:
     QString m_lastNoReturn;
 };
 
+// A target that fails its own calls through the call context.
+class FailingTarget : public QObject, protected IpcCallContext
+{
+    Q_OBJECT
+public:
+    explicit FailingTarget(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
+    Q_DISABLE_COPY_MOVE(FailingTarget)
+
+    Q_INVOKABLE int doubled(int value)
+    {
+        if (value < 0) {
+            sendErrorReply(QStringLiteral("negative: %1").arg(value));
+            return -1;
+        }
+        return value * 2;
+    }
+    Q_INVOKABLE bool fromIpc() const
+    {
+        return calledFromIpc();
+    }
+    Q_INVOKABLE void failTwice()
+    {
+        sendErrorReply(QStringLiteral("first"));
+        sendErrorReply(QStringLiteral("second"));
+    }
+    // Fails, then deletes its own target before the router clears the call.
+    Q_INVOKABLE void failAndDelete()
+    {
+        sendErrorReply(QStringLiteral("gone"));
+        delete this;
+    }
+    // A direct C++ call: no wire call runs.
+    bool directCall()
+    {
+        sendErrorReply(QStringLiteral("ignored"));
+        return calledFromIpc();
+    }
+    // Another context object, called from inside this one's wire call.
+    Q_INVOKABLE bool otherSeesNoCall()
+    {
+        return m_other && !m_other->directCall();
+    }
+    FailingTarget* m_other = nullptr;
+};
+
+// The C++ shape of a QML IpcTarget with a function on it.
+class FailingIpcTarget : public IpcTarget
+{
+    Q_OBJECT
+public:
+    Q_INVOKABLE QString mode(const QString& value)
+    {
+        if (value != QLatin1String("dark")) {
+            sendErrorReply(QStringLiteral("mode is dark"));
+        }
+        return value;
+    }
+};
+
 } // namespace
 
 class TestPhosphorIpcRouter : public QObject
@@ -102,6 +165,10 @@ private Q_SLOTS:
     void invoke_overloadNoMatchingArityReturnsArgCountMismatch();
     void invoke_protectedQInvokableRejected();
     void invoke_ipcTargetWrapperMethodsRejected();
+    void invoke_callContextFailsTheCall();
+    void invoke_callContextOnlyDuringTheCall();
+    void invoke_callContextSurvivesDeletedTarget();
+    void invoke_ipcTargetSendErrorReply();
     void schemaFor_unknownReturnsEmpty();
     void schemaFor_listsFunctions();
     void schemaFor_skipsProtectedQInvokable();
@@ -505,6 +572,85 @@ void TestPhosphorIpcRouter::schemaFor_skipsProtectedQInvokable()
     }
     QVERIFY2(!names.contains(QStringLiteral("protectedSecret")),
              "protected Q_INVOKABLE must not appear in the wire-visible schema");
+}
+
+void TestPhosphorIpcRouter::invoke_callContextFailsTheCall()
+{
+    IpcRouter router;
+    FailingTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("f"), &t));
+
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    QString message;
+    const QVariant failed = router.invoke(QStringLiteral("f"), QStringLiteral("doubled"), {-3}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::CallFailed);
+    QCOMPARE(message, QStringLiteral("negative: -3"));
+    // The return value of a failed call is dropped.
+    QVERIFY(!failed.isValid());
+
+    // The next call starts clean.
+    message.clear();
+    const QVariant ok = router.invoke(QStringLiteral("f"), QStringLiteral("doubled"), {4}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+    QCOMPARE(ok.toInt(), 8);
+    QVERIFY(message.isEmpty());
+
+    // The last message wins.
+    router.invoke(QStringLiteral("f"), QStringLiteral("failTwice"), {}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::CallFailed);
+    QCOMPARE(message, QStringLiteral("second"));
+}
+
+void TestPhosphorIpcRouter::invoke_callContextOnlyDuringTheCall()
+{
+    IpcRouter router;
+    FailingTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("f"), &t));
+    QCOMPARE(router.invoke(QStringLiteral("f"), QStringLiteral("fromIpc"), {}).toBool(), true);
+    // Outside a wire call, the context reports no call and ignores errors.
+    QVERIFY(!t.fromIpc());
+    QVERIFY(!t.directCall());
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::CallFailed;
+    router.invoke(QStringLiteral("f"), QStringLiteral("doubled"), {1}, &outcome);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+
+    // The call belongs to its target: another context object that the
+    // method calls neither sees it nor fails it.
+    FailingTarget other;
+    t.m_other = &other;
+    QCOMPARE(router.invoke(QStringLiteral("f"), QStringLiteral("otherSeesNoCall"), {}, &outcome).toBool(), true);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+}
+
+void TestPhosphorIpcRouter::invoke_callContextSurvivesDeletedTarget()
+{
+    IpcRouter router;
+    auto* t = new FailingTarget;
+    QVERIFY(router.registerTarget(QStringLiteral("f"), t));
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    QString message;
+    router.invoke(QStringLiteral("f"), QStringLiteral("failAndDelete"), {}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::CallFailed);
+    QCOMPARE(message, QStringLiteral("gone"));
+    QCOMPARE(router.target(QStringLiteral("f")), nullptr);
+}
+
+void TestPhosphorIpcRouter::invoke_ipcTargetSendErrorReply()
+{
+    IpcRouter router;
+    FailingIpcTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("q"), &t));
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    QString message;
+    router.invoke(QStringLiteral("q"), QStringLiteral("mode"), {QStringLiteral("blue")}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::CallFailed);
+    QCOMPARE(message, QStringLiteral("mode is dark"));
+    QCOMPARE(router.invoke(QStringLiteral("q"), QStringLiteral("mode"), {QStringLiteral("dark")}, &outcome).toString(),
+             QStringLiteral("dark"));
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+    // sendErrorReply is IpcTarget's own method: not callable over the wire.
+    router.invoke(QStringLiteral("q"), QStringLiteral("sendErrorReply"), {QStringLiteral("x")}, &outcome);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::NoSuchFn);
 }
 
 QTEST_GUILESS_MAIN(TestPhosphorIpcRouter)

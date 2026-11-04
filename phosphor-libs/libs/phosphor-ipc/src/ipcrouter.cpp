@@ -5,6 +5,7 @@
 
 #include "ipcrouterdetail.h"
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcSchemaGenerator.h>
 
@@ -375,12 +376,16 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // coerced QVariant's internal storage. A reallocation during
     // append() would invalidate those pointers, so pre-reserve the
     // exact final size.
+    // A QVariant parameter (an untyped QML function argument) takes the
+    // incoming variant as it is: QVariant::convert() cannot convert to
+    // QVariant itself, and the method wants the variant, not its content.
+    const QMetaType variantType = QMetaType::fromType<QVariant>();
     QVariantList coerced;
     coerced.reserve(args.size());
     for (int i = 0; i < args.size(); ++i) {
         QVariant v = args.at(i);
         const QMetaType expected(method.parameterType(i));
-        if (v.metaType() != expected) {
+        if (expected != variantType && v.metaType() != expected) {
             if (!v.convert(expected)) {
                 // typeName() can return nullptr for a default-
                 // constructed QVariant (e.g. JSON null in an args
@@ -398,7 +403,9 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
 
     QGenericArgument g[MaxArgs];
     for (int i = 0; i < coerced.size(); ++i) {
-        g[i] = QGenericArgument(coerced.at(i).typeName(), coerced.at(i).constData());
+        g[i] = QMetaType(method.parameterType(i)) == variantType
+            ? QGenericArgument("QVariant", &coerced.at(i))
+            : QGenericArgument(coerced.at(i).typeName(), coerced.at(i).constData());
     }
 
     QVariant returnValue;
@@ -407,15 +414,31 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // metatype isn't registered can't be safely allocated via
     // QVariant(type, nullptr), so skip the return slot entirely
     // and let invoke() discard the value.
-    if (returnType.isValid() && returnType.id() != QMetaType::Void && returnType.id() != QMetaType::UnknownType) {
+    // A QVariant return (an untyped QML function) writes into returnValue
+    // itself, not into a variant held inside it.
+    const bool variantReturn = returnType == variantType;
+    if (!variantReturn && returnType.isValid() && returnType.id() != QMetaType::Void
+        && returnType.id() != QMetaType::UnknownType) {
         returnValue = QVariant(returnType, nullptr);
     }
-    QGenericReturnArgument ret = returnValue.isValid()
-        ? QGenericReturnArgument(returnValue.typeName(), returnValue.data())
-        : QGenericReturnArgument();
+    QGenericReturnArgument ret = variantReturn ? QGenericReturnArgument("QVariant", &returnValue)
+        : returnValue.isValid()                ? QGenericReturnArgument(returnValue.typeName(), returnValue.data())
+                                               : QGenericReturnArgument();
 
+    // The method runs as a wire call on its object, so that a target with an
+    // IpcCallContext can fail it. The record is on this stack, not in the
+    // target, which the method may delete. The outer call comes back for a
+    // method that spins a nested event loop in which another call runs.
+    IpcCallContext::Call call;
+    call.object = dynamic_cast<const void*>(obj);
+    call.outer = IpcCallContext::current();
+    IpcCallContext::current() = &call;
     const bool ok =
         method.invoke(obj, Qt::DirectConnection, ret, g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9]);
+    IpcCallContext::current() = call.outer;
+    if (ok && call.failed) {
+        return fail(InvokeOutcome::CallFailed, call.message);
+    }
     if (!ok) {
         return fail(
             InvokeOutcome::InvokeFailed,
@@ -638,6 +661,9 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
                 break;
             case InvokeOutcome::InvokeFailed:
                 code = QString::fromUtf8(ErrorCode::InvocationFailed);
+                break;
+            case InvokeOutcome::CallFailed:
+                code = QString::fromUtf8(ErrorCode::CallFailed);
                 break;
             case InvokeOutcome::Ok:
                 Q_UNREACHABLE();

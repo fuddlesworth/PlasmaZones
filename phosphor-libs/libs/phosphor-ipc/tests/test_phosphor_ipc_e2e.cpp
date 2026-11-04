@@ -8,6 +8,7 @@
 
 #include "ipctesthelpers.h"
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
@@ -53,6 +54,23 @@ public:
     Q_INVOKABLE int sum(int a, int b)
     {
         return a + b;
+    }
+};
+
+class RefusingTarget : public QObject, protected IpcCallContext
+{
+    Q_OBJECT
+public:
+    explicit RefusingTarget(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
+    Q_DISABLE_COPY_MOVE(RefusingTarget)
+
+    Q_INVOKABLE QString open(const QString& name)
+    {
+        sendErrorReply(QStringLiteral("no project %1").arg(name));
+        return name;
     }
 };
 
@@ -104,6 +122,7 @@ private Q_SLOTS:
     void roundtrip_list();
     void roundtrip_schema();
     void roundtrip_unknownTargetError();
+    void roundtrip_callFailedError();
     void roundtrip_malformedRequest();
     void start_failsWhenPathConflict();
     void stop_idempotent();
@@ -132,6 +151,26 @@ void TestPhosphorIpcE2e::roundtrip_call()
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 1);
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("hello"));
+}
+
+void TestPhosphorIpcE2e::roundtrip_callFailedError()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+
+    IpcRouter& router = fx.router;
+    RefusingTarget refusing;
+    QVERIFY(router.registerTarget(QStringLiteral("projects"), &refusing));
+    QVERIFY(router.start(fx.sockPath));
+
+    const QJsonObject req =
+        makeCallReq(7, QStringLiteral("projects"), QStringLiteral("open"), QJsonArray{QStringLiteral("demo")});
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 7);
+    QCOMPARE(resp.value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::CallFailed));
+    QCOMPARE(resp.value(QStringLiteral("message")).toString(), QStringLiteral("no project demo"));
+    QVERIFY(!resp.contains(QStringLiteral("result")));
 }
 
 void TestPhosphorIpcE2e::roundtrip_list()

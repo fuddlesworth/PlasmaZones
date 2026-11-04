@@ -84,6 +84,9 @@ constexpr auto NoSuchSubscription = "NO_SUCH_SUBSCRIPTION";
 constexpr auto InvalidArg = "INVALID_ARG";
 constexpr auto InvocationFailed = "INVOCATION_FAILED";
 constexpr auto MalformedRequest = "MALFORMED_REQUEST";
+// The call ran and failed: the target called
+// IpcCallContext::sendErrorReply.
+constexpr auto CallFailed = "CALL_FAILED";
 } // namespace ErrorCode
 
 // Parsed request shape, populated by parseRequest from a single

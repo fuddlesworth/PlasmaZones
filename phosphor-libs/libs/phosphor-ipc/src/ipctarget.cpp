@@ -55,6 +55,11 @@ void IpcTarget::setTarget(const QString& name)
     Q_EMIT targetChanged();
 }
 
+void IpcTarget::sendErrorReply(const QString& message)
+{
+    IpcCallContext::sendErrorReply(message);
+}
+
 void IpcTarget::classBegin()
 {
     // No-op: registration happens in componentComplete, after QML

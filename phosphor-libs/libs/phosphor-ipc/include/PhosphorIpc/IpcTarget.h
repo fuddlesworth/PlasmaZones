@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/phosphoripc_export.h>
 
 #include <QObject>
@@ -38,7 +39,7 @@ class IpcRouter;
 // target now owns the registry slot. Without that ownership check
 // a duplicate-rejected IpcTarget would tear down the legitimate
 // owner's binding on destruction.
-class PHOSPHORIPC_EXPORT IpcTarget : public QObject, public QQmlParserStatus
+class PHOSPHORIPC_EXPORT IpcTarget : public QObject, public QQmlParserStatus, protected IpcCallContext
 {
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
@@ -60,6 +61,13 @@ public:
     // (the same one used for sync call return values), so any
     // QVariantList-shaped payload works.
     Q_INVOKABLE void emitEvent(const QString& signalName, const QVariantList& args = {});
+
+    // Fails the wire call that runs the QML function, as
+    // IpcCallContext::sendErrorReply does for a C++ target. The client
+    // gets a CALL_FAILED error with `message`, and the function's
+    // return value is dropped. Outside a wire call it does nothing.
+    // IpcTarget's own methods are not callable over the wire.
+    Q_INVOKABLE void sendErrorReply(const QString& message);
 
     // QQmlParserStatus, register with the router after QML has
     // finished setting up the item (so the `target` property is
