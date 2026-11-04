@@ -21,8 +21,10 @@ The library owns:
 - **`IpcRouter`**: central dispatcher backed by a `QLocalServer`
   listening on `$XDG_RUNTIME_DIR/phosphor.sock`. Registers QObject
   "targets" by name, walks their `QMetaObject` to generate JSON
-  schemas, dispatches sync calls via `QMetaMethod::invoke`, and
-  routes signal-broadcast events to per-target subscribers.
+  schemas, dispatches calls via `QMetaMethod::invoke` (answered when
+  the method returns, or later through a deferred reply), routes
+  signal-broadcast events to per-target subscribers, and sends events
+  to one client connection.
 - **`IpcTarget`**: QML element. Plugin authors declare one per
   exposed verb namespace and put `Q_INVOKABLE`-style functions on it
   directly. `IpcTarget.emitEvent("name", [args])` pushes a JSON
@@ -48,7 +50,8 @@ subcommands.
 | `PhosphorIpc::IpcProtocol` | Wire-format constants + parser/serialiser. Shared between the library (server) and the `phosphorctl` binary (client). |
 | `PhosphorIpc::IpcEngine` | Bridge between an application-owned `IpcRouter` and QML-side `IpcTarget` instances. |
 | `PhosphorIpc::IpcSchemaGenerator` | `QMetaObject` → JSON Schema. Used by the schema response and by the CLI for client-side argument validation. |
-| `PhosphorIpc::IpcCallContext` | Mixin for a C++ target. `sendErrorReply(message)` fails the running wire call with `CALL_FAILED`, like `QDBusContext` does for D-Bus. |
+| `PhosphorIpc::IpcCallContext` | Mixin for a C++ target. `sendErrorReply(message)` fails the running wire call with `CALL_FAILED`, like `QDBusContext` does for D-Bus. `deferReply()` answers the call later, and `connectionId()` names the client connection that made it. |
+| `PhosphorIpc::IpcPendingReply` | Move-only handle to a deferred call. `finish(result)` or `fail(...)` answers it once, and dropping it unanswered fails it with `CALL_ABANDONED`. |
 
 ## Wire protocol
 
@@ -81,17 +84,30 @@ older peer.
 
 ```jsonc
 {"type":"reply","id":42,"result":"Hello, nate"}
+// Event to a subscription
 {"type":"event","subscriptionId":45,"args":[7]}
+// Event to one connection (IpcRouter::sendEvent), with no subscription
+{"type":"event","target":"pkg","signal":"output","args":["fetching"]}
 {"type":"error","id":42,"code":"NO_SUCH_TARGET","message":"...","detail":{}}
 ```
 
 Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
 `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`,
-`MALFORMED_REQUEST`, `CALL_FAILED`.
+`MALFORMED_REQUEST`, `CALL_FAILED`, `CALL_ABANDONED`. A deferred reply
+may also fail with a code of the target's own.
 
 `INVOCATION_FAILED` means that the router could not run the method.
 `CALL_FAILED` means that the method ran and failed the call itself (see
-[Failing a call](#failing-a-call)).
+[Failing a call](#failing-a-call)). `CALL_ABANDONED` means that the
+target deferred the reply and then dropped the call without answering
+it (see [Answering later](#answering-later)).
+
+Every reply and request-correlated error carries the request's `id`, and
+the client matches them by it. Most calls are answered in request order,
+but a deferred call is answered when the target finishes it, after the
+replies to calls made later on the same connection. A client that keeps
+more than one request in flight gives each its own id. Everything the
+router writes to one connection arrives in the order it was written.
 
 ## Typical use
 
@@ -211,6 +227,100 @@ direct C++ call, a QML binding) `calledFromIpc()` is false and
 `sendErrorReply` does nothing. `IpcRouter::invoke` reports the failure as
 `InvokeOutcome::CallFailed` with the target's message.
 
+### Answering later
+
+A call that takes a while (it runs a process, waits for the user) need not
+block the router. The method defers its reply and returns at once, and
+the target answers through the `IpcPendingReply` it keeps:
+
+```cpp
+class Packages : public QObject, protected PhosphorIpc::IpcCallContext
+{
+    Q_OBJECT
+public:
+    explicit Packages(PhosphorIpc::IpcRouter& router);
+
+    Q_INVOKABLE void install(const QString& name)
+    {
+        Job& job = startJob(name);
+        job.reply = deferReply();          // no reply goes out on return
+        job.connection = connectionId();   // who asked
+    }
+
+Q_SIGNALS:
+    void output(const QString& line);      // listed by the schema
+
+private:
+    void onOutput(Job& job, const QString& line)
+    {
+        // To the caller only, ahead of the reply.
+        m_router.sendEvent(job.connection, QStringLiteral("pkg"), QStringLiteral("output"), {line});
+    }
+    void onFinished(Job& job, int exitCode)
+    {
+        if (exitCode == 0) {
+            job.reply.finish(QJsonValue::Null);
+        } else {
+            job.reply.fail(QStringLiteral("exit code %1").arg(exitCode));
+        }
+    }
+    ...
+};
+```
+
+The router sends no reply when a deferring method returns, and drops its
+return value. Calls on the same connection go on being answered
+meanwhile. The rules:
+
+- **One answer.** `finish(result)` sends the reply, `fail(message)` a
+  `CALL_FAILED` error and `fail(code, message)` an error with the
+  target's code. The first answer stands, and later ones do nothing and
+  return false. A method that calls `sendErrorReply` after `deferReply`
+  is answered with that error when it returns, unless the pending reply
+  answered first.
+- **Never left waiting.** An `IpcPendingReply` destroyed (or overwritten
+  by a move) unanswered fails the call with `CALL_ABANDONED`.
+- **Closed connection.** `finish` and `fail` on a call whose connection
+  has closed drop the answer and return false, with no warning. So does
+  a pending reply that outlives the router.
+- **Move-only, router thread.** The handle moves and cannot be copied.
+  Answer it, and destroy it, on the router's thread. Debug builds
+  assert this.
+- **No connection.** Outside a wire call, a second time in one call
+  (with a warning), and on a direct `IpcRouter::invoke`, `deferReply()`
+  returns a handle that holds no call (`isValid()` is false). `invoke`
+  then reports `InvokeOutcome::Deferred`.
+
+QML functions have no `deferReply`. A deferred call needs a C++ target.
+
+### Connections and events to the caller
+
+The router gives every client connection it accepts an id, unique in the
+process and never reused, also across routers. While a call runs,
+`IpcCallContext::connectionId()` returns the id of the connection that
+made it, and 0 for a call that came from no connection (a direct
+`IpcRouter::invoke`) or outside a call.
+
+`IpcRouter::sendEvent(connectionId, target, signal, args)` writes one
+event to that connection, whether it subscribed to anything or not. It is
+meant for a call's own output, sent to the client that made the call. The
+frame names the event with `target` and `signal` and carries no
+`subscriptionId`. Declare the event as a signal on the target, as for
+broadcast events, so `phosphorctl schema` lists it. It returns false, and
+writes nothing, for an empty target or signal name and for an id that
+names no open connection. The output limit of broadcasts applies: a
+connection more than 16 MiB behind is closed with a warning, and
+`sendEvent` returns false.
+
+`IpcRouter::connectionClosed(id)` follows the close of every connection,
+once: the client went away, the router closed it, or `stop()` ran. It is
+sent from the event loop, never from inside a call into the router, so a
+slot can stop that connection's work and destroy its pending replies on
+the spot. The router's destructor sends it for the connections it
+closes. A client that gets an event it did not subscribe to is free to
+skip it: `phosphorctl call` ignores events, and `phosphorctl subscribe`
+prints every event it receives.
+
 ### CLI side
 
 ```
@@ -222,6 +332,10 @@ phosphorctl subscribe theme.modeChanged    # stays connected, streams events
 
 Socket-path priority: `--socket PATH` > `$PHOSPHOR_SOCKET` >
 `$XDG_RUNTIME_DIR/phosphor.sock`.
+
+`phosphorctl call` waits two seconds for the answer, so a deferred call
+that takes longer reports a timeout there. Events sent to its connection
+meanwhile are skipped.
 
 ### Acceptance harness
 
@@ -257,7 +371,8 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
   per connection, not globally. The wire identity is `(socket,
   subscriptionId)`.
 - **Disconnect prunes subscriptions.** When a subscriber socket
-  disconnects, all its subscriptions are dropped automatically.
+  disconnects, all its subscriptions are dropped automatically, and so
+  are the connection's deferred calls. `connectionClosed(id)` follows.
 - **Stale socket file recovery.** On `start`, if `listen()` fails
   and the socket path is occupied, the router probes with a quick
   connect. If no live listener answers, the stale path is unlinked

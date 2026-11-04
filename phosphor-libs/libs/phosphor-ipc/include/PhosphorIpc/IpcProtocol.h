@@ -68,8 +68,11 @@ constexpr auto Unsubscribe = "unsubscribe";
 
 // Response `type` discriminator values. Sent by the server.
 namespace ResponseType {
-constexpr auto Reply = "reply"; // sync call / list / schema result
-constexpr auto Event = "event"; // pushed signal payload to a subscriber
+constexpr auto Reply = "reply"; // call / list / schema result
+// Pushed signal payload: to a subscriber (carries `subscriptionId`), or
+// to one connection through IpcRouter::sendEvent (carries `target` and
+// `signal` in place of a subscriptionId).
+constexpr auto Event = "event";
 constexpr auto Error = "error"; // request-correlated failure
 } // namespace ResponseType
 
@@ -87,6 +90,9 @@ constexpr auto MalformedRequest = "MALFORMED_REQUEST";
 // The call ran and failed: the target called
 // IpcCallContext::sendErrorReply.
 constexpr auto CallFailed = "CALL_FAILED";
+// The target deferred the call's reply and dropped the IpcPendingReply
+// without answering it.
+constexpr auto CallAbandoned = "CALL_ABANDONED";
 } // namespace ErrorCode
 
 // Parsed request shape, populated by parseRequest from a single
@@ -122,6 +128,10 @@ struct PHOSPHORIPC_EXPORT Request
 // The router serialises the object to bytes via writeLine() below.
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildReply(qint64 id, const QJsonValue& result);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildEvent(qint64 subscriptionId, const QJsonValue& args);
+// An event addressed to one connection, not to a subscription: named by
+// `target` and `signal` (IpcRouter::sendEvent).
+[[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildEvent(const QString& target, const QString& signalName,
+                                                        const QJsonValue& args);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildError(qint64 id, const QString& code, const QString& message,
                                                         const QJsonObject& detail = {});
 

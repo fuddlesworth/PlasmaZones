@@ -24,6 +24,16 @@ namespace PhosphorIpc::detail {
 // and any future router-side accounting need the same value.
 inline constexpr int MaxSubscriptionsPerSocket = 256;
 
+// Write-side cap on one connection, symmetric to the read-side line cap
+// in handleClientReadyRead. A client that never reads from its socket
+// would otherwise let the router's pending-write queue for it grow without
+// bound as events pile up. 16 MiB, 16x the read cap, because event
+// payloads can legitimately be larger than request lines and a slow
+// consumer is more common than a malformed client. broadcastEvent and
+// sendEvent check it before each event and close a connection that is
+// further behind.
+inline constexpr qint64 MaxBytesToWrite = 16 * 1024 * 1024;
+
 // First method index that counts as user-declared on `object`.
 // For a plain QObject-derived target the floor is QObject's own
 // methodCount (filters destroyed, objectNameChanged, deleteLater,

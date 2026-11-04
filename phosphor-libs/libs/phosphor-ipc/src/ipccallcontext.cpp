@@ -3,6 +3,10 @@
 
 #include <PhosphorIpc/IpcCallContext.h>
 
+#include <PhosphorIpc/IpcRouter.h>
+
+#include <QtGlobal>
+
 namespace PhosphorIpc {
 
 IpcCallContext::~IpcCallContext() = default;
@@ -32,6 +36,34 @@ void IpcCallContext::sendErrorReply(const QString& message)
         running->failed = true;
         running->message = message;
     }
+}
+
+quint64 IpcCallContext::connectionId() const
+{
+    const Call* running = call();
+    return running ? running->connectionId : 0;
+}
+
+IpcPendingReply IpcCallContext::deferReply()
+{
+    Call* running = call();
+    if (!running) {
+        return {};
+    }
+    if (running->deferred) {
+        // The first pending reply holds the call. Handing out a second
+        // would give the client two answers to one request.
+        qWarning(
+            "PhosphorIpc::IpcCallContext::deferReply: the call is deferred already; the second deferral holds "
+            "no call");
+        return {};
+    }
+    running->deferred = true;
+    // A direct IpcRouter::invoke has no client to answer later.
+    if (running->connectionId == 0 || !running->router) {
+        return {};
+    }
+    return running->router->deferCall(*running);
 }
 
 } // namespace PhosphorIpc

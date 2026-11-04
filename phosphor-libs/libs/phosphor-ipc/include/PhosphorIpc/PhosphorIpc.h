@@ -8,6 +8,7 @@
 
 #include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcEngine.h>
+#include <PhosphorIpc/IpcPendingReply.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 #include <PhosphorIpc/IpcSchemaGenerator.h>

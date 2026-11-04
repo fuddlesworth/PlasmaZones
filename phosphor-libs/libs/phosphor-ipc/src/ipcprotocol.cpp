@@ -213,6 +213,16 @@ QJsonObject buildEvent(qint64 subscriptionId, const QJsonValue& args)
     return obj;
 }
 
+QJsonObject buildEvent(const QString& target, const QString& signalName, const QJsonValue& args)
+{
+    QJsonObject obj;
+    obj.insert(QLatin1String(Field::Type), QLatin1String(ResponseType::Event));
+    obj.insert(QLatin1String(Field::Target), target);
+    obj.insert(QLatin1String(Field::Signal), signalName);
+    obj.insert(QLatin1String(Field::Args), args);
+    return obj;
+}
+
 QJsonObject buildError(qint64 id, const QString& code, const QString& message, const QJsonObject& detail)
 {
     QJsonObject obj;
