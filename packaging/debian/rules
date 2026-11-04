@@ -8,12 +8,21 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 %:
 	dh $@ --buildsystem=cmake+ninja
 
+# PHOSPHOR_DEPS_ARCHIVES: the Luau and valijson archives pinned in
+# cmake/PhosphorDependencies.cmake, which CMake checks against their hashes and
+# unpacks, so the build never reaches the network. packaging/deps is filled in
+# both places this package is built: the OBS source package carries the
+# archives there inside its orig tarball, and the release workflow's build-deb
+# job fetches them there before dpkg-buildpackage (see publish-obs and
+# build-deb in .github/workflows/release.yml). By hand, fill it first with
+#   cmake -DPHOSPHOR_DEPS_FETCH=packaging/deps -P cmake/PhosphorDependencies.cmake
 override_dh_auto_configure:
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
-		-DBUILD_TESTING=OFF
+		-DBUILD_TESTING=OFF \
+		-DPHOSPHOR_DEPS_ARCHIVES=$(CURDIR)/packaging/deps
 
 override_dh_auto_install:
 	dh_auto_install

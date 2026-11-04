@@ -27,6 +27,7 @@ already fell on.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -281,6 +282,60 @@ def _finite_verbs_failures() -> list[str]:
     for word in sorted(_FINITE_VERBS - expected):
         bad.append(f"_FINITE_VERBS gained '{word}' without this selftest's literal being updated; if it is "
                    f"also a plural noun it can make a genuine list a finding")
+    return bad
+
+
+def _dep_pins_failures() -> list[str]:
+    import conventions_dep_pins as mod
+
+    bad: list[str] = []
+    sha = "a" * 64
+    pin = ('set(PHOSPHOR_DEPS demo)\n'
+           'set(PHOSPHOR_DEP_demo_VERSION "1.0")\n'
+           'set(PHOSPHOR_DEP_demo_URL "https://example.invalid/demo-1.0.tar.gz")\n'
+           'set(PHOSPHOR_DEP_demo_FILE "demo-1.0.tar.gz")\n'
+           f'set(PHOSPHOR_DEP_demo_SHA256 "{sha}")\n')
+    good = f"source=(demo-1.0.tar.gz::https://example.invalid/demo-1.0.tar.gz)\nsha256sums=('{sha}')\n"
+
+    def run(pin_text, recipe_text, recipes=("recipe",), name="recipe") -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "cmake").mkdir()
+            if pin_text is not None:
+                (d / mod.PIN_FILE).write_text(pin_text, encoding="utf-8")
+            if recipe_text is not None:
+                (d / name).write_text(recipe_text, encoding="utf-8")
+            saved = mod.PIN_RECIPES
+            mod.PIN_RECIPES = recipes
+            try:
+                return [m for _, m in mod.dep_pin_problems(d)]
+            finally:
+                mod.PIN_RECIPES = saved
+
+    def expect(label, found, needle):
+        if needle is None and found:
+            bad.append(f"dep_pin_problems false-positived on {label}: {found}")
+        elif needle is not None and not any(needle in m for m in found):
+            bad.append(f"dep_pin_problems missed {label} (wanted {needle!r}): {found}")
+
+    # Agreement is silent and each kind of drift is not, so a mutation to either
+    # comparison has to break one of these.
+    expect("a recipe matching the pin", run(pin, good), None)
+    expect("a recipe with a stale hash", run(pin, good.replace(sha, "b" * 64)), "SHA-256")
+    expect("a recipe with a stale URL",
+           run(pin, good.replace("::https://example.invalid/demo-1.0.tar.gz", "::https://example.invalid/demo-0.9.tar.gz")),
+           "pinned URL")
+    expect("a listed recipe that is missing", run(pin, None), "cannot be read")
+    expect("a missing pin file", run(None, good), "cannot read the pin file")
+    expect("a pin reformatted out of the one-line shape",
+           run(pin.replace('set(PHOSPHOR_DEP_demo_SHA256 "', 'set(PHOSPHOR_DEP_demo_SHA256\n    "'), good), "no SHA256")
+    expect("an empty recipe list", run(pin, good, recipes=()), "checks nothing")
+    sri = "sha256-" + base64.b64encode(bytes.fromhex(sha)).decode()
+    expect("a .nix recipe carrying the hex and the matching SRI hash",
+           run(pin, good + sri + "\n", recipes=("p.nix",), name="p.nix"), None)
+    expect("a .nix recipe whose SRI hash drifted from the hex",
+           run(pin, good + "sha256-" + base64.b64encode(bytes.fromhex("c" * 64)).decode() + "\n",
+               recipes=("p.nix",), name="p.nix"), "SRI form")
     return bad
 
 
@@ -850,6 +905,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     import conventions_shared_text
 
     entry_shared_text = conventions_shared_text.SHARED_PARAM_TEXT
+    import conventions_dep_pins
+
+    entry_dep_pins = conventions_dep_pins.PIN_RECIPES
     entry_dead_stanza = conventions_dep5._dead_stanza_problems
 
     for text, shape in SELFTEST_PROSE_BAD:
@@ -891,6 +949,7 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
 
     failures.extend(_finite_verbs_failures())
     failures.extend(_shared_text_failures())
+    failures.extend(_dep_pins_failures())
     failures.extend(_dep5_failures())
     # And every fake-tree arm, which lives in its own module: the detector probes above
     # read no file and build no tree, while each of those drives a real rule over a temp
@@ -911,6 +970,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     if conventions_shared_text.SHARED_PARAM_TEXT is not entry_shared_text:
         failures.append("an arm left conventions_shared_text.SHARED_PARAM_TEXT redirected, so "
                         "rule_shared_param_text would check that arm's table instead of the real one")
+    if conventions_dep_pins.PIN_RECIPES is not entry_dep_pins:
+        failures.append("an arm left conventions_dep_pins.PIN_RECIPES redirected, so rule_dep_pins "
+                        "would check that arm's list instead of the real one")
     if conventions_dep5._dead_stanza_problems is not entry_dead_stanza:
         failures.append("an arm left conventions_dep5._dead_stanza_problems wrapped, so the dead-stanza "
                         "arm runs against a stubbed path lister and fails for a reason that has nothing "

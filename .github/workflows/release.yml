@@ -371,6 +371,28 @@ jobs:
               apt-get build-dep -y --no-install-recommends ./
           fi
 
+      # The third-party archives the build compiles in, pinned in
+      # cmake/PhosphorDependencies.cmake. debian/rules hands packaging/deps to
+      # CMake as PHOSPHOR_DEPS_ARCHIVES, the same in-tree path the OBS Debian
+      # source package carries them at (see publish-obs), so the rules file
+      # names one location for both and the build itself never reaches the
+      # network. The script mode downloads each pinned archive and checks its
+      # SHA-256 before keeping it. cmake is a Build-Depends, installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree
+      # and its rules file passes no archive directory, so it needs nothing
+      # here. The watch rebuilds whatever the latest release is, which can be
+      # one of those.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$PWD/packaging/deps" -P cmake/PhosphorDependencies.cmake
+
       - name: Generate Debian changelog from CHANGELOG.md
         # Force bash for the same reason the build step below does: the
         # Debian container's default shell is dash, which has neither
@@ -583,6 +605,28 @@ jobs:
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
+
+      # The spec's Source1 and Source2: the third-party archives the build
+      # compiles in, pinned in cmake/PhosphorDependencies.cmake. rpmbuild looks
+      # for them in SOURCES under their file names, and the spec hands that
+      # directory to CMake as PHOSPHOR_DEPS_ARCHIVES, so the build itself never
+      # reaches the network. The script mode downloads each pinned archive and
+      # checks its SHA-256 before keeping it. cmake comes from the build
+      # dependencies installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree
+      # and its spec names no extra sources, so it needs nothing here. The
+      # watch rebuilds whatever the latest release is, which can be one of
+      # those.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$HOME/rpmbuild/SOURCES" -P cmake/PhosphorDependencies.cmake
 
       # Template the version FIRST so the source tarball baked into the
       # SRPM carries the matching spec rather than the 0.0.0 placeholder.
@@ -811,6 +855,17 @@ jobs:
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
+
+      # See build-rpm for the dependency archives.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$HOME/rpmbuild/SOURCES" -P cmake/PhosphorDependencies.cmake
 
       - name: Generate RPM changelog and set version from CHANGELOG.md
         # See the Debian step: the version assertion below uses `[[ ]]`, which
@@ -1122,6 +1177,26 @@ jobs:
             qt6-wayland plasma-activities \
             vulkan-headers vulkan-icd-loader
 
+      # The third-party archives the build compiles in, pinned in
+      # cmake/PhosphorDependencies.cmake. PKGBUILD.ci below builds from this
+      # checkout and hands packaging/deps to CMake as PHOSPHOR_DEPS_ARCHIVES,
+      # the offline path packaging/arch/PKGBUILD takes with its extra sources,
+      # so the build itself never reaches the network. The script mode
+      # downloads each pinned archive and checks its SHA-256 before keeping
+      # it. cmake comes from the build dependencies installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree.
+      # Its CMake ignores PHOSPHOR_DEPS_ARCHIVES, so it needs nothing here.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$PWD/packaging/deps" -P cmake/PhosphorDependencies.cmake
+
       - name: Prepare PKGBUILD
         run: |
           VERSION="${{ needs.version.outputs.version }}"
@@ -1168,6 +1243,7 @@ jobs:
                   -DCMAKE_INSTALL_PREFIX=/usr \
                   -DCMAKE_INSTALL_LIBDIR=lib \
                   -DBUILD_TESTING=OFF \
+                  -DPHOSPHOR_DEPS_ARCHIVES="$PWD/packaging/deps" \
                   -Wno-dev
               cmake --build build --parallel
           }
@@ -1653,34 +1729,47 @@ jobs:
           cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
           cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
 
-          # Update version and hash. Use the same awk-anchored array
-          # rewrite as the source PKGBUILD (below) so future additional
-          # `source=` entries don't silently leave a stale second hash.
+          # Update version and hash. Same first-entry rewrite as the source
+          # PKGBUILD below and packaging/arch/update-aur.sh; see the source
+          # step for why only the first entry moves.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
           # The tarball is downloaded from the release that carries it, which
           # on a rebuild is the v<version>-r<N> release, not v<version>.
           sed -i "s/^_release=.*/_release=$RELEASE_TAG/" PKGBUILD
           grep -q "^_release=$RELEASE_TAG\$" PKGBUILD
-          awk -v sum="$SHA256" '
-            # Single-line form: sha256sums=(\047hash\047) — replace inline.
-            /^sha256sums=\(.*\)$/ {
+          SUM="$SHA256"
+          awk -v sum="$SUM" '
+            # Single-line form with one entry: sha256sums=(\047hash\047), replaced inline.
+            !done && /^sha256sums=\(\047[^\047]*\047\)$/ {
               print "sha256sums=(\047" sum "\047)"
+              done = 1
               next
             }
-            # Multi-line form: opening `sha256sums=(` on its own line,
-            # then entries, then a `)` on its own line.
-            /^sha256sums=\(/ {
-              print "sha256sums=("
+            # Multi-line form: `sha256sums=(` alone, one entry per line, `)` alone.
+            # Only the first entry is rewritten.
+            !done && /^sha256sums=\($/ { in_block = 1; print; next }
+            in_block && /^\)/ { in_block = 0; print; next }
+            in_block && !done && /^[[:space:]]*\047[^\047]*\047[[:space:]]*(#.*)?$/ {
               print "    \047" sum "\047"
-              print ")"
-              in_block = 1
+              done = 1
               next
             }
-            in_block && /^\)/ { in_block = 0; next }
-            in_block { next }
             { print }
-          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
+            END {
+              if (!done) {
+                print "sha256sums: no first entry found to rewrite" > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' PKGBUILD > PKGBUILD.new
+          mv PKGBUILD.new PKGBUILD
+          # Every source needs its own hash, or makepkg refuses the PKGBUILD.
+          # Sourced in a subshell: a PKGBUILD's top level is assignments only.
+          if ! (source ./PKGBUILD && [[ ${#source[@]} -eq ${#sha256sums[@]} && "${sha256sums[0]}" == "$SUM" ]]); then
+              echo "Error: the PKGBUILD's sha256sums array does not match its source array after the rewrite" >&2
+              exit 1
+          fi
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
           # Enumerate inputs explicitly rather than `cp /build/*` so a future
@@ -1730,9 +1819,18 @@ jobs:
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
 
-          # Calculate and update source tarball hash. Anchor inside the
-          # sha256sums=(...) block via awk so future additional hashes
-          # (e.g. for the .install file) aren't silently left stale.
+          # Calculate the release tarball's hash and write it into the FIRST
+          # sha256sums entry, the one for source[0], which the PKGBUILD leaves
+          # as 'SKIP'. The entries after it pin the dependency archives by
+          # their literal hashes, which check-conventions.py holds to
+          # cmake/PhosphorDependencies.cmake, so the rewrite passes them
+          # through untouched. Same rewrite as packaging/arch/update-aur.sh.
+          # A PKGBUILD from a tag that predates those archives has the
+          # single-line one-entry form, which the rewrite also takes.
+          #
+          # awk and mv are two commands, not `awk ... && mv ...`: under
+          # bash -e a failure on the left of && does not stop the step, so a
+          # PKGBUILD the rewrite could not parse was pushed with 'SKIP'.
           TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
           # Stage the tarball to disk first so we can detect both curl
           # failures and pipe-side errors. Piping `curl | sha256sum`
@@ -1746,27 +1844,38 @@ jobs:
           TARBALL_SHA256=$(sha256sum "$tmptar" | cut -d' ' -f1)
           rm -f "$tmptar"
           echo "Source tarball SHA256: $TARBALL_SHA256"
-          awk -v sum="$TARBALL_SHA256" '
-            # Single-line form: sha256sums=(\047hash\047) — replace inline.
-            /^sha256sums=\(.*\)$/ {
+          SUM="$TARBALL_SHA256"
+          awk -v sum="$SUM" '
+            # Single-line form with one entry: sha256sums=(\047hash\047), replaced inline.
+            !done && /^sha256sums=\(\047[^\047]*\047\)$/ {
               print "sha256sums=(\047" sum "\047)"
+              done = 1
               next
             }
-            # Multi-line form: opening `sha256sums=(` on its own line, then
-            # entries, then a `)` on its own line. Replace the entire array
-            # with a single sum (the source tarball). Add more entries here
-            # when PKGBUILD grows additional source= lines.
-            /^sha256sums=\(/ {
-              print "sha256sums=("
+            # Multi-line form: `sha256sums=(` alone, one entry per line, `)` alone.
+            # Only the first entry is rewritten.
+            !done && /^sha256sums=\($/ { in_block = 1; print; next }
+            in_block && /^\)/ { in_block = 0; print; next }
+            in_block && !done && /^[[:space:]]*\047[^\047]*\047[[:space:]]*(#.*)?$/ {
               print "    \047" sum "\047"
-              print ")"
-              in_block = 1
+              done = 1
               next
             }
-            in_block && /^\)/ { in_block = 0; next }
-            in_block { next }
             { print }
-          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
+            END {
+              if (!done) {
+                print "sha256sums: no first entry found to rewrite" > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' PKGBUILD > PKGBUILD.new
+          mv PKGBUILD.new PKGBUILD
+          # Every source needs its own hash, or makepkg refuses the PKGBUILD.
+          # Sourced in a subshell: a PKGBUILD's top level is assignments only.
+          if ! (source ./PKGBUILD && [[ ${#source[@]} -eq ${#sha256sums[@]} && "${sha256sums[0]}" == "$SUM" ]]); then
+              echo "Error: the PKGBUILD's sha256sums array does not match its source array after the rewrite" >&2
+              exit 1
+          fi
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
           # Enumerate inputs explicitly — see the matching note in
@@ -1801,9 +1910,11 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Publish to openSUSE Build Service (OBS)
   # ═══════════════════════════════════════════════════════════════════════════
-  # Commits the spec + _service to the home:fuddlesworth/plasmazones OBS
-  # package; OBS then fetches the release tarball (via the download_files
-  # source service) and rebuilds for every enabled repository. Gated on the
+  # Commits the spec + _service, the Debian recipe and the Debian orig
+  # tarball to the home:fuddlesworth/plasmazones OBS package; OBS then fetches
+  # the release tarball and the pinned dependency archives (via the
+  # download_files source service) and rebuilds for every enabled repository.
+  # Gated on the
   # GitHub release being created, so all distro builds (including the
   # openSUSE Tumbleweed RPM smoke build) must succeed first — a spec that
   # fails to build is never pushed to the repo users have added with
@@ -1858,7 +1969,8 @@ jobs:
       - name: Install osc (OBS command-line client)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends osc
+          # cmake for the dependency fetch in "Build the Debian orig tarball".
+          sudo apt-get install -y --no-install-recommends osc cmake
 
       - name: Configure osc credentials
         env:
@@ -1957,11 +2069,80 @@ jobs:
           fi
           echo "Debian recipe version: $DSC_VER"
 
+      # The Debian targets' source tarball: this tag's tree with the pinned
+      # dependency archives (cmake/PhosphorDependencies.cmake) added at
+      # packaging/deps, where debian/rules points CMake as
+      # PHOSPHOR_DEPS_ARCHIVES. OBS builds offline, so the archives have to
+      # arrive as sources, and the RPM targets get theirs that way:
+      # download_files fetches the spec's Source1 and Source2 next to Source0.
+      # The Debian targets cannot take them the same way. debtransform takes
+      # exactly one source tarball and has no component tarballs. Its one
+      # flat-file route (DEBTRANSFORM-FILES) writes the files into the debian
+      # tarball at the top of the tree under their bare names, which makes
+      # them binary local changes to the upstream source rather than part of
+      # it, at a path build-deb would have to copy. The archives are upstream
+      # source of this package, and the orig tarball is where that goes. So
+      # this job builds one tarball that already holds them, commits it, and
+      # the .dsc's DEBTRANSFORM-TAR line (written by generate-dsc.sh) picks it
+      # out of the four tarballs in the package.
+      # build-deb fills the same packaging/deps from the same pins, so
+      # debian/rules names one location for both.
+      #
+      # git archive of HEAD, so the tree is the tag's and none of this job's
+      # stamping, and every entry this step adds is normalised (owner, mode,
+      # mtime from the tagged commit, gzip -n), so re-running the same tag
+      # builds the same bytes and the commit step still finds nothing to do.
+      #
+      # A tag older than that file carries its archives inside its own tree,
+      # and its .dsc names no tarball, so it gets none here. The commit step
+      # drops a tarball an earlier release left in the package, because two
+      # tarballs and no DEBTRANSFORM-TAR is exactly what debtransform aborts on.
+      - name: Build the Debian orig tarball
+        id: orig
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; its Debian targets build from Source0."
+              echo "path=" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          ORIG="plasmazones_${VERSION}.orig.tar.gz"
+          TOP="PlasmaZones-${VERSION}"
+          STAGE="$RUNNER_TEMP/obs-orig"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          git archive --format=tar --prefix="$TOP/" -o "$STAGE/orig.tar" HEAD
+          # Not grep -q: it stops reading at the first match, tar then dies of
+          # SIGPIPE, and pipefail turns the match into a false condition.
+          if tar -tf "$STAGE/orig.tar" | grep "^$TOP/packaging/deps/" >/dev/null; then
+              echo "Error: the tag tracks files under packaging/deps, which this step fills itself" >&2
+              exit 1
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$STAGE/$TOP/packaging/deps" -P cmake/PhosphorDependencies.cmake
+          MTIME="$(git log -1 --format=%ct HEAD)"
+          tar -C "$STAGE" -rf "$STAGE/orig.tar" \
+              --sort=name --owner=0 --group=0 --numeric-owner \
+              --mode='u+rwX,go+rX,go-w' --mtime="@$MTIME" \
+              "$TOP/packaging/deps"
+          gzip -n -9 -c "$STAGE/orig.tar" > "$STAGE/$ORIG"
+          tar -tzf "$STAGE/$ORIG" | grep "^$TOP/packaging/deps/"
+          # The .dsc comes from this tag's generate-dsc.sh, so check it names
+          # the file built here rather than assume the two agree.
+          DSC_TAR="$(sed -n 's/^DEBTRANSFORM-TAR:[[:space:]]*//p' packaging/obs/plasmazones.dsc)"
+          if [[ "$DSC_TAR" != "$ORIG" ]]; then
+              echo "Error: plasmazones.dsc names DEBTRANSFORM-TAR '$DSC_TAR', but this step built $ORIG" >&2
+              exit 1
+          fi
+          echo "path=$STAGE/$ORIG" >> "$GITHUB_OUTPUT"
+
       - name: Commit package to OBS
         env:
           OBS_PROJECT: home:fuddlesworth
           VERSION: ${{ needs.version.outputs.version }}
           PKGREL: ${{ needs.version.outputs.pkgrel }}
+          ORIG_TARBALL: ${{ steps.orig.outputs.path }}
         run: |
           set -euo pipefail
           # Check out the existing OBS package working copy — the project
@@ -1989,6 +2170,16 @@ jobs:
           cp packaging/debian/plasmazones.postinst "$PKGDIR/debian.plasmazones.postinst"
           cp packaging/debian/plasmazones.postrm "$PKGDIR/debian.plasmazones.postrm"
           cp packaging/debian/plasmazones.triggers "$PKGDIR/debian.plasmazones.triggers"
+          # The Debian orig tarball from the step above. The working copy
+          # still holds the previous release's, and osc addremove only drops
+          # it once it is gone from disk, so clear every one first. Left in
+          # place it would be a stale tarball beside the new one, and beside
+          # Source0 alone for a tag whose .dsc names none, which debtransform
+          # refuses to choose between.
+          rm -f "$PKGDIR"/plasmazones_*.orig.tar.*
+          if [[ -n "$ORIG_TARBALL" ]]; then
+              cp "$ORIG_TARBALL" "$PKGDIR/"
+          fi
           cd "$PKGDIR"
           # addremove stages new files and drops removed ones; commit only
           # when something actually changed so re-running the same tag is a

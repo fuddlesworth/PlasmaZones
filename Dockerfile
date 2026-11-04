@@ -23,6 +23,10 @@ FROM fedora:44
 # FAIL rather than skip without it). Not a build dep, so it is
 # deliberately absent from the packaging specs this list was copied from --
 # those all configure with -DBUILD_TESTING=OFF, and this image does not.
+# On an x86-64 host the configure fetches the glslang release that
+# cmake/PhosphorDependencies.cmake pins and uses that instead. The package is
+# still needed because this image is for macOS, and on Apple silicon it runs
+# as aarch64, which Khronos publishes no Linux build for.
 # The last four packages are the shell tier's dependencies. They are here
 # because the ENTRYPOINT configures with BUILD_PHOSPHOR_SHELL=ON: without
 # that flag the image built happily and `docker run ... ctest` reported
