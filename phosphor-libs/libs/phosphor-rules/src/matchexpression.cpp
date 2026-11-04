@@ -257,8 +257,59 @@ bool MatchExpression::isValid() const
     // truncated by `subject.toInt()` to 12 — a Pid 12.7 leaf would match pid
     // 12. Reject the leaf rather than accepting a value the user almost
     // certainly did not intend.
+    //
+    // And it must be a NUMBER at all. Evaluation reads it through
+    // `value.toInt()`, which answers 0 for anything it cannot convert, so a
+    // `"abc"`, `""`, `true` or `null` value would compare as 0 and
+    // `ScreenWidth GreaterThan "abc"` would match every screen. The accepted
+    // shapes are the integral and double variants and a string that parses
+    // as an int in full (a hand-written `"2560"` keeps working).
     if (fieldIsNumeric(field)) {
         const int valueTypeId = m_predicate.value.metaType().id();
+        const auto rejectNonNumeric = [this]() {
+            qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with non-numeric value" << m_predicate.value
+                              << "— numeric fields require an integer.";
+            return false;
+        };
+        const auto rejectOutOfRange = [this]() {
+            qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with out-of-range value" << m_predicate.value
+                              << "— numeric fields require an integer within int range.";
+            return false;
+        };
+        switch (valueTypeId) {
+        case QMetaType::Int:
+        case QMetaType::Double:
+            break;
+        case QMetaType::LongLong: {
+            const qlonglong v = m_predicate.value.toLongLong();
+            if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+                return rejectOutOfRange();
+            }
+            break;
+        }
+        case QMetaType::UInt:
+        case QMetaType::ULongLong:
+            if (m_predicate.value.toULongLong() > static_cast<qulonglong>(std::numeric_limits<int>::max())) {
+                return rejectOutOfRange();
+            }
+            break;
+        case QMetaType::QString: {
+            // Parsed wider than int so a well-formed number outside int range
+            // (within 64 bits) is reported as out of range rather than as not
+            // a number.
+            bool ok = false;
+            const qlonglong v = m_predicate.value.toString().toLongLong(&ok);
+            if (!ok) {
+                return rejectNonNumeric();
+            }
+            if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+                return rejectOutOfRange();
+            }
+            break;
+        }
+        default:
+            return rejectNonNumeric();
+        }
         if (valueTypeId == QMetaType::Double) {
             const double d = m_predicate.value.toDouble();
             // Numeric leaves evaluate via subject.toInt() / value.toInt() (int),
@@ -269,9 +320,7 @@ bool MatchExpression::isValid() const
             // (e.g. a value above INT_MAX collapsing to 0, which reads as "pid 0").
             if (!std::isfinite(d) || d < static_cast<double>(std::numeric_limits<int>::min())
                 || d > static_cast<double>(std::numeric_limits<int>::max())) {
-                qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with out-of-range value" << d
-                                  << "— numeric fields require an integer within int range.";
-                return false;
+                return rejectOutOfRange();
             }
             // A bit-for-bit integer-valued double is fine (JSON has no int);
             // only a genuine fractional part is the authoring mistake (a Pid 12.7
@@ -342,7 +391,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         return subject.toBool() == value.toBool();
     }
 
-    // ── Numeric fields (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount) ──
+    // ── Numeric fields (every FieldType::Int field) ──
     // KNOWN LIMITATION (VD-1): VirtualDesktop is compared as a plain int with no
     // awareness of the `0 = all desktops / sticky` sentinel (WindowQuery.h). A
     // sticky window (virtualDesktop == 0) matches only a literal

@@ -228,7 +228,8 @@ private Q_SLOTS:
 
     void testValueForField_tiledWindowCountOptionalContext()
     {
-        // TiledWindowCount is the ONE context field that is optional, and the
+        // TiledWindowCount is optional (like the screen width and height, see
+        // the test below), and the
         // asymmetry is deliberate: 0 is a meaningful count (an empty tiled
         // desktop), so "unknown" cannot be spelled as a defaulted 0 the way the
         // string context fields spell it as empty. Absent must therefore make
@@ -248,6 +249,41 @@ private Q_SLOTS:
         q.tiledWindowCount = 3;
         QCOMPARE(q.valueForField(Field::TiledWindowCount)->toInt(), 3);
         QVERIFY(!q.hasWindow());
+    }
+
+    void testValueForField_screenShapeFields()
+    {
+        // The screen width and height are optional for the tiled count's
+        // reason (no width means "unknown"), while the aspect ratio is a
+        // present string that is empty when unknown. All three are context
+        // fields, so none of their states makes the query look per-window.
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::ScreenWidth).has_value());
+        QVERIFY(!q.valueForField(Field::ScreenHeight).has_value());
+        // Engaged-empty, NOT absent: a positive leaf is false against it and a
+        // negated one matches, which is why the context resolvers refuse a
+        // negated aspect leaf while the size is unknown.
+        QVERIFY(q.valueForField(Field::ScreenAspectRatio).has_value());
+        QVERIFY(q.valueForField(Field::ScreenAspectRatio)->toString().isEmpty());
+        QVERIFY(!q.hasWindow());
+        for (const Field field : {Field::ScreenWidth, Field::ScreenHeight, Field::ScreenAspectRatio}) {
+            QVERIFY(!windowSourcedFields().contains(field));
+        }
+
+        q.screenWidth = 5120;
+        q.screenHeight = 1440;
+        q.screenAspectRatio = QStringLiteral("32:9");
+        QCOMPARE(q.valueForField(Field::ScreenWidth)->toInt(), 5120);
+        QCOMPARE(q.valueForField(Field::ScreenHeight)->toInt(), 1440);
+        QCOMPARE(q.valueForField(Field::ScreenAspectRatio)->toString(), QStringLiteral("32:9"));
+        QVERIFY(!q.hasWindow());
+
+        // Each dimension stands alone: engaging the width does not engage the
+        // height.
+        WindowQuery widthOnly;
+        widthOnly.screenWidth = 2560;
+        QCOMPARE(widthOnly.valueForField(Field::ScreenWidth)->toInt(), 2560);
+        QVERIFY(!widthOnly.valueForField(Field::ScreenHeight).has_value());
     }
 };
 

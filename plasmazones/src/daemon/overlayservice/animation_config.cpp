@@ -36,7 +36,7 @@ namespace PlasmaZones {
 namespace {
 
 // ── Per-role Config builders ───────────────────────────────────────────
-// One factory per overlay role so adding/tweaking a 6th overlay touches
+// One factory per overlay role so adding or tweaking an overlay role touches
 // exactly one named function rather than appending to a 100-line
 // setupSurfaceAnimator. Each builder documents the visual shape it
 // encodes; setupSurfaceAnimator just wires the builder output to the
@@ -47,7 +47,7 @@ namespace {
 //
 //   - **OSD family (`osd.*`)**: genuine OSDs only. Driven by the
 //     passive-shell OSD slot (LayoutOsd and NavigationOsd content). A
-//     JSON edit to `osd.hide` affects OSDs and ONLY OSDs.
+//     profile override at `osd.hide` affects OSDs and ONLY OSDs.
 //   - **Popup family (`popup.<surface>.*`)** - non-OSD overlay
 //     surfaces. Each gets its own leaf paths under
 //     `popup.<surface>` per surface's needs:
@@ -55,8 +55,9 @@ namespace {
 //         leg also scales, and the hide-scale couples to `.hide`)
 //       • `popup.zoneSelector.{show, hide}` (opacity-only)
 //       • `popup.snapAssist.{show, hide}` (opacity-only)
-//       • `popup.cheatsheet.{show, hide}` (opacity-only)
-//     A JSON edit to `popup.layoutPicker.hide` affects ONLY the
+//       • `popup.cheatsheet.{show, hide}` (opacity legs plus a scale
+//         leg, the layout picker's envelope)
+//     A profile override at `popup.layoutPicker.hide` affects ONLY the
 //     layout picker; siblings are unaffected.
 //
 // The shipped tree carries zero bundled per-leaf profile JSONs - every
@@ -189,8 +190,8 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
 /// (slide), dissolve, etc. independently of zone or popup events.
 ///
 /// **Genuine-OSD surface family.** All four leg paths live under
-/// `osd.*`. A JSON edit to `osd.hide` affects OSDs and ONLY OSDs -
-/// LayoutPicker / ZoneSelector / SnapAssist live in the
+/// `osd.*`. A profile override at `osd.hide` affects OSDs and ONLY OSDs -
+/// LayoutPicker / ZoneSelector / SnapAssist / Cheatsheet live in the
 /// `popup.*` family.
 PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree,
                                             const PhosphorShaders::ShaderPresetRegistry* presets)
@@ -290,8 +291,9 @@ PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree&
         .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupCheatsheetHide, 1.0 - kHideScaleTo)};
 }
 
-/// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
-/// hide animation actually paints.
+/// ZoneSelector: opacity-only show/hide. The hide animation paints
+/// because the shared shell only unmaps once the last slot's hide leg
+/// has completed.
 ///
 /// **Popup surface family - dedicated path partition.** Every leg
 /// resolves under `popup.zoneSelector.*`, NOT under the shared
@@ -325,16 +327,16 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
 /// owned its own wl_surface and tore it down on hide (~Surface
 /// synchronously cancelling any in-flight beginHide), so the hide leg
 /// never painted and `popup.snapAssist.hide` was intentionally absent
-/// from the taxonomy. After the unified-shell migration the surface
-/// stays mapped (keepMappedOnHide=true on the shared shell wl_surface)
-/// and snap-assist's hide runs a normal SurfaceAnimator::beginHide on
-/// the slot - so the hide leg paints frames and a per-event shader
-/// assignment is now meaningful.
+/// from the taxonomy. After the unified-shell migration snap-assist's
+/// hide runs a normal SurfaceAnimator::beginHide on its slot, and the
+/// shared shell wl_surface only unmaps after that leg completes - so
+/// the hide leg paints frames and a per-event shader assignment is now
+/// meaningful.
 ///
 /// **Inheritance.** ShaderProfileTree::resolve walks parent paths, so
 /// within the popup family a user setting `popup` to dissolve cascades
-/// to LayoutPicker and ZoneSelector (both legs) and to SnapAssist's
-/// show AND hide legs via the chain `popup.<surface>.<leg>` →
+/// to LayoutPicker, ZoneSelector and Cheatsheet (both legs) and to
+/// SnapAssist's show AND hide legs via the chain `popup.<surface>.<leg>` →
 /// `popup.<surface>` → `popup` → `global`. The genuine OSD
 /// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
 /// by `popup` overrides regardless.
@@ -346,8 +348,8 @@ PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree&
     const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistShow);
     const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistHide);
     return PAL::SurfaceAnimator::Config{
-        // Popup surface family - dedicated path. A user editing
-        // `popup.snapAssist.show.json` affects ONLY the snap
+        // Popup surface family - dedicated path. A user override at
+        // `popup.snapAssist.show` affects ONLY the snap
         // assist; siblings are unaffected. Built-in default mirrors the
         // prior `popup` (150 ms widget-out) so behaviour is
         // preserved.
@@ -436,8 +438,8 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // re-introducing a defensive branch here.
 
     // Profile names are the same paths PhosphorMotionAnimation in QML
-    // uses today, so the live-reload path (drop a JSON, see it apply on
-    // next show) automatically applies to the C++ side too.
+    // uses today, so a profile registered for one of these paths applies to
+    // the C++ side as well as the QML one.
     //
     // Post-shell-migration: the wl_surface that hosts OSD content is the
     // unified PassiveShell (one per screen, scoped

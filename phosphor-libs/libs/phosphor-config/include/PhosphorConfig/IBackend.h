@@ -156,6 +156,21 @@ public:
     /// destroy it before asking for another group on this backend.
     virtual std::unique_ptr<IGroup> group(const QString& name) = 0;
 
+    /// A view of the named group holding only what this backend PERSISTS,
+    /// without any read-only layer that @c group() lays over it (such as
+    /// @c JsonBackend's overlay). Same lifetime rules as @c group().
+    ///
+    /// @c Store decides its writes, resets and imports against this view, so a
+    /// value that only such a layer supplies is never mistaken for one already
+    /// on disk: writing a value that happens to equal the layer's still
+    /// persists it, and a reset never tries to delete what the file does not
+    /// hold. The default returns @c group(), which is exact for any backend
+    /// without such a layer.
+    virtual std::unique_ptr<IGroup> persistedGroup(const QString& name)
+    {
+        return group(name);
+    }
+
     /// Whether the in-memory document carries changes not yet committed to
     /// disk. A clean backend may be re-read from disk without losing state;
     /// a dirty one may not. The default @c true is deliberate: a backend

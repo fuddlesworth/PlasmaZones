@@ -1,6 +1,26 @@
 {
     "releases": [
         {
+            "version": "3.5.4",
+            "date": "2026-11-02",
+            "highlights": [
+                "New: With \"Always re-insert on drag\" on, holding or toggling the re-insert trigger keeps the dragged window floating (#1162)",
+                "New: A rule's Zone condition offers every zone by name, grouped by layout (#1163)",
+                "New: Rules can test a monitor's width, height and aspect ratio, so one monitor can get a different layout at each resolution (#1145)",
+                "New: Fedora 45 RPMs for x86_64 and aarch64 (#1177)",
+                "Fixed: PlasmaZones no longer keeps fullscreen games and videos from going straight to the display (#1169)",
+                "Fixed: Windows without a window class, such as some Gamescope windows, show up in the rule editor's window picker (#1163)",
+                "Fixed: A window class picked from the window picker matches the window (#1163)",
+                "Fixed: The Echo pointer trail no longer leaves a black box over apps that draw their own cursor (#1164)",
+                "Fixed: Layout rules follow a monitor that rotates or changes resolution (#1165)",
+                "Fixed: Gap rules reach windows that are already snapped (#1165)",
+                "Fixed: The rules page's monitor tiles show the layout and rules that apply right now (#1165)",
+                "Fixed: The editor shows fixed zones that don't fit the screen where they really land (#1167)",
+                "Fixed: COPR rebuilds after a KWin update are offered by dnf (#1178)",
+                "Fixed: A tiling algorithm or shader pack can no longer stall PlasmaZones with an oversized result or include (#1175)"
+            ]
+        },
+        {
             "version": "3.5.3",
             "date": "2026-10-24",
             "highlights": [

@@ -514,10 +514,10 @@ void OverlayService::scheduleIdleQuiesce()
         m_idleQuiesceTimer->setInterval(kIdleQuiesceGraceMs);
         connect(m_idleQuiesceTimer, &QTimer::timeout, this, [this]() {
             // Re-check at fire time: a show()/refreshFromIdle() within the grace
-            // window both cancels this timer and resumes, but guard anyway. The
-            // overlay's QQuickWindows are intentionally left alive (NVIDIA
-            // teardown-deadlock avoidance); we only pause the 60 Hz shader
-            // render loop and the CAVA capture. Mirror syncCavaState's wantRun
+            // window both cancels this timer and resumes, but guard anyway.
+            // Nothing here hides a slot or unmaps a shell; we only pause the
+            // 60 Hz shader render loop and the CAVA capture and release idle
+            // GPU resources. Mirror syncCavaState's wantRun
             // predicate: a visible audio decoration also keeps CAVA alive, so it
             // must veto the quiesce too. A vetoed one-shot is NOT re-armed
             // here: every path that shows or hides a decoration or overlay
@@ -541,14 +541,19 @@ void OverlayService::scheduleIdleQuiesce()
             if (m_audioProvider && m_audioProvider->isRunning()) {
                 m_audioProvider->stop();
             }
-            // Timers alone leave the GPU memory pinned: the kept-alive windows'
-            // shader nodes hold full-screen buffer FBOs, pipelines, and uploaded
-            // wallpaper/label textures for the daemon's whole lifetime after the
-            // first drag — on an iGPU that is system RAM taken from the shared
+            // Timers alone leave the GPU memory pinned while a shell stays
+            // mapped through a long idle (a mid-drag pause on an inactive
+            // screen, an OSD up past the grace): its shader nodes hold
+            // full-screen buffer FBOs, pipelines, and uploaded wallpaper/label
+            // textures, and on an iGPU that is system RAM taken from the shared
             // pool. Free them now; they rebuild lazily on the first frame of the
             // next show, well inside the grace window's cost model (a quick
             // re-trigger cancels this timer before it fires, so a warm resume
-            // never pays the rebuild).
+            // never pays the rebuild). An UNMAPPED shell needs none of this
+            // under Qt's threaded render loop: its hide already fired
+            // sceneGraphAboutToStop, which released every shader node, and the
+            // loop deletes the queued release job unrun because the window is
+            // no longer exposed.
             for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
                 if (QQuickItem* slot = it.value().mainOverlaySlot()) {
                     // A false return means the installed shell QML no longer
@@ -570,7 +575,7 @@ void OverlayService::scheduleIdleQuiesce()
             }
             // Parked animation-shader towers (SurfaceAnimator's pending-reuse
             // stash) hold full-window FBOs per (surface, slot) for the
-            // keep-alive shells' lifetime — i.e. forever, after the first
+            // shell's whole lifetime, unmapped or not, after the first
             // animated OSD/popup show on each slot. Genuine rest is exactly
             // when the parking's amortisation argument no longer applies
             // (it defends against per-toggle deleteLater floods, and there

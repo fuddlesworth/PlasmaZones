@@ -85,12 +85,11 @@ void Daemon::connectLayoutSignals()
     updateLayoutFilter();
 
     // Pre-warm the per-screen unified passive overlay shell. The shell
-    // hosts every kbd-None overlay slot (OSD, snap-assist, …) so a
-    // single warm-up at daemon start covers QML compile + first-paint
-    // pipeline build for all of them — subsequent per-content shows are
-    // animator-only operations on already-mapped slot Items inside the
-    // already-warmed shell wl_surface. Deferred so daemon init completes
-    // first.
+    // hosts every overlay slot (OSD, snap-assist, …) so a single warm-up
+    // at daemon start covers QML compile and the first scene build for all
+    // of them. The shell is unmapped again right after, and between shows,
+    // so a later show remaps it rather than reusing a mapped surface.
+    // Deferred so daemon init completes first.
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
             m_overlayService->warmUpNotifications();

@@ -5,6 +5,7 @@
 
 #include "ipcrouterdetail.h"
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcSchemaGenerator.h>
 
@@ -25,7 +26,8 @@
 #include <QThread>
 #include <QVariant>
 
-#include <sys/stat.h> // umask
+#include <sys/stat.h> // umask, lstat
+#include <unistd.h> // getuid
 
 namespace PhosphorIpc {
 
@@ -55,6 +57,28 @@ constexpr int MaxFramesPerReadyRead = 64;
 // the stream resets the counter; we only close on sustained
 // garbage, not on a one-off bad line.
 constexpr int MaxConsecutiveMalformedFrames = 16;
+
+// Whether @p path is a socket that a crashed router of this user left:
+// a socket file of this user that refuses a connection. Only a refusal
+// proves that nothing listens. A listener whose backlog is full (its
+// process busy) does not answer the probe in time and reports no
+// error, and a file that is not a socket also refuses: neither may be
+// removed.
+bool isStaleSocket(const QString& path)
+{
+    struct stat info{};
+    if (::lstat(QFile::encodeName(path).constData(), &info) != 0 || !S_ISSOCK(info.st_mode)
+        || info.st_uid != ::getuid()) {
+        return false;
+    }
+    QLocalSocket probe;
+    probe.connectToServer(path);
+    if (probe.waitForConnected(200)) {
+        probe.abort();
+        return false;
+    }
+    return probe.error() == QLocalSocket::ConnectionRefusedError;
+}
 
 // RAII scope for the ::umask process-global. We use ::umask to
 // force a 0600 mode on the socket file at create time (atomic, no
@@ -120,12 +144,12 @@ bool IpcRouter::start(const QString& socketPath)
         return false;
     }
     // Try to bind first. If listen() fails because a stale socket
-    // file from a crashed previous run is sitting there, probe with
-    // a quick connect, if nothing's listening, the path is dead
-    // and we can safely remove + retry. If a live process IS
-    // listening, the connect succeeds and we leave the path alone
-    // (refuse to start). This avoids the "clobber a live listener
-    // on the same path" bug a blind unlink would cause.
+    // file from a crashed previous run is sitting there, remove it
+    // and retry. A path is stale only when isStaleSocket() says so:
+    // a live listener, also a busy one, and a file that is not a
+    // socket keep the path, and start() fails. This avoids the
+    // "clobber a live listener on the same path" bug a blind unlink
+    // would cause.
     m_server = std::make_unique<QLocalServer>(this);
     // We do NOT use setSocketOptions(UserAccessOption) here: that
     // option makes QLocalServer auto-unlink any existing socket
@@ -149,21 +173,9 @@ bool IpcRouter::start(const QString& socketPath)
     if (!initialBound) {
         const QString initialError = m_server->errorString();
         bool removedStale = false;
-        if (QFile::exists(resolved)) {
-            // Probe via a fresh QLocalSocket: if a live router is
-            // listening, the kernel-level connect handshake
-            // completes near-instantly. If nothing's listening,
-            // connect returns ECONNREFUSED and waitForConnected
-            // reports false, only THEN do we unlink the stale
-            // file and retry.
-            QLocalSocket probe;
-            probe.connectToServer(resolved);
-            const bool aliveListener = probe.waitForConnected(200);
-            probe.abort();
-            if (!aliveListener) {
-                QFile::remove(resolved);
-                removedStale = true;
-            }
+        if (isStaleSocket(resolved)) {
+            QFile::remove(resolved);
+            removedStale = true;
         }
         bool retryBound = false;
         if (removedStale) {
@@ -287,6 +299,25 @@ void IpcRouter::unregisterTarget(const QString& name, QObject* object)
         return;
     }
     m_targets.erase(it);
+    // Its subscriptions go with it. Kept, they would stream again when the
+    // name is registered later, perhaps by another object, to a client
+    // that subscribed to the old one. Each subscriber hears that its
+    // stream ended: an error frame whose id is the subscription id.
+    for (auto subs = m_subscriptionsBySocket.begin(); subs != m_subscriptionsBySocket.end(); ++subs) {
+        QLocalSocket* socket = subs.key();
+        QList<Subscription>& list = subs.value();
+        for (auto sub = list.begin(); sub != list.end();) {
+            if (sub->target != name) {
+                ++sub;
+                continue;
+            }
+            if (socket && socket->state() == QLocalSocket::ConnectedState) {
+                socket->write(writeLine(buildError(sub->subscriptionId, QString::fromUtf8(ErrorCode::NoSuchTarget),
+                                                   QStringLiteral("target '%1' was unregistered").arg(name))));
+            }
+            sub = list.erase(sub);
+        }
+    }
     Q_EMIT targetUnregistered(name);
 }
 
@@ -375,12 +406,16 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // coerced QVariant's internal storage. A reallocation during
     // append() would invalidate those pointers, so pre-reserve the
     // exact final size.
+    // A QVariant parameter (an untyped QML function argument) takes the
+    // incoming variant as it is: QVariant::convert() cannot convert to
+    // QVariant itself, and the method wants the variant, not its content.
+    const QMetaType variantType = QMetaType::fromType<QVariant>();
     QVariantList coerced;
     coerced.reserve(args.size());
     for (int i = 0; i < args.size(); ++i) {
         QVariant v = args.at(i);
         const QMetaType expected(method.parameterType(i));
-        if (v.metaType() != expected) {
+        if (expected != variantType && v.metaType() != expected) {
             if (!v.convert(expected)) {
                 // typeName() can return nullptr for a default-
                 // constructed QVariant (e.g. JSON null in an args
@@ -398,7 +433,9 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
 
     QGenericArgument g[MaxArgs];
     for (int i = 0; i < coerced.size(); ++i) {
-        g[i] = QGenericArgument(coerced.at(i).typeName(), coerced.at(i).constData());
+        g[i] = QMetaType(method.parameterType(i)) == variantType
+            ? QGenericArgument("QVariant", &coerced.at(i))
+            : QGenericArgument(coerced.at(i).typeName(), coerced.at(i).constData());
     }
 
     QVariant returnValue;
@@ -407,15 +444,31 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // metatype isn't registered can't be safely allocated via
     // QVariant(type, nullptr), so skip the return slot entirely
     // and let invoke() discard the value.
-    if (returnType.isValid() && returnType.id() != QMetaType::Void && returnType.id() != QMetaType::UnknownType) {
+    // A QVariant return (an untyped QML function) writes into returnValue
+    // itself, not into a variant held inside it.
+    const bool variantReturn = returnType == variantType;
+    if (!variantReturn && returnType.isValid() && returnType.id() != QMetaType::Void
+        && returnType.id() != QMetaType::UnknownType) {
         returnValue = QVariant(returnType, nullptr);
     }
-    QGenericReturnArgument ret = returnValue.isValid()
-        ? QGenericReturnArgument(returnValue.typeName(), returnValue.data())
-        : QGenericReturnArgument();
+    QGenericReturnArgument ret = variantReturn ? QGenericReturnArgument("QVariant", &returnValue)
+        : returnValue.isValid()                ? QGenericReturnArgument(returnValue.typeName(), returnValue.data())
+                                               : QGenericReturnArgument();
 
+    // The method runs as a wire call on its object, so that a target with an
+    // IpcCallContext can fail it. The record is on this stack, not in the
+    // target, which the method may delete. The outer call comes back for a
+    // method that spins a nested event loop in which another call runs.
+    IpcCallContext::Call call;
+    call.object = dynamic_cast<const void*>(obj);
+    call.outer = IpcCallContext::current();
+    IpcCallContext::current() = &call;
     const bool ok =
         method.invoke(obj, Qt::DirectConnection, ret, g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9]);
+    IpcCallContext::current() = call.outer;
+    if (ok && call.failed) {
+        return fail(InvokeOutcome::CallFailed, call.message);
+    }
     if (!ok) {
         return fail(
             InvokeOutcome::InvokeFailed,
@@ -638,6 +691,9 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
                 break;
             case InvokeOutcome::InvokeFailed:
                 code = QString::fromUtf8(ErrorCode::InvocationFailed);
+                break;
+            case InvokeOutcome::CallFailed:
+                code = QString::fromUtf8(ErrorCode::CallFailed);
                 break;
             case InvokeOutcome::Ok:
                 Q_UNREACHABLE();

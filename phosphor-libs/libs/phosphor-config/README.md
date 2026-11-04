@@ -34,7 +34,7 @@ library provides:
 |------|---------|
 | `PhosphorConfig::Store`             | Front-end API: `read<T>()`, `readVariant()`, `write()`, `reset()`, `changed()` signal |
 | `PhosphorConfig::IBackend`          | Abstract backend. Shipped: `JsonBackend` |
-| `PhosphorConfig::JsonBackend`       | JSON-on-disk, with the path chosen by the consumer (e.g. `$XDG_CONFIG_HOME/<app>/config.json`) |
+| `PhosphorConfig::JsonBackend`       | JSON-on-disk, with the path chosen by the consumer (e.g. `$XDG_CONFIG_HOME/<app>/config.json`). `setOverlay()` lays read-only in-memory values over the file |
 | `PhosphorConfig::QSettingsBackend`  | Read-only reader for a legacy KConfig-style INI file, for migration onto `JsonBackend` |
 | `PhosphorConfig::Schema`            | Declarative struct: groups of `KeyDef` (default + expected type + validator), version, migration chain |
 | `PhosphorConfig::MigrationRunner`   | Runs the schema's `MigrationStep` chain, one step per schema bump |
@@ -93,6 +93,33 @@ schema.migrations.push_back(MigrationStep{
 
 MigrationRunner(schema).runOnFile(configPath);
 ```
+
+Command-line style overrides go in an overlay rather than a rewritten file.
+The overlay has the document's shape, wins over the file for every read
+(nested objects merge key by key), survives `reparseConfiguration()`, and is
+never written back:
+
+```cpp
+// afterglow -o Audio.enabled=false
+backend->setOverlay(QJsonObject{
+    {QStringLiteral("Audio"), QJsonObject{{QStringLiteral("enabled"), false}}},
+});
+settings.read<bool>(QStringLiteral("Audio"), QStringLiteral("enabled")); // false
+```
+
+`Store`'s writes, resets and imports decide against the file
+(`IBackend::persistedGroup()`), so writing a value equal to the overlay's
+still persists it.
+
+A file that exists but does not parse, or whose root is not an object, is
+never overwritten. `loadFailed()` turns on, the backend reads as the last
+document it read or wrote cleanly (empty on a first load), and `sync()`,
+`commit()` and `applyMigration()` refuse rather than write over the user's
+file. `flushNow` also re-checks the file's size and mtime against the last
+load, so a file broken by hand after it was read is refused too. The overlay
+stays on top of the fallback document. A later `reparseConfiguration()` that
+reads the file cleanly clears the flag. A machine-written file with nothing
+worth keeping opts out with `setOverwriteUnreadable(true)`.
 
 ## Design notes
 

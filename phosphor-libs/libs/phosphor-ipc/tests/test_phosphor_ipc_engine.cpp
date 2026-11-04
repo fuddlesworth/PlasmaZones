@@ -10,9 +10,13 @@
 
 #include <PhosphorIpc/IpcEngine.h>
 #include <PhosphorIpc/IpcRouter.h>
+#include <PhosphorIpc/IpcTarget.h>
 
 #include <QObject>
+#include <QQmlComponent>
 #include <QQmlEngine>
+#include <QStringList>
+#include <QVariantMap>
 #include <QTest>
 #include <QVariant>
 #include <QtCore/qtclasshelpermacros.h>
@@ -41,6 +45,8 @@ private Q_SLOTS:
     void routerFor_returnsNullptrForForeignProperty();
     void routerFor_returnsNullptrAfterRouterDestroyed();
     void install_uninstall_install_doesNotLeakDestroyedWatcher();
+    void qmlFunctionFailsItsCall();
+    void qmlUntypedAndTypedFunctionsAreCallable();
 };
 
 void TestPhosphorIpcEngine::install_storesRouterOnEngine()
@@ -185,6 +191,81 @@ void TestPhosphorIpcEngine::install_uninstall_install_doesNotLeakDestroyedWatche
     QCOMPARE(IpcEngine::routerFor(&engine), routerB.get());
     routerB.reset();
     QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
+}
+
+void TestPhosphorIpcEngine::qmlFunctionFailsItsCall()
+{
+    // A function declared in QML runs through the QML engine's own
+    // metaobject. sendErrorReply must still reach the router's call.
+    qmlRegisterType<IpcTarget>("PhosphorIpcTest", 1, 0, "IpcTarget");
+    IpcRouter router;
+    QQmlEngine engine;
+    IpcEngine::install(&engine, &router);
+    QQmlComponent component(&engine);
+    component.setData(R"(import PhosphorIpcTest
+IpcTarget {
+    target: "theme"
+    function setMode(mode) {
+        if (mode !== "dark") {
+            sendErrorReply("mode is dark, not " + mode)
+            return "dropped"
+        }
+        return mode
+    }
+})",
+                      QUrl());
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+    QCOMPARE(router.target(QStringLiteral("theme")), object.get());
+
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    QString message;
+    const QVariant failed =
+        router.invoke(QStringLiteral("theme"), QStringLiteral("setMode"), {QStringLiteral("blue")}, &outcome, &message);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::CallFailed);
+    QCOMPARE(message, QStringLiteral("mode is dark, not blue"));
+    QVERIFY(!failed.isValid());
+
+    const QVariant ok =
+        router.invoke(QStringLiteral("theme"), QStringLiteral("setMode"), {QStringLiteral("dark")}, &outcome);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+    QCOMPARE(ok.toString(), QStringLiteral("dark"));
+}
+
+void TestPhosphorIpcEngine::qmlUntypedAndTypedFunctionsAreCallable()
+{
+    // An untyped QML function takes and returns QVariant. The router hands
+    // the incoming variant over as it is and reads the returned one.
+    qmlRegisterType<IpcTarget>("PhosphorIpcTest", 1, 0, "IpcTarget");
+    IpcRouter router;
+    QQmlEngine engine;
+    IpcEngine::install(&engine, &router);
+    QQmlComponent component(&engine);
+    component.setData(R"(import PhosphorIpcTest
+IpcTarget {
+    target: "calc"
+    function untyped(a, b) { return { sum: a + b, kinds: [typeof a, typeof b] } }
+    function typed(a: int, b: int): int { return a * b }
+    function nothing(text) { }
+})",
+                      QUrl());
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::NoSuchFn;
+    QString message;
+    const QVariantMap untyped =
+        router.invoke(QStringLiteral("calc"), QStringLiteral("untyped"), {2, 3.5}, &outcome, &message).toMap();
+    QVERIFY2(outcome == IpcRouter::InvokeOutcome::Ok, qPrintable(message));
+    QCOMPARE(untyped.value(QStringLiteral("sum")).toDouble(), 5.5);
+    QCOMPARE(untyped.value(QStringLiteral("kinds")).toStringList(),
+             (QStringList{QStringLiteral("number"), QStringLiteral("number")}));
+
+    QCOMPARE(router.invoke(QStringLiteral("calc"), QStringLiteral("typed"), {4, 5}, &outcome).toInt(), 20);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
+
+    router.invoke(QStringLiteral("calc"), QStringLiteral("nothing"), {QStringLiteral("x")}, &outcome, &message);
+    QVERIFY2(outcome == IpcRouter::InvokeOutcome::Ok, qPrintable(message));
 }
 
 QTEST_GUILESS_MAIN(TestPhosphorIpcEngine)

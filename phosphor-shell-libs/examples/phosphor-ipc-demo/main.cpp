@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc and
+// phosphor-ipc-demo. Acceptance harness for phosphor-libs/libs/phosphor-ipc and
 // bin/phosphorctl.
 //
 // QGuiApplication + IpcRouter bound to a per-build socket path

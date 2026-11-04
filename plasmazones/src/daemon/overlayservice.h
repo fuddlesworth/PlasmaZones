@@ -478,11 +478,10 @@ public:
      * first layout switch OSD or keyboard navigation action appears
      * instantly instead of blocking the event loop.
      *
-     * Idempotent for the SAME screen set: the m_notificationsWarmed latch
-     * and the per-screen window guard make a repeat call a no-op for screens
-     * already warmed. A screen that appeared since the last call is still
-     * warmed on the next one, which is the point of calling it again after a
-     * hotplug rather than only once at start.
+     * Called once, from daemon start. A repeat call would be harmless for
+     * screens already warmed, because ShellHost::ensureShell returns a live
+     * shell as it is. Screens that appear later get their shell from the
+     * screenAdded hook that this call installs (ensureOsdScreenAddedConnected).
      */
     void warmUpNotifications();
 
@@ -539,22 +538,24 @@ private:
      * flashes for shaders whose iTime=0 frame is opaque (popin/morph/
      * pixelate/glitch).
      *
-     * This helper does a sacrificial show+hide on the surface so the
-     * compositor maps the wl_surface, Vulkan initialises the swapchain,
-     * the QSGLayer renders at least one frame, and the surface lands
-     * back in State::Hidden. The post-hide mapped guarantee is
-     * conditional: SurfaceConfig::keepMappedOnHide is effects-gated
-     * (createWarmedOsdSurface), so the wl_surface stays alive across
-     * the prime's hide only while shaders or animations are enabled;
-     * with both off the prime still warms the pipelines but the
-     * wl_surface unmaps after the hide.
+     * This helper shows the surface for one frame so the compositor maps
+     * the wl_surface, the swapchain initialises and the QML scene renders
+     * once, then hands it back to the slot-driven sync. With no slot visible
+     * that sync unmaps it again (the passive shell does not keep mapped on
+     * hide, see createWarmedOsdSurface). What survives the unmap is the QML
+     * scene and the compiled QML, not the swapchain or the scene graph's
+     * GPU resources, so the prime only takes the first-ever scene build off
+     * the first user-triggered show. Each later show from unmapped pays the
+     * remap costs that createWarmedOsdSurface lists.
      *
      * Surfaces are tracked in m_primingSurfaces so a user-triggered show
-     * landing during the prime window can cancel the queued hide via
-     * cancelSurfacePrime() and avoid a race that would visibly hide the
-     * user's freshly-shown content. The QML during prime has mode="" /
-     * no content (loader.sourceComponent==null), so the user sees
-     * nothing during the cycle even if the prime show animation fires.
+     * landing during the prime window can cancel the queued hand-back via
+     * cancelSurfacePrime(). Every slot show path calls it before mapping. The
+     * hand-back itself goes through syncPassiveShellSurfaceStateForSurface, not
+     * a bare Surface::hide(), so a prime that outlives a missed cancel still
+     * leaves a shell with a visible slot mapped. No slot is visible during the
+     * prime and the shell has no root animation (animateRoot=false), so the
+     * cycle paints nothing.
      */
     void primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface);
 
@@ -708,9 +709,8 @@ public Q_SLOTS:
     // slot.visible=false and re-syncs surface state. The C++ slot never
     // destroys the QQuickWindow - that would re-introduce the blocking
     // ~QQuickWindow Vulkan teardown the warm-surface design avoids.
-    // keepMappedOnHide is conditional (createWarmedOsdSurface): mapped
-    // across hides only while shaders or animations are enabled; with
-    // effects off the next syncSurfaceState unmaps the wl_surface.
+    // Once no slot is visible the next syncSurfaceState unmaps the
+    // wl_surface (see createWarmedOsdSurface).
     void hideLayoutPicker() override;
 
     // Shader error reporting from QML
@@ -724,8 +724,8 @@ private Q_SLOTS:
     /// finds the matching m_screenStates entry, and runs an animated
     /// slot-hide via SurfaceAnimator::beginHide on (shellSurface,
     /// osdSlotItem) - only the OSD slot Item's opacity animates to 0;
-    /// the shell wl_surface itself stays mapped across the hide while
-    /// shaders or animations are enabled (effects-gated keepMappedOnHide).
+    /// the shell wl_surface stays mapped for the hide and unmaps after
+    /// it only if no other slot is visible.
     void onOsdDismissRequested();
 
     /// Receiver for the shell's `snapAssistDismissRequested` QML signal
@@ -754,10 +754,9 @@ private:
     // for the common case (no audio decoration), so it adds nothing then.
     QList<QQuickItem*> visibleAudioDecorationSlots() const;
     // Whether the overlay is actively displaying content right now: visible and
-    // not in the warm-idled drag-pause/drag-end state. There is no third term.
-    // The overlay QQuickWindows are kept alive across drags to dodge an
-    // NVIDIA teardown deadlock, so "visible" alone stays true at rest — this is
-    // the predicate that gates the 60 Hz shader render loop + CAVA.
+    // not in the warm-idled mid-drag pause (trigger released). There is no
+    // third term. "visible" alone stays true through such a pause, which is why
+    // this is the predicate that gates the 60 Hz shader render loop + CAVA.
     bool isOverlayDisplaying() const;
     // Defer stopping the render loop + CAVA by a short grace period after the
     // overlay goes idle, so rapid drag thrash keeps everything warm; the
@@ -817,13 +816,14 @@ private:
     void validateScreenStateInvariant(const QStringList& targetIds) const;
 
     // Write _idled=true/false on every live overlay window based on which
-    // VS the cursor is currently on. One-overlay-per-VS architecture: all
-    // overlay windows stay alive for their lifetime, and per-window idle
-    // state controls content.visible + Qt.WindowTransparentForInput via
-    // the QML _idled property. Only the cursor's VS is un-idled in
+    // VS the cursor is currently on. One-overlay-per-VS architecture: every
+    // target VS's main-overlay slot stays visible for the drag, and the QML
+    // _idled property controls only whether its content is drawn
+    // (content.visible). It does not touch the input flag, which
+    // syncPassiveShellSurfaceState owns. Only the cursor's VS is un-idled in
     // single-monitor mode; every overlay is un-idled when showOnAllMonitors.
-    // An empty activeEffectiveId idles every overlay (used by
-    // setIdleForDragPause when no VS should be active).
+    // An empty activeEffectiveId idles every overlay (used by refreshFromIdle
+    // when no VS should be active).
     void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
 
     void updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
@@ -1286,11 +1286,10 @@ private:
 
     /// Lazily create the per-screen PassiveOverlayShell + return the
     /// state entry (or nullptr if creation failed). The shell is the
-    /// unified host for kbd-None per-content slots (currently OSD;
-    /// subsequent migration steps fold zone-selector / main-overlay /
-    /// snap-assist / picker in). Wires the shell's QML signals
-    /// (osdDismissRequested, …) to the C++ animator-driven slot-hide
-    /// path.
+    /// unified host for every per-content slot. A freshly created shell has
+    /// its QML signals (osdDismissRequested, …) wired to the C++
+    /// animator-driven slot-hide path by wirePassiveShellSlots, the
+    /// post-create callback.
     PerScreenOverlayState* ensurePassiveShellFor(const QString& effectiveId, QScreen* physScreen);
 
     /// PostCreate hook registered with the ShellHost. Caches the per-content
@@ -1404,14 +1403,18 @@ private:
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot
-    /// visibility. The shell's keepMappedOnHide is effects-gated
-    /// (createWarmedOsdSurface): the window is kept mapped on hide only
-    /// while shaders or animations are enabled. Surface::show()/hide()
-    /// flip Qt::WindowTransparentForInput. The flip only happens
-    /// through Surface's state machine, not through slot-level
-    /// animator hides - without this helper the shell never re-enters
-    /// Hidden after first show, and the input region eats every click
-    /// for the daemon's lifetime.
+    /// visibility: mapped while any slot is visible, unmapped once none
+    /// is (see createWarmedOsdSurface). It also sets
+    /// Qt::WindowTransparentForInput, clear only while a modal slot is
+    /// visible. Surface::show()/hide() do not touch that flag for this
+    /// shell, which does not keep mapped on hide. Slot-level animator hides
+    /// touch neither, so without this helper the shell would stay mapped
+    /// after the last slot hides.
+    ///
+    /// Callers must call Surface::show() themselves BEFORE dispatching a
+    /// slot's beginShow. The show edge cancels every animator track on the
+    /// surface, so letting this sync do the mapping after the leg started
+    /// would leave the slot visible at opacity 0.
     ///
     /// It also drives the surface's layer-shell keyboard interactivity, and
     /// that third predicate is NOT derived from slot visibility. It reads
@@ -1427,16 +1430,24 @@ private:
     /// predicate guards the hide.
     void syncPassiveShellSurfaceState(const QString& effectiveId);
 
-    /// Run `syncPassiveShellSurfaceState` for every per-screen state that
-    /// owns @p surface - used after a slot setVisible(true) + beginShow
-    /// pair when the call site doesn't already have the matching effective
-    /// screen id in scope. The body lookup walks the small state map (≤ a
-    /// handful of screens in practice) and forwards the per-screen sync.
-    /// Without this, slot-show paths leave the input region in whatever
-    /// state Surface::show() set it to (cleared = grabbing) until the
-    /// matching slot-hide-completion handler eventually flips it back -
-    /// reading as "OSD eats clicks for its full lifetime" to the user.
-    void syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface);
+    /// Run `syncPassiveShellSurfaceState` for the per-screen state that
+    /// owns @p surface - used after a Surface::show() + slot setVisible(true)
+    /// + beginShow sequence when the call site doesn't already have the
+    /// matching effective screen id in scope (the show-first rule above
+    /// applies). The body lookup walks the small state map and forwards the
+    /// per-screen sync. Returns false when no state owns @p surface.
+    bool syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface);
+
+    /// The effective screen id whose shell owns @p slotItem now, or
+    /// @p issuedId when no state owns it (the shell is gone). For a slot
+    /// hide completion: the completion captures the key it was issued under,
+    /// and rekeyOverlayState can move the state, shell and slot items to a
+    /// new key while the leg is in flight. Looked up by the issued key, the
+    /// completion would miss, skip its setVisible(false) and leave the slot
+    /// visible, which keeps the shell mapped. The item moves with the
+    /// state, and a later life of the old key has items of its own, so
+    /// resolving through the item finds the migrated state and nothing else.
+    QString currentKeyForSlotItem(const QPointer<QQuickItem>& slotItem, const QString& issuedId) const;
 
     /**
      * @brief Construct the SurfaceAnimator and register per-Role configs.
@@ -1528,7 +1539,7 @@ private:
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
      * ONE surface per screen goes through this single helper: the passive shell that
-     * hosts all seven content SLOTS (listed above), not seven surfaces. Returns a surface
+     * hosts every content slot (see setupSurfaceAnimator), not one surface per slot. Returns a surface
      * that has been warmed up (window created, QML loaded, transport attached) but
      * is hidden - callers decide when to call @c surface->show() or keep it warm
      * for pre-warmed OSDs.
@@ -1538,15 +1549,15 @@ private:
     PhosphorLayer::Surface* createLayerSurface(LayerSurfaceParams params);
 
     /**
-     * @brief Create a warmed OSD-style surface and wire its dismiss signal.
+     * @brief Create a warmed passive-shell surface.
      *
      * Common pattern for ensurePassiveShellFor, its only caller today:
      * (1) caller builds a per-instance
      * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
-     * (2) this helper calls createLayerSurface with keepMappedOnHide
-     * gated on effects (kept mapped only while shaders or animations
-     * are enabled; with both off the next syncSurfaceState unmaps the
-     * wl_surface). Dismiss wiring is NOT done here: per-content
+     * (2) this helper calls createLayerSurface with animateRoot=false and
+     * the keepMappedOnHide default (false), so the next syncSurfaceState
+     * with no slot visible unmaps the wl_surface. Dismiss wiring is NOT
+     * done here: per-content
      * auto-dismiss flows through the shell window's per-slot signals
      * (`osdDismissRequested` et al.), which wirePassiveShellSlots
      * connects to the matching OverlayService slot (e.g.
@@ -1653,9 +1664,9 @@ private:
     // overlay goes idle (see scheduleIdleQuiesce). Cancelled if the overlay
     // displays again within the grace window.
     QTimer* m_idleQuiesceTimer = nullptr;
-    // True while the overlay is in the warm-idled state (blanked + _idled, but
-    // its QQuickWindows kept alive). Distinct from m_visible, which stays true
-    // across drags because the windows are never torn down.
+    // True while the overlay is in the warm-idled mid-drag pause (blanked and
+    // _idled, with its slots still visible). Distinct from m_visible, which
+    // stays true through the pause and goes false only in hide(), at drag end.
     bool m_overlayIdled = false;
 
     // PhosphorZones::Zone data version for shader synchronization

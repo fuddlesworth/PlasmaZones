@@ -181,7 +181,7 @@ int runCall(QStringList args, QString socketPath)
         // too large to be represented" warning some compilers emit
         // for `-9223372036854775808` even when followed by `.0`.
         // Matches the equivalent boundary computation in
-        // libs/phosphor-ipc/src/ipcprotocol.cpp::parseIntegralJsonNumber.
+        // phosphor-libs/libs/phosphor-ipc/src/ipcprotocol.cpp::parseIntegralJsonNumber.
         const double d = result.toDouble();
         constexpr double Int64Min = static_cast<double>(std::numeric_limits<qint64>::min());
         constexpr double Int64Max = 9223372036854775808.0; // 2^63, one past max

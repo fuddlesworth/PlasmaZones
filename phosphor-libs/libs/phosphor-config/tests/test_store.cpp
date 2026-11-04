@@ -916,6 +916,92 @@ private Q_SLOTS:
         QCOMPARE(persisted.value(QStringLiteral("_version")).toInt(), 2);
     }
 
+    // ─── JsonBackend overlay ──────────────────────────────────────────────
+
+    /// Store reads see overlay values through the schema: typed reads,
+    /// readVariant, hasExplicitValue and the export, with the validator
+    /// still applied.
+    void overlay_storeReadsOverlayThroughSchema()
+    {
+        Schema schema = makeSchema();
+        schema.groups[QStringLiteral("Window")].append(
+            KeyDef{QStringLiteral("Opacity"), 1.0, QMetaType::Double, QString(), [](const QVariant& v) {
+                       return QVariant(qBound(0.0, v.toDouble(), 1.0));
+                   }});
+        {
+            JsonBackend seed(m_path);
+            Store store(&seed, schema);
+            store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+            store.write(QStringLiteral("Window"), QStringLiteral("Height"), 700);
+            QVERIFY(store.commit());
+        }
+
+        JsonBackend backend(m_path);
+        backend.setOverlay(QJsonObject{
+            {QStringLiteral("Window"),
+             QJsonObject{{QStringLiteral("Width"), 1920},
+                         {QStringLiteral("Title"), QStringLiteral("Overlay")},
+                         {QStringLiteral("Opacity"), 4.0}}},
+        });
+        Store store(&backend, schema);
+
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 1920);
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Height")), 700);
+        QCOMPARE(store.read<QString>(QStringLiteral("Window"), QStringLiteral("Title")), QStringLiteral("Overlay"));
+        QCOMPARE(store.readVariant(QStringLiteral("Window"), QStringLiteral("Width")), QVariant(1920));
+        QCOMPARE(store.read<double>(QStringLiteral("Window"), QStringLiteral("Opacity")), 1.0);
+        QVERIFY(store.hasExplicitValue(QStringLiteral("Window"), QStringLiteral("Title")));
+        const QJsonObject exported = store.exportToJson().value(QStringLiteral("Window")).toObject();
+        QCOMPARE(exported.value(QStringLiteral("Width")).toInt(), 1920);
+        QCOMPARE(exported.value(QStringLiteral("Title")).toString(), QStringLiteral("Overlay"));
+    }
+
+    /// Store's writes decide against the FILE. Writing a value equal to the
+    /// overlay's still persists it, writing another key of the group carries
+    /// no overlay value to disk, and a reset deletes the file's value while
+    /// the overlay keeps answering reads.
+    void overlay_storeWritesDecideAgainstFile()
+    {
+        JsonBackend backend(m_path);
+        backend.setOverlay(QJsonObject{
+            {QStringLiteral("Window"),
+             QJsonObject{{QStringLiteral("Width"), 1920}, {QStringLiteral("Title"), QStringLiteral("Overlay")}}},
+        });
+        Store store(&backend, makeSchema());
+        QSignalSpy spy(&store, &Store::changed);
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1920);
+        store.write(QStringLiteral("Window"), QStringLiteral("Height"), 700);
+        QVERIFY(store.commit());
+        QCOMPARE(spy.count(), 2);
+        {
+            QFile f(m_path);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            const QJsonObject window =
+                QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("Window")).toObject();
+            QCOMPARE(window, (QJsonObject{{QStringLiteral("Width"), 1920}, {QStringLiteral("Height"), 700}}));
+        }
+
+        // Reset deletes the file's Width; the overlay still answers.
+        spy.clear();
+        store.reset(QStringLiteral("Window"), QStringLiteral("Width"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 1920);
+        // Title exists only in the overlay: nothing to reset, nothing dirtied.
+        QVERIFY(store.commit());
+        spy.clear();
+        store.reset(QStringLiteral("Window"), QStringLiteral("Title"));
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!backend.isDirty());
+
+        // An import equal to the overlay value still lands on disk.
+        QVERIFY(store.importFromJson(
+            QJsonObject{{QStringLiteral("Window"), QJsonObject{{QStringLiteral("Width"), 1920}}}}));
+        QVERIFY(store.commit());
+        QCOMPARE(backend.jsonRootSnapshot().value(QStringLiteral("Window")).toObject().value(QStringLiteral("Width")),
+                 QJsonValue(1920));
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
     QString m_path;

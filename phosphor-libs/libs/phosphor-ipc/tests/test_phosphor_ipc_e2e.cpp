@@ -8,17 +8,21 @@
 
 #include "ipctesthelpers.h"
 
+#include <PhosphorIpc/IpcCallContext.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QLatin1Char>
+#include <QList>
 #include <QObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -26,6 +30,12 @@
 #include <QTest>
 #include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
+
+#include <cstring>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 using namespace PhosphorIpc;
 using PhosphorIpcTests::makeCallReq;
@@ -35,6 +45,30 @@ using PhosphorIpcTests::roundtrip;
 using PhosphorIpcTests::RouterFixture;
 
 namespace {
+
+// A Unix socket bound at @p path. With @p backlog >= 0 it listens with
+// that backlog, else it stays unlistened, as a crashed process leaves it.
+// The caller closes the descriptor; -1 on failure.
+int bindSocket(const QString& path, int backlog)
+{
+    const QByteArray name = QFile::encodeName(path);
+    sockaddr_un address{};
+    if (std::size_t(name.size()) >= sizeof(address.sun_path)) {
+        return -1;
+    }
+    const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+    address.sun_family = AF_UNIX;
+    std::memcpy(address.sun_path, name.constData(), std::size_t(name.size()));
+    if (::bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0
+        || (backlog >= 0 && ::listen(fd, backlog) != 0)) {
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
 
 class EchoTarget : public QObject
 {
@@ -53,6 +87,23 @@ public:
     Q_INVOKABLE int sum(int a, int b)
     {
         return a + b;
+    }
+};
+
+class RefusingTarget : public QObject, protected IpcCallContext
+{
+    Q_OBJECT
+public:
+    explicit RefusingTarget(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
+    Q_DISABLE_COPY_MOVE(RefusingTarget)
+
+    Q_INVOKABLE QString open(const QString& name)
+    {
+        sendErrorReply(QStringLiteral("no project %1").arg(name));
+        return name;
     }
 };
 
@@ -104,8 +155,12 @@ private Q_SLOTS:
     void roundtrip_list();
     void roundtrip_schema();
     void roundtrip_unknownTargetError();
+    void roundtrip_callFailedError();
     void roundtrip_malformedRequest();
     void start_failsWhenPathConflict();
+    void start_replacesStaleSocket();
+    void start_keepsBusyListener();
+    void start_keepsFileThatIsNotASocket();
     void stop_idempotent();
     void start_afterStop_succeeds();
     void oversizedLineClosesConnection();
@@ -132,6 +187,26 @@ void TestPhosphorIpcE2e::roundtrip_call()
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 1);
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("hello"));
+}
+
+void TestPhosphorIpcE2e::roundtrip_callFailedError()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+
+    IpcRouter& router = fx.router;
+    RefusingTarget refusing;
+    QVERIFY(router.registerTarget(QStringLiteral("projects"), &refusing));
+    QVERIFY(router.start(fx.sockPath));
+
+    const QJsonObject req =
+        makeCallReq(7, QStringLiteral("projects"), QStringLiteral("open"), QJsonArray{QStringLiteral("demo")});
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 7);
+    QCOMPARE(resp.value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::CallFailed));
+    QCOMPARE(resp.value(QStringLiteral("message")).toString(), QStringLiteral("no project demo"));
+    QVERIFY(!resp.contains(QStringLiteral("result")));
 }
 
 void TestPhosphorIpcE2e::roundtrip_list()
@@ -261,6 +336,77 @@ void TestPhosphorIpcE2e::start_failsWhenPathConflict()
     ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("alive"));
+}
+
+void TestPhosphorIpcE2e::start_replacesStaleSocket()
+{
+    // A crash leaves the socket file with nothing listening: start()
+    // takes the path over.
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    const int dead = bindSocket(fx.sockPath, -1);
+    QVERIFY(dead >= 0);
+    ::close(dead);
+
+    EchoTarget echo;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("echo"), &echo));
+    QVERIFY(fx.router.start(fx.sockPath));
+    const QJsonObject req =
+        makeCallReq(1, QStringLiteral("echo"), QStringLiteral("echo"), QJsonArray{QStringLiteral("taken")});
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("taken"));
+}
+
+void TestPhosphorIpcE2e::start_keepsBusyListener()
+{
+    // A listener whose process is busy does not accept: once its backlog
+    // is full, a connect does not complete in time and reports no
+    // error. Only a refused connect proves that nothing listens, so the
+    // path stays with its owner.
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    const int busy = bindSocket(fx.sockPath, 0);
+    QVERIFY(busy >= 0);
+    QList<int> waiting;
+    for (int i = 0; i < 64; ++i) {
+        const int client = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+        sockaddr_un address{};
+        address.sun_family = AF_UNIX;
+        const QByteArray name = QFile::encodeName(fx.sockPath);
+        std::memcpy(address.sun_path, name.constData(), std::size_t(name.size()));
+        if (client < 0 || ::connect(client, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+            if (client >= 0) {
+                ::close(client);
+            }
+            break;
+        }
+        waiting.append(client);
+    }
+
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("listen\\(\\) failed")));
+    QVERIFY(!fx.router.start(fx.sockPath));
+    QVERIFY(QFileInfo(fx.sockPath).exists());
+    for (const int client : std::as_const(waiting)) {
+        ::close(client);
+    }
+    ::close(busy);
+}
+
+void TestPhosphorIpcE2e::start_keepsFileThatIsNotASocket()
+{
+    // A connect to a plain file also fails with "connection refused".
+    // That file is not a router's to remove.
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    QFile file(fx.sockPath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("data");
+    file.close();
+
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("listen\\(\\) failed")));
+    QVERIFY(!fx.router.start(fx.sockPath));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("data"));
 }
 
 void TestPhosphorIpcE2e::stop_idempotent()

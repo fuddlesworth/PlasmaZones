@@ -34,6 +34,7 @@
 
 #include <QObject>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QString>
 #include <QStringLiteral>
 #include <QtTest/QtTest>
@@ -351,6 +352,9 @@ void TestOverlaySmoke::syncSurfaceStateDrivesKeyboardInteractivity()
         // pass, so nothing here needs an event loop or a QTRY_.
         cfg.contentItem = std::make_unique<QQuickItem>();
         cfg.screen = physScreen;
+        // The slot-shell configuration: no root animation, and the default
+        // unmap-on-hide lifecycle, so the map edges below are real ones.
+        cfg.animateRoot = false;
         cfg.debugName = QStringLiteral("kbd-axis");
         auto* surface = factory.create(std::move(cfg));
         // The attach is what gives the surface a window and a transport
@@ -368,8 +372,17 @@ void TestOverlaySmoke::syncSurfaceStateDrivesKeyboardInteractivity()
     auto* handle = state->shellSurface()->transport();
     QVERIFY(handle != nullptr);
 
+    auto* window = state->shellWindow();
+
     // Visible and asking to type: the one combination that takes the keyboard.
+    // This sync also maps the surface, so the grab waits for the first frame
+    // (see syncSurfaceState): sent with the first buffer, KWin would decide
+    // the activation under focus-stealing prevention.
     host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    QVERIFY(window->isVisible());
+    QVERIFY(state->shellSurface()->isLogicallyShown());
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
+    Q_EMIT window->frameSwapped();
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
 
     // The release edge the daemon depends on. The slot stays visible for its
@@ -379,15 +392,29 @@ void TestOverlaySmoke::syncSurfaceStateDrivesKeyboardInteractivity()
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
 
     // Asking to type while nothing is visible must not hold the session's
-    // keyboard on an unseen surface.
+    // keyboard on an unseen surface. The surface is already mapped here, so
+    // the grab is immediate. The hide unmaps it: the idle shell is not left
+    // on the output, which is what keeps fullscreen windows scanned out.
     host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
     host.syncSurfaceState(screenId, {.visible = false, .inputGrabbing = false, .keyboardGrabbing = true});
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
+    QVERIFY(!window->isVisible());
+    QVERIFY(!state->shellSurface()->isLogicallyShown());
+
+    // A grab waiting for its first frame is dropped by a hide that lands
+    // first, and the frame arriving later must not resurrect it.
+    host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    QVERIFY(window->isVisible());
+    host.syncSurfaceState(screenId, {.visible = false, .inputGrabbing = false, .keyboardGrabbing = true});
+    Q_EMIT window->frameSwapped();
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
 
     // Teardown hands the keyboard back before the surface goes, rather than
-    // leaving the grab live until the event loop next turns.
+    // leaving the grab live until the event loop next turns. Remapped here,
+    // so the grab lands on the first frame.
     host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    Q_EMIT window->frameSwapped();
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
     host.destroyShell(screenId);
     QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);

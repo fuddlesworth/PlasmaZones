@@ -50,6 +50,12 @@ public:
     /// primary unchanged if @p name is not a connected output.
     void setPrimary(const QString& name);
 
+    /// Re-stamp @p name's identifier with no signal, as a real source does to
+    /// a surviving output when a same-model sibling joins or leaves. The next
+    /// addScreen / removeScreen carries the flip to the manager. Warns and
+    /// no-ops if @p name is not a connected output.
+    void setIdentifier(const QString& name, const QString& identifier);
+
 private:
     QVector<PhysicalScreen> m_screens;
     QString m_primaryName;

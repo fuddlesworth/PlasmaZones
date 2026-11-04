@@ -279,9 +279,12 @@ void OverlayService::hideZoneSelector()
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
-        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ZoneSelector(), [this, screenId]() {
-            onZoneSelectorSlotHideCompleted(screenId);
-        });
+        // Resolved through the slot item at completion time: a rekey can move
+        // the state to a new key while the leg runs (see currentKeyForSlotItem).
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ZoneSelector(),
+                              [this, screenId, slotItem = QPointer<QQuickItem>(slot)]() {
+                                  onZoneSelectorSlotHideCompleted(currentKeyForSlotItem(slotItem, screenId));
+                              });
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);
@@ -710,9 +713,12 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     // while it fades out. PZ-specific QML invocation; the animator-leg
     // mechanism itself routes through ShellHost::hideSlot.
     QMetaObject::invokeMethod(slot, "resetCursorState");
-    m_shellHost->hideSlot(effectiveId, PhosphorSlotKeys::ZoneSelector(), [this, effectiveId]() {
-        onZoneSelectorSlotHideCompleted(effectiveId);
-    });
+    // Resolved through the slot item at completion time: a rekey can move the
+    // state to a new key while the leg runs (see currentKeyForSlotItem).
+    m_shellHost->hideSlot(effectiveId, PhosphorSlotKeys::ZoneSelector(),
+                          [this, effectiveId, slotItem = QPointer<QQuickItem>(slot)]() {
+                              onZoneSelectorSlotHideCompleted(currentKeyForSlotItem(slotItem, effectiveId));
+                          });
 }
 
 // targetGeom BY VALUE, deliberately, and this changes no behaviour. Its only caller passes it

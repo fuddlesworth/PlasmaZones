@@ -81,8 +81,9 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
 
     // ── Per-instance overrides ──────────────────────────────────────────
     // nullopt = use the role's default. All are applied at surface-creation
-    // time; post-show mutation of these fields has no effect (SurfaceConfig
-    // is stored const on the Surface).
+    // time; post-show mutation of these fields has no effect (the Surface
+    // holds its own copy privately and exposes it only through
+    // Surface::config() const).
 
     std::optional<Layer> layerOverride;
     std::optional<Anchors> anchorsOverride;
@@ -100,10 +101,14 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     /// screen position.
     ///
     /// Use this for overlays where reattaching the wl_surface (and its
-    /// Vulkan swapchain) on every show/hide cycle is too expensive — the
-    /// Phosphor layout picker, navigation OSD, and zone selector all
-    /// fall into this category. The Phase-4 LayoutOsd "L3 v2" pattern
-    /// pioneered this for OSDs; Phase 5 generalises it into the library.
+    /// Vulkan swapchain) on every show/hide cycle is too expensive. The
+    /// cost of staying mapped is that the surface is composited for as
+    /// long as it lives, and a transparent surface above a fullscreen
+    /// window stops the compositor from scanning that window out directly.
+    /// No in-tree consumer sets it today.
+    ///
+    /// With animateRoot=false nothing animates the root, so hide() only
+    /// flips input transparency and the consumer owns the hidden visual.
     ///
     /// Default `false` preserves the original lifecycle: hide() unmaps the
     /// window immediately and a future show() pays the reattach cost.
@@ -134,6 +139,25 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
 
     /// Logged in state transitions. Defaults to Role::scopePrefix when empty.
     QString debugName;
+
+    /// When false, the surface's own show/hide never dispatches
+    /// ISurfaceAnimator::beginShow / beginHide on its root item, so the
+    /// root's opacity and scale are left alone. For a surface that hosts
+    /// several independently animated items (a shell with per-content
+    /// slots) and drives each one through the animator itself, where a
+    /// root-level fade would multiply every item's own transition.
+    ///
+    /// ISurfaceAnimator::cancel still retires every animation keyed on this
+    /// surface, the consumer's per-item ones included, at destruction and
+    /// on the Hidden → Shown and Shown → Hidden edges. A redundant show()
+    /// on a Shown surface does not cancel. The edge cancels drop an
+    /// in-flight item leg without running its completion, so a consumer
+    /// must call show() BEFORE starting item legs and hide() only after
+    /// they have settled. The keepMappedOnHide=false hide warning is
+    /// skipped too, since there is no root fade for the unmap to cut short.
+    ///
+    /// Default `true` keeps the root-animated lifecycle.
+    bool animateRoot = true;
 
     // ── Resolution helpers ──────────────────────────────────────────────
 

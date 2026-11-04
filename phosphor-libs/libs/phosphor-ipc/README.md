@@ -3,8 +3,8 @@
 
 # phosphor-ipc
 
-> Typed JSON-over-Unix-socket invocation channel for
-> phosphor-shell. Lets compositor keybinds, external scripts, and
+> Typed JSON-over-Unix-socket invocation channel for Phosphor
+> applications such as phosphor-shell. Lets compositor keybinds, external scripts, and
 > other shells drive Phosphor actions by verb (`phosphorctl call
 > launcher.toggle`) without rebuilding the existing D-Bus surface.
 
@@ -48,6 +48,7 @@ subcommands.
 | `PhosphorIpc::IpcProtocol` | Wire-format constants + parser/serialiser. Shared between the library (server) and the `phosphorctl` binary (client). |
 | `PhosphorIpc::IpcEngine` | Bridge between an application-owned `IpcRouter` and QML-side `IpcTarget` instances. |
 | `PhosphorIpc::IpcSchemaGenerator` | `QMetaObject` → JSON Schema. Used by the schema response and by the CLI for client-side argument validation. |
+| `PhosphorIpc::IpcCallContext` | Mixin for a C++ target. `sendErrorReply(message)` fails the running wire call with `CALL_FAILED`, like `QDBusContext` does for D-Bus. |
 
 ## Wire protocol
 
@@ -86,7 +87,11 @@ older peer.
 
 Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
 `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`,
-`MALFORMED_REQUEST`.
+`MALFORMED_REQUEST`, `CALL_FAILED`.
+
+`INVOCATION_FAILED` means that the router could not run the method.
+`CALL_FAILED` means that the method ran and failed the call itself (see
+[Failing a call](#failing-a-call)).
 
 ## Typical use
 
@@ -157,6 +162,54 @@ collides with moc-generated dispatch, and explicit `emitEvent`
 matches the "wire-visible state transitions are an explicit
 contract" model. Plugin authors must call both for in-QML AND wire
 delivery.
+
+### Failing a call
+
+A method that cannot do what the client asked fails the call, so that the
+client gets an error frame instead of a reply:
+
+```jsonc
+{"type":"error","id":42,"code":"CALL_FAILED","message":"no pane 7","detail":{}}
+```
+
+A C++ target inherits `IpcCallContext` next to `QObject` and calls
+`sendErrorReply` while its method runs:
+
+```cpp
+class Control : public QObject, protected PhosphorIpc::IpcCallContext
+{
+    Q_OBJECT
+public:
+    Q_INVOKABLE int focus(int pane)
+    {
+        if (!exists(pane)) {
+            sendErrorReply(QStringLiteral("no pane %1").arg(pane));
+            return 0; // dropped
+        }
+        ...
+    }
+};
+```
+
+A QML function calls `sendErrorReply` on its `IpcTarget`:
+
+```qml
+IpcTarget {
+    target: "theme"
+    function setMode(mode: string) {
+        if (mode !== "light" && mode !== "dark") {
+            sendErrorReply("mode is light or dark")
+            return
+        }
+        Theme.mode = mode
+    }
+}
+```
+
+The return value of a failed call is dropped. Outside a wire call (a
+direct C++ call, a QML binding) `calledFromIpc()` is false and
+`sendErrorReply` does nothing. `IpcRouter::invoke` reports the failure as
+`InvokeOutcome::CallFailed` with the target's message.
 
 ### CLI side
 

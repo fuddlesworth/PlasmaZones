@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorIpc, typed JSON-over-Unix-socket invocation channel for the
-# phosphor-shell. Lets compositor keybinds, external scripts, and other
+# PhosphorIpc, typed JSON-over-Unix-socket invocation channel for Phosphor
+# applications such as phosphor-shell. Lets compositor keybinds, external scripts, and other
 # shells drive Phosphor actions via `phosphorctl call <target>.<fn>`,
 # without replacing the existing D-Bus surface.
 #
@@ -74,6 +74,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(phosphoripc_public_HDRS
     include/PhosphorIpc/PhosphorIpc.h
+    include/PhosphorIpc/IpcCallContext.h
     include/PhosphorIpc/IpcRouter.h
     include/PhosphorIpc/IpcTarget.h
     include/PhosphorIpc/IpcEngine.h
@@ -82,6 +83,7 @@ set(phosphoripc_public_HDRS
 )
 
 set(phosphoripc_SRCS
+    src/ipccallcontext.cpp
     src/ipcrouter.cpp
     src/ipcrouterdispatch.cpp
     src/ipctarget.cpp

@@ -265,9 +265,8 @@ QRectF Layout::fixedZoneReferenceGeometry() const
         return QRectF();
     // The recalc rect is the screen the layout was last laid out against, and
     // that is the frame the relative coords are defined over, so prefer it
-    // whenever it can hold the fixed zones. Both extents are checked: a
-    // width-only overflow stretches the editor canvas exactly as a height-only
-    // one does.
+    // whenever it can hold the fixed zones. Both extents are checked, since an
+    // overflow on either axis puts zones outside that frame.
     //
     // "Hold" allows less than one logical pixel of slack. A device-pixel box
     // that exactly fills the output is divided by a fractional scale, and the
@@ -283,8 +282,10 @@ QRectF Layout::fixedZoneReferenceGeometry() const
         return m_lastRecalcGeometry;
     }
     // Either the zones genuinely overflow the screen (a 3840x2160 layout on a
-    // 3840x2126 panel-reduced screen — pinning to the bbox keeps the editor
-    // canvas from squashing them, discussion #593) or no screen is known yet.
+    // 3840x2126 panel-reduced screen), where the bbox keeps a preview and the
+    // saved relative copy from squashing them, or no screen is known yet. The
+    // editor canvas does not use this: it always draws against the live
+    // screen and lets overflowing zones run past its edge (issue #1167).
     return bbox;
 }
 

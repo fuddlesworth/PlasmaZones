@@ -71,17 +71,14 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 /// own show/hide is driven off the anyVisible aggregate, so the wl_surface
 /// only moves when the LAST visible slot goes.
 ///
-/// At that point keepMappedOnHide decides, and it is NOT moot: it is
-/// effects-gated in createWarmedOsdSurface. With shaders or animations
-/// enabled the shell stays mapped and keeps its warmed Vulkan swapchain;
-/// with BOTH disabled it is false and the wl_surface is unmapped
-/// synchronously, so the next slot to show pays a full remap. Repeatedly
-/// arming and releasing a hold-mode trigger during one drag toggles the
-/// drop indicator, which on that configuration means an unmap/remap per
-/// cycle. That is the deliberate trade (an idle daemon should not keep a
-/// composited surface alive when it is drawing nothing), and it applies
-/// equally to every consumer of this shell, but it is a real cost rather
-/// than the no-op the previous wording claimed.
+/// At that point the wl_surface is unmapped (keepMappedOnHide is false, see
+/// createWarmedOsdSurface), so the next slot to show pays a full remap.
+/// Repeatedly arming and releasing a hold-mode trigger during one drag
+/// toggles the drop indicator, which means an unmap/remap per cycle. That
+/// is the deliberate trade, and it applies equally to every consumer of
+/// this shell. An idle shell left mapped sits above every fullscreen
+/// window and blocks KWin's direct scanout on its output (Discussion
+/// #1169), which costs far more than the remap.
 ///
 /// The layer is the Hud pattern's Overlay, and that is load-bearing. On
 /// Top, KWin stacks the shell in AboveLayer, which is exactly where a

@@ -594,12 +594,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Modifiers resolved the way dragMoved resolves them. A keyboard trigger
     // arrives as 0 on the wire, and casting that raw would read every keyboard
     // snap-assist trigger as not-held at the drop.
-    Qt::KeyboardModifiers dropMods;
-    if (modifiers != 0) {
-        dropMods = static_cast<Qt::KeyboardModifiers>(modifiers);
-    } else {
-        dropMods = QGuiApplication::queryKeyboardModifiers();
-    }
+    const Qt::KeyboardModifiers dropMods = resolveReportedModifiers(modifiers);
     // Release grace, same contract as the three drag-tick arms but read HERE,
     // at the drop. This is the arm most exposed to the race the grace exists
     // for: the other three are sampled on a motion tick, while this one is

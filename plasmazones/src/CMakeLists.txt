@@ -573,6 +573,10 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/seedorderfilter.h
     daemon/daemon/enginerouting.cpp
     daemon/daemon/enginerouting.h
+    daemon/daemon/screenreshapetracker.cpp
+    daemon/daemon/screenreshapetracker.h
+    daemon/daemon/snapgaptracker.cpp
+    daemon/daemon/snapgaptracker.h
     daemon/daemon/osd.cpp
     daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h

@@ -34,6 +34,7 @@
 // KDE ones (own header → project → KDE → Qt).
 #include "dragpolicytransition.h"
 #include "effect_state.h"
+#include "pixelsizedecisions.h"
 #include "placementstatement.h"
 #include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
@@ -679,8 +680,9 @@ private:
      *        surface ("plasmazonesd") by window class.
      *
      * The focus-follows-mouse stacking walks look THROUGH this surface to the
-     * real user window beneath, because it is full-screen, permanently topmost,
-     * and never holds keyboard focus (PR #517 / discussion #461 #3). The
+     * real user window beneath, because it is full-screen, topmost while mapped,
+     * and takes keyboard focus only for the cheatsheet's search field (PR #517 /
+     * discussion #461 #3). The
      * interactive editor is intentionally excluded so FFM treats it as a real
      * occluder and leaves focus on it.
      */
@@ -946,6 +948,13 @@ private:
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
     /// The KWin output carrying a (physical or virtual) screen id, else nullptr. Counterpart to outputScreenId.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
+    /// The device-pixel size of screen @p screenId, whose output @p output is
+    /// (outputForScreenId's answer): the output's own size for a physical id,
+    /// and for a virtual id its region's share of that size, taken from the
+    /// m_virtualScreenDefs entry carrying the id. Empty, which leaves the
+    /// screen-shape rule fields unknown, for a null or placeholder output and
+    /// for a virtual id with no definition here.
+    QSize screenPixelSize(const QString& screenId, const KWin::LogicalOutput* output) const;
     /// The output a scroll-strip window is managed by, or nullptr when the
     /// window is not a strip column (or is exempt: user move/resize, floating,
     /// deleted — a close-grabbed column counts as exempt for its whole close
@@ -2466,8 +2475,8 @@ private:
     /// Called from every exit of the endDrag reply handling (outcome applied,
     /// D-Bus error, rejected payload, daemon timeout) so a drag that carried a
     /// window across screens always ends with its per-screen match inputs
-    /// (ScreenId, ScreenOrientation, ActiveLayout) re-resolved. Empties the set,
-    /// so the second call in a turn does nothing.
+    /// (ScreenId, the screen-shape fields, ActiveLayout) re-resolved. Empties
+    /// the set, so the second call in a turn does nothing.
     void drainDragSuppressedRuleInvalidations();
 
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
@@ -2734,6 +2743,23 @@ private:
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
+    /// Collapse the pixel-size edges of one event-loop turn onto a single
+    /// queued flushOutputPixelSizes. The edges: an output added, each output's
+    /// currentModeChanged and transformChanged, and an output removed while a
+    /// live output still carries its connector (onScreenRemoved), whose size
+    /// the flush re-reads instead of clearing it at the daemon.
+    void scheduleOutputPixelSizeFlush();
+    /// Read every output's LogicalOutput::pixelSize, send the reports the
+    /// ledger owes (PixelSizeDecisions::Ledger::flush) and, when a size moved,
+    /// drop the rule verdicts once: the screen-shape rule fields derive from
+    /// that size (stampScreenShape) and no verdict cache key moves with it.
+    void flushOutputPixelSizes();
+    /// Send one setPixelSizeFromKWin call. A 0x0 size is the clear.
+    void sendPixelSizeReport(const PixelSizeDecisions::Report& report);
+    /// Report every non-placeholder output's pixel size. continueDaemonReadySetup
+    /// runs it once the bridge is registered: the outputs were added before
+    /// that (onScreenAdded runs at load), and a restarted daemon holds none.
+    void pushOutputPixelSizes();
     /// Per-effect curve registry. Replaces the prior per-process
     /// CurveRegistry::instance() singleton — composition roots own
     /// their own. Declared BEFORE m_windowAnimator so a future
@@ -3831,6 +3857,13 @@ private:
     // Per-screen current virtual desktop last reported to the daemon (physical
     // screenId → 1-based desktop), for dedup of KWin's per-output desktopChanged.
     QHash<QString, int> m_lastScreenDesktop;
+    // Each output's device pixel size as the last flush read it, and as this
+    // bridge last sent it (connector name → LogicalOutput::pixelSize). The
+    // sent half is forgotten when the daemon goes away, so the next bridge's
+    // pushOutputPixelSizes sends every output again.
+    PixelSizeDecisions::Ledger m_pixelSizeLedger;
+    // A flushOutputPixelSizes is queued for the end of this event-loop turn.
+    bool m_outputPixelSizeFlushQueued = false;
 
     // Last effective screen ID reported to daemon (physical or virtual).
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual

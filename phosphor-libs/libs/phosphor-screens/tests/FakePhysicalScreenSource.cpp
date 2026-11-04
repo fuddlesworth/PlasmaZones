@@ -106,4 +106,16 @@ void FakePhysicalScreenSource::setPrimary(const QString& name)
     qWarning("FakePhysicalScreenSource::setPrimary: connector '%s' not present — primary unchanged", qPrintable(name));
 }
 
+void FakePhysicalScreenSource::setIdentifier(const QString& name, const QString& identifier)
+{
+    for (auto& screen : m_screens) {
+        if (screen.name == name) {
+            screen.identifier = identifier;
+            return;
+        }
+    }
+    qWarning("FakePhysicalScreenSource::setIdentifier: connector '%s' not present — nothing re-stamped",
+             qPrintable(name));
+}
+
 } // namespace PhosphorScreens

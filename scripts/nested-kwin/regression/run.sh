@@ -163,6 +163,8 @@ f1155-compositor-only-gate f1155-compositor-only-gate.sh 1 -
 f1156-cross-floor f1156-cross-floor.sh 1 S
 f1157-x11-column-answer f1157-x11-column-answer.sh 1 XS
 f1157-x11-column-answer-scaled f1157-x11-column-answer.sh 1 XS PZ_F1157_SCALE=1.25
+f1170-shell-unmaps-after-drag f1170-shell-unmaps-after-drag.sh 1 F
+f1170-cheatsheet-focus-fsp f1170-cheatsheet-focus-fsp.sh 1 -
 fdrag-float-keeps-size fdrag-float-keeps-size.sh 1 FS
 fsplash-sibling-size-scroll fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=scroll
 fsplash-sibling-size-tile fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=tile

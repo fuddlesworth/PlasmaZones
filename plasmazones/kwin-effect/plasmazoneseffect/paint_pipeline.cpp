@@ -122,6 +122,24 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
         // wrong per-output one.
         return true;
     }
+    // The screen-level paints have the same exposure: a desktop switch or
+    // show-desktop peek blend and the pointer pass are drawn only from
+    // paintScreen, which KWin skips for a layer it scans out directly. Before
+    // the daemon's overlay shell unmapped when idle, its mapped surface forced
+    // composition everywhere and hid this. Without these clauses a switch onto
+    // a desktop topped by an opaque fullscreen window could cut instead of
+    // blending, and a pointer trail over one would vanish with the cursor still
+    // hidden for as long as the pointer kept moving. Per-output, like the pills.
+    // The pointer pass is suppressed over fullscreen outputs by default, so its
+    // clause only bites when the user turned that off.
+    if (m_currentPassOutput ? m_desktopTransition.isRunningForOutput(m_currentPassOutput)
+                            : m_desktopTransition.isRunning()) {
+        return true;
+    }
+    if ((m_pointerPass.isLive() || m_pointerPass.holdsCursorHide())
+        && (!m_currentPassOutput || m_pointerPass.output() == m_currentPassOutput)) {
+        return true;
+    }
     // Deliberately NO clause for m_scrollVisualDelta (parked columns
     // relocated with no spring live, the edge auto-scroll's immediate path).
     // A relocated parked column cannot be lost to scanout: for scanout the

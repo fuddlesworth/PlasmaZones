@@ -26,6 +26,13 @@
 
 namespace PlasmaZones {
 
+namespace {
+/// The largest width or height a loaded ScreenPixelSizes entry may carry: the
+/// same bound DBusScreenAdaptor::setPixelSizeFromKWin holds a compositor report
+/// to, so no seed can claim a size no report could have.
+constexpr int MaxScreenPixelExtent = 65535;
+} // namespace
+
 bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                                        const QString& activity) const
 {
@@ -215,6 +222,19 @@ void WindowTrackingAdaptor::saveState()
             tracking->deleteKey(ConfigKeys::knownDesktopIdsKey());
         } else {
             tracking->writeString(ConfigKeys::knownDesktopIdsKey(), m_knownDesktopIds.join(QLatin1Char(',')));
+        }
+    }
+
+    // Each monitor's last reported size, as identifier -> [width, height].
+    if (dirty & D::DirtyScreenPixelSizes) {
+        if (m_screenPixelSizes.isEmpty()) {
+            tracking->deleteKey(ConfigKeys::screenPixelSizesKey());
+        } else {
+            QJsonObject sizes;
+            for (auto it = m_screenPixelSizes.constBegin(); it != m_screenPixelSizes.constEnd(); ++it) {
+                sizes.insert(it.key(), QJsonArray{it.value().width(), it.value().height()});
+            }
+            tracking->writeJson(ConfigKeys::screenPixelSizesKey(), sizes);
         }
     }
 
@@ -412,6 +432,32 @@ void WindowTrackingAdaptor::loadState()
     m_knownDesktopIds =
         readVal(ConfigKeys::knownDesktopIdsKey(), QString()).split(QLatin1Char(','), Qt::SkipEmptyParts);
 
+    // The monitor sizes the last session saw. Session state is a file a user
+    // can edit, so an entry that is not two positive integers within the
+    // range the compositor report is held to is dropped rather than seeded.
+    m_screenPixelSizes.clear();
+    {
+        const QString sizesStr = readVal(ConfigKeys::screenPixelSizesKey(), QString());
+        if (!sizesStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(sizesStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                const QJsonObject sizes = doc.object();
+                for (auto it = sizes.constBegin(); it != sizes.constEnd(); ++it) {
+                    const QJsonArray pair = it.value().toArray();
+                    const int width = pair.size() == 2 ? pair.at(0).toInt(0) : 0;
+                    const int height = pair.size() == 2 ? pair.at(1).toInt(0) : 0;
+                    if (!it.key().isEmpty() && width > 0 && height > 0 && width <= MaxScreenPixelExtent
+                        && height <= MaxScreenPixelExtent) {
+                        m_screenPixelSizes.insert(it.key(), QSize(width, height));
+                    }
+                }
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved screen pixel sizes:" << parseError.errorString();
+            }
+        }
+    }
+
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()
     // which may differ from the layout the user was on, causing resnap to build its
@@ -465,6 +511,42 @@ void WindowTrackingAdaptor::setKnownDesktopIds(const QStringList& ids)
     m_knownDesktopIds = ids;
     if (m_service) {
         m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyKnownDesktops);
+    }
+}
+
+void WindowTrackingAdaptor::recordScreenPixelSizes(const QHash<QString, QSize>& sizes)
+{
+    bool changed = false;
+    for (auto it = sizes.constBegin(); it != sizes.constEnd(); ++it) {
+        if (it.key().isEmpty() || it.value().isEmpty()) {
+            continue;
+        }
+        const auto held = m_screenPixelSizes.constFind(it.key());
+        if (held != m_screenPixelSizes.constEnd() && *held == it.value()) {
+            continue;
+        }
+        m_screenPixelSizes.insert(it.key(), it.value());
+        changed = true;
+    }
+    if (changed && m_service) {
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyScreenPixelSizes);
+    }
+}
+
+void WindowTrackingAdaptor::renameScreenPixelSize(const QString& oldId, const QString& newId)
+{
+    if (oldId.isEmpty() || newId.isEmpty() || oldId == newId) {
+        return;
+    }
+    const auto held = m_screenPixelSizes.constFind(oldId);
+    if (held == m_screenPixelSizes.constEnd()) {
+        return;
+    }
+    const QSize size = *held;
+    m_screenPixelSizes.erase(held);
+    m_screenPixelSizes.insert(newId, size);
+    if (m_service) {
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyScreenPixelSizes);
     }
 }
 
