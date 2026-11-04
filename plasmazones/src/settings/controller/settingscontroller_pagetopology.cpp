@@ -46,16 +46,16 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // those three also a map key in its own right and not only a component of
     // appearance; animations-transitions, animations-motion and
     // animations-library under animations; decorations-surfaces and
-    // decorations-library under decorations. Overlays has no sub-buckets, only
-    // its leaves. Then the three *-cat collapsible headers
+    // decorations-library under decorations; overlays-library under overlays.
+    // Then the three *-cat collapsible headers
     // (snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
     //
     // The "animations" entry is built at static-init by unioning the
     // virtual sub-buckets (`animations-transitions`, `animations-motion`,
-    // `animations-library`) with the leaf that hangs directly off
-    // `animations` (general).
+    // `animations-library`) with the leaves that hang directly off
+    // `animations` (simple and general).
     // Without this, a future leaf added to a virtual parent only would
     // silently miss the top-level dirty propagation.
     //
@@ -211,16 +211,16 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // per-page Reset writes each key's schema default and a per-page Discard
     // reverts each to the committed baseline (see Settings::resetKeys /
     // discardKeys). ALWAYS express keys through ConfigDefaults accessors — never
-    // inline literals (CLAUDE.md). The pairs mirror the store-backed getters in
-    // settings.cpp.
+    // inline literals (CLAUDE.md). The pairs mirror the store-backed getters,
+    // which live in plasmazones/src/config/settings/*.cpp.
     //
-    // INVARIANTS (maintained by hand — a unit guard would have to link the whole
-    // SettingsController TU): every pair must be a schema-declared key, and no
+    // INVARIANTS (guarded by test_page_owned_config_keys, which links this TU
+    // directly): every pair must be a schema-declared key, and no
     // key may be owned by two pages (a shared key would let one page's Discard
     // revert another page's edit). When adding a page, copy the (group, key)
-    // accessors verbatim from that page's getter in settings.cpp.
+    // accessors verbatim from that page's getter in config/settings/*.cpp.
     //
-    // Scope: KConfig-backed settings pages. The Rules page (separate rule store),
+    // Scope: config-store-backed settings pages. The Rules page (separate rule store),
     // the Profiles page (its own file store; the staged active pointer reverts
     // through ProfilePageController's StagingDomain, and the config a profile
     // stages reverts through whichever surface owns each key — the manifest
@@ -628,6 +628,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::editorSnappingGroup(), CD::overrideModifierKey()},
              {CD::editorFillOnDropGroup(), CD::enabledKey()},
              {CD::editorFillOnDropGroup(), CD::modifierKey()},
+             {CD::editorBackgroundGroup(), CD::opacityKey()},
          }},
     };
     return manifest;
@@ -807,7 +808,7 @@ namespace {
 // they are never dirty and own no resettable state (isLibraryPage), so they
 // neither need dirtyScopeFor's hoist nor block it — counting them would stop
 // the condensed pages' hoist the moment a library leaf sits beside them, which
-// is exactly the topology this PR's per-mode split created. Every OTHER
+// is exactly the topology the per-mode page split created. Every OTHER
 // navigable leaf still counts, which is what keeps the hoist from crossing a
 // surface that speaks for its own config (e.g. window-appearance under
 // appearance).

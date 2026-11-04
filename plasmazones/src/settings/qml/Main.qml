@@ -145,10 +145,12 @@ PhosphorUi.SettingsAppWindow {
             // The signal carries the id so the shell can name the page. Fall
             // back to the generic wording when the id resolves to nothing.
             //
-            // It also carries WHY, because the two branches that refuse fail
-            // for unrelated reasons: one could not read the daemon's slot map,
-            // the other could not clear an override while a discard still owns
-            // it. Naming the daemon on the second would be a false explanation.
+            // It also carries WHY, because the refusals fail for unrelated
+            // reasons: the daemon's slot map could not be read, an override
+            // could not be cleared while a discard still owns it, or (for a
+            // factory reset, with no page id) the config file could not be
+            // written or could not be read. Naming the daemon on any but the
+            // first would be a false explanation.
             const title = settingsController.app.titlePathFor(page);
             const named = title.length > 0;
             if (reason === "overrides-not-cleared") {
@@ -161,7 +163,31 @@ PhosphorUi.SettingsAppWindow {
                 window.showToast(i18n("Your settings could not be written, so nothing was reset."));
                 return;
             }
+            if (reason === "config-unreadable") {
+                window.showToast(i18n("Nothing was reset because %1 cannot be read. Repair that file, then try again.", settingsController.configFilePath));
+                return;
+            }
             window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
+        }
+
+        // save() leaves the values staged and the footer lit when the config
+        // file was not written, which on its own reads as a save that did
+        // nothing. An unreadable file is named, since the user has to fix it.
+        function onConfigWriteFailed(reason) {
+            // "Some": the daemon-side parts of a Save (assignments, quick
+            // slots, rules) still go through; what lives in the config file,
+            // virtual screens included, did not.
+            if (reason === "config-unreadable")
+                window.showToast(i18n("Some of your settings were not saved because %1 cannot be read. Repair that file, then save again.", settingsController.configFilePath));
+            else
+                window.showToast(i18n("Some of your settings could not be saved. Try again."));
+        }
+
+        // The service moved an unreadable config.json aside when it started,
+        // so the app now runs without it. Nothing else says where the old
+        // file went.
+        function onConfigQuarantined(backupPath) {
+            window.showToast(i18n("The PlasmaZones service could not read your settings file, so it set it aside as %1 and started without it.", backupPath));
         }
 
         // discardPage reconciles value-based when a revert refuses, so the page
@@ -284,6 +310,37 @@ PhosphorUi.SettingsAppWindow {
             Kirigami.Theme.colorSet: Kirigami.Theme.Header
             Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
+
+            // Persistent, unlike the save and reset toasts: while config.json
+            // cannot be read the pages may be showing defaults, Reset is
+            // refused and Save writes only what lives outside that file, from
+            // the moment the app opens. Hover shows the explanation; a touch
+            // or stylus tap shows it as a toast.
+            Kirigami.Icon {
+                id: configUnreadableIcon
+
+                readonly property string explanation: i18n("%1 cannot be read, so these pages may not show your settings and changes kept in that file cannot be saved. Repair that file to continue.", settingsController.configFilePath)
+
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                visible: settingsController.configUnreadable
+                source: "dialog-warning"
+                Accessible.role: Accessible.StaticText
+                Accessible.name: explanation
+                ToolTip.visible: configUnreadableHover.hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: explanation
+
+                HoverHandler {
+                    id: configUnreadableHover
+                }
+
+                TapHandler {
+                    acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Stylus
+                    onTapped: window.showToast(configUnreadableIcon.explanation)
+                }
+            }
 
             Rectangle {
                 id: daemonDot

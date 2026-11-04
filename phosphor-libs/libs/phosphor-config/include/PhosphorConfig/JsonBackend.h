@@ -111,8 +111,12 @@ class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
 {
 public:
     /// Construct a backend backed by @p filePath. The file is loaded
-    /// immediately; missing or malformed files start with an empty root
-    /// object (a warning is logged for malformed content).
+    /// immediately. A missing file starts with an empty root object and
+    /// accepts writes. An unreadable one (open failure, parse error, a
+    /// non-object root) also starts empty but reports @c loadFailed() and
+    /// refuses writes (unless @c setOverwriteUnreadable), with a warning
+    /// logged. A flush also refuses when the file has been rewritten since
+    /// this backend last read or wrote it and no longer reads.
     explicit JsonBackend(QString filePath);
     ~JsonBackend() override;
 
@@ -122,8 +126,17 @@ public:
     /// values without the overlay.
     std::unique_ptr<IGroup> persistedGroup(const QString& name) override;
     /// Reloads the file. The overlay is kept and keeps winning over the
-    /// reloaded values.
+    /// reloaded values. On an unreadable file the root falls back to the last
+    /// document this backend read or wrote successfully (empty if none), and
+    /// @c loadFailed() turns on until a later reparse reads the file cleanly.
     void reparseConfiguration() override;
+    bool loadFailed() const override;
+
+    /// Let writes replace an unreadable file instead of refusing. For a file
+    /// only machines write, such as session state, where an unreadable copy
+    /// holds nothing worth protecting and refusing would only lose the next
+    /// save. Off by default: a file a user may edit by hand is protected.
+    void setOverwriteUnreadable(bool overwrite);
     bool sync() override;
     /// Bypasses the Deferred sync policy's debounce so the return value is a
     /// real commit result under every policy. Equivalent to @c flushPending().
@@ -153,8 +166,10 @@ public:
     /// key mutators act on the file's values alone, so writing one key of a
     /// group never carries the group's overlay values to disk with it.
     /// @c sync, @c commit, @c jsonRootSnapshot, @c replaceRoot and
-    /// @c applyMigration work on the file alone, so the overlay must already
-    /// be in the current schema's shape. It is not dirtying: setting it
+    /// @c applyMigration work on the backend's own document alone (the file
+    /// as last read or written, or the last good stand-in while
+    /// @c loadFailed() is set), so the overlay must already be in the current
+    /// schema's shape. It is not dirtying: setting it
     /// schedules no write. It survives @c reparseConfiguration and lasts until
     /// replaced; an empty object removes it.
     ///
@@ -199,8 +214,9 @@ public:
     /// Run @p schema's migration chain against the in-memory root, and
     /// if any step bumps the version stamp, atomically rewrite the backing
     /// file and refresh the in-memory state. Returns @c true unless the
-    /// atomic disk rewrite fails — in which case the backend stays at the
-    /// unmigrated state and the next successful @c sync() retries.
+    /// atomic disk rewrite fails or is refused because @c loadFailed() is
+    /// set. In either case the backend stays at the unmigrated state, and the
+    /// chain runs again from the next Store built over a fresh load.
     /// Consumers that need the "did migrations actually apply" bit should
     /// check @c versionStamp() before and after, not this return value.
     bool applyMigration(const Schema& schema) override;
@@ -213,7 +229,9 @@ public:
 
     /// Read-only access to the in-memory document. Implicitly shared (COW),
     /// so the copy is cheap and isolated from future mutations. This is the
-    /// file's document only; the overlay is not merged in.
+    /// backend's own document: the file as last read or written, or, while
+    /// @c loadFailed() is set, the last good document standing in for it. The
+    /// overlay is not merged in.
     QJsonObject jsonRootSnapshot() const;
 
     /// Backing file path (useful for migration-chain callers that need

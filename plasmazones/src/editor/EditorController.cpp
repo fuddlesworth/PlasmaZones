@@ -112,11 +112,10 @@ EditorController::EditorController(QObject* parent)
     m_layoutReloadTimer.setInterval(50);
     connect(&m_layoutReloadTimer, &QTimer::timeout, this, &EditorController::reloadLocalLayouts);
 
-    // Same coalescing shape for editor-settings writes. 250 ms: long enough to
-    // swallow a slider drag's mouse-move burst, short enough that the write
-    // still feels immediate once the user lets go.
+    // Same coalescing shape for editor-settings writes; see
+    // EditorSettingsSaveDebounceMs for the interval.
     m_editorSettingsSaveTimer.setSingleShot(true);
-    m_editorSettingsSaveTimer.setInterval(250);
+    m_editorSettingsSaveTimer.setInterval(EditorSettingsSaveDebounceMs);
     connect(&m_editorSettingsSaveTimer, &QTimer::timeout, this, &EditorController::flushEditorSettings);
 
     auto bus = QDBusConnection::sessionBus();
@@ -142,16 +141,18 @@ EditorController::EditorController(QObject* parent)
         subscribe(iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
 
-    // Strip-axis inputs follow the live config: the daemon's settingsChanged
-    // fires once per key group on a settings-app Save, so debounce the burst
-    // into one config re-read. Without this, a per-screen axis authored
-    // while the editor is open never reached the template preview until a
-    // restart (loadEditorSettings runs only from this constructor).
-    m_stripAxisReloadTimer.setSingleShot(true);
-    m_stripAxisReloadTimer.setInterval(250);
-    connect(&m_stripAxisReloadTimer, &QTimer::timeout, this, &EditorController::reloadScrollingStripAxis);
-    subscribe(QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
-              &m_stripAxisReloadTimer, SLOT(start()));
+    // The strip-axis inputs and the Editor.* groups follow the live config.
+    // A daemon reload announces the strip axis on settingsChanged and the
+    // Editor.* groups on editorSettingsChanged, and can fire both, so both feed
+    // one debounced re-read. Without this, what the settings app changed while
+    // the editor was open never reached it until a restart (loadEditorSettings
+    // runs only from this constructor).
+    m_configReloadTimer.setSingleShot(true);
+    m_configReloadTimer.setInterval(250);
+    connect(&m_configReloadTimer, &QTimer::timeout, this, &EditorController::reloadLiveConfig);
+    const QString settingsIface = QString(PhosphorProtocol::Service::Interface::Settings);
+    subscribe(settingsIface, QStringLiteral("settingsChanged"), &m_configReloadTimer, SLOT(start()));
+    subscribe(settingsIface, QStringLiteral("editorSettingsChanged"), &m_configReloadTimer, SLOT(start()));
 
     // Local read view of the scrolling templates, the template sibling of
     // m_localLayoutManager: instant template opens without the daemon, plus
@@ -307,15 +308,32 @@ EditorController::EditorController(QObject* parent)
 
 EditorController::~EditorController()
 {
-    // Flush a queued settings write rather than queueing another: the timer
-    // will never fire again from here, so a still-pending edit (the user closed
-    // the editor within the debounce window of their last change) would be lost.
-    if (m_editorSettingsSaveTimer.isActive()) {
-        m_editorSettingsSaveTimer.stop();
-        flushEditorSettingsBlocking();
-    }
+    // Normally a no-op: main() already ran this at aboutToQuit. It still
+    // covers a controller destroyed some other way.
+    flushEditorSettingsForShutdown();
 
     // Services are QObjects with this as parent, so they'll be deleted automatically.
+}
+
+void EditorController::flushEditorSettingsForShutdown()
+{
+    // Flush a queued settings write rather than queueing another: the timer
+    // will never fire again from here, so a still-pending edit (the user closed
+    // the editor within the debounce window of their last change) would be
+    // lost. Keyed on the edited set rather than the timer, because a write
+    // that failed earlier leaves its keys edited with no timer running.
+    m_editorSettingsSaveTimer.stop();
+    if (m_editorKeysEdited) {
+        flushEditorSettingsBlocking();
+        // One attempt at shutdown. A write that failed or was refused here is
+        // reported by writeEditorSettingsToDisk, and trying again from the
+        // destructor would only repeat the warning against the same file.
+        if (m_editorKeysEdited) {
+            qCWarning(lcEditor) << "Editor settings changed this session could not be written before closing and are "
+                                   "lost";
+            m_editorKeysEdited = {};
+        }
+    }
 }
 
 // Preview mode
@@ -459,6 +477,18 @@ int EditorController::fillOnDropModifier() const
 {
     return m_fillOnDropModifier;
 }
+qreal EditorController::backgroundOpacity() const
+{
+    return m_backgroundOpacity;
+}
+qreal EditorController::snapIntervalMin() const
+{
+    return ConfigDefaults::editorSnapIntervalMin();
+}
+qreal EditorController::snapIntervalMax() const
+{
+    return ConfigDefaults::editorSnapIntervalMax();
+}
 QString EditorController::targetScreen() const
 {
     return m_targetScreen;
@@ -549,8 +579,11 @@ void EditorController::setSelectedZoneIdsDirect(const QStringList& zoneIds)
 
 void EditorController::setGridSnappingEnabled(bool enabled)
 {
+    if (m_snappingService->gridSnappingEnabled() == enabled) {
+        return;
+    }
     m_snappingService->setGridSnappingEnabled(enabled);
-    saveEditorSettings();
+    saveEditorSettings(EditorOwnedConfig::Key::GridSnapping);
 }
 
 void EditorController::setGridOverlayVisible(bool visible)
@@ -563,20 +596,30 @@ void EditorController::setGridOverlayVisible(bool visible)
 
 void EditorController::setEdgeSnappingEnabled(bool enabled)
 {
+    if (m_snappingService->edgeSnappingEnabled() == enabled) {
+        return;
+    }
     m_snappingService->setEdgeSnappingEnabled(enabled);
-    saveEditorSettings();
+    saveEditorSettings(EditorOwnedConfig::Key::EdgeSnapping);
 }
 
 void EditorController::setSnapIntervalX(qreal interval)
 {
+    // The service clamps, so compare what it holds after, not the argument.
+    const qreal before = m_snappingService->snapIntervalX();
     m_snappingService->setSnapIntervalX(interval);
-    saveEditorSettings();
+    if (!qFuzzyCompare(before, m_snappingService->snapIntervalX())) {
+        saveEditorSettings(EditorOwnedConfig::Key::SnapIntervalX);
+    }
 }
 
 void EditorController::setSnapIntervalY(qreal interval)
 {
+    const qreal before = m_snappingService->snapIntervalY();
     m_snappingService->setSnapIntervalY(interval);
-    saveEditorSettings();
+    if (!qFuzzyCompare(before, m_snappingService->snapIntervalY())) {
+        saveEditorSettings(EditorOwnedConfig::Key::SnapIntervalY);
+    }
 }
 
 void EditorController::setSnapInterval(qreal interval)
@@ -591,7 +634,7 @@ void EditorController::setSnapOverrideModifier(int modifier)
     if (m_snapOverrideModifier != modifier) {
         m_snapOverrideModifier = modifier;
         Q_EMIT snapOverrideModifierChanged();
-        saveEditorSettings();
+        saveEditorSettings(EditorOwnedConfig::Key::SnapOverrideModifier);
     }
 }
 
@@ -600,7 +643,7 @@ void EditorController::setFillOnDropEnabled(bool enabled)
     if (m_fillOnDropEnabled != enabled) {
         m_fillOnDropEnabled = enabled;
         Q_EMIT fillOnDropEnabledChanged();
-        saveEditorSettings();
+        saveEditorSettings(EditorOwnedConfig::Key::FillOnDropEnabled);
     }
 }
 
@@ -609,7 +652,23 @@ void EditorController::setFillOnDropModifier(int modifier)
     if (m_fillOnDropModifier != modifier) {
         m_fillOnDropModifier = modifier;
         Q_EMIT fillOnDropModifierChanged();
-        saveEditorSettings();
+        saveEditorSettings(EditorOwnedConfig::Key::FillOnDropModifier);
+    }
+}
+
+void EditorController::setBackgroundOpacity(qreal opacity)
+{
+    // The same rule the schema's clampDouble applies to the stored value
+    // (NaN to the minimum, then the range), so what the canvas shows is what
+    // reads back after the save. Compared with the 1+x idiom because 0 is a
+    // legal value.
+    const qreal clamped = qIsNaN(opacity)
+        ? ConfigDefaults::editorBackgroundOpacityMin()
+        : qBound(ConfigDefaults::editorBackgroundOpacityMin(), opacity, ConfigDefaults::editorBackgroundOpacityMax());
+    if (!qFuzzyCompare(1.0 + m_backgroundOpacity, 1.0 + clamped)) {
+        m_backgroundOpacity = clamped;
+        Q_EMIT backgroundOpacityChanged();
+        saveEditorSettings(EditorOwnedConfig::Key::BackgroundOpacity);
     }
 }
 

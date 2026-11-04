@@ -17,7 +17,7 @@ import org.kde.kirigami as Kirigami
  * only sticks when the keySequenceModified handler persists the value
  * and the caller propagates the change back into keySequence (binding
  * or imperative re-sync). capturing is already false when the signal
- * fires, so re-syncs guarded on !capturing work from the handler.
+ * fires, so the field has left its capture prompt by then.
  */
 TextField {
     id: root
@@ -196,9 +196,10 @@ TextField {
 
         var seq = _buildSequence(event.key, event.modifiers);
         if (seq.length > 0) {
-            // Leave capture mode before emitting so consumers whose
-            // write-back is guarded on !capturing (EditorPage's
-            // Connections re-sync) update the field from the handler.
+            // Leave capture mode before emitting, so `text` (bound to
+            // `capturing ? … : keySequence`) has left the capture prompt and
+            // follows keySequence again by the time a handler writes the new
+            // value back.
             // Never self-assign keySequence here: that would sever the
             // caller's binding on first capture.
             capturing = false;

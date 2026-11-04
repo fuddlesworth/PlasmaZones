@@ -143,6 +143,19 @@ void Settings::setAudioSpectrumBarCount(int count)
 Both `<property>Changed` and `settingsChanged` are emitted, and only when the
 value actually changed.
 
+## Editor.* settings (the layout editor's own)
+
+These have no `Q_PROPERTY` on `Settings` (`EditorPageController` is their
+property surface), so three more places carry each one:
+
+- the `editorSettingEntries()` table in `plasmazones/src/config/settings.cpp`,
+  which is how a reload announces it (`test_settings_core`'s schema sweep
+  fails for a key missing there);
+- `EditorOwnedConfig` in `plasmazones/src/editor/helpers/`, the editor's own
+  read and write (`test_editor_owned_config`'s sweep fails for a key missing
+  there), plus the member and change gate in `EditorController`;
+- the `"editor"` entry in `pageOwnedConfigKeys()`, as for any page.
+
 ## Renaming or removing a setting
 
 No ad-hoc migration. Within a schema version, just use the new key; old values

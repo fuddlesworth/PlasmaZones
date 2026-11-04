@@ -97,6 +97,8 @@ bool ConfigMigration::runMigrationChain(const QString& jsonPath, ExternalImports
 // see the same atomic.
 namespace {
 std::atomic<bool> s_migrated{false};
+std::atomic<ConfigMigration::CorruptConfigHandling> s_corruptHandling{
+    ConfigMigration::CorruptConfigHandling::Quarantine};
 } // namespace
 
 /// The legacy assignments.json path. rules.json supersedes it in v4 —
@@ -319,6 +321,28 @@ bool runFilesystemFinalizers(const QString& jsonPath)
 
 } // namespace
 
+QStringList ConfigMigration::quarantineCopies(const QString& filePath)
+{
+    // The same names uniqueQuarantinePath hands out, in the same order.
+    const QString preferred = filePath + QStringLiteral(".corrupt.bak");
+    QStringList found;
+    if (QFile::exists(preferred)) {
+        found.append(preferred);
+    }
+    for (int n = 2; n < 100; ++n) {
+        const QString candidate = preferred + QLatin1Char('.') + QString::number(n);
+        if (QFile::exists(candidate)) {
+            found.append(candidate);
+        }
+    }
+    return found;
+}
+
+void ConfigMigration::setCorruptConfigHandling(CorruptConfigHandling handling)
+{
+    s_corruptHandling.store(handling, std::memory_order_release);
+}
+
 bool ConfigMigration::ensureJsonConfig()
 {
     // Process-level guard: migration is a one-shot operation. Once we've
@@ -448,6 +472,13 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // may want to recover hand-made edits from the corrupt JSON (a parse
         // error can be one stray character in an otherwise valid file).
         // Asymmetric "rename if no INI, silent rm if INI exists" was a trap.
+        if (corrupt && s_corruptHandling.load(std::memory_order_acquire) == CorruptConfigHandling::LeaveInPlace) {
+            qWarning(
+                "ConfigMigration: %s does not parse — leaving it in place; nothing will be written to it until it "
+                "is repaired",
+                qPrintable(jsonPath));
+            return false;
+        }
         if (corrupt) {
             const QString corruptBak = uniqueQuarantinePath(jsonPath + QStringLiteral(".corrupt.bak"));
             if (!QFile::rename(jsonPath, corruptBak)) {

@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 
 namespace PlasmaZones {
@@ -130,6 +131,33 @@ public:
     /// introduce a workflow that involves external rewrites during a
     /// session, drop the guard first via resetMigrationGuardForTesting().
     static bool ensureJsonConfig();
+
+    /// What ensureJsonConfig does with a config.json that does not parse.
+    enum class CorruptConfigHandling {
+        /// Move it to config.json.corrupt.bak and start from defaults (or the
+        /// INI). The daemon's choice: it owns the config, and it needs a file
+        /// it can run on. A settings app or editor already open on the broken
+        /// file (the daemon can be started by one of them over D-Bus) is not
+        /// told; the settings app looks at the file again when it sees the
+        /// daemon start, and the editor on its next reload or write.
+        Quarantine,
+        /// Leave it where it is and report failure. For the layout editor and
+        /// the settings app, which may start while the daemon is running on
+        /// the last readable state: moving the file aside there would turn
+        /// the next write into a fresh, nearly empty config that the daemon
+        /// then reloads as every setting reset. Left in place, the config
+        /// backend refuses to write over it until it is repaired.
+        LeaveInPlace,
+    };
+    /// Set this process's handling. Call before the first ensureJsonConfig.
+    /// The default is Quarantine.
+    static void setCorruptConfigHandling(CorruptConfigHandling handling);
+
+    /// The quarantine copies of @p filePath that exist now, under the names
+    /// Quarantine gives them (`<file>.corrupt.bak`, then `.2` up to `.99`,
+    /// since it never overwrites an older one). Comparing two calls tells
+    /// which copy a daemon start just made.
+    static QStringList quarantineCopies(const QString& filePath);
 
     /// Reset the process-level "already migrated" flag set by
     /// ensureJsonConfig(). Exists so test harnesses can reuse a single

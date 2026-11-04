@@ -69,6 +69,7 @@ class ShaderPreviewController;
 class RegistryShaderPreviewBackend;
 }
 
+#include <QDateTime>
 #include <QHash>
 #include <QObject>
 #include <QSet>
@@ -122,6 +123,13 @@ class SettingsController : public QObject
     Q_PROPERTY(bool advancedMode READ advancedMode WRITE setAdvancedMode NOTIFY advancedModeChanged)
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
+    /// The config file a save or reset failure names when it could not be read.
+    Q_PROPERTY(QString configFilePath READ configFilePath CONSTANT)
+    /// config.json could not be read, so the pages show a stand-in (defaults,
+    /// for an app started on a broken file), Reset is refused and Save writes
+    /// only the parts kept outside that file, until it is repaired. The shell
+    /// shows a persistent warning for it.
+    Q_PROPERTY(bool configUnreadable READ configUnreadable NOTIFY configUnreadableChanged)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
     // Whether this build carries the Phosphor shell (BUILD_PHOSPHOR_SHELL).
     // Pages that list the shell's own surfaces (the `shell.phosphor.*`
@@ -761,15 +769,27 @@ public:
     Q_INVOKABLE void save();
     Q_INVOKABLE void defaults();
 
-    /// Why a `resetPage` refused, carried by `pageResetFailed`. These are
-    /// stable tokens the shell branches on to pick wording, not user-facing
-    /// text: i18n lives in QML in this tree.
+    /// Why a reset or save refused, carried by `pageResetFailed` and
+    /// `configWriteFailed`. These are stable tokens the shell branches on to
+    /// pick wording, not user-facing text: i18n lives in QML in this tree.
     static constexpr QLatin1String ReasonDaemonUnreachable{"daemon-unreachable"};
     static constexpr QLatin1String ReasonOverridesNotCleared{"overrides-not-cleared"};
     /// The cleared configuration could not be written, so nothing was reset.
     /// Raised by the global `defaults()` with an EMPTY page id — a factory reset
     /// is not scoped to a page.
     static constexpr QLatin1String ReasonResetNotWritten{"reset-not-written"};
+    /// The config file could not be read, so it was not overwritten. Carried
+    /// by `pageResetFailed` (a factory reset) and `configWriteFailed`.
+    static constexpr QLatin1String ReasonConfigUnreadable{"config-unreadable"};
+    /// The config file could be read but the write failed. Carried by
+    /// `configWriteFailed`.
+    static constexpr QLatin1String ReasonConfigNotWritten{"config-not-written"};
+
+    QString configFilePath() const;
+    bool configUnreadable() const
+    {
+        return m_configUnreadable;
+    }
 
 Q_SIGNALS:
     void activePageChanged();
@@ -801,9 +821,11 @@ Q_SIGNALS:
     /// it: a refused path, a vanished file, and a non-settings file are one
     /// `false` wanting different words, which only this signal carries.
     void settingsTransferFailed(const QString& reason);
-    /// Emitted when `resetPage` refuses. resetPage returns void and stages
-    /// nothing on that path, so without this the page reconciles CLEAN and the
-    /// refusal is indistinguishable from a page already at its defaults. Two
+    /// Emitted when `resetPage` refuses, and (with an empty page id) when the
+    /// factory reset `defaults()` does, for `ReasonResetNotWritten` or
+    /// `ReasonConfigUnreadable`. resetPage returns void and stages nothing on
+    /// that path, so without this the page reconciles CLEAN and the refusal is
+    /// indistinguishable from a page already at its defaults. Its two
     /// branches emit it for unrelated reasons the shell must word differently:
     ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
     ///     unavailable, currently the daemon's quick-layout slot map.
@@ -813,6 +835,16 @@ Q_SIGNALS:
     /// @p reason is one of the Reason* constants above, NOT user-facing text:
     /// the shell wires i18n in QML and branches on the token.
     void pageResetFailed(const QString& page, const QString& reason);
+    /// Emitted when `save()` could not write the config file. The values stay
+    /// staged and the footer stays lit; this is the word that says why.
+    /// @p reason is ReasonConfigUnreadable or ReasonConfigNotWritten.
+    void configWriteFailed(const QString& reason);
+    void configUnreadableChanged();
+    /// The PlasmaZones service started, found config.json unreadable and
+    /// moved it aside (ConfigMigration's Quarantine), so it and this app now
+    /// run without it (on defaults, or on what it migrated from a legacy INI
+    /// file). @p backupPath is where the old file went.
+    void configQuarantined(const QString& backupPath);
     /// Emitted when `discardPage` refuses — the Discard analogue of
     /// pageResetFailed. The animation branch reconciles value-based, so a
     /// refused revert leaves the page BADGED with no other word. The only
@@ -890,6 +922,18 @@ public Q_SLOTS:
 
 private Q_SLOTS:
     void onExternalSettingsChanged();
+    /// The daemon's editorSettingsChanged: at least one Editor.* key moved.
+    /// They all live in the config store, so the edit-preserving store reload
+    /// adopts them whether or not this process has unsaved edits, without the
+    /// full reload (rules, layouts, screens) onExternalSettingsChanged runs.
+    /// When other keys moved too, settingsChanged follows and its handler
+    /// adopts everything, so this one is queued a turn and skipped then.
+    void onExternalEditorSettingsChanged();
+    /// The daemon's LayoutRegistry.daemonReady: its startup, including the
+    /// config migration that may move an unreadable config.json aside, is
+    /// done. If this app is holding a stand-in for an unreadable file, look
+    /// at it again now.
+    void onDaemonReady();
     void onSettingsPropertyChanged();
     /// Dirty-marks like onSettingsPropertyChanged but for edits whose value
     /// no page manifest can see (the per-screen overrides): latches the
@@ -951,6 +995,16 @@ private:
     /// options, desktop names, the three shader registries).
     void refreshRuleLabels();
     void setNeedsSave(bool needs);
+    /// Reload the config store from disk keeping every unsaved edit
+    /// (Settings::reloadPreservingLocalEdits) with dirty tracking suppressed,
+    /// then let value truth re-decide the dirty pages. Shared by both
+    /// external-change slots.
+    void adoptExternalConfigKeepingEdits();
+    /// Re-read Settings::configUnreadable() into the property, announcing a
+    /// change, and note the quarantine copies that exist when it turns on.
+    /// Connected to Settings::configUnreadableChanged, which every path that
+    /// reads or writes config.json emits through.
+    void refreshConfigUnreadable();
     /// Reload deferred by onExternalSettingsChanged() while edits were
     /// pending — fire it once the app is fully clean again. Connected to
     /// dirtyPagesChanged in the ctor: that is the one signal every
@@ -1185,12 +1239,22 @@ private:
     bool m_saving = false;
     bool m_loading = false;
     /// A daemon settingsChanged broadcast arrived while local edits were
-    /// pending, so onExternalSettingsChanged() deferred the reload instead
-    /// of clobbering them. Drained (one queued reload) by
+    /// pending. onExternalSettingsChanged() adopted the untouched config keys
+    /// at once and deferred the full reload (rules, layouts, staging) instead
+    /// of clobbering the edits. Drained (one queued reload) by
     /// maybeDrainPendingExternalReload() when the app next transitions to
     /// fully clean; cleared without a reload by save(), whose whole-schema
     /// flush supersedes the external state the reload would have adopted.
     bool m_pendingExternalReload = false;
+    /// An editorSettingsChanged adoption is queued for the next event-loop
+    /// turn; onExternalSettingsChanged clears it, since it adopts a superset.
+    bool m_editorAdoptionQueued = false;
+    bool m_configUnreadable = false;
+    /// The quarantine copies of config.json that existed when it was found
+    /// unreadable, so onDaemonReady can tell which one a daemon start made.
+    QHash<QString, QDateTime> m_quarantineCopiesWhenUnreadable;
+    /// The quarantine copies of @p configPath with their change times.
+    static QHash<QString, QDateTime> quarantineCopyStamps(const QString& configPath);
     /// Coalesces onSettingsPropertyChanged()'s queued dirty-set reconcile
     /// (one per event-loop turn) so a value edited back to its committed
     /// state drops out of m_dirtyPages instead of stranding needsSave().

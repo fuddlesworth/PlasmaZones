@@ -1879,6 +1879,12 @@ public:
     // Virtual screen configuration
     QHash<QString, PhosphorScreens::VirtualScreenConfig> virtualScreenConfigs() const;
     void setVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs);
+    /// Put the virtual-screen configs back to @p configs after a save() that
+    /// did not land: in memory, and in the backend's pending document, which
+    /// that save already wrote them into. Left there, a later flush (the next
+    /// save, or the backend's flush on destruction) would write the reverted
+    /// configs anyway.
+    void revertVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs);
     /// Returns true on success, false if the config was rejected by
     /// PhosphorScreens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
     /// already-current value is treated as a successful no-op.
@@ -2091,8 +2097,11 @@ public:
     void setRotateVirtualScreensCounterclockwiseShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Editor Settings (shared [Editor] group in config.json)
-    // PhosphorConfig::Store-backed.
+    // Editor Settings (the Editor.* groups: Shortcuts, Snapping, FillOnDrop,
+    // Background). PhosphorConfig::Store-backed, with no Q_PROPERTY here
+    // (EditorPageController is their property surface). The setters announce
+    // a change with its own signal plus settingsChanged; the reload paths
+    // announce it with its own signal plus editorSettingsChanged.
     // ═══════════════════════════════════════════════════════════════════════════
     QString editorDuplicateShortcut() const override;
     void setEditorDuplicateShortcut(const QString& shortcut) override;
@@ -2116,15 +2125,53 @@ public:
     void setFillOnDropEnabled(bool enabled) override;
     int fillOnDropModifier() const override;
     void setFillOnDropModifier(int mod) override;
+    qreal editorBackgroundOpacity() const override;
+    void setEditorBackgroundOpacity(qreal opacity) override;
 
     // Persistence
     void load() override;
     bool save() override;
-    /// Restore factory defaults. Returns false when the cleared configuration
-    /// could not be written to disk — in that case NOTHING was reset: the
-    /// deletions are dropped, the store is reparsed from disk, and the session
-    /// file and rule store are left untouched. Callers must gate the rest of
-    /// their reset sequence on this rather than assuming it landed.
+
+    /// Adopt what disk now holds for every schema key this process has NOT
+    /// modified, and keep the unsaved edits on the ones it has. The settings
+    /// app calls this when another process (the daemon, the layout editor)
+    /// writes config.json: a plain load() would drop unsaved edits, and
+    /// deferring until the next clean transition let the app's Save write its
+    /// stale copy of the other keys back over the external write. It also
+    /// backs the composite setters' clean-backend refresh, and save() / reset()
+    /// use it to look at a config file that could not be read again.
+    ///
+    /// The committed baseline moves to disk, so a per-page Discard reverts to
+    /// the external value and the re-applied edits still read as unsaved. The
+    /// merge is per key: an edit to one field of a composite blob (the
+    /// animation Profile, a trigger list, a profile tree) is re-applied whole,
+    /// so an external change to a sibling field of the same blob is lost.
+    /// Per-screen overrides, virtual-screen configs and the rule store are
+    /// left alone: they carry no baseline to tell an unsaved edit from a stale
+    /// value. The exception is the first reload that reads the file cleanly
+    /// after a load that could not (reloadMembersFromRepairedConfig), which
+    /// reloads the per-screen and virtual-screen members and announces them.
+    /// The change signals load() fires for the store keys fire here too; the
+    /// per-mode disable-list ones cannot, since that state is not reloaded.
+    void reloadPreservingLocalEdits() override;
+
+    /// Whether config.json could not be read the last time this process
+    /// loaded or tried to write it. save() and reset() look at the file again
+    /// first, and are refused while it still cannot be read rather than
+    /// overwrite it, so the settings app can tell the user which file to
+    /// repair. Flips are announced by configUnreadableChanged.
+    bool configUnreadable() const;
+    /// The file this instance's config backend reads and writes, for messages
+    /// that have to name it.
+    QString configFilePath() const;
+    /// Restore factory defaults. Returns false when NOTHING was reset, which
+    /// happens two ways. When config.json cannot be read (configUnreadable(),
+    /// after looking at it again), reset refuses before touching anything.
+    /// When the cleared configuration could not be written, the deletions are
+    /// dropped, the store is reparsed from disk with the unsaved edits put
+    /// back, and the session file and rule store are left untouched. Callers
+    /// must gate the rest of their reset sequence on this rather than assuming
+    /// it landed.
     bool reset() override;
 
     /// Write the current settings to @p filePath as a standalone config file,
@@ -2161,15 +2208,15 @@ public:
     bool isKeyModified(const QString& group, const QString& key) const;
 
     /// Per-page Discard: revert each key to the committed baseline. Bracketed
-    /// by the same Q_PROPERTY NOTIFY re-emit as load() so QML bindings update,
-    /// and emits settingsChanged() once if anything actually changed.
+    /// by the same re-emit as load() so QML bindings update: the Q_PROPERTY
+    /// NOTIFYs plus settingsChanged() once if any moved, the Editor.* signals
+    /// plus editorSettingsChanged() once if any moved, and
+    /// animationProfileChanged() when the Profile blob moved.
     ///
-    /// SCOPE: re-emits only Q_PROPERTY NOTIFY signals (+ settingsChanged). It
-    /// does NOT re-emit the non-Q_PROPERTY change signals load() also fires —
-    /// the per-mode disable-list signals (disabled*Changed) and the per-screen
-    /// signals (perScreen*SettingsChanged). This is correct for the current
-    /// per-page manifest (all Q_PROPERTY-backed keys); if a future page ever
-    /// owns a disable-list or per-screen key, extend this to re-emit those.
+    /// SCOPE: it does NOT re-emit the per-mode disable-list signals
+    /// (disabled*Changed) or the per-screen signals (perScreen*SettingsChanged)
+    /// load() also fires. No page manifest owns a disable-list or per-screen
+    /// key today; a page that ever does needs this extended to re-emit those.
     void discardKeys(const ConfigKeyList& keys);
 
     /// Per-page Reset: set each key to its schema default. Same NOTIFY /
@@ -2200,7 +2247,9 @@ public:
     /// unsaved and the settings app's Save footer lights up; the user's Save
     /// commits them normally. Used to activate a settings profile.
     ///
-    /// SCOPE: Q_PROPERTY-backed keys only (per Phase 1). Per-screen maps,
+    /// SCOPE: every schema-declared key the blob carries, which includes the
+    /// Editor.* keys and the animation Profile blob as well as the Q_PROPERTY
+    /// ones; each family gets the same re-emit as load(). Per-screen maps,
     /// virtual-screen configs, and per-mode disable lists are NOT staged here.
     /// @return false when the store refused the blob (schema version mismatch)
     /// — in that case nothing was staged and no signal fired.
@@ -2237,7 +2286,22 @@ public:
         return m_announcingPaletteChange;
     }
 
+    /// True while reloadPreservingLocalEdits() (or a composite setter's
+    /// clean-backend refresh, which runs the same body) is announcing values
+    /// adopted from disk. Like a palette change they are not user edits, so
+    /// SettingsController::onSettingsPropertyChanged() must not mark a page
+    /// dirty for them.
+    bool isAnnouncingReload() const
+    {
+        return m_announcingReload;
+    }
+
 Q_SIGNALS:
+    /// configUnreadable() flipped. Emitted from every path that reads or
+    /// writes config.json (the reload body, which the composite setters'
+    /// refresh also runs, and save() / reset()), so a listener needs no other
+    /// hook to keep a "cannot be read" indication current.
+    void configUnreadableChanged();
     /// NOTIFYs for the four raw theme-fallback colour strings. Distinct from
     /// the resolved QColor twins' ISettings signals so a palette change
     /// (which moves only the resolved view) does not announce a raw change;
@@ -2350,8 +2414,9 @@ private:
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
-    // ── NOTIFY re-emit machinery (shared by load / discardKeys / resetKeys) ──
-    // load() and the per-page mutators write backing state directly (bypassing
+    // ── NOTIFY re-emit machinery ─────────────────────────────────────────────
+    // Shared by load / reloadPreservingLocalEdits / discardKeys / resetKeys /
+    // applyConfigOverlayStaged / reset. Those write backing state directly (bypassing
     // the property setters), so they must re-emit NOTIFY by hand or QML
     // bindings never refresh. snapshotNotifyProperties() captures every own
     // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
@@ -2363,6 +2428,51 @@ private:
     // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    /// The Editor.* twin of the pair above. Those settings have no Q_PROPERTY,
+    /// so the meta-object loop cannot see them; a table in settings.cpp pairs
+    /// each one's getter with its signal. The emit half fires each moved
+    /// setting's own signal, then editorSettingsChanged() once, and returns
+    /// whether anything moved. Same synchronous-span rule as above.
+    QVector<QVariant> snapshotEditorSettings() const;
+    bool emitChangedEditorSettings(const QVector<QVariant>& before);
+
+    /// Shared body of load() and reloadPreservingLocalEdits(). With
+    /// @p preserveLocalEdits the keys isKeyModified() reports are re-applied
+    /// over the reparsed document, the baseline is captured from disk before
+    /// that, and the per-screen / virtual-screen members, the owned rule store
+    /// and the per-mode disable lists are not reloaded (except as
+    /// reloadMembersFromRepairedConfig describes).
+    void reloadFromDisk(bool preserveLocalEdits);
+    /// The per-screen and virtual-screen members, captured whole.
+    struct MemberState
+    {
+        QHash<QString, QVariantMap> zoneSelector;
+        QHash<QString, QVariantMap> scrollingZoneSelector;
+        QHash<QString, QVariantMap> autotile;
+        QHash<QString, QVariantMap> scrolling;
+        QHash<QString, PhosphorScreens::VirtualScreenConfig> virtualScreens;
+    };
+    MemberState captureMemberState() const;
+    /// Reload the per-screen and virtual-screen members from a config.json
+    /// that reads cleanly again, carrying over what was changed in memory
+    /// while it could not be read (a three-way merge against
+    /// m_standInMembers, removals included). Called once, by the first clean
+    /// preserving reload after config.json was found unreadable. Defined in
+    /// settings/perscreen.cpp, beside the per-screen helpers it uses.
+    void reloadMembersFromRepairedConfig();
+
+    /// One schema key holding an unsaved edit, as collectLocalEdits found it.
+    struct LocalEdit
+    {
+        QString group;
+        QString key;
+        QVariant value;
+    };
+    /// Every schema key isKeyModified() reports, with its current value.
+    QList<LocalEdit> collectLocalEdits() const;
+    /// Write @p edits back through the store (raw writes, no announcement).
+    void reapplyLocalEdits(const QList<LocalEdit>& edits);
 
     /// The animation Profile blob's state, for change detection across a
     /// load / discard / reset.
@@ -2512,6 +2622,18 @@ private:
     // palette-change NOTIFY fan-out; surfaced through
     // isAnnouncingPaletteChange(). Never true outside that synchronous window.
     bool m_announcingPaletteChange = false;
+    // Raised around the edit-preserving reload body; see isAnnouncingReload().
+    bool m_announcingReload = false;
+    // configUnreadable() as last announced through configUnreadableChanged.
+    bool m_announcedConfigUnreadable = false;
+    void announceConfigUnreadableIfMoved();
+    // The per-screen and virtual-screen members as this process last read or
+    // saved them, refreshed by every full load and every successful save.
+    MemberState m_memberBase;
+    // Set once config.json is found unreadable (by a load, a reload or a
+    // refused write): the base of reloadMembersFromRepairedConfig()'s merge.
+    // Empty otherwise.
+    std::optional<MemberState> m_standInMembers;
 
     // The last-announced resolved values of the theme-fallback colours
     // (Highlight, Inactive, Border, LabelFont, then the drop indicator's fill
@@ -2634,14 +2756,13 @@ private:
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     // Animations are stored in m_store; no cached members here.
 
-    // Non-owned CurveRegistry for animation profile parsing. Injected
-    // at construction (daemon composition root); null for standalone
-    // Settings instances that fall back to a local static registry.
-    // Injection is constructor-only — there is no post-construction
-    // setter because `load()` runs during ctor and would leave cached
-    // Profile state parsed through the wrong registry if a setter ran
-    // after. Callers must pass the registry up front or accept the
-    // fallback contract.
+    // Non-owned CurveRegistry for animation profile parsing. Injected at
+    // construction (daemon composition root) or later through
+    // setCurveRegistry(); null for standalone Settings instances that fall
+    // back to a local static registry. Profile reads parse on demand, so a
+    // registry handed over after construction applies from the next read on;
+    // setCurveRegistry() documents why it should still come before the
+    // first one.
     PhosphorAnimation::CurveRegistry* m_curveRegistry = nullptr;
 
     // Additional Autotiling Settings

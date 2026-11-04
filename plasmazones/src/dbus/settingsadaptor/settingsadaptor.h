@@ -201,6 +201,18 @@ Q_SIGNALS:
     void settingsChanged();
 
     /**
+     * @brief Daemon → layout editor and Settings app: an Editor.* setting
+     * changed on a daemon reload (a settings-app Save, the editor's own
+     * write coming back, or a factory reset over D-Bus).
+     *
+     * Kept off @ref settingsChanged because nothing else reads those keys,
+     * and every subscriber of settingsChanged (the daemon's own handlers, the
+     * KWin effect, the shell) would otherwise re-fetch its whole state each
+     * time the editor saved a slider.
+     */
+    void editorSettingsChanged();
+
+    /**
      * @brief Daemon → KWin effect: the per-event motion-profile tree changed.
      *
      * Emitted when the motion-profile registry mutates (a per-event

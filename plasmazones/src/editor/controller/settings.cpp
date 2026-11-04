@@ -16,47 +16,9 @@
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
 #include "../../config/configbackends.h"
-#include <QKeySequence>
 #include <QRegularExpression>
 
 namespace PlasmaZones {
-
-namespace {
-
-/// Load a shortcut from config with validation: an empty or unparseable
-/// stored value falls back to the default, and the member only updates (and
-/// the signal only fires) when the value actually changes. Lives here
-/// rather than in the header because loadEditorSettings is its only caller.
-template<typename F>
-void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
-                         QString& member, F emitSignal)
-{
-    // An empty or unparseable stored value is INVALID rather than
-    // "disabled" (the capture field offers no clear affordance, so such a
-    // value only appears via a hand-edited config). The in-memory fallback
-    // to the default is deliberate, and the next settings flush writing that
-    // default back over the broken value is accepted — a broken shortcut
-    // entry has nothing worth preserving.
-    // QKeySequence::fromString does not answer "unparseable" with an empty
-    // sequence — garbage parses to an entry holding Qt::Key_unknown — so the
-    // gate checks every chord for that sentinel explicitly.
-    QString value = group.readString(key, defaultValue);
-    const QKeySequence parsed = QKeySequence::fromString(value, QKeySequence::PortableText);
-    bool invalid = value.isEmpty() || parsed.isEmpty();
-    for (int i = 0; !invalid && i < parsed.count(); ++i) {
-        invalid = parsed[i].key() == Qt::Key_unknown;
-    }
-    if (invalid) {
-        qCWarning(lcEditor) << "Invalid editor shortcut" << key << value << "- using default";
-        value = defaultValue;
-    }
-    if (member != value) {
-        member = value;
-        emitSignal();
-    }
-}
-
-} // anonymous namespace
 
 QString EditorController::validateZoneName(const QString& zoneId, const QString& name)
 {
@@ -154,7 +116,9 @@ void EditorController::setDefaultZoneColors(const QString& highlightColor, const
 void EditorController::loadEditorSettings()
 {
     // Ensure INI→JSON migration has run (the daemon does this too, but the
-    // editor may start before the daemon on first upgrade).
+    // editor may start before the daemon on first upgrade). main() set this
+    // process to leave an unparseable config.json in place, so a broken file
+    // stays where the backend's write refusal protects it.
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
     auto backend = PlasmaZones::createDefaultConfigBackend();
@@ -164,6 +128,11 @@ void EditorController::loadEditorSettings()
     // Single batched D-Bus round-trip for all 8 gap/overlay keys, not 8 sequential
     // getSetting() calls — this is on the ctor hot path before the QML engine starts.
     refreshGlobalGapOverlaySettings();
+
+    // An unreadable config.json reads as all defaults, which is also what the
+    // members start at, so the reads below still give the editor a usable
+    // state. The backend refuses to write it until it is repaired, and the
+    // warning it logged names the file.
 
     // Load label font settings from global Snapping.Zones.Labels config (read-only in editor)
     {
@@ -181,82 +150,89 @@ void EditorController::loadEditorSettings()
             labels->readBool(ConfigDefaults::fontStrikeoutKey(), ConfigDefaults::labelFontStrikeout());
     }
 
-    // Load editor snapping settings
-    {
-        auto editorSnapping = backend->group(ConfigDefaults::editorSnappingGroup());
-        bool gridEnabled =
-            editorSnapping->readBool(ConfigDefaults::gridEnabledKey(), ConfigDefaults::editorGridSnappingEnabled());
-        bool edgeEnabled =
-            editorSnapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
-
-        // ConfigDefaults accessors, not EditorConstants::DefaultSnapInterval:
-        // under sparse persistence an at-default key is ABSENT, so the
-        // fallback here is the value most installs actually run with, and a
-        // divergent second spelling would silently fork on a future retune.
-        qreal snapIntX =
-            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), ConfigDefaults::editorSnapIntervalX());
-        qreal snapIntY =
-            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), ConfigDefaults::editorSnapIntervalY());
-
-        m_snappingService->setGridSnappingEnabled(gridEnabled);
-        m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
-        m_snappingService->setSnapIntervalX(snapIntX);
-        m_snappingService->setSnapIntervalY(snapIntY);
-
-        int snapOverrideMod = editorSnapping->readInt(ConfigDefaults::overrideModifierKey(),
-                                                      ConfigDefaults::editorSnapOverrideModifier());
-        if (m_snapOverrideModifier != snapOverrideMod) {
-            m_snapOverrideModifier = snapOverrideMod;
-            Q_EMIT snapOverrideModifierChanged();
-        }
-    }
-
-    // Load app-specific keyboard shortcuts
-    {
-        auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
-        loadShortcutSetting(*shortcuts, ConfigDefaults::duplicateKey(), ConfigDefaults::editorDuplicateShortcut(),
-                            m_editorDuplicateShortcut, [this]() {
-                                Q_EMIT editorDuplicateShortcutChanged();
-                            });
-
-        loadShortcutSetting(*shortcuts, ConfigDefaults::splitHorizontalKey(),
-                            ConfigDefaults::editorSplitHorizontalShortcut(), m_editorSplitHorizontalShortcut, [this]() {
-                                Q_EMIT editorSplitHorizontalShortcutChanged();
-                            });
-
-        loadShortcutSetting(*shortcuts, ConfigDefaults::splitVerticalKey(),
-                            ConfigDefaults::editorSplitVerticalShortcut(), m_editorSplitVerticalShortcut, [this]() {
-                                Q_EMIT editorSplitVerticalShortcutChanged();
-                            });
-
-        loadShortcutSetting(*shortcuts, ConfigDefaults::fillKey(), ConfigDefaults::editorFillShortcut(),
-                            m_editorFillShortcut, [this]() {
-                                Q_EMIT editorFillShortcutChanged();
-                            });
-    }
-
-    // Load fill-on-drop settings
-    {
-        auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
-        bool fillOnDropEn = fillOnDrop->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::fillOnDropEnabled());
-        if (m_fillOnDropEnabled != fillOnDropEn) {
-            m_fillOnDropEnabled = fillOnDropEn;
-            Q_EMIT fillOnDropEnabledChanged();
-        }
-
-        int fillOnDropMod = fillOnDrop->readInt(ConfigDefaults::modifierKey(), ConfigDefaults::fillOnDropModifier());
-        if (m_fillOnDropModifier != fillOnDropMod) {
-            m_fillOnDropModifier = fillOnDropMod;
-            Q_EMIT fillOnDropModifierChanged();
-        }
-    }
+    applyEditorOwnedSettings(*backend);
 
     // Strip axis, read ONLY (the editor never writes a scrolling setting).
     // Snapshotted from the same backend, and RE-snapshotted while the editor
-    // runs: reloadScrollingStripAxis below is wired to the daemon's
-    // settingsChanged signal, so an axis authored in the settings app while
-    // the editor is open reaches the preview without a restart.
+    // runs: reloadLiveConfig below is wired to the daemon's settingsChanged
+    // signal, so an axis authored in the settings app while the editor is
+    // open reaches the preview without a restart.
     refreshScrollingStripAxisSnapshot(*backend);
+}
+
+void EditorController::applyEditorOwnedSettings(PhosphorConfig::IBackend& backend)
+{
+    static_assert(DefaultBackgroundOpacity == ConfigDefaults::editorBackgroundOpacity(),
+                  "EditorController::m_backgroundOpacity starts at a literal to keep configdefaults.h out of "
+                  "EditorController.h; that literal has to stay the configured default.");
+
+    QStringList invalidShortcuts;
+    const EditorOwnedConfig config = EditorOwnedConfig::read(backend, &invalidShortcuts);
+    // Warn once per broken entry, not on every live reload, and again only if
+    // it is repaired and then broken anew.
+    for (const QString& key : std::as_const(invalidShortcuts)) {
+        if (!m_warnedInvalidShortcuts.contains(key)) {
+            qCWarning(lcEditor) << "Invalid editor shortcut" << key << "in" << ConfigDefaults::configFilePath()
+                                << "- using the default";
+        }
+    }
+    m_warnedInvalidShortcuts = invalidShortcuts;
+
+    // A key edited here and not yet written keeps the local value: the file
+    // still holds the older one, and adopting it would undo the edit before
+    // its write lands. Every other key follows the file, so a settings-app
+    // change to them is picked up even while one of ours is pending.
+    using Key = EditorOwnedConfig::Key;
+    const auto adopt = [this](Key key) {
+        return !m_editorKeysEdited.testFlag(key);
+    };
+    // The service setters gate their own signals on a change.
+    if (adopt(Key::GridSnapping)) {
+        m_snappingService->setGridSnappingEnabled(config.gridSnappingEnabled);
+    }
+    if (adopt(Key::EdgeSnapping)) {
+        m_snappingService->setEdgeSnappingEnabled(config.edgeSnappingEnabled);
+    }
+    if (adopt(Key::SnapIntervalX)) {
+        m_snappingService->setSnapIntervalX(config.snapIntervalX);
+    }
+    if (adopt(Key::SnapIntervalY)) {
+        m_snappingService->setSnapIntervalY(config.snapIntervalY);
+    }
+    // The rest are plain members announced here, only on a change.
+    const auto adoptMember = [&adopt](Key key, auto& member, const auto& value, auto emitChanged) {
+        if (adopt(key) && member != value) {
+            member = value;
+            emitChanged();
+        }
+    };
+    adoptMember(Key::SnapOverrideModifier, m_snapOverrideModifier, config.snapOverrideModifier, [this]() {
+        Q_EMIT snapOverrideModifierChanged();
+    });
+    adoptMember(Key::DuplicateShortcut, m_editorDuplicateShortcut, config.duplicateShortcut, [this]() {
+        Q_EMIT editorDuplicateShortcutChanged();
+    });
+    adoptMember(Key::SplitHorizontalShortcut, m_editorSplitHorizontalShortcut, config.splitHorizontalShortcut,
+                [this]() {
+                    Q_EMIT editorSplitHorizontalShortcutChanged();
+                });
+    adoptMember(Key::SplitVerticalShortcut, m_editorSplitVerticalShortcut, config.splitVerticalShortcut, [this]() {
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    });
+    adoptMember(Key::FillShortcut, m_editorFillShortcut, config.fillShortcut, [this]() {
+        Q_EMIT editorFillShortcutChanged();
+    });
+    adoptMember(Key::FillOnDropEnabled, m_fillOnDropEnabled, config.fillOnDropEnabled, [this]() {
+        Q_EMIT fillOnDropEnabledChanged();
+    });
+    adoptMember(Key::FillOnDropModifier, m_fillOnDropModifier, config.fillOnDropModifier, [this]() {
+        Q_EMIT fillOnDropModifierChanged();
+    });
+    // The schema already clamped it, so this compares like for like.
+    if (adopt(Key::BackgroundOpacity) && !qFuzzyCompare(1.0 + m_backgroundOpacity, 1.0 + config.backgroundOpacity)) {
+        m_backgroundOpacity = config.backgroundOpacity;
+        Q_EMIT backgroundOpacityChanged();
+    }
 }
 
 void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend)
@@ -307,13 +283,38 @@ void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBacken
         refreshTemplatePreviewVertical();
 }
 
-void EditorController::reloadScrollingStripAxis()
+void EditorController::reloadLiveConfig()
 {
-    // The debounced settingsChanged arm: re-read from a fresh backend (the
-    // daemon just rewrote the file) and let the snapshot's own change gates
-    // decide whether anything is announced.
+    // The debounced settingsChanged / editorSettingsChanged arm: re-read from a
+    // fresh backend (the daemon just rewrote the file) and let each snapshot's
+    // own change gates decide whether anything is announced.
     auto backend = PlasmaZones::createDefaultConfigBackend();
+    // A file broken mid-session reads as all defaults. Adopting that would
+    // reset every editor setting and the strip axis for what is only a bad
+    // edit, so keep the current state until the file reads cleanly again.
+    if (backend->loadFailed()) {
+        return;
+    }
     refreshScrollingStripAxisSnapshot(*backend);
+    // The Editor.* groups too, so a change made on the settings app's Editor
+    // page while the editor is open shows up here. applyEditorOwnedSettings
+    // keeps any key edited here and not yet written, and the write that
+    // follows carries only those keys, so the editor never writes back a key
+    // the settings app changed. The same key changed on both sides goes to
+    // whichever write lands last. (The settings app's own Save still rewrites
+    // the whole file from its copy; it adopts the editor's writes as their
+    // reload reaches it, so only a write landing just before its Save is
+    // lost. See SettingsController::onExternalSettingsChanged.)
+    applyEditorOwnedSettings(*backend);
+
+    // A Refused or abandoned write leaves its keys edited with nothing to
+    // retry it. A reload that reads the file cleanly is the moment it can
+    // land again, so restart the write from here rather than leave it for
+    // whenever the user next changes something.
+    if (m_editorKeysEdited && !m_editorSettingsSaveTimer.isActive()) {
+        m_editorSettingsWriteFailures = 0;
+        m_editorSettingsSaveTimer.start(EditorSettingsSaveDebounceMs);
+    }
 }
 
 void EditorController::refreshTemplatePreviewVertical()
@@ -370,23 +371,47 @@ bool EditorController::resolveTemplatePreviewVertical() const
     return false;
 }
 
-void EditorController::saveEditorSettings()
+void EditorController::saveEditorSettings(EditorOwnedConfig::Keys changed)
 {
     // Queue, don't write. Every caller is a property setter, and QML drives some
-    // of them per mouse-move step (ControlBar binds snapIntervalX to
-    // Slider.onMoved), so writing here put a whole-document rewrite, an fsync
-    // and a full daemon config reparse on every tick of a drag. Restarting the
-    // timer on each call collapses the burst into one write once the value
-    // settles. setSnapInterval calls two setters for one logical change, which
-    // now costs one write instead of two.
-    m_editorSettingsSaveTimer.start();
+    // of them per mouse-move step (ControlBar binds the grid intervals and the
+    // background opacity to Slider.onMoved), so writing here put a
+    // whole-document rewrite, an fsync and a full daemon config reparse on
+    // every tick of a drag. Restarting the timer on each call collapses the
+    // burst into one write once the value settles. setSnapInterval calls two
+    // setters for one logical change, which costs one write instead of two.
+    m_editorKeysEdited |= changed;
+    m_editorSettingsWriteFailures = 0;
+    m_editorSettingsSaveTimer.start(EditorSettingsSaveDebounceMs);
 }
 
 void EditorController::flushEditorSettings()
 {
-    if (!writeEditorSettingsToDisk()) {
+    switch (writeEditorSettingsToDisk()) {
+    case EditorSettingsWrite::Nothing:
         return;
+    case EditorSettingsWrite::Refused:
+        // Not transient: the file stays unreadable until someone repairs it,
+        // so retrying on a timer would only repeat the backend's warning. The
+        // edits stay queued, and the next change, the next live reload that
+        // reads the file cleanly, or closing the editor tries again.
+        return;
+    case EditorSettingsWrite::Failed:
+        // Possibly transient (a full disk, a rename race), so retry a few
+        // times with a growing delay. After that the edits stay queued for
+        // the next change, the next live reload, or closing the editor,
+        // rather than looping on a disk that keeps failing.
+        if (++m_editorSettingsWriteFailures <= MaxEditorSettingsWriteRetries) {
+            m_editorSettingsSaveTimer.start(EditorSettingsSaveDebounceMs << m_editorSettingsWriteFailures);
+        } else {
+            qCWarning(lcEditor) << "Giving up retrying the editor settings write; the changes are kept and the next "
+                                   "change, settings reload or closing the editor tries again";
+        }
+        return;
+    case EditorSettingsWrite::Written:
+        break;
     }
+    m_editorSettingsWriteFailures = 0;
 
     // Hand the daemon the new on-disk state. Async, and the reply is logged
     // rather than dropped: if the daemon is up but the reload errors, the editor
@@ -407,27 +432,50 @@ void EditorController::flushEditorSettings()
 
 void EditorController::flushEditorSettingsBlocking()
 {
-    if (!writeEditorSettingsToDisk()) {
+    if (writeEditorSettingsToDisk() != EditorSettingsWrite::Written) {
         return;
     }
 
     // Teardown takes the blocking form. reloadDaemonSettings parents its reply
-    // watcher to `this`, and the only caller here is ~EditorController — the
-    // watcher would be a child of a half-destroyed object whose connection dies
-    // with it, and the process may exit before the message is even written to
-    // the bus. The reload would be silently lost, and the daemon would then
-    // revert the settings the user changed on their way out. One bounded call
-    // at exit buys delivery.
+    // watcher to `this`, which is about to be destroyed, and the process may
+    // exit before the message is even written to the bus. The reload would be
+    // silently lost, and the daemon would then revert the settings the user
+    // changed on their way out. One bounded call at exit buys delivery.
     PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
 }
 
-bool EditorController::writeEditorSettingsToDisk()
+EditorOwnedConfig EditorController::currentEditorOwnedConfig() const
 {
+    EditorOwnedConfig c;
+    c.gridSnappingEnabled = m_snappingService->gridSnappingEnabled();
+    c.edgeSnappingEnabled = m_snappingService->edgeSnappingEnabled();
+    c.snapIntervalX = m_snappingService->snapIntervalX();
+    c.snapIntervalY = m_snappingService->snapIntervalY();
+    c.snapOverrideModifier = m_snapOverrideModifier;
+    c.duplicateShortcut = m_editorDuplicateShortcut;
+    c.splitHorizontalShortcut = m_editorSplitHorizontalShortcut;
+    c.splitVerticalShortcut = m_editorSplitVerticalShortcut;
+    c.fillShortcut = m_editorFillShortcut;
+    c.fillOnDropEnabled = m_fillOnDropEnabled;
+    c.fillOnDropModifier = m_fillOnDropModifier;
+    c.backgroundOpacity = m_backgroundOpacity;
+    return c;
+}
+
+EditorController::EditorSettingsWrite EditorController::writeEditorSettingsToDisk()
+{
+    if (!m_editorKeysEdited) {
+        // Nothing edited here, so nothing to write and nothing for the daemon
+        // to reparse.
+        return EditorSettingsWrite::Nothing;
+    }
+
     // Write-in-process-then-reload, the same contract the settings app follows
     // (see src/settings/dbusutils.h — nothing in the tree writes a setting over
     // D-Bus). The ephemeral backend reads config.json fresh off disk, applies
-    // the Editor.* groups below and flushes; the reload at the bottom then makes
-    // the daemon reparse.
+    // the keys edited here and flushes; the caller's reload then makes the
+    // daemon reparse. Writing only the edited keys onto what disk holds now is
+    // what keeps a settings-app change to any other Editor.* key intact.
     //
     // The reload is load-bearing, not a courtesy. JsonBackend::sync rewrites the
     // WHOLE document from its in-memory root, and the daemon's root is only
@@ -438,41 +486,29 @@ bool EditorController::writeEditorSettingsToDisk()
     // protect against that: the clobber is whole-file, so it does not matter
     // that the daemon never edits Editor.* itself.
     auto backend = PlasmaZones::createDefaultConfigBackend();
-
-    // Save editor snapping settings
-    {
-        auto editorSnapping = backend->group(ConfigDefaults::editorSnappingGroup());
-        editorSnapping->writeBool(ConfigDefaults::gridEnabledKey(), m_snappingService->gridSnappingEnabled());
-        editorSnapping->writeBool(ConfigDefaults::edgeEnabledKey(), m_snappingService->edgeSnappingEnabled());
-        editorSnapping->writeDouble(ConfigDefaults::intervalXKey(), m_snappingService->snapIntervalX());
-        editorSnapping->writeDouble(ConfigDefaults::intervalYKey(), m_snappingService->snapIntervalY());
-        editorSnapping->writeInt(ConfigDefaults::overrideModifierKey(), m_snapOverrideModifier);
+    if (backend->loadFailed()) {
+        // The backend would refuse the sync anyway. Saying so here keeps the
+        // refusal from reading as a transient failure worth retrying. The
+        // backend's own warning named the file; this one says what waits.
+        qCWarning(lcEditor) << "Editor settings not written: the config file cannot be read. The change is kept "
+                               "until the file reads cleanly or the editor closes";
+        return EditorSettingsWrite::Refused;
     }
 
-    // Save app-specific keyboard shortcuts
-    {
-        auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
-        shortcuts->writeString(ConfigDefaults::duplicateKey(), m_editorDuplicateShortcut);
-        shortcuts->writeString(ConfigDefaults::splitHorizontalKey(), m_editorSplitHorizontalShortcut);
-        shortcuts->writeString(ConfigDefaults::splitVerticalKey(), m_editorSplitVerticalShortcut);
-        shortcuts->writeString(ConfigDefaults::fillKey(), m_editorFillShortcut);
-    }
-
-    // Save fill-on-drop settings
-    {
-        auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
-        fillOnDrop->writeBool(ConfigDefaults::enabledKey(), m_fillOnDropEnabled);
-        fillOnDrop->writeInt(ConfigDefaults::modifierKey(), m_fillOnDropModifier);
-    }
+    currentEditorOwnedConfig().write(*backend, m_editorKeysEdited);
 
     if (!backend->sync()) {
         // Nothing reached disk, so there is nothing for the daemon to pick up
-        // and its snapshot is still the truth. Reporting failure keeps the
-        // callers from asking the daemon to reparse a file that never changed.
+        // and its snapshot is still the truth. Drop the pending write from the
+        // backend before it goes out of scope: its destructor would otherwise
+        // retry the flush, and a write landing there would never be followed
+        // by the daemon reload the caller skips on this result.
+        backend->reparseConfiguration();
         qCWarning(lcEditor) << "Failed to write editor settings to" << ConfigDefaults::configFilePath();
-        return false;
+        return EditorSettingsWrite::Failed;
     }
-    return true;
+    m_editorKeysEdited = {};
+    return EditorSettingsWrite::Written;
 }
 
 } // namespace PlasmaZones

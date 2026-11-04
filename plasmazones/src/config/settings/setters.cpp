@@ -42,6 +42,12 @@ QHash<QString, PhosphorScreens::VirtualScreenConfig> Settings::virtualScreenConf
     return m_virtualScreenConfigs;
 }
 
+void Settings::revertVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs)
+{
+    setVirtualScreenConfigs(configs);
+    saveVirtualScreenConfigs(m_configBackend);
+}
+
 void Settings::setVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs)
 {
     // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,

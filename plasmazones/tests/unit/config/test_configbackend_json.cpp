@@ -4,12 +4,15 @@
 #include <QTest>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QScopeGuard>
 
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
+#include "config/configmigration.h"
 #include "config/perscreenresolver.h"
 #include "helpers/IsolatedConfigGuard.h"
 
@@ -468,54 +471,140 @@ private Q_SLOTS:
     // Corrupt JSON recovery
     // =========================================================================
 
-    void testCorruptJsonFile_loadsEmpty()
-    {
-        IsolatedConfigGuard guard;
-        // Write corrupt JSON to disk
-        const QString path = ConfigDefaults::configFilePath();
-        QDir().mkpath(QFileInfo(path).absolutePath());
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write("{this is not valid json!!!");
-        f.close();
-
-        // Backend should load with empty root (not crash or throw)
-        auto backend = PlasmaZones::createDefaultConfigBackend();
-        auto g = backend->group(QStringLiteral("TestGroup"));
-        QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("default")), QStringLiteral("default"));
-    }
-
-    void testCorruptJsonFile_reparseRecovery()
+    void testCorruptJsonFile_loadsEmptyAndRefusesWrites()
     {
         IsolatedConfigGuard guard;
         const QString path = ConfigDefaults::configFilePath();
         QDir().mkpath(QFileInfo(path).absolutePath());
-
-        // Write valid JSON first
+        const QByteArray corrupt("{this is not valid json!!!");
         {
             QFile f(path);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(R"({"TestGroup":{"Key":"Value"}})");
+            f.write(corrupt);
         }
 
+        // Loads with an empty root (no crash), reports the failure, and will
+        // not write that empty root over the user's unreadable file.
         auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY(backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("default")), QStringLiteral("default"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        QVERIFY(!backend->sync());
+        QVERIFY(!backend->commit());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), corrupt);
+    }
+
+    void testCorruptJsonFile_reparseKeepsLastGoodDocument()
+    {
+        IsolatedConfigGuard guard;
+        const QString path = ConfigDefaults::configFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        const auto writeFile = [&path](const QByteArray& bytes) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(bytes) == bytes.size();
+        };
+
+        QVERIFY(writeFile(R"({"TestGroup":{"Key":"Value"}})"));
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY(!backend->loadFailed());
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
         }
 
-        // Now corrupt the file on disk
-        {
-            QFile f(path);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write("CORRUPT!");
-        }
-
-        // reparseConfiguration should reset to empty (not crash)
+        // A hand edit breaks the file mid-session. The reparse keeps the last
+        // readable document rather than resetting every key to its default,
+        // and refuses to write that document back over the broken file.
+        QVERIFY(writeFile("CORRUPT!"));
         backend->reparseConfiguration();
+        QVERIFY(backend->loadFailed());
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
-            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("gone")), QStringLiteral("gone"));
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("gone")), QStringLiteral("Value"));
+            g->writeString(QStringLiteral("Other"), QStringLiteral("x"));
+        }
+        QVERIFY(!backend->commit());
+
+        // Once the file is repaired, a reparse reads it and writes land again.
+        QVERIFY(writeFile(R"({"TestGroup":{"Key":"Fixed"}})"));
+        backend->reparseConfiguration();
+        QVERIFY(!backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Fixed"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Written"));
+        }
+        QVERIFY(backend->commit());
+        auto reread = PlasmaZones::createDefaultConfigBackend();
+        auto g = reread->group(QStringLiteral("TestGroup"));
+        QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Written"));
+    }
+
+    /// session.json opts out of the write refusal: it is machine-written, and
+    /// refusing would only lose the daemon's shutdown save.
+    void testSessionBackend_overwritesUnreadableFile()
+    {
+        IsolatedConfigGuard guard;
+        const QString path = ConfigDefaults::sessionFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            f.write("{garbage");
+        }
+        auto backend = PlasmaZones::createSessionBackend();
+        QVERIFY(backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        QVERIFY(backend->commit());
+        auto reread = PlasmaZones::createSessionBackend();
+        QVERIFY(!reread->loadFailed());
+        QCOMPARE(reread->group(QStringLiteral("TestGroup"))->readString(QStringLiteral("Key")),
+                 QStringLiteral("Value"));
+    }
+
+    /// The layout editor and the settings app leave an unparseable config.json
+    /// where it is, so a daemon running on its last readable state is not
+    /// handed a fresh, nearly empty file by the next editor write. The daemon,
+    /// which keeps the default handling, still moves it aside at its start.
+    void testCorruptConfig_leaveInPlaceVersusQuarantine()
+    {
+        const QByteArray broken("{\"Snapping\": oops");
+        const auto writeBroken = [&broken]() {
+            const QString path = ConfigDefaults::configFilePath();
+            QDir().mkpath(QFileInfo(path).absolutePath());
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(broken) == broken.size();
+        };
+        const auto restoreDefault = qScopeGuard([]() {
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+        });
+
+        {
+            IsolatedConfigGuard guard;
+            QVERIFY(writeBroken());
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::LeaveInPlace);
+            QVERIFY(!ConfigMigration::ensureJsonConfig());
+            QFile f(ConfigDefaults::configFilePath());
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(f.readAll(), broken);
+            QVERIFY(!QFile::exists(ConfigDefaults::configFilePath() + QStringLiteral(".corrupt.bak")));
+        }
+        {
+            IsolatedConfigGuard guard;
+            QVERIFY(writeBroken());
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+            ConfigMigration::ensureJsonConfig();
+            QFile bak(ConfigDefaults::configFilePath() + QStringLiteral(".corrupt.bak"));
+            QVERIFY(bak.open(QIODevice::ReadOnly));
+            QCOMPARE(bak.readAll(), broken);
         }
     }
 

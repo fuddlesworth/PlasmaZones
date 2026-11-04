@@ -2041,6 +2041,16 @@ target_link_libraries(test_scrolling_behavior_controller PRIVATE Qt6::Test Qt6::
     PhosphorControl::PhosphorControl)
 add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior_controller)
 
+# The Editor page's property surface over the Editor.* settings, which have no
+# Q_PROPERTY on Settings. Same compile-the-source-directly reason as above.
+add_executable(test_editor_page_controller
+    settings/pages/test_editor_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/editorpagecontroller.cpp
+)
+target_link_libraries(test_editor_page_controller PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+    PhosphorControl::PhosphorControl)
+add_test(NAME test_editor_page_controller COMMAND test_editor_page_controller)
+
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
 # plasmazones_core. Split by surface: the template splice / metadata rewrite
@@ -3186,6 +3196,15 @@ target_link_libraries(test_dbus_layout_service_replies
                       PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                               PhosphorProtocol::PhosphorProtocol)
 add_test(NAME test_dbus_layout_service_replies COMMAND test_dbus_layout_service_replies)
+
+# The layout editor's own read and write of the Editor.* settings: it must read
+# config.json exactly as the daemon does (schema defaults, clamps, modifier
+# masks) and write only the keys it changed. EditorOwnedConfig lives in the
+# editor executable, so its TU is compiled into the test directly.
+add_executable(test_editor_owned_config editor/test_editor_owned_config.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/helpers/EditorOwnedConfig.cpp)
+target_link_libraries(test_editor_owned_config PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_editor_owned_config COMMAND test_editor_owned_config)
 
 # Decoration page→root scoping helpers (decorationpagescope.{h,cpp}): the pure
 # dispatch/prefix/diff logic behind SettingsController's per-page decoration

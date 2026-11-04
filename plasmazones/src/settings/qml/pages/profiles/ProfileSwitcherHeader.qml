@@ -69,6 +69,12 @@ Item {
             settingsEditRefresh.restart();
         }
 
+        // A reload that moves only Editor.* settings announces them here
+        // instead of on settingsChanged, and profiles capture those keys too.
+        function onEditorSettingsChanged() {
+            settingsEditRefresh.restart();
+        }
+
         target: appSettings
     }
 

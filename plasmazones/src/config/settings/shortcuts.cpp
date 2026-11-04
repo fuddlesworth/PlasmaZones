@@ -10,7 +10,8 @@ namespace PlasmaZones {
 
 // ── Shortcuts (PhosphorConfig::Store-backed) ────────────────────────────────
 // Every shortcut is a flat string; schema registers them without validators.
-// Change-detection goes through the P_STORE_SET_STRING macro.
+// Change-detection goes through the P_STORE_SET_STRING macro. The non-shortcut
+// Editor.* settings sit at the end of this file, under their own banner.
 
 // Global shortcuts — meta actions, zone navigation, snap-to-zone numbered,
 // layout rotation, virtual-screen swap/rotate.
@@ -155,7 +156,12 @@ P_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVe
 P_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
 P_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
 
-// Editor snapping + fill-on-drop toggles.
+// ── Editor settings that are not shortcuts ──────────────────────────────────
+// Editor.Snapping, Editor.FillOnDrop and Editor.Background. Unlike the strings
+// above these carry schema validators (clampDouble, the modifier mask); like
+// every P_STORE_SET_* setter they write first and compare after, so a clamped
+// value is what decides whether anything changed. They live beside the
+// editor shortcuts because EditorPageController reads both.
 P_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
 P_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
 P_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
@@ -171,4 +177,6 @@ P_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
 P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
 P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
+P_STORE_GET(qreal, editorBackgroundOpacity, editorBackgroundGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setEditorBackgroundOpacity, editorBackgroundGroup, opacityKey, editorBackgroundOpacityChanged)
 } // namespace PlasmaZones

@@ -8,8 +8,9 @@
 // them too (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList). The
 // domains big enough to carry their own weight are already split
 // (settingsschema_scrolling.cpp's three entry points and settingsschema_tiling.cpp's
-// one); every remaining function is under ninety lines, and moving one out drags its
-// helpers into a header for a single consumer. When a domain grows past that, split it
+// one). What remains here is small enough that moving a domain out would drag its
+// helpers into a header for a single consumer; appendShortcutsSchema is the longest,
+// being one flat list of string keys. When a domain grows logic of its own, split it
 // the way scrolling and tiling were.
 
 #include "settingsschema.h"
@@ -485,7 +486,7 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── PhosphorZones::Zone Geometry (Snapping.Gaps) ──────────────────────────────────────────
-// Inner/outer gaps (uniform + per-side), adjacency threshold.
+// The adjacency threshold only; the shared inner/outer gaps live in Gaps.
 
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
@@ -501,12 +502,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// TWO sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
-// and Tiling (autotile master/ratio/count controls + retile toggle). All
-// QString keys, no validators needed. There is no Editor group here — the
-// zone editor's shortcuts are not part of the daemon's schema; EditorController
-// owns its own settings in a separate process.
+// THREE sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
+// Tiling (autotile master/ratio/count controls + retile toggle), and Scrolling,
+// declared in settingsschema_scrolling.cpp and appended at the end. All QString
+// keys, no validators needed. The layout editor's own shortcuts are not here:
+// appendEditorSchema declares them under Editor.Shortcuts.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -689,11 +690,13 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────
-// Three sub-groups: Shortcuts (zone editor: duplicate/split/fill), Snapping
+// Four sub-groups: Shortcuts (zone editor: duplicate/split/fill), Snapping
 // (grid + edge toggles, per-axis intervals, override modifier), FillOnDrop
-// (toggle + modifier). Modifier keys use a validator that rejects
-// non-standard Qt::KeyboardModifier bits and falls back to the default —
-// matches the hand-written load path's validModifiers mask check.
+// (toggle + modifier), and Background (the canvas veil opacity, clamped to
+// 0-1). Modifier keys use a validator that rejects non-standard
+// Qt::KeyboardModifier bits and falls back to the default. The layout editor
+// reads these groups through this schema too (EditorOwnedConfig), so the
+// validators apply in its process as well.
 
 void appendEditorSchema(PhosphorConfig::Schema& schema)
 {
@@ -752,6 +755,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Modifier held while dropping a zone to expand it into available space, as a Qt "
                         "keyboard-modifier value."),
          modifierOr(CD::fillOnDropModifier())},
+    };
+
+    schema.groups[CD::editorBackgroundGroup()] = {
+        {CD::opacityKey(), CD::editorBackgroundOpacity(), QMetaType::Double,
+         QStringLiteral("How opaque the layout editor's background is. Lower values let more of the desktop and "
+                        "its windows show through behind the zones."),
+         clampDouble(CD::editorBackgroundOpacityMin(), CD::editorBackgroundOpacityMax())},
     };
 }
 
@@ -1198,8 +1208,8 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 // ─── Decorations ──────────────────────────────────────────────────────────────
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
 // shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested JSON
-// object — the same QVariantMap shape as the autotile PerAlgorithmSettings entry above
-// and the animation ShaderProfileTree blob. Both are bounded in
+// object — the same QVariantMap shape as the autotile PerAlgorithmSettings entry in
+// settingsschema_tiling.cpp and the animation ShaderProfileTree blob. Both are bounded in
 // settingsschema_shadertrees.cpp, which covers a hand-edited config.json.
 
 void appendDecorationsSchema(PhosphorConfig::Schema& schema)

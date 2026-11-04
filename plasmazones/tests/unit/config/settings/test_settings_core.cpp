@@ -5,12 +5,10 @@
  * @file test_settings_core.cpp
  * @brief Unit tests for Settings: reset, save/load roundtrip, signal emission
  *
- * Split from test_settings.cpp. Tests cover:
- * 1. reset() correctness (P0 -- data-loss prevention)
- * 2. save/load round-trip fidelity (P0)
- * 3. Signal emission on load and setters (P1)
- * 4. LabelFontWeight default (regression guard)
- * 5. Activation setting load + default fallback
+ * Split from test_settings.cpp. Tests cover reset() correctness, save/load
+ * round-trip fidelity, signal emission on the reload paths and the setters,
+ * stale-key purging, profile staging, commit failure, the profile round trip,
+ * and the defaults export, each section headed below.
  *
  * Companion test files:
  *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
@@ -19,9 +17,11 @@
  *     prune-on-write/read, autoAssignAllLayouts master toggle
  */
 
+#include <QScopeGuard>
 #include <QSet>
 #include <QTest>
 #include <QColor>
+#include <QFile>
 #include <QGuiApplication>
 #include <QPalette>
 #include <QSignalSpy>
@@ -33,8 +33,14 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include "config/configbackends.h"
 #include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorConfig/Schema.h>
+#include <PhosphorConfig/Store.h>
 
 #include "config/settings.h"
+#include "config/configmigration.h"
+#include "config/settingsschema.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/types/enums.h"
 #include "core/types/overlayshadertree.h"
 #include "config/configdefaults.h"
 #include "core/types/constants.h"
@@ -682,6 +688,499 @@ private Q_SLOTS:
     }
 
     /**
+     * The Editor.* settings have no Q_PROPERTY on Settings, so load()'s
+     * property snapshot cannot see them. A reload that changes only an editor
+     * setting must still announce it: its own signal, then the
+     * editorSettingsChanged aggregate the daemon relays to the open editor
+     * (issue #1161). It must NOT fire settingsChanged, whose daemon and
+     * compositor subscribers read no Editor.* key and would otherwise re-fetch
+     * their whole state on every editor save. Two instances on one config
+     * stand in for the settings app (writer) and the daemon (reloader).
+     */
+    void testLoad_announcesEditorOnlyChange()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings daemon;
+        QCOMPARE(daemon.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacity());
+
+        {
+            Settings settingsApp;
+            settingsApp.setEditorBackgroundOpacity(0.25);
+            settingsApp.setEditorGridSnappingEnabled(!ConfigDefaults::editorGridSnappingEnabled());
+            QVERIFY(settingsApp.save());
+        }
+
+        QSignalSpy aggregateSpy(&daemon, &Settings::settingsChanged);
+        QSignalSpy editorAggregateSpy(&daemon, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&daemon, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy gridSpy(&daemon, &Settings::editorGridSnappingEnabledChanged);
+        QVERIFY(aggregateSpy.isValid() && editorAggregateSpy.isValid() && opacitySpy.isValid() && gridSpy.isValid());
+        // A consumer reacting to the signal reads the getter, so the getter
+        // must already answer the new value when the signal fires.
+        qreal opacitySeenInSlot = -1.0;
+        connect(&daemon, &Settings::editorBackgroundOpacityChanged, this, [&]() {
+            opacitySeenInSlot = daemon.editorBackgroundOpacity();
+        });
+
+        daemon.load();
+
+        QCOMPARE(daemon.editorBackgroundOpacity(), 0.25);
+        QCOMPARE(opacitySeenInSlot, 0.25);
+        QCOMPARE(daemon.editorGridSnappingEnabled(), !ConfigDefaults::editorGridSnappingEnabled());
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(gridSpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 0);
+
+        // A second reload of the same file changes nothing and stays silent.
+        daemon.load();
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(gridSpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 0);
+    }
+
+    /**
+     * Every Editor.* key the schema declares must be announced by a reload
+     * that changes only it. The keys reach the reload's change detection
+     * through a hand-kept table in settings.cpp, so a key added to the schema
+     * and forgotten there would reload silently and never reach an open
+     * editor. Walking the schema rather than a list here is what catches that.
+     */
+    void testLoad_announcesEveryEditorKey()
+    {
+        const PhosphorConfig::Schema& schema = cachedSettingsSchema();
+        const QString editorPrefix = ConfigDefaults::editorGroup() + QLatin1Char('.');
+        QStringList failures;
+        int checked = 0;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            if (!it.key().startsWith(editorPrefix)) {
+                continue;
+            }
+            for (const PhosphorConfig::KeyDef& def : it.value()) {
+                const QString name = it.key() + QLatin1Char('/') + def.key;
+                // Candidates the key's validator keeps, so a coerced pick
+                // fails loudly below instead of passing vacuously.
+                QVariantList candidates;
+                switch (def.expectedType) {
+                case QMetaType::Bool:
+                    candidates = {!def.defaultValue.toBool()};
+                    break;
+                case QMetaType::Int:
+                    candidates = {int(Qt::AltModifier), int(Qt::MetaModifier), int(Qt::ShiftModifier)};
+                    break;
+                case QMetaType::Double:
+                    candidates = {0.25, 0.5, 0.05};
+                    break;
+                case QMetaType::QString:
+                    candidates = {QStringLiteral("Ctrl+Alt+Shift+F12")};
+                    break;
+                default:
+                    failures.append(name + QStringLiteral(": no candidate value for its type, extend this test"));
+                    continue;
+                }
+
+                IsolatedConfigGuard guard;
+                Settings daemon;
+                {
+                    auto backend = PlasmaZones::createDefaultConfigBackend();
+                    PhosphorConfig::Store writer(backend.get(), schema);
+                    bool wrote = false;
+                    for (const QVariant& candidate : std::as_const(candidates)) {
+                        writer.write(it.key(), def.key, candidate);
+                        if (writer.readVariant(it.key(), def.key) != def.defaultValue) {
+                            wrote = true;
+                            break;
+                        }
+                    }
+                    if (!wrote || !backend->sync()) {
+                        failures.append(name + QStringLiteral(": could not write a non-default value"));
+                        continue;
+                    }
+                }
+
+                QSignalSpy editorAggregateSpy(&daemon, &Settings::editorSettingsChanged);
+                QSignalSpy aggregateSpy(&daemon, &Settings::settingsChanged);
+                daemon.load();
+                ++checked;
+                if (editorAggregateSpy.count() != 1) {
+                    failures.append(name
+                                    + QStringLiteral(": editorSettingsChanged fired %1 times, expected once")
+                                          .arg(editorAggregateSpy.count()));
+                }
+                if (aggregateSpy.count() != 0) {
+                    failures.append(name + QStringLiteral(": settingsChanged fired for an Editor.*-only reload"));
+                }
+            }
+        }
+        QVERIFY2(checked > 0, "no Editor.* keys found in the schema");
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
+    }
+
+    /**
+     * The canvas veil opacity is clamped to 0–1 by the schema, on the write
+     * and on the read. The setter writes first and compares after, so a
+     * repeated out-of-range write that clamps to the stored value is silent.
+     */
+    void testEditorBackgroundOpacity_clamped()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::editorBackgroundOpacityChanged);
+            settings.setEditorBackgroundOpacity(1.5);
+            QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMax());
+            QCOMPARE(spy.count(), 1);
+            settings.setEditorBackgroundOpacity(2.0);
+            QCOMPARE(spy.count(), 1);
+            settings.setEditorBackgroundOpacity(-0.5);
+            QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMin());
+            QCOMPARE(spy.count(), 2);
+        }
+
+        // Read side: a hand-edited out-of-range value reads back clamped.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            backend->group(ConfigDefaults::editorBackgroundGroup())->writeDouble(ConfigDefaults::opacityKey(), 3.0);
+            QVERIFY(backend->sync());
+        }
+        Settings reader;
+        QCOMPARE(reader.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMax());
+    }
+
+    /**
+     * The settings app's answer to an outside write while it has unsaved
+     * edits: adopt what disk holds for every key it has not touched, keep the
+     * edits, and leave them reading as unsaved. Before this, a later Save
+     * wrote the app's stale copy of the outside change back.
+     */
+    void testReloadPreservingLocalEdits_adoptsExternalKeepsEdits()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settingsApp;
+        settingsApp.setBorderWidth(7); // the unsaved local edit
+        QVERIFY(settingsApp.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+
+        {
+            Settings editorStandIn;
+            editorStandIn.setEditorBackgroundOpacity(0.3);
+            QVERIFY(editorStandIn.save());
+        }
+
+        QSignalSpy editorAggregateSpy(&settingsApp, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&settingsApp, &Settings::editorBackgroundOpacityChanged);
+        settingsApp.reloadPreservingLocalEdits();
+
+        QCOMPARE(settingsApp.editorBackgroundOpacity(), 0.3);
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(settingsApp.borderWidth(), 7);
+        QVERIFY(settingsApp.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+        QVERIFY(!settingsApp.isKeyModified(ConfigDefaults::editorBackgroundGroup(), ConfigDefaults::opacityKey()));
+
+        // The Save that used to put the stale opacity back now keeps both.
+        QVERIFY(settingsApp.save());
+        Settings reread;
+        QCOMPARE(reread.editorBackgroundOpacity(), 0.3);
+        QCOMPARE(reread.borderWidth(), 7);
+    }
+
+    /**
+     * A config.json broken by hand while the app runs is not overwritten by
+     * its next Save, and once it is repaired the Save after that lands
+     * without a Discard or a restart, keeping the edit made meanwhile.
+     */
+    void testSave_refusesUnreadableConfigThenRecovers()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setBorderWidth(7);
+        QVERIFY(settings.save());
+
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        const QByteArray broken = good + QByteArray("{ a hand edit with a typo");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(broken);
+        f.close();
+
+        QSignalSpy unreadableSpy(&settings, &Settings::configUnreadableChanged);
+        settings.setBorderWidth(8);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.configUnreadable());
+        QCOMPARE(unreadableSpy.count(), 1);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), broken);
+        f.close();
+
+        // The user repairs the file. The next Save looks again and lands.
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        QVERIFY(settings.save());
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(unreadableSpy.count(), 2);
+        // A further save that changes nothing about readability is silent.
+        QVERIFY(settings.save());
+        QCOMPARE(unreadableSpy.count(), 2);
+        Settings reread;
+        QCOMPARE(reread.borderWidth(), 8);
+    }
+
+    /**
+     * A settings app started on a broken config.json holds empty per-screen
+     * and virtual-screen state, because there was nothing it could read. Its
+     * first Save after the file is repaired must not write that empty state
+     * over the per-screen configuration the repaired file holds.
+     */
+    void testSave_afterStartOnBrokenFile_keepsRepairedPerScreenConfig()
+    {
+        IsolatedConfigGuard guard;
+        const auto restoreHandling = qScopeGuard([]() {
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+        });
+        ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::LeaveInPlace);
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        const int position = static_cast<int>(ZoneSelectorPosition::BottomLeft);
+        {
+            Settings writer;
+            writer.setPerScreenZoneSelectorSetting(screen, positionKey, position);
+            QVERIFY(writer.save());
+        }
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ broken");
+        f.close();
+
+        Settings app;
+        QVERIFY(app.configUnreadable());
+        QVERIFY(!app.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        app.setBorderWidth(9);
+        QVERIFY(app.save());
+
+        Settings reread;
+        QCOMPARE(reread.getPerScreenZoneSelectorSettings(screen).value(positionKey).toInt(), position);
+        QCOMPARE(reread.borderWidth(), 9);
+    }
+
+    /**
+     * A factory reset against a config.json broken since it was read refuses
+     * without losing the unsaved edit, refuses again up front while the file
+     * stays broken, and goes through once it is repaired.
+     */
+    void testReset_refusesUnreadableConfigKeepingEdits()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setBorderWidth(7);
+        QVERIFY(settings.save());
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good + QByteArray("{ a hand edit with a typo"));
+        f.close();
+
+        settings.setBorderWidth(8);
+        // Broken since the last read: the refusal comes from the write.
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.borderWidth(), 8);
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+        QVERIFY(settings.configUnreadable());
+        // Known to be broken now: refused before anything is touched.
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.borderWidth(), 8);
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        QVERIFY(settings.reset());
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(settings.borderWidth(), ConfigDefaults::borderWidth());
+    }
+
+    /**
+     * A per-screen override cleared in memory while config.json could not be
+     * read stays cleared once the file is repaired. The repaired file's
+     * entries come back, but not one the user removed meanwhile.
+     */
+    void testRepairedConfig_keepsPerScreenRemovalMadeWhileBroken()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        Settings settings;
+        settings.setPerScreenZoneSelectorSetting(screen, positionKey,
+                                                 static_cast<int>(ZoneSelectorPosition::BottomLeft));
+        QVERIFY(settings.save());
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ broken");
+        f.close();
+
+        // A full reload while broken: the members come from the last readable
+        // state, which still has the override.
+        settings.load();
+        QVERIFY(settings.configUnreadable());
+        QVERIFY(settings.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+        settings.clearPerScreenZoneSelectorPositionSettings(screen);
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        settings.setBorderWidth(9);
+        QVERIFY(settings.save());
+
+        Settings reread;
+        QVERIFY(!reread.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+        QCOMPARE(reread.borderWidth(), 9);
+    }
+
+    /**
+     * A break found only by a refused write, after which the file is moved
+     * aside (what the daemon's start does to an unreadable config.json): the
+     * next reload adopts the fresh file for the per-screen state too, keeping
+     * only what was changed in memory. Saving the old per-screen state over
+     * the fresh file would leave a mix of defaults and stale overrides.
+     */
+    void testRefusedWriteThenFreshFile_mergesPerScreenFromLastSave()
+    {
+        IsolatedConfigGuard guard;
+        const QString screenA = QStringLiteral("test-screen-a");
+        const QString screenB = QStringLiteral("test-screen-b");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        const int position = static_cast<int>(ZoneSelectorPosition::BottomLeft);
+        Settings settings;
+        settings.setPerScreenZoneSelectorSetting(screenA, positionKey, position);
+        QVERIFY(settings.save());
+
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ a hand edit with a typo, and long enough to change the size");
+        f.close();
+
+        // Changed in memory while broken, then refused at the write.
+        settings.setPerScreenZoneSelectorSetting(screenB, positionKey, position);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.configUnreadable());
+
+        // The file is moved aside; the next look finds none and starts fresh.
+        QVERIFY(QFile::remove(path));
+        QSignalSpy perScreenSpy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+        settings.reloadPreservingLocalEdits();
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(perScreenSpy.count(), 1);
+        QVERIFY(!settings.getPerScreenZoneSelectorSettings(screenA).contains(positionKey));
+        QCOMPARE(settings.getPerScreenZoneSelectorSettings(screenB).value(positionKey).toInt(), position);
+
+        QVERIFY(settings.save());
+        Settings reread;
+        QVERIFY(!reread.getPerScreenZoneSelectorSettings(screenA).contains(positionKey));
+        QCOMPARE(reread.getPerScreenZoneSelectorSettings(screenB).value(positionKey).toInt(), position);
+    }
+
+    /**
+     * A per-screen width pair merged from two sides (the value changed in
+     * memory while the file was unreadable, the kind changed in the repaired
+     * file) is repaired the way a load repairs it, rather than saved as a
+     * proportion under a pixel kind.
+     */
+    void testRepairedConfig_repairsMergedPerScreenWidthPair()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString kindKey = QString::fromLatin1(PerScreenScrollingKey::DefaultColumnWidthKind);
+        const QString valueKey = QString::fromLatin1(PerScreenScrollingKey::DefaultColumnWidthValue);
+        const QString path = ConfigDefaults::configFilePath();
+        const auto readFile = [&path]() {
+            QFile f(path);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const auto writeFile = [&path](const QByteArray& bytes) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(bytes) == bytes.size();
+        };
+
+        Settings settings;
+        settings.setPerScreenScrollingSetting(screen, kindKey, ConfigDefaults::scrollingWidthKindProportion());
+        settings.setPerScreenScrollingSetting(screen, valueKey, 0.5);
+        QVERIFY(settings.save());
+        const QByteArray proportion = readFile();
+        QByteArray fixed;
+        {
+            Settings other;
+            other.setPerScreenScrollingSetting(screen, kindKey, ConfigDefaults::scrollingWidthKindFixed());
+            other.setPerScreenScrollingSetting(screen, valueKey, 900.0);
+            QVERIFY(other.save());
+            fixed = readFile();
+        }
+        QVERIFY(writeFile(proportion));
+
+        QVERIFY(writeFile("{ broken"));
+        settings.load();
+        QVERIFY(settings.configUnreadable());
+        // A value-only write, which the setter deliberately does not repair.
+        settings.setPerScreenScrollingSetting(screen, valueKey, 0.6);
+
+        QVERIFY(writeFile(fixed));
+        settings.reloadPreservingLocalEdits();
+        QVERIFY(!settings.configUnreadable());
+        const QVariantMap merged = settings.getPerScreenScrollingSettings(screen);
+        QCOMPARE(merged.value(kindKey).toInt(), ConfigDefaults::scrollingWidthKindFixed());
+        // A pixel width, not the 0.6 proportion laid over the Fixed kind.
+        QVERIFY2(merged.value(valueKey).toDouble() > 1.0, qPrintable(merged.value(valueKey).toString()));
+    }
+
+    /**
+     * A factory reset announces the families load() alone cannot see once
+     * the groups are cleared: the Editor.* settings and the animation Profile
+     * blob, whose explicitness picks the global profile's registry layer.
+     */
+    void testReset_announcesEditorAndAnimationProfile()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setEditorBackgroundOpacity(0.3);
+        settings.setAnimationDuration(ConfigDefaults::animationDuration() + 100);
+        QVERIFY(settings.hasExplicitAnimationProfile());
+        QVERIFY(settings.save());
+
+        QSignalSpy editorAggregateSpy(&settings, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&settings, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        QVERIFY(settings.reset());
+
+        QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacity());
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QVERIFY(!settings.hasExplicitAnimationProfile());
+        QCOMPARE(profileSpy.count(), 1);
+    }
+
+    /**
      * LabelFontWeight default must be 700 (CSS Bold), not 75 (Qt5 QFont::Bold).
      * Regression guard for the CSS vs QFont weight confusion.
      */
@@ -1123,12 +1622,6 @@ private Q_SLOTS:
         QCOMPARE(reloaded.animationDuration(), 500);
     }
 
-    /**
-     * The shared inner/outer gap global default is config-backed: the getter reads
-     * the "Gaps" config group (compile default on a fresh config), the setter
-     * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
-     * once per real change, and the value survives a save/reload.
-     */
     /// The profiles staging seam: applyConfigOverlayStaged writes the blob's
     /// values into memory, fires the per-property NOTIFY + settingsChanged,
     /// and does NOT move the baseline — the staged key must read as modified
@@ -1181,11 +1674,9 @@ private Q_SLOTS:
      * always fails:
      *   - save() must NOT advance the baseline (isKeyModified stays true, so
      *     the unsaved edit remains discardable and the next save retries);
-     *   - reset() must return false and keep the previous COMMITTED values.
-     *     When an unsaved edit was staged, its discard is announced with one
-     *     NOTIFY round (the observable value moved back to the committed
-     *     one); with nothing staged, nothing observably changed and nothing
-     *     may fire.
+     *   - reset() must return false and leave everything as it was, an
+     *     unsaved edit included: nothing was reset, so nothing observably
+     *     changes and nothing may fire.
      */
     void testCommitFailure_saveKeepsBaselineAndResetRollsBack()
     {
@@ -1218,24 +1709,16 @@ private Q_SLOTS:
         QCOMPARE(settings.adjacentThreshold(), 99);
 
         // reset() under a failing commit with an UNSAVED edit staged (99 over
-        // the committed 77): false, the edit is discarded back to the
-        // committed value, and that discard is ANNOUNCED — the observable
-        // value moved 99 -> 77, and a silent revert would leave QML painting
-        // the dropped edit.
+        // the committed 77): false, and the edit survives, still reading as
+        // unsaved. Dropping it would cost the user work for a reset that did
+        // not happen.
         QSignalSpy thresholdSpy(&settings, &Settings::adjacentThresholdChanged);
         QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
         QVERIFY(!settings.reset());
-        QCOMPARE(settings.adjacentThreshold(), 77);
-        QCOMPARE(thresholdSpy.count(), 1);
-        QCOMPARE(changedSpy.count(), 1);
-
-        // Same failure with NO unsaved edit: nothing observably changes, so
-        // nothing may fire (a spurious settingsChanged is a daemon retile
-        // for nothing).
-        thresholdSpy.clear();
-        changedSpy.clear();
-        QVERIFY(!settings.reset());
-        QCOMPARE(settings.adjacentThreshold(), 77);
+        QCOMPARE(settings.adjacentThreshold(), 99);
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+        // Nothing observably changed, so nothing may fire (a spurious
+        // settingsChanged is a daemon retile for nothing).
         QCOMPARE(thresholdSpy.count(), 0);
         QCOMPARE(changedSpy.count(), 0);
 
@@ -1336,6 +1819,12 @@ private Q_SLOTS:
         }
     }
 
+    /**
+     * The shared inner/outer gap global default is config-backed: the getter reads
+     * the "Gaps" config group (compile default on a fresh config), the setter
+     * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
+     * once per real change, and the value survives a save/reload.
+     */
     void testConfigBackedGap_roundTripsAndEmits()
     {
         IsolatedConfigGuard guard;

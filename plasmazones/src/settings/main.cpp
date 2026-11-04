@@ -110,6 +110,12 @@ int main(int argc, char* argv[])
     // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
     // into a crash on the first paint frame. See discussion #262.
     QApplication app(argc, argv);
+    // Before anything can construct a Settings or run the migration: this
+    // process may start while the daemon runs on the last readable config,
+    // so an unparseable config.json is left in place rather than moved aside
+    // (see ConfigMigration::CorruptConfigHandling).
+    PlasmaZones::ConfigMigration::setCorruptConfigHandling(
+        PlasmaZones::ConfigMigration::CorruptConfigHandling::LeaveInPlace);
     PlasmaZones::loadTranslations(&app);
 
     app.setApplicationName(QStringLiteral("plasmazones-settings"));
@@ -170,14 +176,15 @@ int main(int argc, char* argv[])
     }
 
     // Ensure INI→JSON migration has run (the daemon does this too, but the
-    // settings app may start before the daemon on first upgrade). Same
-    // failure handling as the daemon: continue with whatever the backend can
-    // load, but say so, because the pages then show defaults for every
-    // setting the old config held.
+    // settings app may start before the daemon on first upgrade). A failure
+    // here is most often a config.json that does not parse, which this
+    // process leaves in place (LeaveInPlace above): the pages then show
+    // defaults, saves are refused until the file is repaired, and the window
+    // header says so. Continue either way.
     if (!PlasmaZones::ConfigMigration::ensureJsonConfig()) {
         qCWarning(PlasmaZones::lcCore)
-            << "Config migration reported a failure — continuing with whatever the backend can load,"
-            << "which may mean defaults for settings the old config held";
+            << "Config migration reported a failure — continuing with whatever the backend can load;"
+            << "an unparseable config.json is left in place and saves are refused until it is repaired";
     }
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML

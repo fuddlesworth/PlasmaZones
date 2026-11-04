@@ -21,6 +21,8 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QScopeGuard>
+#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QFile>
@@ -53,6 +55,75 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
     ConfigMigration::ensureJsonConfig();
     return createDefaultConfigBackend();
 }
+
+/// The Editor.* settings, which Settings deliberately leaves without a
+/// Q_PROPERTY (EditorPageController is their property surface, see there),
+/// so the meta-object NOTIFY snapshot does not cover them. Each entry pairs a
+/// read with the signal that announces it, for snapshotEditorSettings /
+/// emitChangedEditorSettings. A setting added to the Editor groups belongs
+/// here too, or a reload that changes only it stays silent and an open
+/// editor never hears about a change made in the settings app;
+/// test_settings_core's schema sweep fails for any Editor.* key missing.
+struct EditorSettingEntry
+{
+    QVariant (*read)(const Settings&);
+    void (ISettings::*changed)();
+};
+
+const QVector<EditorSettingEntry>& editorSettingEntries()
+{
+    static const QVector<EditorSettingEntry> entries = {
+        {[](const Settings& s) {
+             return QVariant(s.editorDuplicateShortcut());
+         },
+         &ISettings::editorDuplicateShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSplitHorizontalShortcut());
+         },
+         &ISettings::editorSplitHorizontalShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSplitVerticalShortcut());
+         },
+         &ISettings::editorSplitVerticalShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorFillShortcut());
+         },
+         &ISettings::editorFillShortcutChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorGridSnappingEnabled());
+         },
+         &ISettings::editorGridSnappingEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorEdgeSnappingEnabled());
+         },
+         &ISettings::editorEdgeSnappingEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapIntervalX());
+         },
+         &ISettings::editorSnapIntervalXChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapIntervalY());
+         },
+         &ISettings::editorSnapIntervalYChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorSnapOverrideModifier());
+         },
+         &ISettings::editorSnapOverrideModifierChanged},
+        {[](const Settings& s) {
+             return QVariant(s.fillOnDropEnabled());
+         },
+         &ISettings::fillOnDropEnabledChanged},
+        {[](const Settings& s) {
+             return QVariant(s.fillOnDropModifier());
+         },
+         &ISettings::fillOnDropModifierChanged},
+        {[](const Settings& s) {
+             return QVariant(s.editorBackgroundOpacity());
+         },
+         &ISettings::editorBackgroundOpacityChanged},
+    };
+    return entries;
+}
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
@@ -75,10 +146,9 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // The curve registry is taken at construction (before load()) so the
     // initial property snapshot parses Profile blobs through the caller's
     // registry and preserves `shared_ptr<const Curve>` identity end-to-end.
-    // There is deliberately no post-construction setter — a late-set
-    // registry would leave already-parsed Profile state referencing
-    // curves built through the fallback registry, defeating the shared-
-    // curve cache without any mechanism for the cached state to notice.
+    // setCurveRegistry() exists for composition roots that only have a
+    // loaded registry later; Profile reads reparse on every call, so it
+    // applies from the next read on.
     //
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
@@ -152,6 +222,22 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
 
 void Settings::load()
 {
+    reloadFromDisk(false);
+    qCInfo(lcConfig) << "Settings loaded";
+}
+
+void Settings::reloadPreservingLocalEdits()
+{
+    reloadFromDisk(true);
+    qCDebug(lcConfig) << "Settings reloaded with unsaved edits kept";
+}
+
+void Settings::reloadFromDisk(bool preserveLocalEdits)
+{
+    // The full load is wrapped in the settings app's own loading flag by its
+    // caller; the preserving one also runs from inside composite setters,
+    // where no caller can, so it tags itself.
+    const QScopedValueRollback<bool> announcing(m_announcingReload, m_announcingReload || preserveLocalEdits);
     // Snapshot every Q_PROPERTY declared on Settings (skipping inherited
     // QObject properties like objectName) that has a NOTIFY signal, so we
     // can re-emit the matching NOTIFY signal after load() refreshes
@@ -180,6 +266,12 @@ void Settings::load()
     // the life of the process. See animationProfileState.
     const AnimationProfileState animProfileSnapshot = animationProfileState();
 
+    // The Editor.* settings have no Q_PROPERTY either (see
+    // editorSettingEntries), so the snapshot above misses them. Without this
+    // one, the settings app's Save of an editor-only change reloaded here
+    // silently, and the open editor kept its stale copy.
+    const QVector<QVariant> editorSnapshot = snapshotEditorSettings();
+
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
     // so the post-reparse re-emission below can fire the per-mode signals
@@ -203,11 +295,24 @@ void Settings::load()
     QHash<Mode, QStringList> monitorsBefore;
     QHash<Mode, QStringList> desktopsBefore;
     QHash<Mode, QStringList> activitiesBefore;
-    for (const Mode mode : PhosphorZones::allModes()) {
-        monitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
-        desktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
-        activitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
+    // The preserving mode does not reload the rule store the lists live in
+    // (see below), so they cannot move there and are not snapshotted.
+    if (!preserveLocalEdits) {
+        for (const Mode mode : PhosphorZones::allModes()) {
+            monitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+            desktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+            activitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
+        }
     }
+
+    // The unsaved edits to keep, read BEFORE the reparse drops them. Only the
+    // schema keys: per-screen and virtual-screen state lives in members the
+    // reparse does not touch, and is skipped below in this mode. A clean
+    // backend has no unsaved write, so every key equals its baseline and the
+    // sweep would find nothing; skipping it keeps the composite setters'
+    // clean-backend refresh cheap.
+    const QList<LocalEdit> localEdits =
+        (preserveLocalEdits && m_configBackend->isDirty()) ? collectLocalEdits() : QList<LocalEdit>{};
 
     m_configBackend->reparseConfiguration();
 
@@ -215,6 +320,17 @@ void Settings::load()
     // width setter, and the schema clamp cannot catch it (its bounds span both
     // kinds). Coerce before anything reads the pair.
     normalizeScrollingColumnWidthValue();
+
+    if (preserveLocalEdits) {
+        // The baseline is "what disk holds", so it moves to the reparsed
+        // document BEFORE the edits go back on top. A per-page Discard then
+        // reverts to the external value, and the edits still read as unsaved.
+        captureBaseline();
+        reapplyLocalEdits(localEdits);
+        // A kept edit to one half of the width pair can disagree with the
+        // other half just adopted from disk.
+        normalizeScrollingColumnWidthValue();
+    }
 
     // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
@@ -232,7 +348,10 @@ void Settings::load()
     // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
     // D-Bus signal and on Discard, plus a RuleStoreWatcher that reloads
     // on external file writes when no daemon is running).
-    if (m_ownedRuleStore) {
+    //
+    // Not when preserving local edits: the rule store keeps no baseline, so a
+    // reload there could not tell an unsaved rule edit from a stale one.
+    if (m_ownedRuleStore && !preserveLocalEdits) {
         m_ownedRuleStore->load();
     }
 
@@ -251,8 +370,30 @@ void Settings::load()
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
     const QHash<QString, QVariantMap> perScreenScrollingBefore = m_perScreenScrollingSettings;
 
-    loadPerScreenOverrides(m_configBackend);
-    loadVirtualScreenConfigs(m_configBackend);
+    // Not when preserving local edits, for the same no-baseline reason as the
+    // rule store above: these maps are members, and a reload would drop their
+    // unsaved edits wholesale.
+    if (!preserveLocalEdits) {
+        loadPerScreenOverrides(m_configBackend);
+        loadVirtualScreenConfigs(m_configBackend);
+        // What the members now hold is what this process last read for them,
+        // so it is the base of any later repaired-file merge.
+        m_memberBase = captureMemberState();
+        if (m_configBackend->loadFailed()) {
+            m_standInMembers = m_memberBase;
+        } else {
+            m_standInMembers.reset();
+        }
+    } else if (m_standInMembers && !m_configBackend->loadFailed()) {
+        // These members were loaded or last saved before config.json became
+        // unreadable, so they reflect a stand-in (empty, for a process that
+        // started on a broken file, or the last state read or saved) and not
+        // what the file now holds. save() writes them over the file wholesale, so keeping
+        // them would erase or revert the per-screen overrides and virtual
+        // screens the repaired file holds. Load the real ones now and carry
+        // over what was changed in memory meanwhile.
+        reloadMembersFromRepairedConfig();
+    }
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenScrollingZoneSelectorChanged =
@@ -270,8 +411,6 @@ void Settings::load()
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenScrollingZoneSelectorChanged
         || perScreenAutotileChanged || perScreenScrollingChanged;
 
-    qCInfo(lcConfig) << "Settings loaded";
-
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
@@ -283,7 +422,7 @@ void Settings::load()
     // of by property index. Iterates allModes so future enum extensions
     // automatically participate without touching this block.
     bool anyDisableChanged = false;
-    for (const Mode mode : PhosphorZones::allModes()) {
+    for (const Mode mode : preserveLocalEdits ? QList<Mode>{} : PhosphorZones::allModes()) {
         if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != monitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
@@ -298,13 +437,6 @@ void Settings::load()
         }
     }
 
-    // Aggregate signal — fires when ANY property OR ANY per-mode
-    // disable list changed. Without `anyDisableChanged` in the
-    // predicate, a cross-process write (daemon shortcut, KCM D-Bus
-    // call) that updates only a disable list would emit the per-mode
-    // signals but NOT the aggregate — inconsistent with the direct
-    // setter path (`writeDisableEntries` emits `settingsChanged()`
-    // whenever persistence succeeds).
     // Per-screen override maps are not Q_PROPERTYs, so the NOTIFY loop above
     // doesn't cover them. Emit their change signals here, gated on the
     // before/after comparison, so QML per-screen helpers refresh on Discard /
@@ -321,12 +453,25 @@ void Settings::load()
     if (perScreenGapChanged)
         Q_EMIT perScreenSnappingSettingsChanged();
 
+    // The Editor.* settings announce themselves on their own aggregate, not
+    // on settingsChanged: see ISettings::editorSettingsChanged.
+    emitChangedEditorSettings(editorSnapshot);
+
+    // Aggregate signal: fires when any Q_PROPERTY, any per-mode disable list
+    // or any per-screen override map changed. Each of those has its own
+    // signal above, and the aggregate keeps a cross-process write (daemon
+    // shortcut, D-Bus call) consistent with the direct setter path, which
+    // always ends in settingsChanged (`writeDisableEntries` included).
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
 
-    // The store now mirrors disk — refresh the committed baseline that
-    // per-page Discard reverts to and isKeyModified() compares against.
-    captureBaseline();
+    // The store now mirrors disk, so refresh the committed baseline that
+    // per-page Discard reverts to and isKeyModified() compares against. The
+    // preserving mode captured it before re-applying the kept edits.
+    if (!preserveLocalEdits) {
+        captureBaseline();
+    }
+    announceConfigUnreadableIfMoved();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -358,6 +503,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+                                       // + Editor.Background
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
@@ -540,8 +686,83 @@ void Settings::purgeStaleKeys()
     }
 }
 
+QList<Settings::LocalEdit> Settings::collectLocalEdits() const
+{
+    QList<LocalEdit> edits;
+    const auto& schema = m_store->schema();
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        for (const auto& def : it.value()) {
+            if (isKeyModified(it.key(), def.key)) {
+                edits.append({it.key(), def.key, m_store->readVariant(it.key(), def.key)});
+            }
+        }
+    }
+    return edits;
+}
+
+void Settings::reapplyLocalEdits(const QList<LocalEdit>& edits)
+{
+    for (const LocalEdit& edit : edits) {
+        m_store->write(edit.group, edit.key, edit.value);
+    }
+}
+
+Settings::MemberState Settings::captureMemberState() const
+{
+    return {m_perScreenZoneSelectorSettings, m_perScreenScrollingZoneSelectorSettings, m_perScreenAutotileSettings,
+            m_perScreenScrollingSettings, m_virtualScreenConfigs};
+}
+
+QString Settings::configFilePath() const
+{
+    if (const auto* json = dynamic_cast<const PhosphorConfig::JsonBackend*>(m_configBackend)) {
+        return json->filePath();
+    }
+    return ConfigDefaults::configFilePath();
+}
+
+void Settings::announceConfigUnreadableIfMoved()
+{
+    const bool unreadable = configUnreadable();
+    // A break found by a refused write (or a preserving reload) rather than a
+    // full load leaves the members as they were, so the merge that runs when
+    // the file reads cleanly again needs the base they were last read or
+    // saved from. Recorded here, where every path that can find the file
+    // unreadable passes.
+    if (unreadable && !m_standInMembers) {
+        m_standInMembers = m_memberBase;
+    }
+    // Held back while signals are blocked (the daemon's teardown and batch
+    // paths), so the flip is announced by the next unblocked pass instead of
+    // being lost to a listener.
+    if (signalsBlocked()) {
+        return;
+    }
+    if (m_announcedConfigUnreadable != unreadable) {
+        m_announcedConfigUnreadable = unreadable;
+        Q_EMIT configUnreadableChanged();
+    }
+}
+
+bool Settings::configUnreadable() const
+{
+    return m_configBackend && m_configBackend->loadFailed();
+}
+
 bool Settings::save()
 {
+    // The flush can find the file broken since it was last read.
+    const auto announceUnreadable = qScopeGuard([this]() {
+        announceConfigUnreadableIfMoved();
+    });
+    // A config.json that could not be read refuses writes until a load reads
+    // it cleanly again, and nothing else reparses a backend holding unsaved
+    // edits. Look again here, keeping the edits, so a file the user repaired
+    // since takes this save instead of refusing it until a restart.
+    if (configUnreadable()) {
+        reloadPreservingLocalEdits();
+    }
+
     purgeStaleKeys();
 
     // Flush every Store-declared key through write() so clamp /
@@ -588,8 +809,10 @@ bool Settings::save()
     }
 
     // Disk now holds the flushed store — the just-saved values become the new
-    // committed baseline for per-page Discard / dirty checks.
+    // committed baseline for per-page Discard / dirty checks, and the members
+    // just written become the base of any later repaired-file merge.
     captureBaseline();
+    m_memberBase = captureMemberState();
     return true;
 }
 
@@ -666,6 +889,8 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // palette on every call, so staged sentinel values track the current
     // theme immediately.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
+    const AnimationProfileState animProfileSnapshot = animationProfileState();
+    const QVector<QVariant> editorSnapshot = snapshotEditorSettings();
 
     // importFromJson is additive/overwriting over declared keys; a
     // fully-resolved profile blob carries every declared key (defaults included)
@@ -688,6 +913,8 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     normalizeScrollingColumnWidthValue();
 
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    emitAnimationProfileChangeIfMoved(animProfileSnapshot);
+    emitChangedEditorSettings(editorSnapshot);
     if (anyChanged)
         Q_EMIT settingsChanged();
     return true;
@@ -734,6 +961,33 @@ bool Settings::emitChangedNotifyProperties(const QVector<QVariant>& before)
     return anyChanged;
 }
 
+QVector<QVariant> Settings::snapshotEditorSettings() const
+{
+    const QVector<EditorSettingEntry>& entries = editorSettingEntries();
+    QVector<QVariant> snapshot;
+    snapshot.reserve(entries.size());
+    for (const EditorSettingEntry& entry : entries) {
+        snapshot.append(entry.read(*this));
+    }
+    return snapshot;
+}
+
+bool Settings::emitChangedEditorSettings(const QVector<QVariant>& before)
+{
+    const QVector<EditorSettingEntry>& entries = editorSettingEntries();
+    bool anyChanged = false;
+    for (qsizetype i = 0; i < entries.size(); ++i) {
+        if (entries.at(i).read(*this) != before.value(i)) {
+            Q_EMIT(this->*entries.at(i).changed)();
+            anyChanged = true;
+        }
+    }
+    if (anyChanged) {
+        Q_EMIT editorSettingsChanged();
+    }
+    return anyChanged;
+}
+
 void Settings::captureBaseline()
 {
     m_baseline.clear();
@@ -771,6 +1025,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
 {
     const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
+    const QVector<QVariant> editorBefore = snapshotEditorSettings();
     for (const ConfigKey& gk : keys) {
         // Only keys captured in the committed baseline (i.e. schema-declared) can
         // be reverted; a mistyped manifest entry would otherwise write a default-
@@ -790,6 +1045,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
     }
     normalizeScrollingColumnWidthValue();
     emitAnimationProfileChangeIfMoved(animProfileBefore);
+    emitChangedEditorSettings(editorBefore);
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
@@ -798,11 +1054,13 @@ void Settings::resetKeys(const ConfigKeyList& keys)
 {
     const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
+    const QVector<QVariant> editorBefore = snapshotEditorSettings();
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
     normalizeScrollingColumnWidthValue();
     emitAnimationProfileChangeIfMoved(animProfileBefore);
+    emitChangedEditorSettings(editorBefore);
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
@@ -907,6 +1165,25 @@ P_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, s
 
 bool Settings::reset()
 {
+    const auto announceUnreadable = qScopeGuard([this]() {
+        announceConfigUnreadableIfMoved();
+    });
+    // Same look-again as save(): a config.json repaired since it failed to
+    // read must not keep refusing the reset that would overwrite it. If it
+    // still cannot be read, refuse now, before anything below touches the
+    // store: the write would be refused anyway, and backing out of the
+    // deletions afterwards costs the unsaved edits more work to keep.
+    if (configUnreadable()) {
+        reloadPreservingLocalEdits();
+        if (configUnreadable()) {
+            qCWarning(lcConfig) << "reset: the configuration file cannot be read, so nothing was reset";
+            return false;
+        }
+    }
+    // Kept so a refused commit (an I/O error, or a file broken since it was
+    // last read) can put them back instead of losing them with the deletions.
+    const QList<LocalEdit> editsBeforeReset = collectLocalEdits();
+
     // Delete all managed groups (reset nukes everything). The explicit
     // "Updates" sweep scrubs the retired legacy group from configs written by
     // older builds — nothing writes or reads it anymore (dismissed-update-
@@ -919,6 +1196,11 @@ bool Settings::reset()
     // bindings kept painting the old ones until the app was restarted — the
     // user-visible shape of that bug is "Reset to Defaults did nothing".
     const QVector<QVariant> propsBeforeReset = snapshotNotifyProperties();
+    // The two non-Q_PROPERTY families load() announces, for the same reason:
+    // the Editor.* settings and the animation Profile blob (whose
+    // explicitness the daemon keys the global profile's registry layer on).
+    const QVector<QVariant> editorBeforeReset = snapshotEditorSettings();
+    const AnimationProfileState animProfileBeforeReset = animationProfileState();
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -941,26 +1223,30 @@ bool Settings::reset()
     // the only ordering that cannot half-apply is: do the one that can fail
     // cleanly (nothing has been destroyed yet) before the two that are
     // irreversible. Returning here is safe precisely because deleteGroup only
-    // mutated the backend's in-memory root, and the load() below reparses from
-    // disk, discarding those deletions and restoring the live state.
+    // mutated the backend's in-memory root, and the reparse below discards
+    // those deletions and restores the live state.
     if (!m_configBackend->commit()) {
         qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
                                "dropped and the previous values remain";
-        // Reparse BEFORE load(): load()'s property snapshot must see the
-        // RESTORED values, not the wiped in-memory root — otherwise its
-        // post-reparse diff reads defaults-vs-restored and fires a NOTIFY
-        // plus settingsChanged round (a daemon retile) for values that never
-        // observably changed. load() repeats the reparse harmlessly. The
-        // session file and the rule store were never touched, so there is
-        // nothing else to undo.
+        // Back out of the deletions: reparse (the deletions were in memory
+        // only), adopt the store from disk without touching the per-screen
+        // members or the rule store, and put the unsaved edits back. The
+        // reparse comes first so the reload's own snapshot already reads the
+        // restored values and announces nothing for values that never
+        // observably changed. The session file and the rule store were never
+        // touched, so there is nothing else to undo.
         m_configBackend->reparseConfiguration();
-        load();
-        // The reparse also DISCARDS any unsaved in-memory edits (they were
-        // never committed), and load()'s internal diff cannot see that (its
-        // snapshot already reads the restored values). Diff against the true
-        // pre-reset observable state instead: silent when the restore was a
-        // no-op, one NOTIFY round when unsaved edits were dropped, so QML
-        // stops painting a value the store no longer holds.
+        reloadFromDisk(true);
+        reapplyLocalEdits(editsBeforeReset);
+        // A kept edit to one half of the width pair can disagree with the
+        // other half on disk, as in reloadFromDisk's preserving branch.
+        normalizeScrollingColumnWidthValue();
+        // Diff against the true pre-reset observable state: silent when the
+        // restore is complete, which with the edits put back is the usual
+        // case, and one NOTIFY round for anything that still moved (a file
+        // changed on disk meanwhile).
+        emitAnimationProfileChangeIfMoved(animProfileBeforeReset);
+        emitChangedEditorSettings(editorBeforeReset);
         if (emitChangedNotifyProperties(propsBeforeReset)) {
             Q_EMIT settingsChanged();
         }
@@ -1050,6 +1336,8 @@ bool Settings::reset()
     // The Q_PROPERTY twin of the per-mode loop below, against the snapshot
     // taken before the clear. Folded into the same aggregate so a reset that
     // only moved Q_PROPERTYs still fires settingsChanged exactly once.
+    emitAnimationProfileChangeIfMoved(animProfileBeforeReset);
+    emitChangedEditorSettings(editorBeforeReset);
     bool anyDisableChanged = emitChangedNotifyProperties(propsBeforeReset);
     for (const Mode mode : PhosphorZones::allModes()) {
         if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {

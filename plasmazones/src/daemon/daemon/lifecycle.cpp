@@ -58,6 +58,7 @@
 #include <PhosphorRules/RuleStoreWatcher.h>
 
 #include <QGuiApplication>
+#include <QSignalBlocker>
 #include <QFutureWatcher>
 #include <QPointer>
 #include <QStandardPaths>
@@ -906,7 +907,17 @@ void Daemon::stop()
     // before the engine borrows and layout providers were severed.
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
-    m_settings->save();
+    {
+        // save() re-reads a config.json that was unreadable and has since
+        // been repaired, and announces what that adopts. Nothing here can act
+        // on it any more (the D-Bus surface is gone and the engines are being
+        // torn down), so the announcement is blocked rather than run into a
+        // half-torn-down daemon.
+        // A programmatic stop()/start() cycle therefore does not announce
+        // those values either; start() reads them through the getters.
+        const QSignalBlocker blocker(m_settings.get());
+        m_settings->save();
+    }
 
     // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
     // (run above the running gate, with the engines still wired). No separate save.

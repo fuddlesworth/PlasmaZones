@@ -11,7 +11,8 @@ import org.phosphor.animation
 /**
  * @brief Bottom control bar component for the layout editor
  *
- * Contains zone creation, template selection, snapping controls, and save/cancel buttons.
+ * Contains zone creation, template selection, the template column controls,
+ * snapping controls, the background opacity control, and save/cancel buttons.
  * Organized into logical groups for better UX.
  * Follows KDE HIG and Kirigami best practices.
  */
@@ -309,8 +310,9 @@ ToolBar {
                         editorController.edgeSnappingEnabled = checked;
                 }
 
-                // Update when edgeSnappingEnabled changes externally (a click
-                // severs the declarative checked binding)
+                // Follow edgeSnappingEnabled when it changes elsewhere (a live
+                // reload). The assignment replaces the declarative binding
+                // above on the first such change, so this keeps it current.
                 Connections {
                     function onEdgeSnappingEnabledChanged() {
                         edgeSnapButton.checked = editorController.edgeSnappingEnabled || false;
@@ -340,8 +342,9 @@ ToolBar {
                         editorController.gridSnappingEnabled = checked;
                 }
 
-                // Update when gridSnappingEnabled changes externally (a click
-                // severs the declarative checked binding)
+                // Follow gridSnappingEnabled when it changes elsewhere (a live
+                // reload). The assignment replaces the declarative binding
+                // above on the first such change, so this keeps it current.
                 Connections {
                     function onGridSnappingEnabledChanged() {
                         gridSnapButton.checked = editorController.gridSnappingEnabled || false;
@@ -370,22 +373,32 @@ ToolBar {
                     id: gridIntervalXSlider
 
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                    from: 0.01
-                    to: 0.5
-                    stepSize: 0.01
-                    value: editorController ? (editorController.snapIntervalX || 0.1) : 0.1
+                    // Percent units, not the stored fraction: a step of 1/100
+                    // lands on values like 0.35000000000000003, which never
+                    // compares equal to a saved 0.35.
+                    from: editorController ? Math.round(editorController.snapIntervalMin * 100) : 1
+                    to: editorController ? Math.round(editorController.snapIntervalMax * 100) : 50
+                    stepSize: 1
+                    value: editorController ? Math.round((editorController.snapIntervalX || 0.1) * 100) : 10
                     Accessible.name: i18nc("@label", "Horizontal grid interval")
-                    Accessible.description: i18nc("@info", "Adjust horizontal grid interval (1% to 50%)")
+                    Accessible.description: i18nc("@info", "Adjust horizontal grid interval (%1% to %2%)", from, to)
                     onMoved: {
                         if (editorController)
-                            editorController.snapIntervalX = value;
+                            editorController.snapIntervalX = Math.round(value) / 100;
+                    }
+                    // A change that arrived mid-drag was skipped below, so
+                    // catch up with the controller on release.
+                    onPressedChanged: {
+                        if (!pressed && editorController)
+                            value = Math.round((editorController.snapIntervalX || 0.1) * 100);
                     }
 
-                    // Update when snapIntervalX changes externally
+                    // Follow snapIntervalX when it changes elsewhere (a live
+                    // reload), except mid-drag.
                     Connections {
                         function onSnapIntervalXChanged() {
                             if (!gridIntervalXSlider.pressed)
-                                gridIntervalXSlider.value = editorController.snapIntervalX || 0.1;
+                                gridIntervalXSlider.value = Math.round((editorController.snapIntervalX || 0.1) * 100);
                         }
 
                         target: editorController
@@ -394,10 +407,10 @@ ToolBar {
                 }
 
                 Label {
-                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalXSlider.value * 100))
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalXSlider.value))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
-                    Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value * 100))
+                    Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value))
                 }
 
                 Label {
@@ -411,22 +424,32 @@ ToolBar {
                     id: gridIntervalYSlider
 
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                    from: 0.01
-                    to: 0.5
-                    stepSize: 0.01
-                    value: editorController ? (editorController.snapIntervalY || 0.1) : 0.1
+                    // Percent units, not the stored fraction: a step of 1/100
+                    // lands on values like 0.35000000000000003, which never
+                    // compares equal to a saved 0.35.
+                    from: editorController ? Math.round(editorController.snapIntervalMin * 100) : 1
+                    to: editorController ? Math.round(editorController.snapIntervalMax * 100) : 50
+                    stepSize: 1
+                    value: editorController ? Math.round((editorController.snapIntervalY || 0.1) * 100) : 10
                     Accessible.name: i18nc("@label", "Vertical grid interval")
-                    Accessible.description: i18nc("@info", "Adjust vertical grid interval (1% to 50%)")
+                    Accessible.description: i18nc("@info", "Adjust vertical grid interval (%1% to %2%)", from, to)
                     onMoved: {
                         if (editorController)
-                            editorController.snapIntervalY = value;
+                            editorController.snapIntervalY = Math.round(value) / 100;
+                    }
+                    // A change that arrived mid-drag was skipped below, so
+                    // catch up with the controller on release.
+                    onPressedChanged: {
+                        if (!pressed && editorController)
+                            value = Math.round((editorController.snapIntervalY || 0.1) * 100);
                     }
 
-                    // Update when snapIntervalY changes externally
+                    // Follow snapIntervalY when it changes elsewhere (a live
+                    // reload), except mid-drag.
                     Connections {
                         function onSnapIntervalYChanged() {
                             if (!gridIntervalYSlider.pressed)
-                                gridIntervalYSlider.value = editorController.snapIntervalY || 0.1;
+                                gridIntervalYSlider.value = Math.round((editorController.snapIntervalY || 0.1) * 100);
                         }
 
                         target: editorController
@@ -435,10 +458,10 @@ ToolBar {
                 }
 
                 Label {
-                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalYSlider.value * 100))
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalYSlider.value))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
-                    Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))
+                    Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value))
                 }
             }
 
@@ -461,8 +484,9 @@ ToolBar {
                         editorController.gridOverlayVisible = checked;
                 }
 
-                // Update when gridOverlayVisible changes externally (a click
-                // severs the declarative checked binding)
+                // Follow gridOverlayVisible when it changes elsewhere. The
+                // assignment replaces the declarative binding above on the
+                // first such change, so this keeps it current.
                 Connections {
                     function onGridOverlayVisibleChanged() {
                         gridOverlayButton.checked = editorController.gridOverlayVisible || false;
@@ -470,6 +494,119 @@ ToolBar {
 
                     target: editorController
                     enabled: editorController !== null
+                }
+            }
+        }
+
+        Kirigami.Separator {
+            // Hidden with the sections it divides the button from: in preview
+            // mode none of them is shown, and a lone rule would sit at the
+            // bar's left edge.
+            visible: !controlBar.previewMode
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // BACKGROUND OPACITY: a view preference, so unlike the sections
+        // above it stays available in preview and template mode. One button
+        // that opens a popup, because an inline slider made the bar wider
+        // than a 1366 px screen and pushed Save off its end.
+        // ═══════════════════════════════════════════════════════════════
+        ToolButton {
+            id: backgroundOpacityButton
+
+            readonly property int percent: editorController ? Math.round(editorController.backgroundOpacity * 100) : 70
+
+            icon.name: "contrast"
+            display: AbstractButton.IconOnly
+            text: i18nc("@action:button", "Background Opacity")
+            enabled: editorController !== null && editorController !== undefined
+            down: pressed || backgroundOpacityPopup.visible
+            Accessible.name: text
+            Accessible.description: i18nc("@info", "Opens a slider for how opaque the editor's background is. Lower values show more of the desktop behind it.")
+            ToolTip.visible: hovered && !backgroundOpacityPopup.visible
+            ToolTip.text: i18nc("@tooltip", "Background opacity: %1%", percent)
+            onClicked: {
+                if (backgroundOpacityPopup.visible)
+                    backgroundOpacityPopup.close();
+                else
+                    backgroundOpacityPopup.open();
+            }
+            // A popup does not close when the item it hangs off hides, so
+            // fullscreen (which hides the bar) would leave it floating.
+            onVisibleChanged: {
+                if (!visible)
+                    backgroundOpacityPopup.close();
+            }
+
+            Popup {
+                id: backgroundOpacityPopup
+
+                // Focus keeps keyboard input in the popup while it is open:
+                // Escape closes it (closePolicy) rather than the editor, and
+                // the arrow keys move the slider.
+                focus: true
+                onOpened: backgroundOpacitySlider.forceActiveFocus()
+
+                // Above the button: the bar sits at the bottom of the window.
+                x: Math.round((backgroundOpacityButton.width - width) / 2)
+                y: -height - Kirigami.Units.smallSpacing
+                padding: Kirigami.Units.largeSpacing
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18nc("@label", "Background opacity")
+                    }
+
+                    Slider {
+                        id: backgroundOpacitySlider
+
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                        // Percent units for the same reason as the grid
+                        // intervals, and it matters more here: the default,
+                        // 0.7, is one of the fractions a 0.01 step misses.
+                        from: 0
+                        to: 100
+                        stepSize: 1
+                        value: backgroundOpacityButton.percent
+                        Accessible.name: i18nc("@label", "Background opacity")
+                        Accessible.description: i18nc("@info", "How opaque the editor's background is. Lower values show more of the desktop behind it.")
+                        onMoved: {
+                            if (editorController)
+                                editorController.backgroundOpacity = Math.round(value) / 100;
+                        }
+                        // A change that arrived mid-drag was skipped below,
+                        // so catch up with the controller on release.
+                        onPressedChanged: {
+                            if (!pressed)
+                                value = backgroundOpacityButton.percent;
+                        }
+
+                        // Follow backgroundOpacity when it changes elsewhere
+                        // (a live reload), except mid-drag. The assignment
+                        // replaces the declarative binding above on the first
+                        // such change, so this keeps it current.
+                        Connections {
+                            function onBackgroundOpacityChanged() {
+                                if (!backgroundOpacitySlider.pressed)
+                                    backgroundOpacitySlider.value = backgroundOpacityButton.percent;
+                            }
+
+                            target: editorController
+                            enabled: editorController !== null
+                        }
+                    }
+
+                    Label {
+                        text: i18nc("@info background opacity percentage", "%1%", Math.round(backgroundOpacitySlider.value))
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                        horizontalAlignment: Text.AlignRight
+                        Accessible.name: i18nc("@info", "Background opacity: %1%", Math.round(backgroundOpacitySlider.value))
+                    }
                 }
             }
         }

@@ -21,7 +21,7 @@ std::shared_ptr<PerScreenPathResolver> sharedResolver()
 }
 
 /// Build a JsonBackend at @p path with PZ's resolver + version stamp applied.
-std::unique_ptr<PhosphorConfig::IBackend> makeBackend(const QString& path)
+std::unique_ptr<PhosphorConfig::JsonBackend> makeBackend(const QString& path)
 {
     auto backend = std::make_unique<PhosphorConfig::JsonBackend>(path);
     // Anchor the root-group name to PZ's canonical "General" accessor so a
@@ -42,7 +42,14 @@ std::unique_ptr<PhosphorConfig::IBackend> createDefaultConfigBackend()
 
 std::unique_ptr<PhosphorConfig::IBackend> createSessionBackend()
 {
-    return makeBackend(ConfigDefaults::sessionFilePath());
+    auto backend = makeBackend(ConfigDefaults::sessionFilePath());
+    // Session state is machine-written (the daemon's persistence worker,
+    // which already rewrites the file wholesale through writeJsonAtomically,
+    // and the config migration), and a factory reset deletes it outright. An
+    // unreadable copy holds nothing a user would want kept, and refusing
+    // there would only lose the daemon's shutdown save.
+    backend->setOverwriteUnreadable(true);
+    return backend;
 }
 
 } // namespace PlasmaZones

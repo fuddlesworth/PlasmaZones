@@ -7,6 +7,7 @@
 #include <PhosphorConfig/Schema.h>
 
 #include <QColor>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -200,16 +201,99 @@ void removeAtPath(QJsonObject& root, const QStringList& segments)
 
 } // namespace
 
+// ─── Reading the backing file ──────────────────────────────────────────────
+
+namespace {
+
+/// What a read of the backing file found. Missing is a first run (or a
+/// deliberate delete) and is not a failure; Unreadable covers an open
+/// failure, a parse error and a non-object root alike.
+enum class DiskRead {
+    Missing,
+    Ok,
+    Unreadable,
+};
+
+/// Read and parse @p path into @p out. Logs the reason for Unreadable, naming
+/// what @p consequence then happens.
+DiskRead readDocument(const QString& path, QJsonObject& out, const char* consequence)
+{
+    QFile f(path);
+    if (!f.exists()) {
+        return DiskRead::Missing;
+    }
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning("PhosphorConfig::JsonBackend: failed to open %s for reading — %s", qPrintable(path), consequence);
+        return DiskRead::Unreadable;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError) {
+        qWarning("PhosphorConfig::JsonBackend: JSON parse error in %s at offset %d: %s — %s", qPrintable(path),
+                 err.offset, qPrintable(err.errorString()), consequence);
+        return DiskRead::Unreadable;
+    }
+    if (!doc.isObject()) {
+        // Well-formed JSON that isn't an object (a bare array / literal at the
+        // root). doc.object() would silently hand back {}, which must not be
+        // mistaken for a first run.
+        qWarning("PhosphorConfig::JsonBackend: %s does not hold a JSON object at its root — %s", qPrintable(path),
+                 consequence);
+        return DiskRead::Unreadable;
+    }
+    out = doc.object();
+    return DiskRead::Ok;
+}
+
+/// Size and modification time of the backing file, to notice cheaply that
+/// someone else rewrote it since this backend last read or wrote it.
+struct DiskStamp
+{
+    bool exists = false;
+    qint64 size = -1;
+    QDateTime modified;
+    bool operator==(const DiskStamp&) const = default;
+};
+
+DiskStamp stampOf(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists()) {
+        return {};
+    }
+    return {true, info.size(), info.lastModified()};
+}
+
+} // namespace
+
 // ─── JsonBackend::Data ──────────────────────────────────────────────────────
 
 struct JsonBackend::Data
 {
     QString filePath;
     QJsonObject root;
+    /// The document this backend last read or wrote successfully: refreshed
+    /// by every successful load, flush and migration commit (another
+    /// process's write is not seen until the next load). A reparse that finds
+    /// the file unreadable falls back to it rather than to {}, so a
+    /// hand-broken file reads as "unchanged" instead of "every key reset".
+    /// The overlay is not part of it, being kept apart from root.
+    QJsonObject lastGoodRoot;
     /// Read-only layer over @c root (see @c setOverlay). Kept apart from it so
     /// nothing that writes, syncs or snapshots @c root can ever carry it.
     QJsonObject overlay;
     bool dirty = false;
+    /// The most recent load, or the check a flush makes when the file has
+    /// changed since, found a file it could not read (open failure, parse
+    /// error, non-object root). Writes are refused while it is set, because
+    /// d->root is then a stand-in rather than what disk holds, and a
+    /// whole-document flush would overwrite the user's file with it.
+    bool loadFailed = false;
+    /// setOverwriteUnreadable: a failed load does not block writes.
+    bool overwriteUnreadable = false;
+    /// The backing file as this backend last read or wrote it, so a flush can
+    /// tell whether someone else has rewritten it since.
+    DiskStamp stamp;
     int activeGroupCount = 0;
     std::shared_ptr<IGroupPathResolver> resolver;
     QString rootGroupName = QStringLiteral("General");
@@ -650,37 +734,38 @@ JsonBackend::~JsonBackend()
 
 void JsonBackend::loadFromDisk()
 {
-    QFile f(d->filePath);
-    if (!f.exists()) {
+    // An unreadable file falls back to the last readable document and flags
+    // the load as failed; see Data::loadFailed for why writes are then
+    // refused. A missing file is NOT a failure: it is a first run (or a
+    // deliberate delete), and starting empty with writes allowed is correct.
+    d->stamp = stampOf(d->filePath);
+    QJsonObject doc;
+    switch (readDocument(d->filePath, doc, "keeping the last readable state")) {
+    case DiskRead::Missing:
         d->root = QJsonObject();
+        d->lastGoodRoot = QJsonObject();
+        d->loadFailed = false;
+        return;
+    case DiskRead::Unreadable:
+        d->root = d->lastGoodRoot;
+        d->loadFailed = true;
+        return;
+    case DiskRead::Ok:
+        d->root = std::move(doc);
+        d->lastGoodRoot = d->root;
+        d->loadFailed = false;
         return;
     }
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("PhosphorConfig::JsonBackend: failed to open %s for reading", qPrintable(d->filePath));
-        d->root = QJsonObject();
-        return;
-    }
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-    if (err.error != QJsonParseError::NoError) {
-        qWarning("PhosphorConfig::JsonBackend: JSON parse error in %s at offset %d: %s", qPrintable(d->filePath),
-                 err.offset, qPrintable(err.errorString()));
-        d->root = QJsonObject();
-        return;
-    }
-    if (!doc.isObject()) {
-        // Well-formed JSON that isn't an object (a bare array / literal at the
-        // root). doc.object() would silently hand back {} — same outcome as the
-        // missing-file and parse-error paths above, so it gets the same
-        // breadcrumb rather than looking like a first run.
-        qWarning(
-            "PhosphorConfig::JsonBackend: %s does not hold a JSON object at its root — starting from an empty "
-            "configuration",
-            qPrintable(d->filePath));
-        d->root = QJsonObject();
-        return;
-    }
-    d->root = doc.object();
+}
+
+void JsonBackend::setOverwriteUnreadable(bool overwrite)
+{
+    d->overwriteUnreadable = overwrite;
+}
+
+bool JsonBackend::loadFailed() const
+{
+    return d->loadFailed;
 }
 
 void JsonBackend::markDirty()
@@ -750,8 +835,9 @@ void JsonBackend::reparseConfiguration()
             d->activeGroupCount);
         return;
     }
-    // Replaces the file's document only. The overlay is not file state, so it
-    // is kept and laid over the reloaded values.
+    // Replaces the backend's own document (the last good one if the file no
+    // longer parses). The overlay is not file state, so it is kept and laid
+    // over the reloaded values.
     loadFromDisk();
     d->dirty = false;
 }
@@ -778,6 +864,32 @@ bool JsonBackend::flushNow()
     if (!d->dirty) {
         return true;
     }
+    if (!d->overwriteUnreadable) {
+        // A file broken since the last load is caught here, not only by a
+        // reparse: most writers flush without reparsing first, and a hand
+        // edit with a typo would otherwise be overwritten by the first save
+        // after it. Checked only when the file changed since this backend
+        // last read or wrote it, so a normal flush costs one stat.
+        if (!d->loadFailed && stampOf(d->filePath) != d->stamp) {
+            QJsonObject ignored;
+            if (readDocument(d->filePath, ignored, "not overwriting it") == DiskRead::Unreadable) {
+                d->loadFailed = true;
+            }
+        }
+        if (d->loadFailed) {
+            // The file holds something this backend could not read, so a
+            // whole-document write would replace it with this process's
+            // state. The backend stays dirty, which keeps the edit in memory
+            // and keeps a clean-backend refresh from reparsing over it; the
+            // reparse that clears the refusal once the file is repaired
+            // replaces the in-memory document, edits included, so a caller
+            // that wants to keep them re-applies them after (Settings does,
+            // through reloadPreservingLocalEdits).
+            qWarning("PhosphorConfig::JsonBackend: refusing to write %s — it could not be read",
+                     qPrintable(d->filePath));
+            return false;
+        }
+    }
 
     applyVersionStamp(d->root);
 
@@ -788,6 +900,8 @@ bool JsonBackend::flushNow()
         return false;
     }
 
+    d->lastGoodRoot = d->root;
+    d->stamp = stampOf(d->filePath);
     d->dirty = false;
     return true;
 }
@@ -1157,6 +1271,15 @@ bool JsonBackend::applyMigration(const Schema& schema)
     if (schema.migrations.isEmpty()) {
         return true;
     }
+    if (d->loadFailed && !d->overwriteUnreadable) {
+        // Same refusal as flushNow: the root is a stand-in for a file that
+        // could not be read, so committing a migrated copy of it would
+        // overwrite that file.
+        qWarning(
+            "PhosphorConfig::JsonBackend::applyMigration: refusing to migrate %s — the last load could not read it",
+            qPrintable(d->filePath));
+        return false;
+    }
     // Work against an in-memory snapshot so a partial migration (step 3 of 5
     // fails) never leaves the backend's live root half-transformed. On
     // success we swap the whole thing into place; on failure the live state
@@ -1186,6 +1309,8 @@ bool JsonBackend::applyMigration(const Schema& schema)
     // the "in-memory matches disk" invariant without paying a re-read.
     replaceRoot(std::move(snapshot));
     clearDirty();
+    d->lastGoodRoot = d->root;
+    d->stamp = stampOf(d->filePath);
     return true;
 }
 

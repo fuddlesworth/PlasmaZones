@@ -111,6 +111,16 @@ settings.read<bool>(QStringLiteral("Audio"), QStringLiteral("enabled")); // fals
 (`IBackend::persistedGroup()`), so writing a value equal to the overlay's
 still persists it.
 
+A file that exists but does not parse, or whose root is not an object, is
+never overwritten. `loadFailed()` turns on, the backend reads as the last
+document it read or wrote cleanly (empty on a first load), and `sync()`,
+`commit()` and `applyMigration()` refuse rather than write over the user's
+file. `flushNow` also re-checks the file's size and mtime against the last
+load, so a file broken by hand after it was read is refused too. The overlay
+stays on top of the fallback document. A later `reparseConfiguration()` that
+reads the file cleanly clears the flag. A machine-written file with nothing
+worth keeping opts out with `setOverwriteUnreadable(true)`.
+
 ## Design notes
 
 - **No ad-hoc backwards compatibility.** The library enforces one migration

@@ -23,7 +23,7 @@ class ISettings;
 /// generic `changed()` signal, which SettingsController connects to
 /// `onSettingsPropertyChanged()` so edits flip the needsSave flag on the
 /// owning page. The Settings class does not expose Q_PROPERTY for the
-/// [Editor] group, so SettingsController's meta-object-loop dirty wiring
+/// Editor.* groups, so SettingsController's meta-object-loop dirty wiring
 /// skips it; this forwarder replaces the explicit connect() list that used
 /// to sit in SettingsController's constructor.
 class EditorPageController : public PhosphorControl::PageController
@@ -49,10 +49,21 @@ class EditorPageController : public PhosphorControl::PageController
     Q_PROPERTY(int snapOverrideModifier READ snapOverrideModifier WRITE setSnapOverrideModifier NOTIFY
                    snapOverrideModifierChanged)
 
-    // Fill-on-drop (lives on the Editor page UI; stored in the shared [Editor] group)
+    // Fill-on-drop (lives on the Editor page UI; stored in Editor.FillOnDrop)
     Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
     Q_PROPERTY(
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
+
+    // Editor canvas veil
+    Q_PROPERTY(
+        qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
+
+    // Slider bounds, the same ConfigDefaults ranges the schema clamps the
+    // stored values to, so the page cannot drift from them.
+    Q_PROPERTY(qreal snapIntervalMin READ snapIntervalMin CONSTANT)
+    Q_PROPERTY(qreal snapIntervalMax READ snapIntervalMax CONSTANT)
+    Q_PROPERTY(qreal backgroundOpacityMin READ backgroundOpacityMin CONSTANT)
+    Q_PROPERTY(qreal backgroundOpacityMax READ backgroundOpacityMax CONSTANT)
 
 public:
     /// Reference parameter, not pointer: the Settings instance is required
@@ -83,6 +94,11 @@ public:
     int snapOverrideModifier() const;
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
+    qreal backgroundOpacity() const;
+    qreal snapIntervalMin() const;
+    qreal snapIntervalMax() const;
+    qreal backgroundOpacityMin() const;
+    qreal backgroundOpacityMax() const;
 
     void setDuplicateShortcut(const QString& shortcut);
     void setSplitHorizontalShortcut(const QString& shortcut);
@@ -95,9 +111,13 @@ public:
     void setSnapOverrideModifier(int mod);
     void setFillOnDropEnabled(bool enabled);
     void setFillOnDropModifier(int mod);
+    void setBackgroundOpacity(qreal opacity);
 
-    /// Restore every editor-page property to its ConfigDefaults value.
-    Q_INVOKABLE void resetDefaults();
+    /// Restore the four editor shortcuts to their ConfigDefaults values. The
+    /// page's other settings are left alone: this backs the Keyboard Shortcuts
+    /// card's own reset row, and the page-wide Reset goes through the page
+    /// manifest instead.
+    Q_INVOKABLE void resetShortcutDefaults();
 
 Q_SIGNALS:
     void duplicateShortcutChanged();
@@ -111,6 +131,7 @@ Q_SIGNALS:
     void snapOverrideModifierChanged();
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
+    void backgroundOpacityChanged();
 
     /// Generic "something changed" — SettingsController hooks this to its
     /// dirty-tracking slot. Emitted alongside every per-property NOTIFY.

@@ -4,6 +4,7 @@
 #include "EditorController.h"
 #include "EditorLaunchController.h"
 #include "core/resolve/animationbootstrap.h"
+#include "config/configmigration.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -81,6 +82,12 @@ int main(int argc, char* argv[])
     // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
     // into a crash on the first paint frame. See discussion #262.
     QApplication app(argc, argv);
+    // Before anything can construct a Settings or run the migration: this
+    // process may start while the daemon runs on the last readable config,
+    // so an unparseable config.json is left in place rather than moved aside
+    // (see ConfigMigration::CorruptConfigHandling).
+    PlasmaZones::ConfigMigration::setCorruptConfigHandling(
+        PlasmaZones::ConfigMigration::CorruptConfigHandling::LeaveInPlace);
     PlasmaZones::loadTranslations(&app);
 
     app.setApplicationName(QStringLiteral("plasmazones-editor"));
@@ -276,7 +283,12 @@ int main(int argc, char* argv[])
     // Without this, the C++ destruction order (engine before controller) can race
     // with deferred-delete processing of QML items that have KDE style helpers,
     // causing a crash in QQmlData::destroyed() (QTBUG-style lifecycle issue).
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, [&engine]() {
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, [&engine, &controller]() {
+        // Write any queued editor-settings change first. The pump below can
+        // fire the save timer, whose asynchronous daemon reload might never
+        // leave the process; flushEditorSettingsForShutdown takes the blocking
+        // path and stops the timer.
+        controller.flushEditorSettingsForShutdown();
         // Process any pending deferred deletes before tearing down the engine
         QCoreApplication::processEvents(QEventLoop::AllEvents);
         // Explicitly delete root QML objects while the engine is still alive

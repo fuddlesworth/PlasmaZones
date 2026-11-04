@@ -299,7 +299,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("inherit"), PhosphorI18n::tr("create"), PhosphorI18n::tr("save")});
     search->setPageKeywords(QStringLiteral("editor"),
                             {PhosphorI18n::tr("editor"), PhosphorI18n::tr("layout"), PhosphorI18n::tr("design"),
-                             PhosphorI18n::tr("zones")});
+                             PhosphorI18n::tr("zones"), PhosphorI18n::tr("opacity"), PhosphorI18n::tr("background")});
     search->setPageKeywords(QStringLiteral("about"),
                             {PhosphorI18n::tr("about"), PhosphorI18n::tr("version"), PhosphorI18n::tr("license"),
                              PhosphorI18n::tr("credits")});
@@ -1146,6 +1146,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("profiles"), QStringLiteral("importProfile"),
                PhosphorI18n::tr("Import a profile"));
     addSection(search, QStringLiteral("profiles"), QStringLiteral("profilesList"), PhosphorI18n::tr("Profiles"));
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Editor
+    // ═══════════════════════════════════════════════════════════════════════════
+    addSetting(search, QStringLiteral("editor"), QStringLiteral("editorBackgroundOpacity"),
+               PhosphorI18n::tr("Background opacity"),
+               {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("transparent"), PhosphorI18n::tr("canvas")});
 }
 
 } // namespace PlasmaZones

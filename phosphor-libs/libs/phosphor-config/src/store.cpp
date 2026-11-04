@@ -392,9 +392,9 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
     if (!d->schema.migrations.isEmpty()) {
         if (!d->backend->applyMigration(d->schema)) {
             qWarning(
-                "PhosphorConfig::Store: schema declares %lld migration step(s) but the backend reported no "
-                "migration support — migrations will NOT run. Ensure the backend implements applyMigration() "
-                "or remove the migration chain from the schema.",
+                "PhosphorConfig::Store: schema declares %lld migration step(s) but the backend did not commit "
+                "them — it has no migration support, could not write, or could not read its store. Migrations "
+                "will NOT run this session.",
                 static_cast<long long>(d->schema.migrations.size()));
         }
     }

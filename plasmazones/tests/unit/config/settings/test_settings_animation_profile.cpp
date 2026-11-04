@@ -51,7 +51,7 @@ private Q_SLOTS:
     /// `animationProfileChanged` has no backing Q_PROPERTY, so the
     /// meta-object re-emission loop cannot cover this: only an explicit
     /// comparison can.
-    void testAnimationProfile_resetToDefaultsAnnouncesTheExplicitnessFlip()
+    void testAnimationProfile_perKeyResetAnnouncesTheExplicitnessFlip()
     {
         IsolatedConfigGuard guard;
         Settings settings;
@@ -72,6 +72,54 @@ private Q_SLOTS:
         QVERIFY2(spy.count() > 0,
                  "resetting the animation profile must announce the change even when no field value moved");
         QVERIFY2(!settings.hasExplicitAnimationProfile(), "the reset must clear the stored blob");
+    }
+
+    /// The composite setters refresh a clean backend from disk before they
+    /// write, and what that refresh adopts from another process must be
+    /// announced: the reload that follows sees no difference anymore, so it
+    /// would otherwise never be.
+    void testCompositeSetterRefresh_announcesAdoptedChange()
+    {
+        IsolatedConfigGuard guard;
+        Settings stale;
+        QVERIFY(stale.save());
+        {
+            Settings writer;
+            writer.setEditorBackgroundOpacity(0.3);
+            QVERIFY(writer.save());
+        }
+
+        QSignalSpy opacitySpy(&stale, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy editorAggregateSpy(&stale, &Settings::editorSettingsChanged);
+        PhosphorAnimation::Profile edited = stale.animationProfile();
+        edited.duration = 640.0;
+        stale.setAnimationProfile(edited);
+
+        QCOMPARE(stale.editorBackgroundOpacity(), 0.3);
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+    }
+
+    /// Profile staging writes the Profile blob through importFromJson, past
+    /// the setters, so it has to announce the move itself just as load() and
+    /// the per-key paths do. (The factory reset() arm is covered in
+    /// test_settings_core.)
+    void testAnimationProfile_stagingAnnouncesTheChange()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QVERIFY(!settings.hasExplicitAnimationProfile());
+
+        Settings source;
+        PhosphorAnimation::Profile edited = source.animationProfile();
+        edited.duration = 500.0;
+        source.setAnimationProfile(edited);
+        const QJsonObject blob = source.exportConfigToJson();
+
+        QSignalSpy spy(&settings, &Settings::animationProfileChanged);
+        QVERIFY(settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasExplicitAnimationProfile());
     }
 
     /// Two writers over one config file (settings app + daemon in

@@ -77,6 +77,13 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // Nothing in this tree calls setSettings at all; it is a published D-Bus
     // surface for external clients.)
     //
+    // Adopt any external write before the blocker goes up, so its
+    // announcement is not swallowed: a composite setter in the batch refreshes
+    // a clean backend from disk, and anything it adopted under the blocker
+    // would never be announced (the re-emit below covers only m_getters,
+    // which holds no Editor.* key).
+    m_settings->reloadPreservingLocalEdits();
+
     // Snapshot every registered getter first so the post-batch re-emit can fire
     // only for values that actually changed (emit-on-change rule), including
     // cross-property side effects (e.g. setZoneSpanModifier rewrites the trigger

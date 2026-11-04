@@ -275,10 +275,11 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::tilingAlgorithmGroup(), CD::splitRatioKey()), number(pct, 100.0));
         t.insert(pairKey(CD::tilingAlgorithmGroup(), CD::splitRatioStepKey()), number(pct, 100.0));
         // The editor's grid snapping interval is a FRACTION of the canvas
-        // (0.01-1.0, default 0.1), not a pixel step — the editor's own control
+        // (0.01-0.5, default 0.1), not a pixel step — the editor's own control
         // bar renders it as a percentage for the same reason.
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalXKey()), number(pct, 100.0));
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalYKey()), number(pct, 100.0));
+        t.insert(pairKey(CD::editorBackgroundGroup(), CD::opacityKey()), number(pct, 100.0));
 
         // ── Pixel quantities ────────────────────────────────────────────────
         t.insert(pairKey(CD::snappingZonesBorderGroup(), CD::widthKey()), number(px));

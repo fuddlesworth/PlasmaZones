@@ -4,6 +4,7 @@
 #include "SnappingService.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
+#include "../../config/configdefaults.h"
 
 #include <QtMath>
 
@@ -35,7 +36,8 @@ void SnappingService::setEdgeSnappingEnabled(bool enabled)
 
 void SnappingService::setSnapIntervalX(qreal interval)
 {
-    interval = qBound(0.01, interval, 1.0);
+    // The schema's range, so the grid in use is the one that reads back.
+    interval = qBound(ConfigDefaults::editorSnapIntervalMin(), interval, ConfigDefaults::editorSnapIntervalMax());
     if (!qFuzzyCompare(m_snapIntervalX, interval)) {
         m_snapIntervalX = interval;
         Q_EMIT snapIntervalXChanged();
@@ -45,7 +47,7 @@ void SnappingService::setSnapIntervalX(qreal interval)
 
 void SnappingService::setSnapIntervalY(qreal interval)
 {
-    interval = qBound(0.01, interval, 1.0);
+    interval = qBound(ConfigDefaults::editorSnapIntervalMin(), interval, ConfigDefaults::editorSnapIntervalMax());
     if (!qFuzzyCompare(m_snapIntervalY, interval)) {
         m_snapIntervalY = interval;
         Q_EMIT snapIntervalYChanged();

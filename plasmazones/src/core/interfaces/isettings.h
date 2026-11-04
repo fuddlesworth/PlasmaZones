@@ -350,6 +350,8 @@ public:
     virtual void setFillOnDropEnabled(bool enabled) = 0;
     virtual int fillOnDropModifier() const = 0;
     virtual void setFillOnDropModifier(int mod) = 0;
+    virtual qreal editorBackgroundOpacity() const = 0;
+    virtual void setEditorBackgroundOpacity(qreal opacity) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
@@ -736,6 +738,14 @@ public:
     // Settings::load (settings.cpp) for the live guard against
     // `m_ownedRuleStore`.
     virtual void load() = 0;
+    /// Adopt what the config file now holds for every key without an unsaved
+    /// edit here, keeping the edits, and announce what moved. For a caller
+    /// about to run setters with signals blocked: a setter's own refresh can
+    /// adopt another process's write, and the blocker would swallow that
+    /// announcement for good. Default: nothing to adopt (no backing file).
+    virtual void reloadPreservingLocalEdits()
+    {
+    }
     /// Persist the current values. Returns false when the write did not
     /// reach disk (the implementation keeps the previous baseline so the
     /// unsaved values stay discardable and the next save retries).
@@ -904,6 +914,16 @@ Q_SIGNALS:
     void editorSnapOverrideModifierChanged();
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
+    void editorBackgroundOpacityChanged();
+    /// Aggregate for the Editor.* settings when a reload path (load, discard,
+    /// reset, profile staging) moves them, emitted once after their own
+    /// signals. Deliberately separate from settingsChanged: no daemon or
+    /// compositor consumer reads an Editor.* key, and folding them in would
+    /// run the whole settingsChanged cascade every time the layout editor
+    /// saves. The daemon relays it over D-Bus to the editor and the settings
+    /// app. The Editor.* setters still emit settingsChanged, like every other
+    /// setter, since they only ever run in the settings app.
+    void editorSettingsChanged();
     // Shader effects
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();
