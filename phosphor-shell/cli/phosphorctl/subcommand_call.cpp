@@ -15,8 +15,10 @@
 #include <QStringList>
 #include <QTextStream>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace Phosphorctl {
 
@@ -53,6 +55,27 @@ QJsonValue parseArgValue(const QString& raw)
     return raw;
 }
 
+// What `call` waits for an answer by default, and the longest --timeout it
+// takes (a day, well inside an int of milliseconds).
+constexpr int DefaultTimeoutMs = 2000;
+constexpr int MaxTimeoutSeconds = 24 * 60 * 60;
+
+// Parse a --timeout value in seconds, fractions allowed, into milliseconds.
+// 0 means no limit. Nothing for a value that is not a number in range.
+std::optional<int> parseTimeoutMs(const QString& raw)
+{
+    bool ok = false;
+    const double seconds = raw.toDouble(&ok);
+    if (!ok || !std::isfinite(seconds) || seconds < 0 || seconds > MaxTimeoutSeconds) {
+        return std::nullopt;
+    }
+    if (seconds == 0) {
+        return 0;
+    }
+    // A positive value never rounds down to "no limit".
+    return std::max(1, static_cast<int>(std::lround(seconds * 1000)));
+}
+
 } // namespace
 
 int runCall(QStringList args, QString socketPath)
@@ -70,7 +93,7 @@ int runCall(QStringList args, QString socketPath)
     }
 
     if (args.isEmpty()) {
-        err << "phosphorctl call: expects <target>.<fn> [--arg name=value ...]\n";
+        err << "phosphorctl call: expects <target>.<fn> [--arg name=value ...] [--timeout SECONDS]\n";
         return 1;
     }
     const QString targetDotFn = args.first();
@@ -82,11 +105,32 @@ int runCall(QStringList args, QString socketPath)
     const QString target = targetDotFn.left(dotIdx);
     const QString fn = targetDotFn.mid(dotIdx + 1);
 
-    // Remaining args are --arg name=value flags. The order in which
-    // they appear is the order they're passed to the function.
+    // Remaining args are --arg name=value flags, in the order they're
+    // passed to the function, and an optional --timeout.
     QJsonArray jsonArgs;
+    int timeoutMs = DefaultTimeoutMs;
     for (int i = 1; i < args.size(); ++i) {
         const QString& a = args.at(i);
+        if (a == QLatin1String("--timeout") || a.startsWith(QLatin1String("--timeout="))) {
+            QString value;
+            if (a == QLatin1String("--timeout")) {
+                if (i + 1 >= args.size()) {
+                    err << "phosphorctl call: --timeout requires a number of seconds\n";
+                    return 1;
+                }
+                value = args.at(++i);
+            } else {
+                value = a.mid(QStringLiteral("--timeout=").size());
+            }
+            const std::optional<int> parsed = parseTimeoutMs(value);
+            if (!parsed) {
+                err << "phosphorctl call: --timeout expects seconds from 0 to " << MaxTimeoutSeconds
+                    << " (0 waits without a limit), got '" << sanitiseForSingleLine(value) << "'\n";
+                return 1;
+            }
+            timeoutMs = *parsed;
+            continue;
+        }
         QString pair;
         if (a == QLatin1String("--arg") || a == QLatin1String("-a")) {
             if (i + 1 >= args.size()) {
@@ -97,7 +141,7 @@ int runCall(QStringList args, QString socketPath)
         } else if (a.startsWith(QLatin1String("--arg="))) {
             pair = a.mid(QStringLiteral("--arg=").size());
         } else {
-            err << "phosphorctl call: unexpected argument '" << a << "' (use --arg name=value)\n";
+            err << "phosphorctl call: unexpected argument '" << a << "' (use --arg name=value or --timeout SECONDS)\n";
             return 1;
         }
         const int eq = pair.indexOf(QLatin1Char('='));
@@ -124,7 +168,12 @@ int runCall(QStringList args, QString socketPath)
     req.insert(QLatin1String(PhosphorIpc::Field::Fn), fn);
     req.insert(QLatin1String(PhosphorIpc::Field::Args), jsonArgs);
 
-    const auto resp = client.request(req);
+    // Events the target sends to this call go to stderr as they arrive, one
+    // compact JSON line each, so that stdout carries only the result.
+    const auto resp = client.request(req, timeoutMs, [&err](const QJsonObject& event) {
+        err << QString::fromUtf8(QJsonDocument(event).toJson(QJsonDocument::Compact)) << "\n";
+        err.flush();
+    });
     if (!resp.has_value()) {
         err << "phosphorctl call: " << client.errorMessage() << "\n";
         return 2;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <PhosphorIpc/IpcPendingReply.h>
 #include <PhosphorIpc/phosphoripc_export.h>
 
 #include <QString>
@@ -39,7 +40,23 @@ class IpcRouter;
 // the length of the call. A method that runs for any other reason (a
 // direct C++ call, a queued slot, a call into another object from inside
 // a wire call) sees no call: calledFromIpc() is false and
-// sendErrorReply() does nothing.
+// sendErrorReply() does nothing. That holds inside a nested event loop
+// the method runs (QEventLoop::exec, QDialog::exec): the object's other
+// slots that run in it see no call. It does not hold for
+// QCoreApplication::processEvents, which runs those slots at the
+// method's own loop level, where they see the method's call; a method
+// that waits for something defers its reply instead. A sendErrorReply()
+// or deferReply() made in such a slot does nothing and warns, since the
+// error or deferral was most likely meant for the method's call.
+//
+// A call that cannot answer before its method returns (it runs a process,
+// waits for the user) defers its reply: deferReply() returns an
+// IpcPendingReply that the target keeps and finishes later. See
+// IpcPendingReply.h for the rules. connectionId() names the client
+// connection that made the call, so a target can send that client events of
+// its own (IpcRouter::sendEvent, on the router that runs the call) and drop
+// the client's work when the connection closes
+// (IpcRouter::connectionClosed).
 class PHOSPHORIPC_EXPORT IpcCallContext
 {
 public:
@@ -54,8 +71,33 @@ protected:
     [[nodiscard]] bool calledFromIpc() const;
 
     // Fails the running wire call with `message`. A second call replaces
-    // the message. Outside a wire call it does nothing.
+    // the message. Outside a wire call it does nothing. After deferReply()
+    // the error still goes out when the method returns, unless the pending
+    // reply has answered the call already, and the pending reply then has
+    // nothing left to answer.
     void sendErrorReply(const QString& message);
+
+    // The connection that made the running wire call: a number the router
+    // gives each client connection it accepts, unique in the process and
+    // never reused, also across routers. 0 outside a wire call and for a
+    // call that came from no connection (a direct IpcRouter::invoke).
+    [[nodiscard]] quint64 connectionId() const;
+
+    // Defers the running wire call's reply. The router sends nothing when
+    // the method returns, and drops its return value. The call is answered
+    // through the returned object (finish or fail) or, if that object goes
+    // away unanswered, with a CALL_ABANDONED error.
+    //
+    // Returns an object that holds no call (isValid() false):
+    //   - outside a wire call;
+    //   - on a second deferReply() in the same call (with a warning);
+    //   - for a call from no connection. IpcRouter::invoke then reports
+    //     InvokeOutcome::Deferred, since there is no client to answer later;
+    //   - when the connection has IpcRouter::MaxPendingCallsPerConnection
+    //     deferred calls waiting for their answer already. The call then
+    //     fails with CALL_FAILED when the method returns, so a client
+    //     cannot pile up deferred work without bound.
+    [[nodiscard]] IpcPendingReply deferReply();
 
 private:
     friend class IpcRouter;
@@ -65,12 +107,29 @@ private:
     struct Call
     {
         const void* object = nullptr;
+        // The thread's event loop level when the call started. A slot run
+        // by a nested event loop inside the method sees a higher level,
+        // and no call.
+        int loopLevel = 0;
         bool failed = false;
         QString message;
         Call* outer = nullptr;
+        // The router that runs the call, and the connection and request it
+        // came from (0 and 0 for a direct IpcRouter::invoke).
+        IpcRouter* router = nullptr;
+        quint64 connectionId = 0;
+        qint64 requestId = 0;
+        // Set by deferReply(). pendingToken is the router's key for the
+        // pending reply, 0 when the call came from no connection.
+        bool deferred = false;
+        quint64 pendingToken = 0;
     };
     static Call*& current();
     [[nodiscard]] Call* call() const;
+    // Warns when this object's method runs a wire call further out, at
+    // another event loop level: `what` was called from a slot of a nested
+    // loop and did nothing.
+    void warnIfNestedInCall(const char* what) const;
 };
 
 } // namespace PhosphorIpc

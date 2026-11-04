@@ -200,7 +200,9 @@ QJsonObject buildReply(qint64 id, const QJsonValue& result)
     QJsonObject obj;
     obj.insert(QLatin1String(Field::Type), QLatin1String(ResponseType::Reply));
     obj.insert(QLatin1String(Field::Id), static_cast<double>(id));
-    obj.insert(QLatin1String(Field::Result), result);
+    // QJsonObject::insert drops the key for an undefined value, and a
+    // reply always carries `result`.
+    obj.insert(QLatin1String(Field::Result), result.isUndefined() ? QJsonValue(QJsonValue::Null) : result);
     return obj;
 }
 
@@ -209,6 +211,16 @@ QJsonObject buildEvent(qint64 subscriptionId, const QJsonValue& args)
     QJsonObject obj;
     obj.insert(QLatin1String(Field::Type), QLatin1String(ResponseType::Event));
     obj.insert(QLatin1String(Field::SubscriptionId), static_cast<double>(subscriptionId));
+    obj.insert(QLatin1String(Field::Args), args);
+    return obj;
+}
+
+QJsonObject buildEvent(const QString& target, const QString& signalName, const QJsonValue& args)
+{
+    QJsonObject obj;
+    obj.insert(QLatin1String(Field::Type), QLatin1String(ResponseType::Event));
+    obj.insert(QLatin1String(Field::Target), target);
+    obj.insert(QLatin1String(Field::Signal), signalName);
     obj.insert(QLatin1String(Field::Args), args);
     return obj;
 }

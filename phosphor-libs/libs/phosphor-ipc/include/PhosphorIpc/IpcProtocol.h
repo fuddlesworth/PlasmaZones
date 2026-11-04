@@ -14,12 +14,12 @@
 #include <optional>
 
 // Wire-format definitions for the JSON-over-Unix-socket protocol the
-// IpcRouter speaks. Shared between libs/phosphor-ipc (server) and
-// bin/phosphorctl (client); both link this library so the constants
-// and parsers stay in lockstep. Mirrors the
-// libs/phosphor-protocol/{WindowTypes.h,WindowMarshalling.h} split
-// precedent, JSON is self-describing so we ship the type constants
-// only, no Qt-marshalling boilerplate.
+// IpcRouter speaks. Shared between phosphor-libs/libs/phosphor-ipc
+// (server) and phosphor-shell/cli/phosphorctl (client); both link this
+// library so the constants and parsers stay in lockstep. Mirrors the
+// split of phosphor-libs/libs/phosphor-protocol (PhosphorProtocol/
+// WindowTypes.h and WindowMarshalling.h); JSON is self-describing so we
+// ship the type constants only, no Qt-marshalling boilerplate.
 //
 // Wire shape: one JSON object per line, '\n'-terminated, UTF-8.
 // (Same NDJSON shape as niri-ipc, hyprland-ipc.)
@@ -68,14 +68,18 @@ constexpr auto Unsubscribe = "unsubscribe";
 
 // Response `type` discriminator values. Sent by the server.
 namespace ResponseType {
-constexpr auto Reply = "reply"; // sync call / list / schema result
-constexpr auto Event = "event"; // pushed signal payload to a subscriber
+constexpr auto Reply = "reply"; // call / list / schema result, subscribe / unsubscribe ack
+// Pushed signal payload: to a subscriber (carries `subscriptionId`), or
+// to one connection through IpcRouter::sendEvent (carries `target` and
+// `signal` in place of a subscriptionId).
+constexpr auto Event = "event";
 constexpr auto Error = "error"; // request-correlated failure
 } // namespace ResponseType
 
 // Error `code` strings the server returns. Stable across protocol
 // version 1, adding new codes is safe; renaming or removing one
-// is a protocol break.
+// is a protocol break. A deferred call may also fail with a code its
+// target picked (IpcPendingReply::fail), which is not in this list.
 namespace ErrorCode {
 constexpr auto NoSuchTarget = "NO_SUCH_TARGET";
 constexpr auto NoSuchFn = "NO_SUCH_FN";
@@ -85,8 +89,12 @@ constexpr auto InvalidArg = "INVALID_ARG";
 constexpr auto InvocationFailed = "INVOCATION_FAILED";
 constexpr auto MalformedRequest = "MALFORMED_REQUEST";
 // The call ran and failed: the target called
-// IpcCallContext::sendErrorReply.
+// IpcCallContext::sendErrorReply, or IpcPendingReply::fail without a
+// code. Also a deferral past the router's cap on waiting deferred calls.
 constexpr auto CallFailed = "CALL_FAILED";
+// The target deferred the call's reply and dropped the IpcPendingReply
+// without answering it.
+constexpr auto CallAbandoned = "CALL_ABANDONED";
 } // namespace ErrorCode
 
 // Parsed request shape, populated by parseRequest from a single
@@ -122,6 +130,10 @@ struct PHOSPHORIPC_EXPORT Request
 // The router serialises the object to bytes via writeLine() below.
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildReply(qint64 id, const QJsonValue& result);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildEvent(qint64 subscriptionId, const QJsonValue& args);
+// An event addressed to one connection, not to a subscription: named by
+// `target` and `signal` (IpcRouter::sendEvent).
+[[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildEvent(const QString& target, const QString& signalName,
+                                                        const QJsonValue& args);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildError(qint64 id, const QString& code, const QString& message,
                                                         const QJsonObject& detail = {});
 

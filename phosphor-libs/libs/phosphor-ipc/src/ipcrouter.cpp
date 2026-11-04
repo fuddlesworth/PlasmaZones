@@ -6,6 +6,7 @@
 #include "ipcrouterdetail.h"
 
 #include <PhosphorIpc/IpcCallContext.h>
+#include <PhosphorIpc/IpcPendingReply.h>
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcSchemaGenerator.h>
 
@@ -26,37 +27,15 @@
 #include <QThread>
 #include <QVariant>
 
+#include <algorithm>
+#include <atomic>
+
 #include <sys/stat.h> // umask, lstat
 #include <unistd.h> // getuid
 
 namespace PhosphorIpc {
 
 namespace {
-
-// Hard cap on a single NDJSON request line. The router buffers
-// unframed bytes until canReadLine() returns true; without a cap,
-// a peer that never sends '\n' would let the per-socket buffer
-// grow until the process OOMs. 1 MiB is far above any realistic
-// shell request (the upper-bound observed is ~few hundred bytes
-// of args+target+fn payload) and well under any kernel send/recv
-// buffer ceiling.
-constexpr qint64 MaxLineBytes = 1024 * 1024;
-
-// Cap on frames dispatched per readyRead() invocation. A peer that
-// pipelines thousands of frames in a single TCP segment would
-// otherwise let the dispatch loop monopolise the event loop and
-// starve other connections. When the cap is hit and more bytes
-// remain, the readyRead handler schedules itself again via a queued
-// invocation, yielding to the event loop between batches.
-constexpr int MaxFramesPerReadyRead = 64;
-
-// Maximum number of CONSECUTIVE malformed frames a peer may send
-// before the router force-closes the connection. The (N+1)-th
-// consecutive malformed frame triggers the close (i.e. the cap is
-// "the largest run we tolerate"). A well-formed frame anywhere in
-// the stream resets the counter; we only close on sustained
-// garbage, not on a one-off bad line.
-constexpr int MaxConsecutiveMalformedFrames = 16;
 
 // Whether @p path is a socket that a crashed router of this user left:
 // a socket file of this user that refuses a connection. Only a refusal
@@ -119,6 +98,16 @@ QString resolveDefaultSocketPath()
     return QDir(xdg).filePath(QStringLiteral("phosphor.sock"));
 }
 
+// The id of a new client connection. One counter for the process, so that
+// an id is never reused, not even by another router (which may live on
+// another thread, hence the atomic). 0 is never handed out: it means "no
+// connection".
+quint64 nextConnectionId()
+{
+    static std::atomic<quint64> last{0};
+    return ++last;
+}
+
 } // namespace
 
 IpcRouter::IpcRouter(QObject* parent)
@@ -129,6 +118,10 @@ IpcRouter::IpcRouter(QObject* parent)
 IpcRouter::~IpcRouter()
 {
     stop();
+    // The event loop will not run for this router again: tell about the
+    // connections stop() closed (and any closed before it that the loop
+    // has not got to) now.
+    announceClosedConnections();
 }
 
 bool IpcRouter::start(const QString& socketPath)
@@ -161,7 +154,7 @@ bool IpcRouter::start(const QString& socketPath)
     // umask-default mode. ::umask() is process-global (NOT
     // thread-local), so any other thread creating files during the
     // narrow scope below inherits the 0177 mask. The router
-    // contract (GUI thread only, Q_ASSERT'd above) plus the
+    // contract (owning thread only, Q_ASSERT'd above) plus the
     // microsecond-scale scope makes the race window negligible in
     // practice; a future move to fchmod(socketDescriptor(), 0600)
     // after listen would remove the global mutation entirely.
@@ -207,20 +200,37 @@ bool IpcRouter::start(const QString& socketPath)
 void IpcRouter::stop()
 {
     Q_ASSERT(thread() == QThread::currentThread());
-    // Clear subscription state BEFORE tearing down the server. The
-    // server's reset destroys child sockets, which fire
-    // disconnected() synchronously; that re-enters
-    // handleClientDisconnected, which would otherwise mutate
-    // m_subscriptionsBySocket while we're about to clear it. Clearing
-    // first makes the disconnect-driven removes into safe no-ops
-    // (the hash is empty already).
+    // Forget every connection first, then close the sockets. The closes
+    // are booked here, once, after the sockets are closed.
+    QList<quint64> closed = m_socketByConnectionId.keys();
+    std::sort(closed.begin(), closed.end());
     m_subscriptionsBySocket.clear();
     m_malformedCountBySocket.clear();
+    m_connectionIdBySocket.clear();
+    m_socketByConnectionId.clear();
+    m_pendingCalls.clear();
+    m_pendingTokensByConnection.clear();
     if (m_server) {
+        // The server deletes its child sockets when it goes, at once. A
+        // target method may run stop() while a dispatch on one of them is
+        // on the stack, so the router takes the sockets over, closes them
+        // and deletes them through retireSocket, after any such dispatch
+        // unwinds. Their handlers go first: the bookkeeping that
+        // handleClientDisconnected would do is done above.
+        const QList<QLocalSocket*> sockets = m_server->findChildren<QLocalSocket*>(Qt::FindDirectChildrenOnly);
+        for (QLocalSocket* socket : sockets) {
+            QObject::disconnect(socket, nullptr, this, nullptr);
+            socket->setParent(this);
+            socket->abort();
+            retireSocket(socket);
+        }
         m_server->close();
         m_server.reset();
     }
     m_socketPath.clear();
+    for (const quint64 id : std::as_const(closed)) {
+        connectionGone(id);
+    }
 }
 
 QString IpcRouter::socketPath() const
@@ -259,8 +269,11 @@ bool IpcRouter::registerTarget(const QString& name, QObject* object)
         // slot reading listTargets() during the emission. Instead,
         // overwrite the slot in place and emit a single
         // targetRegistered. Observers that cared about the prior
-        // QObject can connect to its destroyed() signal directly.
+        // QObject can connect to its destroyed() signal directly. The
+        // prior object's subscriptions end, as unregisterTarget ends
+        // them, so they do not stream the new object's events.
         m_targets.remove(name);
+        endSubscriptionsTo(name);
     }
     m_targets.insert(name, QPointer<QObject>(object));
     // Auto-remove the registry entry if the target QObject is
@@ -275,6 +288,7 @@ bool IpcRouter::registerTarget(const QString& name, QObject* object)
         const auto it = m_targets.constFind(name);
         if (it != m_targets.constEnd() && !it.value()) {
             m_targets.erase(it);
+            endSubscriptionsTo(name);
             Q_EMIT targetUnregistered(name);
         }
     });
@@ -299,10 +313,18 @@ void IpcRouter::unregisterTarget(const QString& name, QObject* object)
         return;
     }
     m_targets.erase(it);
-    // Its subscriptions go with it. Kept, they would stream again when the
-    // name is registered later, perhaps by another object, to a client
-    // that subscribed to the old one. Each subscriber hears that its
-    // stream ended: an error frame whose id is the subscription id.
+    endSubscriptionsTo(name);
+    Q_EMIT targetUnregistered(name);
+}
+
+void IpcRouter::endSubscriptionsTo(const QString& name)
+{
+    // Subscriptions go with their target. Kept, they would stream again
+    // when the name is registered later, perhaps by another object, to a
+    // client that subscribed to the old one. Each subscriber hears that its
+    // stream ended: an error frame whose id is the subscription id. The
+    // writes are buffered and cannot close a socket here, so the hash is
+    // not changed under the loop.
     for (auto subs = m_subscriptionsBySocket.begin(); subs != m_subscriptionsBySocket.end(); ++subs) {
         QLocalSocket* socket = subs.key();
         QList<Subscription>& list = subs.value();
@@ -318,7 +340,6 @@ void IpcRouter::unregisterTarget(const QString& name, QObject* object)
             sub = list.erase(sub);
         }
     }
-    Q_EMIT targetUnregistered(name);
 }
 
 QStringList IpcRouter::listTargets() const
@@ -359,6 +380,12 @@ QJsonObject IpcRouter::schemaFor(const QString& targetName) const
 
 QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const QVariantList& args,
                            InvokeOutcome* outcome, QString* errorMessage)
+{
+    return invokeCall(targetName, fn, args, 0, 0, outcome, errorMessage);
+}
+
+QVariant IpcRouter::invokeCall(const QString& targetName, const QString& fn, const QVariantList& args,
+                               quint64 connectionId, qint64 requestId, InvokeOutcome* outcome, QString* errorMessage)
 {
     Q_ASSERT(thread() == QThread::currentThread());
     auto fail = [&](InvokeOutcome code, const QString& msg) -> QVariant {
@@ -462,17 +489,43 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     IpcCallContext::Call call;
     call.object = dynamic_cast<const void*>(obj);
     call.outer = IpcCallContext::current();
+    call.loopLevel = QThread::currentThread()->loopLevel();
+    call.router = this;
+    call.connectionId = connectionId;
+    call.requestId = requestId;
     IpcCallContext::current() = &call;
     const bool ok =
         method.invoke(obj, Qt::DirectConnection, ret, g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9]);
     IpcCallContext::current() = call.outer;
-    if (ok && call.failed) {
-        return fail(InvokeOutcome::CallFailed, call.message);
-    }
     if (!ok) {
+        // QMetaMethod::invoke fails before it runs a moc-generated method,
+        // so no pending reply exists then. A hand-written qt_metacall may
+        // run the method and still report failure: the error below then
+        // answers the call, and the pending reply has nothing left to
+        // answer.
+        if (call.pendingToken != 0) {
+            takePendingCall(call.pendingToken);
+        }
         return fail(
             InvokeOutcome::InvokeFailed,
             QStringLiteral("invocation of '%1.%2' failed (QMetaMethod::invoke returned false)").arg(targetName, fn));
+    }
+    if (call.deferred) {
+        // The call has one answer, the first one given. A method that
+        // deferred and then failed the call is answered by the error now,
+        // unless its pending reply answered (or abandoned) the call during
+        // the method already. Taking the call out of m_pendingCalls makes
+        // a later finish() on the pending reply a no-op.
+        if (call.failed && (call.pendingToken == 0 || takePendingCall(call.pendingToken))) {
+            return fail(InvokeOutcome::CallFailed, call.message);
+        }
+        if (outcome) {
+            *outcome = InvokeOutcome::Deferred;
+        }
+        return {};
+    }
+    if (call.failed) {
+        return fail(InvokeOutcome::CallFailed, call.message);
     }
     if (outcome) {
         *outcome = InvokeOutcome::Ok;
@@ -490,9 +543,12 @@ void IpcRouter::handleNewConnection()
         // Cap the per-socket kernel-side read buffer. Without this,
         // a client that opens the socket and never sends a newline
         // can pin arbitrary amounts of memory in the receive buffer
-        // until canReadLine() finally returns true. handleClientReadyRead
-        // also enforces the same cap at the userspace-buffer layer.
-        socket->setReadBufferSize(MaxLineBytes);
+        // until canReadLine() finally returns true. readFrames also
+        // enforces the same cap at the userspace-buffer layer.
+        socket->setReadBufferSize(detail::MaxLineBytes);
+        const quint64 connectionId = nextConnectionId();
+        m_connectionIdBySocket.insert(socket, connectionId);
+        m_socketByConnectionId.insert(connectionId, socket);
         // Explicit Qt::DirectConnection: both signals fire from the
         // router's own thread (same thread as the QLocalServer), and
         // the dispatch / disconnect paths intentionally re-enter
@@ -515,9 +571,25 @@ void IpcRouter::handleNewConnection()
 
 void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
 {
-    if (!socket) {
+    // A dispatch on this socket is on the stack already when a target
+    // method spins a nested event loop and the queued batch kick below
+    // runs inside it (Qt does not re-emit readyRead for a socket whose
+    // readyRead is still being handled). Reading on would answer later
+    // requests before the running one; the outer readFrames reads them
+    // when the method returns.
+    if (!socket || m_socketsInDispatch.contains(socket)) {
         return;
     }
+    m_socketsInDispatch.insert(socket);
+    readFrames(socket);
+    m_socketsInDispatch.remove(socket);
+    if (m_socketsToDelete.remove(socket)) {
+        socket->deleteLater();
+    }
+}
+
+void IpcRouter::readFrames(QLocalSocket* socket)
+{
     // Hard cap on the unframed accumulation. canReadLine() only
     // returns true once a '\n' arrives; until then bytes accumulate
     // in the QLocalSocket's userspace buffer (bounded by
@@ -528,11 +600,17 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
     // there's no way for a valid line to arrive on this connection.
     // Force the socket closed with a MALFORMED_REQUEST diagnostic;
     // handleClientDisconnected will clean up the subscription state.
-    if (!socket->canReadLine() && socket->bytesAvailable() >= MaxLineBytes) {
-        closeWithMalformedDiagnostic(
-            socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes));
-        return;
-    }
+    // Checked again when the lines run out: the bytes may have come in
+    // while a dispatch below ran a nested event loop, whose readyRead
+    // brought no new pass here, and with the buffer full none comes.
+    const auto closeIfLineTooLong = [this, socket]() {
+        if (socket->state() == QLocalSocket::ConnectedState && !socket->canReadLine()
+            && socket->bytesAvailable() >= detail::MaxLineBytes) {
+            closeWithMalformedDiagnostic(
+                socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(detail::MaxLineBytes));
+        }
+    };
+    closeIfLineTooLong();
     int frames = 0;
     while (socket->canReadLine()) {
         // A prior dispatch() in this readyRead burst may have force-
@@ -544,13 +622,13 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             return;
         }
         QByteArray line = socket->readLine();
-        if (line.size() > MaxLineBytes) {
+        if (line.size() > detail::MaxLineBytes) {
             // Defense-in-depth: readLine returned a line that's
             // somehow larger than the cap (shouldn't happen given the
             // pre-canReadLine guard above, but Qt's behavior here is
             // documented as "up to MaxBytes" without a hard floor).
             closeWithMalformedDiagnostic(
-                socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes));
+                socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(detail::MaxLineBytes));
             return;
         }
         // Strip the trailing newline; QJsonDocument tolerates it
@@ -562,7 +640,7 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             continue;
         }
         dispatch(socket, line);
-        if (++frames >= MaxFramesPerReadyRead) {
+        if (++frames >= detail::MaxFramesPerReadyRead) {
             // Yield to the event loop so other connections (and the
             // event loop itself) aren't starved by a pipelining peer.
             // Reschedule ourselves only if data remains; readyRead
@@ -583,6 +661,7 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             return;
         }
     }
+    closeIfLineTooLong();
 }
 
 void IpcRouter::handleClientDisconnected(QLocalSocket* socket)
@@ -597,16 +676,32 @@ void IpcRouter::handleClientDisconnected(QLocalSocket* socket)
     // map size stays bounded by live connections.
     m_subscriptionsBySocket.remove(socket);
     m_malformedCountBySocket.remove(socket);
-    // Only schedule deleteLater for sockets the router still owns
-    // as live children of m_server. When stop() resets m_server,
-    // each child socket's destructor fires disconnected() synchronously,
-    // and we'd be calling deleteLater() on a QObject already inside
-    // its destruction path — Qt logs a warning ("cannot deleteLater()
-    // an object already being destroyed"). The parent-child cleanup
-    // covers that case for us.
-    if (m_server && socket->parent() == m_server.get()) {
-        socket->deleteLater();
+    // The connection's id goes, so sendEvent and pending replies find it
+    // closed, and so do its deferred calls, whose answers have nowhere to
+    // go. stop() forgets its sockets and books their closes itself.
+    const quint64 connectionId = m_connectionIdBySocket.take(socket);
+    if (connectionId != 0) {
+        m_socketByConnectionId.remove(connectionId);
+        const QSet<quint64> tokens = m_pendingTokensByConnection.take(connectionId);
+        for (const quint64 token : tokens) {
+            m_pendingCalls.remove(token);
+        }
+        connectionGone(connectionId);
     }
+    retireSocket(socket);
+}
+
+void IpcRouter::retireSocket(QLocalSocket* socket)
+{
+    // A deleteLater() made inside a nested event loop runs in that loop,
+    // so a socket closed while a target method spins one would be freed
+    // under the dispatch that runs the method. handleClientReadyRead
+    // deletes such a socket when the dispatch unwinds.
+    if (m_socketsInDispatch.contains(socket)) {
+        m_socketsToDelete.insert(socket);
+        return;
+    }
+    socket->deleteLater();
 }
 
 void IpcRouter::closeWithMalformedDiagnostic(QLocalSocket* socket, const QString& message)
@@ -630,13 +725,13 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         const QJsonObject err = buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest), parseError);
         socket->write(writeLine(err));
         // Increment per-socket malformed-frame counter. If the peer
-        // keeps streaming garbage past MaxConsecutiveMalformedFrames
+        // keeps streaming garbage past detail::MaxConsecutiveMalformedFrames
         // in a row, close the connection so the router doesn't keep
         // echoing errors indefinitely.
         int& count = m_malformedCountBySocket[socket];
-        if (++count > MaxConsecutiveMalformedFrames) {
+        if (++count > detail::MaxConsecutiveMalformedFrames) {
             qWarning("PhosphorIpc::IpcRouter::dispatch: socket exceeded %d consecutive malformed frames; closing",
-                     MaxConsecutiveMalformedFrames);
+                     detail::MaxConsecutiveMalformedFrames);
             // No additional diagnostic frame here — the per-frame
             // MALFORMED_REQUEST written via socket->write above
             // already told the peer; we only need to flush + abort.
@@ -670,9 +765,29 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         return;
     }
     if (req.type == QLatin1String(RequestType::Call)) {
+        // readFrames dispatches only for an open socket, and the router
+        // knows the id of every one.
+        const quint64 connectionId = m_connectionIdBySocket.value(socket);
+        Q_ASSERT(connectionId != 0);
         InvokeOutcome outcome = InvokeOutcome::Ok;
         QString invokeError;
-        const QVariant result = invoke(req.target, req.fn, req.args, &outcome, &invokeError);
+        const QVariant result = invokeCall(req.target, req.fn, req.args, connectionId, req.id, &outcome, &invokeError);
+        // The method may have closed the connection (stop(), or sendEvent
+        // past the output limit). Its answer has nowhere to go.
+        if (socket->state() != QLocalSocket::ConnectedState) {
+            return;
+        }
+        if (outcome == InvokeOutcome::Deferred) {
+            if (connectionId == 0) {
+                // A deferral needs the connection's id, and without one
+                // the pending reply held no call: nothing would answer.
+                socket->write(writeLine(buildError(req.id, QString::fromUtf8(ErrorCode::CallAbandoned),
+                                                   QStringLiteral("the call came from an unknown connection"))));
+            }
+            // Otherwise the pending reply answers the call later, or did
+            // already.
+            return;
+        }
         if (outcome != InvokeOutcome::Ok) {
             // Structured outcome -> wire error code. No string
             // matching: a future tweak to the diagnostic message
@@ -696,6 +811,7 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
                 code = QString::fromUtf8(ErrorCode::CallFailed);
                 break;
             case InvokeOutcome::Ok:
+            case InvokeOutcome::Deferred:
                 Q_UNREACHABLE();
             }
             socket->write(writeLine(buildError(req.id, code, invokeError)));
@@ -714,6 +830,109 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
     }
     socket->write(writeLine(buildError(req.id, QString::fromUtf8(ErrorCode::MalformedRequest),
                                        QStringLiteral("unknown request type '%1'").arg(req.type))));
+}
+
+IpcPendingReply IpcRouter::deferCall(IpcCallContext::Call& call)
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+    // The connection may have closed during the method already (stop(),
+    // sendEvent past the output limit). Its calls were taken out of the
+    // books then, and an entry made now would stay until the target drops
+    // the pending reply. The pending reply holds the call all the same,
+    // and finds nothing to answer.
+    if (!connectedSocket(call.connectionId)) {
+        call.pendingToken = ++m_lastPendingToken;
+        return IpcPendingReply(this, call.pendingToken, call.connectionId);
+    }
+    QSet<quint64>& tokens = m_pendingTokensByConnection[call.connectionId];
+    if (tokens.size() >= MaxPendingCallsPerConnection) {
+        // An error the method sent already is the more telling one.
+        if (!call.failed) {
+            call.failed = true;
+            call.message = QStringLiteral("too many deferred calls waiting on this connection (cap %1)")
+                               .arg(MaxPendingCallsPerConnection);
+        }
+        return {};
+    }
+    const quint64 token = ++m_lastPendingToken;
+    m_pendingCalls.insert(token, PendingCall{call.connectionId, call.requestId});
+    tokens.insert(token);
+    call.pendingToken = token;
+    return IpcPendingReply(this, token, call.connectionId);
+}
+
+std::optional<IpcRouter::PendingCall> IpcRouter::takePendingCall(quint64 token)
+{
+    const auto it = m_pendingCalls.constFind(token);
+    if (it == m_pendingCalls.cend()) {
+        return std::nullopt;
+    }
+    const PendingCall pending = it.value();
+    m_pendingCalls.erase(it);
+    const auto tokens = m_pendingTokensByConnection.find(pending.connectionId);
+    if (tokens != m_pendingTokensByConnection.end()) {
+        tokens->remove(token);
+        if (tokens->isEmpty()) {
+            m_pendingTokensByConnection.erase(tokens);
+        }
+    }
+    return pending;
+}
+
+bool IpcRouter::finishPendingCall(quint64 token, const QJsonValue& result)
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+    const std::optional<PendingCall> pending = takePendingCall(token);
+    QLocalSocket* socket = pending ? connectedSocket(pending->connectionId) : nullptr;
+    if (!socket) {
+        return false;
+    }
+    socket->write(writeLine(buildReply(pending->requestId, result)));
+    return true;
+}
+
+bool IpcRouter::failPendingCall(quint64 token, const QString& code, const QString& message)
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+    const std::optional<PendingCall> pending = takePendingCall(token);
+    QLocalSocket* socket = pending ? connectedSocket(pending->connectionId) : nullptr;
+    if (!socket) {
+        return false;
+    }
+    socket->write(writeLine(buildError(pending->requestId, code, message)));
+    return true;
+}
+
+QLocalSocket* IpcRouter::connectedSocket(quint64 connectionId) const
+{
+    QLocalSocket* socket = m_socketByConnectionId.value(connectionId).data();
+    return socket && socket->state() == QLocalSocket::ConnectedState ? socket : nullptr;
+}
+
+void IpcRouter::connectionGone(quint64 connectionId)
+{
+    // connectionClosed goes out from the event loop. A close happens
+    // inside router calls (the abort in sendEvent or broadcastEvent when a
+    // client is too far behind, stop()), and a slot that ends the
+    // connection's work must not run inside the target code that made
+    // that call. One queued flush serves every close
+    // booked before it runs.
+    m_closedConnections.append(connectionId);
+    if (m_closedConnections.size() == 1) {
+        QMetaObject::invokeMethod(this, &IpcRouter::announceClosedConnections, Qt::QueuedConnection);
+    }
+}
+
+void IpcRouter::announceClosedConnections()
+{
+    // takeFirst, not a range loop: a slot may close another connection,
+    // which appends to the list while it is being sent. A slot that
+    // destroys the router (against the IpcRouter.h lifetime rule, but
+    // cheap to survive) ends the loop.
+    const QPointer<IpcRouter> self(this);
+    while (self && !m_closedConnections.isEmpty()) {
+        Q_EMIT connectionClosed(m_closedConnections.takeFirst());
+    }
 }
 
 } // namespace PhosphorIpc

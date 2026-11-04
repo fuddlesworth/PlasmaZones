@@ -20,10 +20,14 @@
 #include <QTest>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <memory>
+
 using namespace PhosphorIpc;
+using PhosphorIpcTests::connectClient;
 using PhosphorIpcTests::makeReq;
 using PhosphorIpcTests::readLines;
 using PhosphorIpcTests::RouterFixture;
+using PhosphorIpcTests::send;
 
 namespace {
 
@@ -77,6 +81,8 @@ private Q_SLOTS:
     void multipleSubscribers_eachReceiveEvent();
     void disconnect_pruneSubscriptions();
     void unregister_endsSubscriptions();
+    void destroyedTarget_endsSubscriptions();
+    void subscribe_duplicateIdRejected();
 };
 
 void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
@@ -90,12 +96,9 @@ void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
     // First line is the subscribe ack.
     const QList<QJsonObject> ack = readLines(socket, 1);
     QCOMPARE(ack.size(), 1);
@@ -127,12 +130,9 @@ void TestPhosphorIpcSubscribe::subscribe_unknownTarget()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("ghost"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("ghost"), QStringLiteral("countChanged")));
     const QList<QJsonObject> resp = readLines(socket, 1);
     QCOMPARE(resp.size(), 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
@@ -150,12 +150,9 @@ void TestPhosphorIpcSubscribe::subscribe_unknownSignal()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("ghostSignal"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("ghostSignal")));
     const QList<QJsonObject> resp = readLines(socket, 1);
     QCOMPARE(resp.size(), 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
@@ -179,17 +176,12 @@ void TestPhosphorIpcSubscribe::subscribe_duplicateRejected()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
     readLines(socket, 1); // first ack
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 2, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 2, QStringLiteral("count"), QStringLiteral("countChanged")));
     const QList<QJsonObject> resp = readLines(socket, 1);
     QCOMPARE(resp.size(), 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
@@ -216,12 +208,9 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
     readLines(socket, 1); // discard the ack
 
     QJsonArray args;
@@ -231,8 +220,7 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
     QCOMPARE(events.size(), 1);
 
     // Send unsubscribe.
-    socket.write(writeLine(makeReq(QStringLiteral("unsubscribe"), 2, {}, {}, 1)));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("unsubscribe"), 2, {}, {}, 1));
     const QList<QJsonObject> unsubAck = readLines(socket, 1);
     QCOMPARE(unsubAck.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
 
@@ -245,8 +233,7 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
     // before the list reply. Read exactly one frame and assert it's
     // the list reply, never the stray event.
     router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
-    socket.write(writeLine(makeReq(QStringLiteral("list"), 3)));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("list"), 3));
     const QList<QJsonObject> next = readLines(socket, 1);
     QCOMPARE(next.size(), 1);
     QCOMPARE(next.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
@@ -262,12 +249,10 @@ void TestPhosphorIpcSubscribe::unsubscribe_unknownId()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
     // Unsubscribe with no prior subscribe on this connection.
-    socket.write(writeLine(makeReq(QStringLiteral("unsubscribe"), 1, {}, {}, 42)));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("unsubscribe"), 1, {}, {}, 42));
     const QList<QJsonObject> resp = readLines(socket, 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
     QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_SUBSCRIPTION"));
@@ -285,17 +270,11 @@ void TestPhosphorIpcSubscribe::multipleSubscribers_eachReceiveEvent()
 
     QLocalSocket a;
     QLocalSocket b;
-    a.connectToServer(fx.sockPath);
-    b.connectToServer(fx.sockPath);
-    QVERIFY(a.waitForConnected(2000));
-    QVERIFY(b.waitForConnected(2000));
+    QVERIFY(connectClient(a, fx.sockPath));
+    QVERIFY(connectClient(b, fx.sockPath));
 
-    a.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    b.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 2, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    a.flush();
-    b.flush();
+    send(a, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
+    send(b, makeReq(QStringLiteral("subscribe"), 2, QStringLiteral("count"), QStringLiteral("countChanged")));
     readLines(a, 1);
     readLines(b, 1);
 
@@ -328,11 +307,8 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // from "did it not crash."
     {
         QLocalSocket sock;
-        sock.connectToServer(fx.sockPath);
-        QVERIFY(sock.waitForConnected(2000));
-        sock.write(writeLine(
-            makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-        sock.flush();
+        QVERIFY(connectClient(sock, fx.sockPath));
+        send(sock, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
         readLines(sock, 1); // ack
         sock.disconnectFromServer();
         // Wait for the disconnected signal to actually fire (and
@@ -360,11 +336,8 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // events back onto the live socket would surface as extra
     // events arriving here.)
     QLocalSocket live;
-    live.connectToServer(fx.sockPath);
-    QVERIFY(live.waitForConnected(2000));
-    live.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    live.flush();
+    QVERIFY(connectClient(live, fx.sockPath));
+    send(live, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged")));
     readLines(live, 1); // ack
 
     for (int i = 1; i <= 3; ++i) {
@@ -384,8 +357,7 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // misrouted here, it would arrive before the list reply. Read
     // exactly one more frame and assert it's the list reply, never
     // an event.
-    live.write(writeLine(makeReq(QStringLiteral("list"), 99)));
-    live.flush();
+    send(live, makeReq(QStringLiteral("list"), 99));
     const QList<QJsonObject> next = readLines(live, 1);
     QCOMPARE(next.size(), 1);
     QCOMPARE(next.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
@@ -417,24 +389,23 @@ void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
     // Subscribe to the first 256 distinct (target, signal) pairs.
     // Each subscribe issues one round-trip with the ack reply.
     for (int i = 0; i < Cap; ++i) {
-        socket.write(writeLine(makeReq(QStringLiteral("subscribe"), i + 1, QStringLiteral("count_%1").arg(i),
-                                       QStringLiteral("countChanged"))));
-        socket.flush();
+        send(socket,
+             makeReq(QStringLiteral("subscribe"), i + 1, QStringLiteral("count_%1").arg(i),
+                     QStringLiteral("countChanged")));
         const QList<QJsonObject> ack = readLines(socket, 1);
         QVERIFY2(ack.size() == 1, qPrintable(QStringLiteral("subscribe %1: no ack").arg(i)));
         QCOMPARE(ack.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     }
 
     // 257th subscription: must fail with MALFORMED_REQUEST.
-    socket.write(writeLine(makeReq(QStringLiteral("subscribe"), Cap + 1, QStringLiteral("count_%1").arg(Cap),
-                                   QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket,
+         makeReq(QStringLiteral("subscribe"), Cap + 1, QStringLiteral("count_%1").arg(Cap),
+                 QStringLiteral("countChanged")));
     const QList<QJsonObject> resp = readLines(socket, 1);
     QCOMPARE(resp.size(), 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
@@ -449,8 +420,7 @@ void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
     QJsonArray args;
     args.append(1);
     router.broadcastEvent(QStringLiteral("count_0"), QStringLiteral("countChanged"), args);
-    socket.write(writeLine(makeReq(QStringLiteral("list"), Cap + 2)));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("list"), Cap + 2));
     const QList<QJsonObject> after = readLines(socket, 2);
     QCOMPARE(after.size(), 2);
     QCOMPARE(after.at(0).value(QStringLiteral("type")).toString(), QStringLiteral("event"));
@@ -470,11 +440,8 @@ void TestPhosphorIpcSubscribe::unregister_endsSubscriptions()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    QVERIFY(connectClient(socket, fx.sockPath));
+    send(socket, makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("count"), QStringLiteral("countChanged")));
     QCOMPARE(readLines(socket, 1).size(), 1);
 
     // The subscriber hears that its stream ended.
@@ -493,14 +460,81 @@ void TestPhosphorIpcSubscribe::unregister_endsSubscriptions()
     QVERIFY(readLines(socket, 1, 300).isEmpty());
 
     // The connection stays usable: a new subscription streams.
-    socket.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 6, QStringLiteral("count"), QStringLiteral("countChanged"))));
-    socket.flush();
+    send(socket, makeReq(QStringLiteral("subscribe"), 6, QStringLiteral("count"), QStringLiteral("countChanged")));
     QCOMPARE(readLines(socket, 1).first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), QJsonArray{8});
     const QList<QJsonObject> events = readLines(socket, 1);
     QCOMPARE(events.size(), 1);
     QCOMPARE(events.first().value(QStringLiteral("subscriptionId")).toInt(), 6);
+}
+
+void TestPhosphorIpcSubscribe::destroyedTarget_endsSubscriptions()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+
+    IpcRouter& router = fx.router;
+    auto c = std::make_unique<CounterTarget>();
+    QVERIFY(router.registerTarget(QStringLiteral("count"), c.get()));
+    QVERIFY(router.start(fx.sockPath));
+
+    QLocalSocket socket;
+    QVERIFY(connectClient(socket, fx.sockPath));
+    send(socket, makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("count"), QStringLiteral("countChanged")));
+    QCOMPARE(readLines(socket, 1).size(), 1);
+
+    // Destroyed without unregisterTarget: the stream ends as it does on an
+    // unregister.
+    c.reset();
+    const QList<QJsonObject> ended = readLines(socket, 1);
+    QCOMPARE(ended.size(), 1);
+    QCOMPARE(ended.first().value(QStringLiteral("id")).toInt(), 5);
+    QCOMPARE(ended.first().value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::NoSuchTarget));
+
+    // The next object under the name does not stream to it.
+    CounterTarget other;
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &other));
+    router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), QJsonArray{7});
+    QVERIFY(readLines(socket, 1, 300).isEmpty());
+}
+
+void TestPhosphorIpcSubscribe::subscribe_duplicateIdRejected()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+
+    IpcRouter& router = fx.router;
+    CounterTarget a;
+    CounterTarget b;
+    QVERIFY(router.registerTarget(QStringLiteral("a"), &a));
+    QVERIFY(router.registerTarget(QStringLiteral("b"), &b));
+    QVERIFY(router.start(fx.sockPath));
+
+    QLocalSocket socket;
+    QVERIFY(connectClient(socket, fx.sockPath));
+    send(socket, makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("a"), QStringLiteral("countChanged")));
+    const QList<QJsonObject> ack = readLines(socket, 1);
+    QCOMPARE(ack.size(), 1);
+    QCOMPARE(ack.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+
+    // The same id for another stream on the connection is refused: the two
+    // streams could not be told apart.
+    send(socket, makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("b"), QStringLiteral("countChanged")));
+    const QList<QJsonObject> refused = readLines(socket, 1);
+    QCOMPARE(refused.size(), 1);
+    QCOMPARE(refused.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(refused.first().value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::MalformedRequest));
+
+    router.broadcastEvent(QStringLiteral("b"), QStringLiteral("countChanged"), QJsonArray{1});
+    QVERIFY(readLines(socket, 1, 300).isEmpty());
+
+    // Another connection may use the id.
+    QLocalSocket other;
+    QVERIFY(connectClient(other, fx.sockPath));
+    send(other, makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("b"), QStringLiteral("countChanged")));
+    const QList<QJsonObject> otherAck = readLines(other, 1);
+    QCOMPARE(otherAck.size(), 1);
+    QCOMPARE(otherAck.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
 }
 
 QTEST_GUILESS_MAIN(TestPhosphorIpcSubscribe)

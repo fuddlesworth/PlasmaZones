@@ -56,7 +56,8 @@ bool Client::connectTo(const QString& socketPath, int timeoutMs)
     return true;
 }
 
-std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs)
+std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs,
+                                           const std::function<void(const QJsonObject&)>& onEvent)
 {
     if (m_socket.state() != QLocalSocket::ConnectedState) {
         m_errorMessage = QStringLiteral("not connected");
@@ -89,15 +90,19 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
     timeout.setSingleShot(true);
     QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
 
+    // Scan complete lines without consuming them eagerly. The line we
+    // match for expectedId, everything before it (kept events and
+    // unrelated orphan error frames) and malformed lines get dropped from
+    // the buffer. Event frames after the matched line stay in m_readBuffer
+    // for takePendingBytes to surface to the streaming-subscribe loop.
+    // Event frames before it go to `onEvent` when one is set, and are
+    // dropped there. `cursor` survives across drains: the lines before it
+    // are kept events, already looked at, and a call whose target streams
+    // events to its caller would otherwise re-parse every one of them on
+    // each readyRead.
+    int cursor = 0;
     auto drain = [&]() {
         m_readBuffer.append(m_socket.readAll());
-        // Scan complete lines without consuming them eagerly. The
-        // line we match for expectedId (and any unrelated orphan
-        // error frames that arrived before it) get dropped from the
-        // buffer; subscription events that ride on the same burst
-        // stay in m_readBuffer for takePendingBytes to surface to
-        // the streaming-subscribe loop.
-        int cursor = 0;
         while (true) {
             const int nl = m_readBuffer.indexOf('\n', cursor);
             if (nl < 0) {
@@ -123,12 +128,18 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
             const QJsonObject obj = doc.object();
             const QString frameType = obj.value(QLatin1String(PhosphorIpc::Field::Type)).toString();
             // Event frames (and any other ResponseType::Event-shaped
-            // payload) carry subscriptionId, not id. They must be
-            // preserved in m_readBuffer so the subscribe loop's
-            // takePendingBytes() handoff can deliver them. Advance
-            // the cursor without removing.
+            // payload) carry subscriptionId, or target and signal for an
+            // event sent to this connection alone, never id. With an
+            // onEvent consumer they go to it now. Without one they stay in
+            // m_readBuffer, the cursor moving past them, until a match
+            // drops them with everything before it.
             if (frameType == QLatin1String(PhosphorIpc::ResponseType::Event)) {
-                cursor = lineEnd;
+                if (onEvent) {
+                    m_readBuffer.remove(cursor, lineEnd - cursor);
+                    onEvent(obj);
+                } else {
+                    cursor = lineEnd;
+                }
                 continue;
             }
             // Non-event frames must carry an id to be correlated.
@@ -147,6 +158,7 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
                 // onto the same readyRead burst) stays in
                 // m_readBuffer for takePendingBytes to surface.
                 m_readBuffer.remove(0, lineEnd);
+                cursor = 0;
                 loop.quit();
                 return;
             }
@@ -169,7 +181,9 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
     // socket).
     drain();
     if (!matched) {
-        timeout.start(timeoutMs);
+        if (timeoutMs > 0) {
+            timeout.start(timeoutMs);
+        }
         loop.exec();
     }
 

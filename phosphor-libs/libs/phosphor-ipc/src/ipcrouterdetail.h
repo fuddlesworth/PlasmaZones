@@ -11,18 +11,57 @@
 #include <QString>
 
 // Private detail header shared between ipcrouter.cpp and
-// ipcrouterdispatch.cpp. Holds the meta-helpers and the per-router
-// resource caps so both translation units agree on the introspection
-// floor (QObject's built-in methods, dropped from the wire-callable
-// surface), the access filter (Public only), and the cap constants.
+// ipcrouterdispatch.cpp. Holds the meta-helpers, so both translation
+// units agree on the introspection floor (QObject's built-in methods,
+// dropped from the wire-callable surface) and the access filter (Public
+// only), and the router's per-connection resource caps, kept together
+// so the limits a client can run into are listed in one place (the
+// deferred-call cap, which targets document, is public in IpcRouter.h).
 // Not installed; consumers see only the public IpcRouter API.
 namespace PhosphorIpc::detail {
 
 // Per-socket subscription cap. Bounds the amplification factor a
-// single client can pin on broadcastEvent. Lives in the shared
-// header because both the read-side dispatcher (handleSubscribe)
-// and any future router-side accounting need the same value.
+// single client can pin on broadcastEvent.
 inline constexpr int MaxSubscriptionsPerSocket = 256;
+
+// Hard cap on a single NDJSON request line. The router buffers
+// unframed bytes until canReadLine() returns true; without a cap,
+// a peer that never sends '\n' would let the per-socket buffer
+// grow until the process OOMs. 1 MiB is far above any realistic
+// shell request (the upper-bound observed is ~few hundred bytes
+// of args+target+fn payload) and well under any kernel send/recv
+// buffer ceiling.
+inline constexpr qint64 MaxLineBytes = 1024 * 1024;
+
+// Cap on frames dispatched per batch of IpcRouter::readFrames. A peer
+// that pipelines thousands of frames in a single burst would otherwise
+// let the dispatch loop monopolise the event loop and starve other
+// connections. When the cap is hit and more lines remain, the router
+// schedules the next batch via a queued invocation, yielding to the
+// event loop between batches.
+inline constexpr int MaxFramesPerReadyRead = 64;
+
+// Maximum number of CONSECUTIVE malformed frames a peer may send
+// before the router force-closes the connection. The (N+1)-th
+// consecutive malformed frame triggers the close (i.e. the cap is
+// "the largest run we tolerate"). A well-formed frame anywhere in
+// the stream resets the counter; we only close on sustained
+// garbage, not on a one-off bad line.
+inline constexpr int MaxConsecutiveMalformedFrames = 16;
+
+// Write-side cap on the events queued to one connection, symmetric to
+// the read-side line cap (MaxLineBytes). A client that never
+// reads from its socket would otherwise let the router's pending-write
+// queue for it grow without bound as events pile up. 16 MiB, 16x the
+// read cap, because event payloads can legitimately be larger than
+// request lines and a slow consumer is more common than a malformed
+// client. broadcastEvent and sendEvent check it before each event and
+// close a connection that is further behind. Replies are not checked:
+// there is one per request, so the client's own requests bound them.
+inline constexpr qint64 MaxBytesToWrite = 16 * 1024 * 1024;
+
+// The cap on deferred calls per connection is public, since a target's
+// client can run into it: IpcRouter::MaxPendingCallsPerConnection.
 
 // First method index that counts as user-declared on `object`.
 // For a plain QObject-derived target the floor is QObject's own

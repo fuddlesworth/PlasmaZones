@@ -10,7 +10,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-set(PHOSPHORIPC_VERSION "0.1.0")
+set(PHOSPHORIPC_VERSION "0.2.0")
 
 # The Qt floor this library requires AND advertises in its generated
 # PhosphorIpcConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
@@ -50,7 +50,8 @@ include(GenerateExportHeader)
 # Core: QObject / QVariant / QString. Network: QLocalServer /
 # QLocalSocket. Qml: IpcTarget's QML_ELEMENT registration. No Gui
 # here: none of the public headers (IpcRouter, IpcTarget, IpcProtocol,
-# IpcSchemaGenerator, IpcEngine) pull in any QtGui types, so linking
+# IpcSchemaGenerator, IpcEngine, IpcCallContext, IpcPendingReply, the
+# PhosphorIpc umbrella) pull in any QtGui types, so linking
 # Gui at the core target would force CLI consumers like phosphorctl
 # to drag in the full GUI stack for no reason. The Gui dependency is
 # scoped onto PhosphorIpcQml below (qmltyperegistrar's generated code
@@ -75,6 +76,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphoripc_public_HDRS
     include/PhosphorIpc/PhosphorIpc.h
     include/PhosphorIpc/IpcCallContext.h
+    include/PhosphorIpc/IpcPendingReply.h
     include/PhosphorIpc/IpcRouter.h
     include/PhosphorIpc/IpcTarget.h
     include/PhosphorIpc/IpcEngine.h
@@ -84,6 +86,7 @@ set(phosphoripc_public_HDRS
 
 set(phosphoripc_SRCS
     src/ipccallcontext.cpp
+    src/ipcpendingreply.cpp
     src/ipcrouter.cpp
     src/ipcrouterdispatch.cpp
     src/ipctarget.cpp

@@ -23,8 +23,10 @@ void printUsage(QTextStream& out)
 {
     out << "usage: phosphorctl [--socket PATH] <subcommand> [args]\n\n"
         << "Subcommands:\n"
-        << "  call <target>.<fn> [--arg name=value ...]\n"
-        << "      Invoke a function on a target and print its return value.\n"
+        << "  call <target>.<fn> [--arg name=value ...] [--timeout SECONDS]\n"
+        << "      Invoke a function on a target and print its return value. Waits\n"
+        << "      2 seconds for the answer by default, and without a limit for\n"
+        << "      --timeout 0. Events the target sends to the call go to stderr.\n"
         << "  list\n"
         << "      Print every registered target id, one per line.\n"
         << "  schema <target>\n"
