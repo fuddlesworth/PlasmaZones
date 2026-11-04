@@ -36,11 +36,15 @@ inline bool commandStillInTile(const QRectF& zone, const QPointF& commandedOrigi
 /// the one the tile wears. KWin's borderless maximized windows option takes the
 /// decoration off for a full maximize and puts it back on the restore. A
 /// maximize the user asked for (@p requestedMaximized without
-/// @p maximizeOwnedByTiling) is a state the tile does not hold: the next batch
-/// clears it, so the minimum without the title bar is not the tile's. Reported,
-/// the changed minimum re-tiled the screen and that batch cleared the maximize
-/// the user had just made, so the window jumped straight back to its tile
-/// (discussion #1182). A maximize the tiling put on the window (a monocle
+/// @p maximizeOwnedByTiling) is not the tile's state when its decoration
+/// changes. On a tiling screen the next batch clears it. On a scrolling screen
+/// the interception hands it to the engine, and the batch that answers makes
+/// it the column's maximize. Its poll then reports the minimum, or the
+/// decoration change does when the title bar comes off after that batch.
+/// Either way the minimum without the title bar is not one to report before
+/// that batch. Reported, the changed minimum re-tiled the screen and that
+/// batch cleared the maximize the user had just made, so the window jumped
+/// straight back to its tile (discussion #1182). A maximize the tiling put on the window (a monocle
 /// stack, a column maximized to the edges, or its own maximize write still in
 /// progress) is the tile's state, and its decoration is the tile's.
 inline constexpr bool decorationChangeMovesTileMinimum(bool requestedMaximized, bool maximizeOwnedByTiling)

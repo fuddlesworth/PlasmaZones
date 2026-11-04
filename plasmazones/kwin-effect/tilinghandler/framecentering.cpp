@@ -4,11 +4,14 @@
 // Frame-commit handling for TilingHandler: slotWindowFrameGeometryChanged,
 // which centres a tile whose client committed a smaller size than it was
 // asked for and reports a minimum size it discovers on the way,
-// reportMinSizeIfChanged, the min-size reporter it shares with the batch, and
-// reportStripCommit, which reports a strip window's answer to its offered
-// column (read by PlasmaZonesEffect::readColumnAnswer), and
-// cancelStripQuickTile, which takes KWin's quick tile back off a strip tile
-// through dropKWinTile and answerDroppedTileAck, which the batch shares.
+// reportMinSizeIfChanged, the min-size reporter it shares with the batch,
+// noteMinSizeDecorationChanged, which re-reports that minimum when the
+// window's decoration changes, reportStripCommit, which reports a strip
+// window's answer to its offered column (read by
+// PlasmaZonesEffect::readColumnAnswer), cancelStripQuickTile, which takes
+// KWin's quick tile back off a strip tile through dropKWinTile and
+// answerDroppedTileAck, which the batch shares, and
+// stripOutputMovedSinceBatch, whether a strip's output moved since its batch.
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
