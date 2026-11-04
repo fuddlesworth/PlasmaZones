@@ -460,6 +460,9 @@ PROSE_STRING_KEYS = {
     "highlight",
     "highlights",
     "label",
+    # A shader parameter's group is the section heading ParameterEditor.qml
+    # shows above that group's controls.
+    "group",
 }
 
 

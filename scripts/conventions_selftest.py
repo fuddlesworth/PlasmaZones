@@ -208,6 +208,7 @@ SELFTEST_JSON = json.dumps(
         "releases": [{"version": "1.0", "highlights": ["Fixed: the pane blurs — and the border follows."]}],
         "description": "A description field.",
         "presets": {"Plasma": {}},
+        "parameters": [{"id": "speed", "group": "Pass 0 - Flow Field"}],
         "nested": {"notprose": ["ignored — not a prose key"]},
     }
 )
@@ -933,6 +934,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
         # A preset's key is its label.
         if not any(v == "Plasma" for v in seen.values()):
             failures.append("iter_json_prose skips a preset name, which the picker shows verbatim")
+        # A shader parameter's group is the section heading ParameterEditor.qml shows.
+        if "/parameters/0/group" not in seen:
+            failures.append("iter_json_prose skips a shader parameter's group, which the editor shows as a heading")
         # And it must NOT widen to every string in the document.
         if any("notprose" in trail for trail in seen):
             failures.append("iter_json_prose yields strings under a non-prose key")
