@@ -76,6 +76,7 @@ private Q_SLOTS:
     void unsubscribe_unknownId();
     void multipleSubscribers_eachReceiveEvent();
     void disconnect_pruneSubscriptions();
+    void unregister_endsSubscriptions();
 };
 
 void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
@@ -456,6 +457,50 @@ void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
     QCOMPARE(after.at(0).value(QStringLiteral("subscriptionId")).toInt(), 1);
     QCOMPARE(after.at(1).value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(after.at(1).value(QStringLiteral("id")).toInt(), Cap + 2);
+}
+
+void TestPhosphorIpcSubscribe::unregister_endsSubscriptions()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+
+    IpcRouter& router = fx.router;
+    CounterTarget c;
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
+    QVERIFY(router.start(fx.sockPath));
+
+    QLocalSocket socket;
+    socket.connectToServer(fx.sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+    socket.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 5, QStringLiteral("count"), QStringLiteral("countChanged"))));
+    socket.flush();
+    QCOMPARE(readLines(socket, 1).size(), 1);
+
+    // The subscriber hears that its stream ended.
+    router.unregisterTarget(QStringLiteral("count"), &c);
+    const QList<QJsonObject> ended = readLines(socket, 1);
+    QCOMPARE(ended.size(), 1);
+    QCOMPARE(ended.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(ended.first().value(QStringLiteral("id")).toInt(), 5);
+    QCOMPARE(ended.first().value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::NoSuchTarget));
+
+    // A target registered again under the name, here another object, does
+    // not stream to the old subscription.
+    CounterTarget other;
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &other));
+    router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), QJsonArray{7});
+    QVERIFY(readLines(socket, 1, 300).isEmpty());
+
+    // The connection stays usable: a new subscription streams.
+    socket.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 6, QStringLiteral("count"), QStringLiteral("countChanged"))));
+    socket.flush();
+    QCOMPARE(readLines(socket, 1).first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), QJsonArray{8});
+    const QList<QJsonObject> events = readLines(socket, 1);
+    QCOMPARE(events.size(), 1);
+    QCOMPARE(events.first().value(QStringLiteral("subscriptionId")).toInt(), 6);
 }
 
 QTEST_GUILESS_MAIN(TestPhosphorIpcSubscribe)

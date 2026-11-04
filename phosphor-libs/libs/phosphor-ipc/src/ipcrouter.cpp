@@ -288,6 +288,25 @@ void IpcRouter::unregisterTarget(const QString& name, QObject* object)
         return;
     }
     m_targets.erase(it);
+    // Its subscriptions go with it. Kept, they would stream again when the
+    // name is registered later, perhaps by another object, to a client
+    // that subscribed to the old one. Each subscriber hears that its
+    // stream ended: an error frame whose id is the subscription id.
+    for (auto subs = m_subscriptionsBySocket.begin(); subs != m_subscriptionsBySocket.end(); ++subs) {
+        QLocalSocket* socket = subs.key();
+        QList<Subscription>& list = subs.value();
+        for (auto sub = list.begin(); sub != list.end();) {
+            if (sub->target != name) {
+                ++sub;
+                continue;
+            }
+            if (socket && socket->state() == QLocalSocket::ConnectedState) {
+                socket->write(writeLine(buildError(sub->subscriptionId, QString::fromUtf8(ErrorCode::NoSuchTarget),
+                                                   QStringLiteral("target '%1' was unregistered").arg(name))));
+            }
+            sub = list.erase(sub);
+        }
+    }
     Q_EMIT targetUnregistered(name);
 }
 
