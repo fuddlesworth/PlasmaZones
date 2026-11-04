@@ -9,8 +9,6 @@ body:
     attributes:
       value: |
         Have a question about PlasmaZones? Please check the [documentation](https://phosphor-works.github.io/plasmazones/) and search the open and closed issues first.
-
-        The support report below is required. It shows your settings, layouts and rules, which usually answers half the question.
   - type: textarea
     id: question
     attributes:
@@ -22,13 +20,3 @@ body:
     attributes:
       label: What you're trying to do
       description: Optional. The goal behind the question, and what you have tried so far.
-  - type: textarea
-    id: report
-    attributes:
-      label: Support report
-      description: |
-        Run `plasmazones-report` in a terminal and drag the `.tar.gz` file it names here. It is written to `/tmp` (or `$TMPDIR`) with home paths redacted, but it still contains window titles, your rule patterns and the model and serial number of your monitors, so look it over before posting it.
-        If the command fails because PlasmaZones isn't running, paste its output here along with the output of `journalctl --user -b -t plasmazonesd`.
-      placeholder: Drop the plasmazones-report .tar.gz file here
-    validations:
-      required: true

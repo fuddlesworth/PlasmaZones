@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Every issue goes through one of the forms here, and each form requires a plasmazones-report archive.
+# Every issue goes through one of the forms here. Only the bug report requires a plasmazones-report archive.
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
