@@ -69,7 +69,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <signal name="settingsChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified, except that a reload which moves only Editor.* settings emits editorSettingsChanged instead."/>
+        </signal>
+        <signal name="editorSettingsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to the layout editor and the Settings app: a reload moved one or more Editor.* settings (shortcuts, snapping, fill on drop, canvas background). Kept separate from settingsChanged because no other consumer reads those keys, so a save from the editor does not make every settingsChanged subscriber re-fetch its state."/>
         </signal>
         <signal name="motionProfileTreeChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed. Since schema v8 that tree is the Animations/MotionProfileTree config key, so this fires on a write to it rather than on a file rescan. Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own timing writes. The KWin effect re-fetches motionProfileTree on this signal."/>

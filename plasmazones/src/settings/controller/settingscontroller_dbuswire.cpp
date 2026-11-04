@@ -5,7 +5,8 @@
 //
 // Centralises every daemon-broadcast subscription the settings UI relies
 // on for live updates:
-//   * Settings reload + async running-windows reply (Settings interface)
+//   * Settings reload, the Editor.*-only reload, and the async
+//     running-windows reply (Settings interface)
 //   * Layout list / property / assignment mutations + quick-slot updates
 //     (LayoutRegistry interface)
 //   * Virtual-desktop + activity changes (LayoutRegistry interface)
@@ -72,6 +73,16 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     // Listen for external settings changes from the daemon.
     const QString settingsIface = QString(PhosphorProtocol::Service::Interface::Settings);
     subscribeDaemonSignal(settingsIface, QStringLiteral("settingsChanged"), SLOT(onExternalSettingsChanged()));
+    // A reload that moved only Editor.* settings (typically the layout
+    // editor's own write) is announced on its own signal, so the daemon's
+    // other settingsChanged subscribers are spared it.
+    subscribeDaemonSignal(settingsIface, QStringLiteral("editorSettingsChanged"),
+                          SLOT(onExternalEditorSettingsChanged()));
+    // Not runningChanged: the daemon takes its bus name before its config
+    // migration runs, so a look at config.json then can still find the file
+    // the migration is about to move aside. daemonReady comes after.
+    subscribeDaemonSignal(QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("daemonReady"),
+                          SLOT(onDaemonReady()));
 
     // Async window picker reply channel. Emitted by SettingsAdaptor whenever
     // the KWin effect answers a runningWindowsRequested call via

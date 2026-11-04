@@ -44,8 +44,6 @@ SettingsFlickable {
                         description: i18n("Clone the currently selected zone")
 
                         ShortcutCaptureField {
-                            id: editorDuplicateShortcutField
-
                             accessibleName: i18n("Duplicate zone")
                             keySequence: root.settingsBridge.duplicateShortcut
                             placeholderText: "Ctrl+D"
@@ -62,8 +60,6 @@ SettingsFlickable {
                         description: i18n("Divide selected zone into left and right halves")
 
                         ShortcutCaptureField {
-                            id: editorSplitHorizontalShortcutField
-
                             accessibleName: i18n("Split horizontally")
                             keySequence: root.settingsBridge.splitHorizontalShortcut
                             placeholderText: "Ctrl+Shift+H"
@@ -80,8 +76,6 @@ SettingsFlickable {
                         description: i18n("Divide selected zone into top and bottom halves")
 
                         ShortcutCaptureField {
-                            id: editorSplitVerticalShortcutField
-
                             accessibleName: i18n("Split vertically")
                             keySequence: root.settingsBridge.splitVerticalShortcut
                             placeholderText: "Ctrl+Alt+V"
@@ -98,8 +92,6 @@ SettingsFlickable {
                         description: i18n("Expand selected zone to fill surrounding empty area")
 
                         ShortcutCaptureField {
-                            id: editorFillShortcutField
-
                             accessibleName: i18n("Fill space")
                             keySequence: root.settingsBridge.fillShortcut
                             placeholderText: "Ctrl+Shift+F"
@@ -118,7 +110,7 @@ SettingsFlickable {
                         Button {
                             text: i18n("Reset to defaults")
                             icon.name: "edit-reset"
-                            onClicked: root.settingsBridge.resetDefaults()
+                            onClicked: root.settingsBridge.resetShortcutDefaults()
                         }
                     }
                 }
@@ -179,18 +171,20 @@ SettingsFlickable {
                         description: i18n("Horizontal grid spacing as percentage of screen width")
 
                         SettingsSlider {
-                            id: snapIntervalXSlider
-
                             accessibleName: i18n("Grid interval X")
-                            from: 0.01
-                            to: 0.5
-                            stepSize: 0.01
-                            value: root.settingsBridge.snapIntervalX
+                            // Percent units, not the stored fraction: a step of
+                            // 1/100 lands on values like 0.35000000000000003,
+                            // which never compares equal to a saved 0.35.
+                            from: Math.round(root.settingsBridge.snapIntervalMin * 100)
+                            to: Math.round(root.settingsBridge.snapIntervalMax * 100)
+                            stepSize: 1
+                            tickMarkStepSize: 10
+                            value: Math.round(root.settingsBridge.snapIntervalX * 100)
                             formatValue: function (v) {
-                                return Math.round(v * 100) + "%";
+                                return i18nc("a whole-number percentage", "%1%", Math.round(v));
                             }
                             onMoved: value => {
-                                return root.settingsBridge.snapIntervalX = value;
+                                root.settingsBridge.snapIntervalX = Math.round(value) / 100;
                             }
                         }
                     }
@@ -202,18 +196,20 @@ SettingsFlickable {
                         description: i18n("Vertical grid spacing as percentage of screen height")
 
                         SettingsSlider {
-                            id: snapIntervalYSlider
-
                             accessibleName: i18n("Grid interval Y")
-                            from: 0.01
-                            to: 0.5
-                            stepSize: 0.01
-                            value: root.settingsBridge.snapIntervalY
+                            // Percent units, not the stored fraction: a step of
+                            // 1/100 lands on values like 0.35000000000000003,
+                            // which never compares equal to a saved 0.35.
+                            from: Math.round(root.settingsBridge.snapIntervalMin * 100)
+                            to: Math.round(root.settingsBridge.snapIntervalMax * 100)
+                            stepSize: 1
+                            tickMarkStepSize: 10
+                            value: Math.round(root.settingsBridge.snapIntervalY * 100)
                             formatValue: function (v) {
-                                return Math.round(v * 100) + "%";
+                                return i18nc("a whole-number percentage", "%1%", Math.round(v));
                             }
                             onMoved: value => {
-                                return root.settingsBridge.snapIntervalY = value;
+                                root.settingsBridge.snapIntervalY = Math.round(value) / 100;
                             }
                         }
                     }
@@ -293,66 +289,29 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Background opacity")
+                        searchAnchor: "editorBackgroundOpacity"
                         description: i18n("Lower values let more of the desktop show through behind the editor")
 
                         SettingsSlider {
-                            id: backgroundOpacitySlider
-
                             accessibleName: i18n("Background opacity")
-                            from: 0
-                            to: 1
-                            stepSize: 0.01
-                            value: root.settingsBridge.backgroundOpacity
+                            // Percent units for the same reason as the grid
+                            // intervals, and it matters more here: the default,
+                            // 0.7, is one of the fractions a 0.01 step misses.
+                            from: Math.round(root.settingsBridge.backgroundOpacityMin * 100)
+                            to: Math.round(root.settingsBridge.backgroundOpacityMax * 100)
+                            stepSize: 1
+                            tickMarkStepSize: 10
+                            value: Math.round(root.settingsBridge.backgroundOpacity * 100)
                             formatValue: function (v) {
-                                return Math.round(v * 100) + "%";
+                                return i18nc("a whole-number percentage", "%1%", Math.round(v));
                             }
                             onMoved: value => {
-                                return root.settingsBridge.backgroundOpacity = value;
+                                root.settingsBridge.backgroundOpacity = Math.round(value) / 100;
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    // Keep inputs in sync with editorPage sub-controller properties
-    Connections {
-        function onDuplicateShortcutChanged() {
-            if (!editorDuplicateShortcutField.capturing)
-                editorDuplicateShortcutField.keySequence = root.settingsBridge.duplicateShortcut;
-        }
-
-        function onSplitHorizontalShortcutChanged() {
-            if (!editorSplitHorizontalShortcutField.capturing)
-                editorSplitHorizontalShortcutField.keySequence = root.settingsBridge.splitHorizontalShortcut;
-        }
-
-        function onSplitVerticalShortcutChanged() {
-            if (!editorSplitVerticalShortcutField.capturing)
-                editorSplitVerticalShortcutField.keySequence = root.settingsBridge.splitVerticalShortcut;
-        }
-
-        function onFillShortcutChanged() {
-            if (!editorFillShortcutField.capturing)
-                editorFillShortcutField.keySequence = root.settingsBridge.fillShortcut;
-        }
-
-        function onSnapIntervalXChanged() {
-            if (!snapIntervalXSlider.slider.pressed)
-                snapIntervalXSlider.value = root.settingsBridge.snapIntervalX;
-        }
-
-        function onSnapIntervalYChanged() {
-            if (!snapIntervalYSlider.slider.pressed)
-                snapIntervalYSlider.value = root.settingsBridge.snapIntervalY;
-        }
-
-        function onBackgroundOpacityChanged() {
-            if (!backgroundOpacitySlider.slider.pressed)
-                backgroundOpacitySlider.value = root.settingsBridge.backgroundOpacity;
-        }
-
-        target: root.settingsBridge
     }
 }

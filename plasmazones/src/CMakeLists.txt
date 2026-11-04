@@ -778,6 +778,8 @@ set(plasmazones_editor_SRCS
     editor/controller/scrollingtemplate.cpp
     editor/EditorController.h
     editor/helpers/BatchOperationScope.h
+    editor/helpers/EditorOwnedConfig.cpp
+    editor/helpers/EditorOwnedConfig.h
     editor/helpers/ZoneSerialization.cpp
     editor/helpers/ZoneSerialization.h
     editor/helpers/SettingsDbusQueries.cpp

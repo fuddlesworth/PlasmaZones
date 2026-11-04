@@ -536,6 +536,10 @@ void Daemon::connectShortcutSignals()
         QString key = Utils::contextLockKey(mode, screenId);
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
+        // Adopt any external write first, outside the blocker below: the
+        // setter's own clean-backend refresh would otherwise adopt it with
+        // its announcement swallowed, and the daemon would never react to it.
+        m_settings->reloadPreservingLocalEdits();
         bool wasLocked = m_settings->isScreenLocked(key);
         // Block settingsChanged during mutation — the signal triggers a
         // D-Bus relay, and external consumers (settings app) read from disk.

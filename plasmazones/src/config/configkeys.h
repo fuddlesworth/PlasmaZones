@@ -811,6 +811,12 @@ public:
     P_CONFIG_KEY(modifierKey, "Modifier")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Editor.Background
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // (uses opacityKey)
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Virtual Screens
     // The "VirtualScreen:" prefix is intentional — parsing must use
     // groupName.mid(prefix.size()) to extract the physical screen ID,

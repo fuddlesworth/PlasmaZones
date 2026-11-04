@@ -33,11 +33,13 @@ Canvas {
         ctx.lineWidth = 1;
         var intervalX = editorController ? editorController.snapIntervalX : 0.1;
         var intervalY = editorController ? editorController.snapIntervalY : 0.1;
-        // Validate intervals (1% to 50% range)
-        if (!isFinite(intervalX) || intervalX < 0.01 || intervalX > 0.5)
+        // Validate intervals against the configured range
+        var minInterval = editorController ? editorController.snapIntervalMin : 0.01;
+        var maxInterval = editorController ? editorController.snapIntervalMax : 0.5;
+        if (!isFinite(intervalX) || intervalX < minInterval || intervalX > maxInterval)
             intervalX = 0.1;
 
-        if (!isFinite(intervalY) || intervalY < 0.01 || intervalY > 0.5)
+        if (!isFinite(intervalY) || intervalY < minInterval || intervalY > maxInterval)
             intervalY = 0.1;
 
         var stepX = width * intervalX;

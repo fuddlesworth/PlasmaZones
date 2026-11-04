@@ -264,9 +264,12 @@ Window {
             });
     }
 
-    // Semi-transparent background at the user's Editor.Background opacity.
-    // A child Rectangle lets the window surface be fully transparent while
-    // popup menus (xdg_popup) get their own opaque surfaces from the style.
+    // Background veil at the user's Editor.Background opacity. A child
+    // Rectangle lets the window surface be fully transparent while popup menus
+    // (xdg_popup) get their own opaque surfaces from the style. The 0.7
+    // fallback only covers a missing controller, which main() rules out by
+    // setting it before the window loads; the configured default lives in
+    // ConfigDefaults::editorBackgroundOpacity().
     Rectangle {
         id: windowBackground
 
@@ -783,7 +786,7 @@ Window {
         color: exitButtonMouse.containsMouse ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.3) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
         // Focus ring when reached via Tab, frame-contrast hairline otherwise
         border.color: fullscreenExitButton.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-        border.width: fullscreenExitButton.activeFocus ? 2 : 1
+        border.width: fullscreenExitButton.activeFocus ? Theme.focusBorderWidth : 1
         z: 200
         // Fade in/out animation
         opacity: editorWindow.fullscreenMode ? 1 : 0

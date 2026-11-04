@@ -958,4 +958,86 @@ QVariantMap Settings::getPerScreenSnappingSettings(const QString& screenIdOrName
     return perScreenGapOverrides(screenIdOrName);
 }
 
+void Settings::reloadMembersFromRepairedConfig()
+{
+    // Three-way: the members' base (what they held when last read or saved,
+    // before the file became unreadable), what they hold now, and what the
+    // repaired file holds. Only the difference between the first two was done
+    // in memory, so only that is laid over the file's values, removals
+    // included. The base itself is not: it is empty for a process that
+    // started on a broken file, and the last readable or saved state
+    // otherwise, and neither is an edit to keep.
+    const MemberState base = *m_standInMembers;
+    const MemberState now = captureMemberState();
+    m_standInMembers.reset();
+
+    loadPerScreenOverrides(m_configBackend);
+    loadVirtualScreenConfigs(m_configBackend);
+    // The file's values are what disk holds from here on.
+    m_memberBase = captureMemberState();
+
+    const auto applyDelta = [](QHash<QString, QVariantMap>& target, QHash<QString, QVariantMap> was,
+                               QHash<QString, QVariantMap> is) {
+        // One spelling per monitor on both sides, the one the file's entries
+        // were just canonicalized to, so each monitor is diffed in one pass
+        // even when it was keyed by connector name in one and EDID id in the
+        // other.
+        migrateConnectorNames(was);
+        migrateConnectorNames(is);
+        QSet<QString> screens(was.keyBegin(), was.keyEnd());
+        screens.unite(QSet<QString>(is.keyBegin(), is.keyEnd()));
+        for (const QString& screen : std::as_const(screens)) {
+            const QVariantMap before = was.value(screen);
+            const QVariantMap after = is.value(screen);
+            if (before == after) {
+                continue;
+            }
+            // The file may key the same monitor by its other spelling
+            // (connector name or EDID id), so find its entry the way the
+            // per-screen setters do rather than by exact key.
+            auto existing = findPerScreenEntryMutable(target, screen);
+            const QString key = existing != target.end() ? existing.key() : screen;
+            QVariantMap merged = existing != target.end() ? existing.value() : QVariantMap{};
+            for (auto it = after.constBegin(); it != after.constEnd(); ++it) {
+                if (!before.contains(it.key()) || before.value(it.key()) != it.value()) {
+                    merged.insert(it.key(), it.value());
+                }
+            }
+            for (auto it = before.constBegin(); it != before.constEnd(); ++it) {
+                if (!after.contains(it.key())) {
+                    merged.remove(it.key());
+                }
+            }
+            if (merged.isEmpty()) {
+                target.remove(key);
+            } else {
+                target.insert(key, merged);
+            }
+        }
+    };
+    applyDelta(m_perScreenZoneSelectorSettings, base.zoneSelector, now.zoneSelector);
+    applyDelta(m_perScreenScrollingZoneSelectorSettings, base.scrollingZoneSelector, now.scrollingZoneSelector);
+    applyDelta(m_perScreenAutotileSettings, base.autotile, now.autotile);
+    applyDelta(m_perScreenScrollingSettings, base.scrolling, now.scrolling);
+    // A merged width pair can mix one half from memory with the other from
+    // the file, so run the same repair loadPerScreenOverrides runs.
+    for (auto it = m_perScreenScrollingSettings.begin(); it != m_perScreenScrollingSettings.end(); ++it) {
+        repairPerScreenScrollingWidth(it.value());
+    }
+
+    QSet<QString> physical(base.virtualScreens.keyBegin(), base.virtualScreens.keyEnd());
+    physical.unite(QSet<QString>(now.virtualScreens.keyBegin(), now.virtualScreens.keyEnd()));
+    for (const QString& id : std::as_const(physical)) {
+        const auto was = base.virtualScreens.constFind(id);
+        const auto is = now.virtualScreens.constFind(id);
+        if (is == now.virtualScreens.constEnd()) {
+            if (was != base.virtualScreens.constEnd()) {
+                m_virtualScreenConfigs.remove(id);
+            }
+        } else if (was == base.virtualScreens.constEnd() || !(*was == *is)) {
+            m_virtualScreenConfigs.insert(id, *is);
+        }
+    }
+}
+
 } // namespace PlasmaZones

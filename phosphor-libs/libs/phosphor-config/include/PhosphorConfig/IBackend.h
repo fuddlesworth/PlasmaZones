@@ -178,9 +178,25 @@ public:
     /// read-only @c QSettingsBackend::readConfigFromDisk helper.
     virtual void reparseConfiguration() = 0;
 
+    /// Whether the most recent load (construction or @c reparseConfiguration),
+    /// or a flush that found the store rewritten since, found a backing store
+    /// it could not read: unreadable, malformed, or of the wrong shape. A
+    /// missing store is a first run, not a failure.
+    ///
+    /// While this is set the in-memory document is a stand-in, not what the
+    /// store holds, so implementations refuse @c sync() / @c commit() rather
+    /// than overwrite the unreadable content, and readers should not treat
+    /// what they read as a fresh view of disk. Default @c false, for backends
+    /// with no load step to fail.
+    virtual bool loadFailed() const
+    {
+        return false;
+    }
+
     /// Request that pending writes reach disk. No-op when nothing is dirty.
     /// Returns @c true on success (or when there was nothing to flush),
-    /// @c false on an I/O error — backends log the reason before returning.
+    /// @c false on an I/O error or a refusal while @c loadFailed() is set —
+    /// backends log the reason before returning.
     ///
     /// @c true means "accepted", NOT "committed": a backend is free to satisfy
     /// this by scheduling the write (@c JsonBackend's Deferred sync policy
@@ -191,7 +207,8 @@ public:
 
     /// Flush pending writes to disk NOW and report whether they landed.
     /// Returns @c true when disk holds the current in-memory state on return
-    /// (including when there was nothing to flush), @c false on an I/O error.
+    /// (including when there was nothing to flush), @c false on an I/O error
+    /// or a refusal while @c loadFailed() is set.
     /// Unlike @c sync() this never defers, so a @c true result is a commitment
     /// the caller can key state off.
     ///
@@ -276,9 +293,10 @@ public:
     /// state and commit any resulting version bump. Returns @c true when the
     /// backend supports schema migrations (even if no step applied — e.g.
     /// the on-disk version already matches). Returns @c false when the
-    /// backend has no concept of a JSON-root snapshot; callers should log
-    /// that declared migrations will not run. Default: no-op returning
-    /// @c false.
+    /// backend has no concept of a JSON-root snapshot, or could not commit
+    /// the migrated document (a write failure, or a refusal while
+    /// @c loadFailed() is set); callers should log that declared migrations
+    /// did not run. Default: no-op returning @c false.
     virtual bool applyMigration(const Schema&)
     {
         return false;

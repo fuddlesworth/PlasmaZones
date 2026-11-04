@@ -88,14 +88,28 @@ class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
 {
 public:
     /// Construct a backend backed by @p filePath. The file is loaded
-    /// immediately; missing or malformed files start with an empty root
-    /// object (a warning is logged for malformed content).
+    /// immediately. A missing file starts with an empty root object and
+    /// accepts writes. An unreadable one (open failure, parse error, a
+    /// non-object root) also starts empty but reports @c loadFailed() and
+    /// refuses writes (unless @c setOverwriteUnreadable), with a warning
+    /// logged. A flush also refuses when the file has been rewritten since
+    /// this backend last read or wrote it and no longer reads.
     explicit JsonBackend(QString filePath);
     ~JsonBackend() override;
 
     // IBackend interface
     std::unique_ptr<IGroup> group(const QString& name) override;
+    /// On an unreadable file the root falls back to the last document this
+    /// backend read or wrote successfully (empty if none), and
+    /// @c loadFailed() turns on until a later reparse reads the file cleanly.
     void reparseConfiguration() override;
+    bool loadFailed() const override;
+
+    /// Let writes replace an unreadable file instead of refusing. For a file
+    /// only machines write, such as session state, where an unreadable copy
+    /// holds nothing worth protecting and refusing would only lose the next
+    /// save. Off by default: a file a user may edit by hand is protected.
+    void setOverwriteUnreadable(bool overwrite);
     bool sync() override;
     /// Bypasses the Deferred sync policy's debounce so the return value is a
     /// real commit result under every policy. Equivalent to @c flushPending().
@@ -141,8 +155,9 @@ public:
     /// Run @p schema's migration chain against the in-memory root, and
     /// if any step bumps the version stamp, atomically rewrite the backing
     /// file and refresh the in-memory state. Returns @c true unless the
-    /// atomic disk rewrite fails — in which case the backend stays at the
-    /// unmigrated state and the next successful @c sync() retries.
+    /// atomic disk rewrite fails or is refused because @c loadFailed() is
+    /// set. In either case the backend stays at the unmigrated state, and the
+    /// chain runs again from the next Store built over a fresh load.
     /// Consumers that need the "did migrations actually apply" bit should
     /// check @c versionStamp() before and after, not this return value.
     bool applyMigration(const Schema& schema) override;

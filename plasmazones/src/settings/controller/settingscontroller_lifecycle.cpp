@@ -25,6 +25,8 @@
 
 #include "settingscontroller.h"
 
+#include "config/configdefaults.h"
+
 #include "settings/utils/dbusutils.h"
 #include "settingscontroller_pagekeys.h"
 
@@ -96,6 +98,11 @@ void SettingsController::adoptOnDiskState()
         Q_EMIT stagedScrollingOrderChanged();
 }
 
+QString SettingsController::configFilePath() const
+{
+    return m_settings.configFilePath();
+}
+
 void SettingsController::load()
 {
     // A full load adopts the on-disk state wholesale, which is everything a
@@ -129,6 +136,15 @@ void SettingsController::save()
             Q_EMIT savingFinished();
         });
     });
+
+    // Look at an unreadable config.json again before capturing anything for
+    // the rollbacks below. Settings::save() would do the same look-again, but
+    // a repaired file merged in there would come after these captures, and a
+    // failed write would then restore pre-repair values over the merged ones.
+    // (m_saving is raised, so the adoption's NOTIFYs do not dirty pages.)
+    if (m_settings.configUnreadable()) {
+        m_settings.reloadPreservingLocalEdits();
+    }
 
     // Flush staged ordering INTO Settings, but do not consume the staging yet.
     // The write has to happen before Settings::save(), because save() is what
@@ -164,6 +180,11 @@ void SettingsController::save()
     // Verdict gated like the D-Bus flushes below: a staged split whose defs
     // all failed validation is skipped rather than written, and the badge has
     // to stay lit so the user knows the edit did not persist.
+    // Kept so a config write that fails can put them back: the staged split
+    // stays staged for the next Save, and Settings must not carry it in the
+    // meantime (a Discard clears only the staging, and any later Save would
+    // write it out).
+    const auto virtualScreensBeforeFlush = m_settings.virtualScreenConfigs();
     const bool virtualScreensPersisted = m_staging.flushVirtualScreensToSettings(m_settings);
 
     // Save main settings (includes editor settings + VS configs persisted
@@ -183,6 +204,9 @@ void SettingsController::save()
     if (!configWritten) {
         qCWarning(lcConfig) << "save: writing the config file failed — baseline unmoved, values stay staged";
         commitOk = false;
+        m_settings.revertVirtualScreenConfigs(virtualScreensBeforeFlush);
+        Q_EMIT configWriteFailed(
+            QString(m_settings.configUnreadable() ? ReasonConfigUnreadable : ReasonConfigNotWritten));
     }
 
     // save() re-captured the committed baseline, so the animation controller's
@@ -220,14 +244,23 @@ void SettingsController::save()
     // adaptor slot (e.g. setQuickLayoutSlot ignoring an out-of-range slot)
     // still replies successfully and is not caught here.
 
-    // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
-    // IDs exist when assignments referencing them are processed.
-    if (!m_staging.flushVirtualScreensToDaemon()) {
-        commitOk = false;
-    }
+    // When the config file was not written, skip the two steps that act on
+    // it. The virtual-screen configs live in that file, so pushing them would
+    // apply a split the file does not hold, and clear their staging for it;
+    // they stay staged for the Save after the file is repaired. And there is
+    // nothing new on disk for the daemon to reload. (The daemon-side flushes
+    // below can still start a stopped daemon, whose start then moves an
+    // unreadable file aside; onDaemonReady reports that.)
+    if (configWritten) {
+        // Flush staged VS configs to daemon BEFORE notifyReload so virtual
+        // screen IDs exist when assignments referencing them are processed.
+        if (!m_staging.flushVirtualScreensToDaemon()) {
+            commitOk = false;
+        }
 
-    // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
-    DaemonDBus::notifyReload();
+        // Notify daemon to reload settings (before D-Bus assignment mutations)
+        DaemonDBus::notifyReload();
+    }
 
     // Flush staged quick-layout slots (snapping + tiling + scrolling) via D-Bus
     // (after reload).
@@ -360,11 +393,12 @@ void SettingsController::save()
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
     //
-    // A reload deferred while edits were pending is superseded by this save:
-    // the whole-schema flush above rewrote the file from this process's
-    // state, so re-reading disk afterwards would recover nothing of the
-    // external change. Clear the flag so the clean transition below doesn't
-    // fire a pointless reload.
+    // A reload deferred while edits were pending is superseded by this save.
+    // onExternalSettingsChanged() already adopted the external change's
+    // untouched config keys when it arrived, so the whole-schema flush above
+    // wrote them back as they were, and re-reading disk afterwards would find
+    // nothing new. Clear the flag so the clean transition below doesn't fire
+    // a pointless reload.
     m_pendingExternalReload = false;
     setNeedsSave(false);
     // Window-rule failure handling moved to RuleController itself
@@ -422,9 +456,11 @@ void SettingsController::defaults()
     // leaves the previous configuration on disk and in the store, so notifying
     // the daemon, resetting its managed rules and clearing the staging would
     // half-apply a factory reset the config itself never took.
-    if (!m_settings.reset()) {
+    const bool resetWritten = m_settings.reset();
+    if (!resetWritten) {
         qCWarning(lcConfig) << "defaults: the cleared configuration could not be written — nothing was reset";
-        Q_EMIT pageResetFailed(QString(), QString(ReasonResetNotWritten));
+        Q_EMIT pageResetFailed(QString(),
+                               QString(m_settings.configUnreadable() ? ReasonConfigUnreadable : ReasonResetNotWritten));
         return;
     }
 

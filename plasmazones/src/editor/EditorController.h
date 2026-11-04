@@ -26,6 +26,7 @@
 #include "undo/UndoController.h"
 #include "EditorGapsModel.h"
 #include "EditorTemplateModel.h"
+#include "helpers/EditorOwnedConfig.h"
 
 #include <memory>
 #include <optional>
@@ -119,6 +120,11 @@ class EditorController : public QObject
     // Opacity of the veil drawn behind the canvas (Editor.Background)
     Q_PROPERTY(
         qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
+
+    // The grid-interval range the schema clamps to, for the bottom bar's
+    // sliders, so they match the settings app's Editor page.
+    Q_PROPERTY(qreal snapIntervalMin READ snapIntervalMin CONSTANT)
+    Q_PROPERTY(qreal snapIntervalMax READ snapIntervalMax CONSTANT)
 
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
@@ -219,6 +225,15 @@ public:
     explicit EditorController(QObject* parent = nullptr);
     ~EditorController() override;
 
+    /// Write any editor-settings change still queued, and tell the daemon with
+    /// a blocking call. main() runs this at aboutToQuit, BEFORE it pumps the
+    /// event loop for the QML teardown: otherwise the save timer can fire in
+    /// that pump, take the asynchronous path, and the daemon's reload request
+    /// may never leave the process. The destructor runs it too, as a no-op
+    /// when nothing is pending. One attempt only: a write that fails or is
+    /// refused here is dropped with a warning, not retried.
+    void flushEditorSettingsForShutdown();
+
     // Preview mode
     bool previewMode() const;
     void setPreviewMode(bool preview);
@@ -266,6 +281,8 @@ public:
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
     qreal backgroundOpacity() const;
+    qreal snapIntervalMin() const;
+    qreal snapIntervalMax() const;
     QString targetScreen() const;
     bool templatePreviewVertical() const;
     EditorGapsModel* gaps() const
@@ -492,10 +509,11 @@ public Q_SLOTS:
     // Daemon scrollingTemplatesChanged subscriber: the store watches
     // nothing, so this reload is how other-process writes reach us.
     void reloadLocalTemplates();
-    /// Daemon settingsChanged subscriber (debounced by m_configReloadTimer):
-    /// re-snapshots the strip-axis inputs and the Editor.* groups, so what
-    /// the settings app changes while the editor is open reaches it without
-    /// a restart.
+    /// Daemon settingsChanged and editorSettingsChanged subscriber (debounced
+    /// by m_configReloadTimer): re-snapshots the strip-axis inputs and the
+    /// Editor.* groups, so what the settings app changes while the editor is
+    /// open reaches it without a restart. The global gap and overlay values
+    /// and the label font are still read once, at startup.
     void reloadLiveConfig();
     /// Persist the current layout. False = the save did not land
     /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
@@ -925,19 +943,29 @@ private:
     /// from the config store, plus the gap and overlay globals from the daemon.
     void loadEditorSettings();
 
-    /// Queue an editor-settings write. Coalesced behind
-    /// m_editorSettingsSaveTimer — see flushEditorSettings for the real work.
-    void saveEditorSettings();
-    /// Write the editor settings to config.json and tell the daemon to reparse.
-    /// Runs off m_editorSettingsSaveTimer.
+    /// Mark @p changed as edited here and queue a write. Coalesced behind
+    /// m_editorSettingsSaveTimer; see flushEditorSettings for the real work.
+    /// Setters call it only for a value that actually moved, because a key
+    /// marked here wins over a concurrent settings-app change to it.
+    void saveEditorSettings(EditorOwnedConfig::Keys changed);
+    /// Write the edited settings to config.json and tell the daemon to
+    /// reparse. Runs off m_editorSettingsSaveTimer.
     void flushEditorSettings();
     /// flushEditorSettings for teardown: same write, but the daemon reload is
-    /// blocking so it is actually delivered before the process goes away. Only
-    /// ~EditorController calls this — see the note there.
+    /// blocking so it is actually delivered before the process goes away.
     void flushEditorSettingsBlocking();
-    /// The config write both flush paths share. Returns false when nothing
-    /// reached disk, in which case there is nothing for the daemon to reload.
-    bool writeEditorSettingsToDisk();
+    /// Outcome of writeEditorSettingsToDisk.
+    enum class EditorSettingsWrite {
+        Nothing, ///< no edited key, nothing touched
+        Written, ///< the edited keys reached disk
+        Refused, ///< config.json could not be read, so it was not overwritten
+        Failed, ///< the write itself failed
+    };
+    /// The config write both flush paths share: the edited keys only, onto
+    /// what disk holds now. Clears m_editorKeysEdited only when it landed.
+    EditorSettingsWrite writeEditorSettingsToDisk();
+    /// The editor-owned settings as this process currently holds them.
+    EditorOwnedConfig currentEditorOwnedConfig() const;
 
     /**
      * @brief Handles clipboard content changes
@@ -1016,20 +1044,42 @@ private:
     /// layoutChanged + layoutListChanged back-to-back — only hits the
     /// PhosphorZones::LayoutRegistry once.
     QTimer m_layoutReloadTimer;
-    /// Coalesces saveEditorSettings() bursts. Every snapping/fill-on-drop
-    /// setter calls saveEditorSettings, and ControlBar drives snapIntervalX
-    /// from Slider.onMoved — one call per mouse-move step. Each one rewrites
-    /// the whole config document, fsyncs it, and makes the daemon reparse its
-    /// entire config, so running that per tick is a drag-long stutter. Batch
-    /// the burst into one write once the value settles.
+    /// Coalesces saveEditorSettings() bursts. Every editor-settings setter
+    /// calls saveEditorSettings, and ControlBar drives the grid intervals and
+    /// the background opacity from Slider.onMoved, one call per mouse-move
+    /// step. Each write rewrites the whole config document, fsyncs it, and
+    /// makes the daemon reparse its entire config, so running that per tick
+    /// is a drag-long stutter. Batch the burst into one write once the value
+    /// settles.
     QTimer m_editorSettingsSaveTimer;
-    /// Debounces settingsChanged bursts (a settings-app Save emits per key
-    /// group) into one reloadLiveConfig() re-read.
+    /// Debounce for the editor-settings write, and the base of the retry
+    /// backoff after a failed one. Long enough to swallow a slider drag's
+    /// mouse-move burst, short enough that the write still feels immediate
+    /// once the user lets go.
+    static constexpr int EditorSettingsSaveDebounceMs = 250;
+    /// Retries after a failed write before the edits wait for the next change,
+    /// the next live reload that reads the file cleanly, or closing.
+    static constexpr int MaxEditorSettingsWriteRetries = 3;
+    /// The Editor.* settings changed in this process and not yet on disk.
+    /// Only these are written, and a reload does not adopt these, so neither
+    /// side overwrites a key the other changed. Kept after a failed write, so
+    /// the edit is retried rather than lost.
+    EditorOwnedConfig::Keys m_editorKeysEdited;
+    /// Consecutive failed writes, for the bounded retry in flushEditorSettings.
+    int m_editorSettingsWriteFailures = 0;
+    /// Shortcut keys already warned about as invalid, so a broken entry is
+    /// reported once rather than on every live reload.
+    QStringList m_warnedInvalidShortcuts;
+    /// Debounces the daemon's settingsChanged / editorSettingsChanged into one
+    /// reloadLiveConfig() re-read. A reload can move both, and the editor's own
+    /// write comes back as one.
     QTimer m_configReloadTimer;
 
     /// Read the Editor.* groups (snapping, shortcuts, fill on drop, canvas
     /// background) from @p backend into the editor's state, announcing only
-    /// what changed. Writes nothing back, so a reload cannot queue a save.
+    /// what changed, and skipping the keys in m_editorKeysEdited. Writes
+    /// nothing back itself; reloadLiveConfig decides separately whether a
+    /// pinned write should be restarted.
     void applyEditorOwnedSettings(PhosphorConfig::IBackend& backend);
 
     /// The one snapshot writer for the strip-axis inputs (global value +
@@ -1059,19 +1109,25 @@ private:
     bool m_fillOnDropEnabled = true; // Enabled by default
     int m_fillOnDropModifier = 0x04000000; // Qt::ControlModifier (different from snap override)
 
-    // Canvas veil opacity; loadEditorSettings replaces it before QML reads it
-    qreal m_backgroundOpacity = 0.7;
+    // Canvas veil opacity; loadEditorSettings replaces it before QML reads it.
+    // The literal is ConfigDefaults::editorBackgroundOpacity(), spelled out to
+    // keep configdefaults.h out of this header; a static_assert in
+    // controller/settings.cpp ties the two together.
+    static constexpr qreal DefaultBackgroundOpacity = 0.7;
+    qreal m_backgroundOpacity = DefaultBackgroundOpacity;
 
     // Screen
     QString m_targetScreen;
 
     // Strip-axis inputs for templatePreviewVertical(), snapshotted by
-    // loadEditorSettings(). The tri-state config enum (Auto / Horizontal /
+    // refreshScrollingStripAxisSnapshot() at startup and on every live
+    // reload. The tri-state config enum (Auto / Horizontal /
     // Vertical), NOT PhosphorProtocol::ScrollAxis — the two numberings differ
     // on purpose and are never cast between.
     /// Auto. Spelled as the literal rather than ConfigDefaults::
     /// scrollingStripAxis() so this header need not pull in configdefaults.h;
-    /// loadEditorSettings() carries a static_assert tying the two together.
+    /// refreshScrollingStripAxisSnapshot() carries a static_assert tying the
+    /// two together.
     int m_scrollingStripAxis = 0;
     /// Per-screen StripAxis overrides, keyed by the screen id or name the
     /// group was stored under. Absent screen means "use the global value".

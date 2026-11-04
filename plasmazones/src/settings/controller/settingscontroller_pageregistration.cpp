@@ -157,7 +157,7 @@ void SettingsController::buildApplicationController()
 
     // ── Block 3: tools & meta ──
     // Editor holds layout-editor PREFERENCES (shortcuts, grid snapping,
-    // fill-on-drop), not the editor itself — authoring custom zone layouts
+    // fill-on-drop, background opacity), not the editor itself — authoring custom zone layouts
     // is a power activity, so the whole page is advanced.
     regPage(m_editorPage, QString(), PhosphorI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);

@@ -14,8 +14,10 @@ namespace PlasmaZones {
 /**
  * @brief Provides static access to default configuration values
  *
- * Canonical default values for all PlasmaZones configuration keys.
- * Used by Settings::load() when no persisted value exists.
+ * Canonical default values for all PlasmaZones configuration keys. The
+ * settings schema (settingsschema*.cpp) takes its KeyDef defaults from here,
+ * and so do the readers that bypass the schema (the layout editor's label-font
+ * and strip-axis reads, the settings pages' reset-to-default paths).
  *
  * Usage:
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
@@ -797,33 +799,37 @@ public:
     {
         return true;
     }
-    static double editorSnapInterval()
+    static constexpr double editorSnapInterval()
     {
         return 0.1;
     }
     /// Per-axis defaults — currently share the same value as editorSnapInterval
     /// but split so future aspect-aware defaults don't require auditing every
-    /// call site. Use these from resetDefaults / first-run paths.
+    /// call site. The schema takes its interval defaults from these.
     ///
     /// Return type is `qreal` to match `ISettings::editorSnapIntervalX/Y`
     /// (qreal is `double` on every Qt6-supported target, but the type
     /// alignment removes a category of "I forgot which one" mistakes in
     /// callers that take the value `auto`).
-    static qreal editorSnapIntervalX()
+    static constexpr qreal editorSnapIntervalX()
     {
         return editorSnapInterval();
     }
-    static qreal editorSnapIntervalY()
+    static constexpr qreal editorSnapIntervalY()
     {
         return editorSnapInterval();
     }
-    static double editorSnapIntervalMin()
+    static constexpr double editorSnapIntervalMin()
     {
         return 0.01;
     }
-    static double editorSnapIntervalMax()
+    /// Half the canvas: a grid cell any wider is not a grid. Both sliders (the
+    /// settings app's Editor page and the editor's bottom bar) stop here, and
+    /// the schema clamp and the editor's SnappingService use it too, so a
+    /// hand-edited larger value reads back as this.
+    static constexpr double editorSnapIntervalMax()
     {
-        return 1.0;
+        return 0.5;
     }
     static int editorSnapOverrideModifier()
     {
@@ -839,7 +845,7 @@ public:
     }
     /// Opacity of the theme-coloured veil the layout editor draws behind its
     /// canvas. Lower lets more of the desktop show through.
-    static double editorBackgroundOpacity()
+    static constexpr qreal editorBackgroundOpacity()
     {
         return 0.7;
     }
@@ -1274,8 +1280,17 @@ static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animati
 // The autotile five. Every OTHER constexpr accessor that declares a [min, max] was checked
 // here and these were not, for no reason anyone could name — the guard is free, and a
 // default outside its own declared slider range is a bug the compiler can simply refuse.
-// (The many non-constexpr accessors cannot be checked this way; test_configdefaults.cpp
-// covers those at runtime.)
+// (Non-constexpr accessors cannot be checked this way, and only some of them have a
+// runtime check in test_configdefaults.cpp, so a ranged default belongs here as
+// constexpr.)
+static_assert(ConfigDefaults::editorSnapIntervalX() >= ConfigDefaults::editorSnapIntervalMin()
+                  && ConfigDefaults::editorSnapIntervalX() <= ConfigDefaults::editorSnapIntervalMax()
+                  && ConfigDefaults::editorSnapIntervalY() >= ConfigDefaults::editorSnapIntervalMin()
+                  && ConfigDefaults::editorSnapIntervalY() <= ConfigDefaults::editorSnapIntervalMax(),
+              "ConfigDefaults::editorSnapIntervalX/Y() outside declared [min, max] range");
+static_assert(ConfigDefaults::editorBackgroundOpacity() >= ConfigDefaults::editorBackgroundOpacityMin()
+                  && ConfigDefaults::editorBackgroundOpacity() <= ConfigDefaults::editorBackgroundOpacityMax(),
+              "ConfigDefaults::editorBackgroundOpacity() outside declared [min, max] range");
 static_assert(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin()
                   && ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax(),
               "ConfigDefaults::autotileInsertPosition() outside declared [min, max] range");

@@ -366,6 +366,14 @@ SettingsController::SettingsController(QObject* parent)
     , m_localLayoutManager(
           std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(), ConfigDefaults::layoutsSubdir()))
 {
+    // Settings loaded config.json in its constructor. Note the quarantine
+    // copies now, before anything slower runs: a daemon starting alongside
+    // could move the file aside in between, and its copy must not count as
+    // one that was already there.
+    m_configUnreadable = m_settings.configUnreadable();
+    if (m_configUnreadable) {
+        m_quarantineCopiesWhenUnreadable = quarantineCopyStamps(m_settings.configFilePath());
+    }
     // The screen-id resolver is installed in the member-init list (see
     // m_screenIdResolverReady) so it is ready before m_settings load()s. It
     // lives in src/common/screenidresolver.{h,cpp} so daemon/editor/settings
@@ -528,6 +536,10 @@ SettingsController::SettingsController(QObject* parent)
                                        << "ms — KWin effect unresponsive?";
         Q_EMIT runningWindowsTimedOut();
     });
+
+    // From here on Settings announces flips (m_configUnreadable was seeded at
+    // the top of this constructor).
+    connect(&m_settings, &Settings::configUnreadableChanged, this, &SettingsController::refreshConfigUnreadable);
 
     // Forward daemon running state changes and refresh data when daemon starts
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {

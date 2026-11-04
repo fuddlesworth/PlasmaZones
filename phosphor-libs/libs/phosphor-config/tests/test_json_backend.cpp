@@ -3,6 +3,7 @@
 
 #include <PhosphorConfig/IGroupPathResolver.h>
 #include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorConfig/Schema.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -468,7 +469,169 @@ private Q_SLOTS:
         QCOMPARE(doc.object().value(QStringLiteral("Group")).toObject().value(QStringLiteral("n")).toInt(), 42);
     }
 
+    // ─── Unreadable store: writes refused, last good document kept ─────────
+
+    void unreadableStore_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::newRow("parse error") << QByteArray("{not json");
+        QTest::newRow("non-object root") << QByteArray("[1, 2, 3]");
+    }
+
+    /// An unreadable file must never be overwritten by the stand-in root:
+    /// that is how a hand edit with one typo used to cost the whole config.
+    void unreadableStore()
+    {
+        QFETCH(QByteArray, bytes);
+        QVERIFY(writeFile(m_path, bytes));
+        JsonBackend b(m_path);
+        QVERIFY(b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k"), QStringLiteral("d")), QStringLiteral("d"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("v"));
+        }
+        QVERIFY(!b.sync());
+        QVERIFY(!b.commit());
+        QVERIFY(b.isDirty());
+        QCOMPARE(readFile(m_path), bytes);
+    }
+
+    void missingStore_isNotALoadFailure()
+    {
+        JsonBackend b(m_path);
+        QVERIFY(!b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("v"));
+        }
+        QVERIFY(b.commit());
+        QVERIFY(QFile::exists(m_path));
+    }
+
+    /// A reparse that cannot read the file falls back to what this backend
+    /// last wrote, not to an empty root, so readers see "unchanged" rather
+    /// than every key at its default.
+    void failedReparse_keepsLastWrittenDocument()
+    {
+        JsonBackend b(m_path);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("written"));
+        }
+        QVERIFY(b.commit());
+        QVERIFY(writeFile(m_path, QByteArray("garbage")));
+        b.reparseConfiguration();
+        QVERIFY(b.loadFailed());
+        QVERIFY(!b.isDirty());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k")), QStringLiteral("written"));
+        }
+
+        // Repairing the file and reparsing clears the refusal.
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"repaired"}})")));
+        b.reparseConfiguration();
+        QVERIFY(!b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k")), QStringLiteral("repaired"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("again"));
+        }
+        QVERIFY(b.commit());
+        QCOMPARE(QJsonDocument::fromJson(readFile(m_path))
+                     .object()
+                     .value(QStringLiteral("G"))
+                     .toObject()
+                     .value(QStringLiteral("k"))
+                     .toString(),
+                 QStringLiteral("again"));
+    }
+
+    /// A refused write stays refused until a reparse reads the repaired
+    /// file. Repairing the file alone is not enough: the backend cannot know
+    /// it is readable again until it looks.
+    void refusedWrite_staysRefusedUntilReparse()
+    {
+        QVERIFY(writeFile(m_path, QByteArray("garbage")));
+        JsonBackend b(m_path);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("pending"));
+        }
+        QVERIFY(!b.commit());
+        QVERIFY(writeFile(m_path, QByteArray("{}")));
+        QVERIFY(!b.commit());
+        QCOMPARE(readFile(m_path), QByteArray("{}"));
+    }
+
+    /// A file broken AFTER the backend loaded it cleanly is not overwritten
+    /// by the next flush. Most writers never reparse before they save, so
+    /// the refusal cannot wait for a reparse to notice the breakage.
+    void brokenAfterLoad_refusedAtFlush()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"v"}})")));
+        JsonBackend b(m_path);
+        QVERIFY(!b.loadFailed());
+        // Make sure the rewrite moves the size, so the stamp check cannot
+        // miss it on a coarse-mtime filesystem.
+        const QByteArray broken("{ \"G\": { \"k\": oops a hand edit with a typo");
+        QVERIFY(writeFile(m_path, broken));
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("app"));
+        }
+        QVERIFY(!b.commit());
+        QVERIFY(b.loadFailed());
+        QCOMPARE(readFile(m_path), broken);
+    }
+
+    /// The opt-out for machine-written files: a failed load does not block
+    /// the next write.
+    void overwriteUnreadable_writesAnyway()
+    {
+        QVERIFY(writeFile(m_path, QByteArray("garbage")));
+        JsonBackend b(m_path);
+        b.setOverwriteUnreadable(true);
+        QVERIFY(b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("v"));
+        }
+        QVERIFY(b.commit());
+        QCOMPARE(QJsonDocument::fromJson(readFile(m_path))
+                     .object()
+                     .value(QStringLiteral("G"))
+                     .toObject()
+                     .value(QStringLiteral("k"))
+                     .toString(),
+                 QStringLiteral("v"));
+    }
+
+    void unreadableStore_refusesMigration()
+    {
+        const QByteArray bytes("{broken");
+        QVERIFY(writeFile(m_path, bytes));
+        JsonBackend b(m_path);
+        Schema schema;
+        schema.version = 2;
+        schema.migrations = {
+            {1,
+             [](QJsonObject& root) {
+                 root[QStringLiteral("_version")] = 2;
+             }},
+        };
+        QVERIFY(!b.applyMigration(schema));
+        QCOMPARE(readFile(m_path), bytes);
+    }
+
 private:
+    [[nodiscard]] static bool writeFile(const QString& path, const QByteArray& bytes)
+    {
+        QFile f(path);
+        return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(bytes) == bytes.size();
+    }
+
     static QByteArray readFile(const QString& path)
     {
         QFile f(path);

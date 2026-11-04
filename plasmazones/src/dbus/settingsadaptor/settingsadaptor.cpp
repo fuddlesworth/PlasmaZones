@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QSignalBlocker>
 #include <QDBusVariant>
 #include <algorithm>
 #include <functional>
@@ -60,6 +61,11 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, PhosphorAnimation::Phospho
 
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
+    // A direct relay, unlike the debounced motion-tree notifier: the
+    // settings app tells the daemon's echo of its own Save apart from an
+    // external change by when it arrives (queued ahead of the reply to its
+    // blocking reloadSettings call), and a timer would deliver it later.
+    connect(m_settings, &ISettings::editorSettingsChanged, this, &SettingsAdaptor::editorSettingsChanged);
 
     // The per-event motion-profile registry is a second source of
     // settings-shaped state: editing a `window.open` duration writes the
@@ -101,6 +107,9 @@ SettingsAdaptor::~SettingsAdaptor()
     // ~QObject destroys us (the owning unique_ptr has already run).
     if (m_settings && m_saveTimer->isActive()) {
         m_saveTimer->stop();
+        // Blocked for the reason Daemon::stop gives: what save() might adopt
+        // and announce has no consumer left at teardown.
+        const QSignalBlocker blocker(m_settings);
         m_settings->save();
         qCInfo(lcDbusSettings) << "Flushed pending save on destruction";
     }
@@ -116,6 +125,10 @@ void SettingsAdaptor::detach()
     // it here (the dtor uses the same pattern).
     if (m_settings && m_saveTimer->isActive()) {
         m_saveTimer->stop();
+        // Blocked as in Daemon::stop: the daemon is tearing down (this runs
+        // once the bus surface is gone), and nothing will act on a change the
+        // save adopts.
+        const QSignalBlocker blocker(m_settings);
         m_settings->save();
     }
     if (m_settings) {

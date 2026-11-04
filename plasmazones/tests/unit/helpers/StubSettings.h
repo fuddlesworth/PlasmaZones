@@ -2532,14 +2532,20 @@ public:
         Q_EMIT autotilePerAlgorithmSettingsChanged();
         Q_EMIT settingsChanged();
     }
-    // Editor settings — round-trip the stub members so a test can
-    // exercise the EditorPageController setter/getter contract.
+    // Editor settings — round-trip the stub members, so a consumer test can
+    // drive an ISettings that holds what it was given.
     //
     // Every setter below pairs the field-specific signal with the umbrella
     // `settingsChanged()` emit. The concrete Settings class does the same
     // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros
     // (src/config/settings/settings_detail.h) — the stub matches so tests can rely on `settingsChanged()`
     // firing on any setter, regardless of which ISettings backend is wired.
+    //
+    // DELIBERATE OMISSION: the snap-interval and modifier setters store their
+    // argument as given, without the schema's clampDouble / modifier-mask
+    // coercion. No stub-backed test feeds them an out-of-range value; one that
+    // needs the coercion must use the real Settings. The opacity setter
+    // mirrors its clamp anyway, since that costs a few lines.
     QString editorDuplicateShortcut() const override
     {
         return m_editorDuplicateShortcut;
@@ -2678,7 +2684,12 @@ public:
     }
     void setEditorBackgroundOpacity(qreal v) override
     {
-        // Mirror the schema's clampDouble, as the real store would.
+        // Mirror the schema's clampDouble, as the real store would, NaN branch
+        // included (see setDecorationBlurScaleMultiplier for why it is spelled
+        // out rather than left to qBound's argument order).
+        if (qIsNaN(v)) {
+            v = ConfigDefaults::editorBackgroundOpacityMin();
+        }
         const qreal clamped =
             qBound(ConfigDefaults::editorBackgroundOpacityMin(), v, ConfigDefaults::editorBackgroundOpacityMax());
         if (qFuzzyCompare(1.0 + m_editorBackgroundOpacity, 1.0 + clamped))
@@ -3034,6 +3045,11 @@ public:
     }
 
     // Persistence (ISettings)
+    // DELIBERATELY UNIMPLEMENTED: there is no disk to reload from, so none of
+    // the change signals production load() re-emits (the Q_PROPERTY NOTIFYs,
+    // the Editor.* signals and editorSettingsChanged, the per-mode and
+    // per-screen signals) can fire here. A test of reload announcements must
+    // use the real Settings.
     void load() override
     {
     }

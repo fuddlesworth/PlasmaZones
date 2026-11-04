@@ -20,11 +20,9 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups. The swept set is the six scrolling groups (Scrolling,
- * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator,
- * Scrolling.ZoneSelector and Scrolling.Behavior.DragScroll, whose page
- * manifests are the newest and least exercised), Rendering, whose Gpu key
- * once shipped with no manifest owner, and Decorations.Performance.
+ * schema groups. everySweptSchemaKeyIsOwned lists the swept groups and why
+ * each one joined; every Editor.* group the schema declares is swept too,
+ * found by prefix rather than listed.
  */
 
 #include <QSet>
@@ -150,11 +148,9 @@ private Q_SLOTS:
         QVERIFY2(undeclared.isEmpty(), qPrintable(undeclared.join(QLatin1String("; "))));
     }
 
-    /// The other direction, over the swept groups: every key the schema
-    /// declares under Scrolling, Scrolling.Behavior, Scrolling.TabIndicator,
-    /// Scrolling.DropIndicator, Scrolling.ZoneSelector,
-    /// Scrolling.Behavior.DragScroll, Rendering or Decorations.Performance
-    /// must be owned by exactly one page, except the entries listed in
+    /// The other direction, over the swept groups (listed in the body, plus
+    /// every Editor.* group): every key the schema declares under them must be
+    /// owned by exactly one page, except the entries listed in
     /// deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
@@ -197,19 +193,38 @@ private Q_SLOTS:
         // only ones of the four outside this sweep, so deleting any of their
         // ownership entries would have dropped the key out of per-page dirty
         // tracking, Reset and Discard with nothing failing.
-        // The four Editor.* groups joined with Editor.Background (issue
-        // #1161): a key missing from the editor page's manifest leaves the
-        // page clean after an edit, so Save never appears and the change
-        // never reaches the daemon or the open editor.
-        for (const QString& group :
-             {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
-              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
-              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
-              ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup(),
-              ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
-              ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::editorShortcutsGroup(),
-              ConfigDefaults::editorSnappingGroup(), ConfigDefaults::editorFillOnDropGroup(),
-              ConfigDefaults::editorBackgroundGroup()}) {
+        // The Editor.* groups joined with Editor.Background (issue #1161): a
+        // key missing from the editor page's manifest leaves the page clean
+        // after an edit, so Save never appears and the change never reaches
+        // the daemon or the open editor. They are found by prefix, so an
+        // Editor group added later is swept without editing this list.
+        QStringList sweptGroups = {
+            ConfigDefaults::scrollingGroup(),
+            ConfigDefaults::scrollingBehaviorGroup(),
+            ConfigDefaults::scrollingTabIndicatorGroup(),
+            ConfigDefaults::scrollingDropIndicatorGroup(),
+            ConfigDefaults::scrollingZoneSelectorGroup(),
+            ConfigDefaults::scrollingDragScrollGroup(),
+            ConfigDefaults::renderingGroup(),
+            ConfigDefaults::decorationsPerformanceGroup(),
+            ConfigDefaults::snappingBehaviorGroup(),
+            ConfigDefaults::snappingBehaviorZoneSpanGroup(),
+            ConfigDefaults::tilingBehaviorGroup(),
+        };
+        const QString editorPrefix = ConfigDefaults::editorGroup() + QLatin1Char('.');
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            if (it.key().startsWith(editorPrefix)) {
+                sweptGroups.append(it.key());
+            }
+        }
+        // The Editor sweep must find the four groups declared today, so a
+        // renamed prefix cannot quietly sweep nothing.
+        for (const QString& editorGroup :
+             {ConfigDefaults::editorShortcutsGroup(), ConfigDefaults::editorSnappingGroup(),
+              ConfigDefaults::editorFillOnDropGroup(), ConfigDefaults::editorBackgroundGroup()}) {
+            QVERIFY2(sweptGroups.contains(editorGroup), qPrintable(editorGroup));
+        }
+        for (const QString& group : std::as_const(sweptGroups)) {
             const auto it = schema.groups.constFind(group);
             if (it == schema.groups.constEnd()) {
                 // Collect-then-assert, like the rest of this file: an abort

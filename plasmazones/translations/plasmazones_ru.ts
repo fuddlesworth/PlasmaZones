@@ -227,7 +227,7 @@
 <context>
     <name>plasmazones</name>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="91"/>
+        <location filename="../src/editor/controller/settings.cpp" line="53"/>
         <source>A zone with this name already exists</source>
         <translation>Зона с таким именем уже существует</translation>
     </message>
@@ -1330,17 +1330,17 @@
         <translation>Сбросить переопределение краевого зазора</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="103"/>
+        <location filename="../src/editor/main.cpp" line="110"/>
         <source>Create new layout</source>
         <translation>Создать новую раскладку</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="106"/>
+        <location filename="../src/editor/main.cpp" line="113"/>
         <source>Scrolling template ID to edit</source>
         <translation>Идентификатор шаблона прокрутки для правки</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="108"/>
+        <location filename="../src/editor/main.cpp" line="115"/>
         <source>Create new scrolling template</source>
         <translation>Создать шаблон прокрутки</translation>
     </message>
@@ -1442,7 +1442,7 @@
         <translation>Идентификатор раскладки не может быть пустым</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="99"/>
+        <location filename="../src/editor/main.cpp" line="106"/>
         <source>Layout ID to edit</source>
         <translation>Идентификатор раскладки для редактирования</translation>
     </message>
@@ -1545,7 +1545,7 @@
         <translation>Новая раскладка</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="104"/>
+        <location filename="../src/editor/main.cpp" line="111"/>
         <source>Open in read-only preview mode</source>
         <translation>Открыть в режиме предпросмотра только для чтения</translation>
     </message>
@@ -1643,7 +1643,7 @@
         <translation>Разделить зону</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="101"/>
+        <location filename="../src/editor/main.cpp" line="108"/>
         <source>Target screen name</source>
         <translation>Имя целевого экрана</translation>
     </message>
@@ -1685,7 +1685,7 @@
         <translation>Обновить цвет зон (%1)</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="94"/>
+        <location filename="../src/editor/main.cpp" line="101"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Визуальный редактор раскладок для PlasmaZones</translation>
     </message>
@@ -1697,7 +1697,7 @@
         <translation>Диспетчер зон не инициализирован</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="79"/>
+        <location filename="../src/editor/controller/settings.cpp" line="41"/>
         <source>Zone name contains invalid characters: &lt; &gt; &quot; &apos; \</source>
         <translation>Имя зоны содержит недопустимые символы: &lt; &gt; &quot; &apos; \</translation>
     </message>
@@ -1711,22 +1711,22 @@
         <translation>Зона не найдена</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="133"/>
+        <location filename="../src/editor/controller/settings.cpp" line="95"/>
         <source>Zone number %1 is already in use</source>
         <translation>Номер зоны %1 уже используется</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="113"/>
+        <location filename="../src/editor/controller/settings.cpp" line="75"/>
         <source>Zone number cannot exceed 99</source>
         <translation>Номер зоны не может превышать 99</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="70"/>
+        <location filename="../src/editor/controller/settings.cpp" line="32"/>
         <source>Zone name cannot exceed %1 characters</source>
         <translation>Имя зоны не может превышать %1 символов</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="110"/>
+        <location filename="../src/editor/controller/settings.cpp" line="72"/>
         <source>Zone number must be at least 1</source>
         <translation>Номер зоны должен быть не менее 1</translation>
     </message>
@@ -1992,23 +1992,23 @@
         <translation>В файле не найдено допустимых раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="123"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="230"/>
+        <location filename="../src/settings/main.cpp" line="129"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="256"/>
         <source>PlasmaZones Settings</source>
         <translation>Параметры PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="128"/>
+        <location filename="../src/settings/main.cpp" line="134"/>
         <source>Open a specific settings page</source>
         <translation>Открыть определённую страницу параметров</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="131"/>
+        <location filename="../src/settings/main.cpp" line="137"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>Показать определённый параметр на странице (прямая ссылка)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="135"/>
+        <location filename="../src/settings/main.cpp" line="141"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>Показать определённый раздел на странице (прямая ссылка)</translation>
     </message>
@@ -2262,7 +2262,8 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="117"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="543"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="191"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="851"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="908"/>
         <source>Appearance</source>
         <translation>Внешний вид</translation>
     </message>
@@ -2476,7 +2477,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="56"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="29"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="139"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="131"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="40"/>
         <location filename=".qml-stubs/plasmazones/src/ui/CheatsheetContent.qml.cpp" line="393"/>
         <source>Snapping</source>
@@ -4237,7 +4238,7 @@
         <translation>Под столбцом</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="512"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="513"/>
         <source>%1 %2</source>
         <comment>a number followed by its unit</comment>
         <translation>%1 %2</translation>
@@ -4358,7 +4359,7 @@
         <translation>Вкл</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="497"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="498"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="200"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
@@ -6004,6 +6005,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="125"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="302"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
         <source>opacity</source>
         <translation>непрозрачность</translation>
@@ -6015,6 +6017,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="507"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="511"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1150"/>
         <source>transparency</source>
         <translation>прозрачность</translation>
     </message>
@@ -7369,6 +7372,11 @@
         <translation>создать</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="302"/>
+        <source>background</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="325"/>
         <source>preview</source>
         <translation>предпросмотр</translation>
@@ -7642,6 +7650,23 @@
         <translation>Источник звука</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1149"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="296"/>
+        <source>Background opacity</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1150"/>
+        <source>transparent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1150"/>
+        <source>canvas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="328"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="389"/>
         <source>device</source>
@@ -7806,20 +7831,20 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1140"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="135"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="141"/>
         <source>Save current settings</source>
         <translation>Сохранить текущие параметры</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1142"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="239"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="245"/>
         <source>Import a profile</source>
         <translation>Импортировать профиль</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="90"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1143"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="260"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="266"/>
         <source>Profiles</source>
         <translation>Профили</translation>
     </message>
@@ -10151,7 +10176,7 @@
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="105"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="155"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="162"/>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="85"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="128"/>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
@@ -10159,18 +10184,18 @@
         <translation>Зона %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="39"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="60"/>
         <source>%1 (%2)</source>
         <comment>a name, then a number telling it apart from others of the same name</comment>
         <translation type="unfinished">%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="70"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="112"/>
         <source>Unnamed layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="88"/>
+        <location filename="../src/settings/rules/rulepickeroptions.cpp" line="131"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -10312,12 +10337,12 @@
         <translation>Шаблон: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="281"/>
+        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="314"/>
         <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Overview page.</source>
         <translation>Выбранный вами шаблон прокрутки был удалён, поэтому этот монитор сохранил прежний шаблон. Выберите шаблон заново на странице обзора.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="283"/>
+        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="316"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
             <numerusform>Выбранный вами %n шаблон прокрутки был удалён, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
@@ -10326,7 +10351,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="292"/>
+        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="325"/>
         <source>Failed to apply assignment changes: %1</source>
         <translation>Не удалось применить изменения назначения: %1</translation>
     </message>
@@ -10927,7 +10952,7 @@
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="55"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="522"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="579"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="382"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/DisplayMap.qml.cpp" line="277"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/DisplayMap.qml.cpp" line="294"/>
@@ -10937,28 +10962,28 @@
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="59"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="580"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="386"/>
         <source>Standard (16:9)</source>
         <translation>Стандартный (16:9)</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="63"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="581"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="390"/>
         <source>Ultrawide (21:9)</source>
         <translation>Ультраширокий (21:9)</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="67"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="582"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="394"/>
         <source>Super-Ultrawide (32:9)</source>
         <translation>Сверхширокий (32:9)</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="71"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="583"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="398"/>
         <source>Portrait (9:16)</source>
         <translation>Книжный (9:16)</translation>
@@ -11191,125 +11216,125 @@
         <translation>Шестнадцатеричный код цвета</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="53"/>
         <source>Add Zone</source>
         <comment>@action:button</comment>
         <translation>Добавить зону</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="57"/>
         <source>Click to add a new zone to the layout</source>
         <comment>@info</comment>
         <translation>Щёлкните, чтобы добавить новую зону в раскладку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="58"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="59"/>
         <source>Add a new zone to the layout. The zone will be created centered on the canvas.</source>
         <comment>@tooltip</comment>
         <translation>Добавить новую зону в раскладку. Зона будет создана по центру холста.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="82"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="83"/>
         <source>Apply Template…</source>
         <comment>@item:inmenu</comment>
         <translation>Применить шаблон…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="90"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="91"/>
         <source>Grid 2×2</source>
         <comment>@item:inmenu</comment>
         <translation>Сетка 2×2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="95"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="96"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="104"/>
         <source>Grid Layouts</source>
         <comment>@title:group</comment>
         <translation>Сеточные раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="99"/>
         <source>Grid 3×2</source>
         <comment>@item:inmenu</comment>
         <translation>Сетка 3×2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="107"/>
         <source>Columns 2</source>
         <comment>@item:inmenu</comment>
         <translation>2 столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="111"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="120"/>
         <source>Column Layouts</source>
         <comment>@title:group</comment>
         <translation>Столбцовые раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="114"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="115"/>
         <source>Columns 3</source>
         <comment>@item:inmenu</comment>
         <translation>3 столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="122"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="123"/>
         <source>Rows 2</source>
         <comment>@item:inmenu</comment>
         <translation>2 строки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="127"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="128"/>
         <source>Row Layouts</source>
         <comment>@title:group</comment>
         <translation>Строчные раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="131"/>
         <source>Priority Grid</source>
         <comment>@item:inmenu</comment>
         <translation>Приоритетная сетка</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="135"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="143"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="136"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="144"/>
         <source>Special Layouts</source>
         <comment>@title:group</comment>
         <translation>Особые раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="139"/>
         <source>Focus</source>
         <comment>@item:inmenu</comment>
         <translation>Фокус</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="149"/>
         <source>Layout templates</source>
         <comment>@label</comment>
         <translation>Шаблоны раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="150"/>
         <source>Apply a predefined layout template</source>
         <comment>@info</comment>
         <translation>Применить готовый шаблон раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="227"/>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/TemplateStripCanvas.qml.cpp" line="262"/>
         <source>Add Column</source>
         <comment>@action:button</comment>
         <translation>Добавить столбец</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="239"/>
         <source>Add a starting column to the template</source>
         <comment>@info</comment>
         <translation>Добавить начальный столбец в шаблон</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="224"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="225"/>
         <source>A template can start at most %n column</source>
         <comment>@info</comment>
         <translation>
@@ -11319,13 +11344,13 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="240"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="241"/>
         <source>Add a starting column at the end of the strip</source>
         <comment>@tooltip</comment>
         <translation>Добавить начальный столбец в конце ленты</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="249"/>
         <source>%n column</source>
         <translation>
             <numerusform>%n столбец</numerusform>
@@ -11334,174 +11359,219 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="262"/>
         <source>Drag the divider after a column to resize it. Click a column to reorder it, switch it to tabs, or remove it.</source>
         <comment>@info</comment>
         <translation>Перетащите разделитель после столбца, чтобы изменить его размер. Щёлкните столбец, чтобы изменить его порядок, переключить на вкладки или удалить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="297"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="298"/>
         <source>Snap to Edges</source>
         <comment>@action:button</comment>
         <translation>Прилипание к краям</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="305"/>
         <source>Toggle edge snapping. Zones will align with edges of other zones when enabled.</source>
         <comment>@info</comment>
         <translation>Переключить прилипание к краям. При включении зоны будут выравниваться по краям других зон.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="306"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="307"/>
         <source>Edge snapping enabled. Zones align to edges of other zones. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к краям включено. Зоны выравниваются по краям других зон. Щёлкните, чтобы отключить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="306"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="307"/>
         <source>Edge snapping disabled. Click to enable. Zones will align to edges of other zones.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к краям отключено. Щёлкните, чтобы включить. Зоны будут выравниваться по краям других зон.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="329"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="331"/>
         <source>Snap to Grid</source>
         <comment>@action:button</comment>
         <translation>Прилипание к сетке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="337"/>
         <source>Toggle grid snapping. Zones will align to a grid when enabled. Use the sliders to change horizontal and vertical grid sizes.</source>
         <comment>@info</comment>
         <translation>Переключить прилипание к сетке. При включении зоны будут выравниваться по сетке. Используйте ползунки, чтобы изменить размеры сетки по горизонтали и вертикали.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="337"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="339"/>
         <source>Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к сетке включено (Г:%1% В:%2%). Зоны выравниваются по линиям сетки. Щёлкните, чтобы отключить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="337"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="339"/>
         <source>Grid snapping disabled. Click to enable. Zones will align to grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к сетке отключено. Щёлкните, чтобы включить. Зоны будут выравниваться по линиям сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="364"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="367"/>
         <source>H:</source>
         <comment>@label</comment>
         <translation>Г:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="365"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="383"/>
         <source>Horizontal grid interval</source>
         <comment>@label</comment>
         <translation>Горизонтальный интервал сетки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="378"/>
-        <source>Adjust horizontal grid interval (1% to 50%)</source>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="384"/>
+        <source>Adjust horizontal grid interval (%1% to %2%)</source>
+        <oldsource>Adjust horizontal grid interval (1% to 50%)</oldsource>
         <comment>@info</comment>
-        <translation>Настройка горизонтального интервала сетки (от 1% до 50%)</translation>
+        <translation type="unfinished">Настройка горизонтального интервала сетки (от 1% до 50%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="397"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="461"/>
         <source>%1%</source>
         <comment>@info grid interval percentage</comment>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="413"/>
         <source>Horizontal interval: %1%</source>
         <comment>@info</comment>
         <translation>Горизонтальный интервал: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="404"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="417"/>
         <source>V:</source>
         <comment>@label</comment>
         <translation>В:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="406"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="418"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="419"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="434"/>
         <source>Vertical grid interval</source>
         <comment>@label</comment>
         <translation>Вертикальный интервал сетки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="419"/>
-        <source>Adjust vertical grid interval (1% to 50%)</source>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="435"/>
+        <source>Adjust vertical grid interval (%1% to %2%)</source>
+        <oldsource>Adjust vertical grid interval (1% to 50%)</oldsource>
         <comment>@info</comment>
-        <translation>Настройка вертикального интервала сетки (от 1% до 50%)</translation>
+        <translation type="unfinished">Настройка вертикального интервала сетки (от 1% до 50%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="441"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="464"/>
         <source>Vertical interval: %1%</source>
         <comment>@info</comment>
         <translation>Вертикальный интервал: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="473"/>
         <source>Show Grid</source>
         <comment>@action:button</comment>
         <translation>Показывать сетку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="456"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="479"/>
         <source>Toggle grid overlay visibility. Shows or hides the visual grid lines on the canvas.</source>
         <comment>@info</comment>
         <translation>Переключить видимость наложения сетки. Показывает или скрывает линии сетки на холсте.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="481"/>
         <source>Grid overlay visible. Click to hide grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Наложение сетки видимо. Щёлкните, чтобы скрыть линии сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="481"/>
         <source>Grid overlay hidden. Click to show grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Наложение сетки скрыто. Щёлкните, чтобы показать линии сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="510"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="523"/>
+        <source>Background Opacity</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="527"/>
+        <source>Opens a slider for how opaque the editor&apos;s background is. Lower values show more of the desktop behind it.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="529"/>
+        <source>Background opacity: %1%</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="576"/>
+        <source>Background opacity</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="577"/>
+        <source>How opaque the editor&apos;s background is. Lower values show more of the desktop behind it.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="605"/>
+        <source>%1%</source>
+        <comment>@info background opacity percentage</comment>
+        <translation type="unfinished">%1%</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="608"/>
+        <source>Background opacity: %1%</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="647"/>
         <source>Unsaved changes</source>
         <comment>@info</comment>
         <translation>Несохранённые изменения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="555"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="692"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="433"/>
         <source>Cancel</source>
         <comment>@action:button</comment>
         <translation>Отмена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="557"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="694"/>
         <source>Discard changes and close editor</source>
         <comment>@info</comment>
         <translation>Отменить изменения и закрыть редактор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="570"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="707"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="428"/>
         <source>Save</source>
         <comment>@action:button</comment>
         <translation>Сохранить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="575"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="712"/>
         <source>Save layout and close editor</source>
         <comment>@info</comment>
         <translation>Сохранить раскладку и закрыть редактор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="575"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/ControlBar.qml.cpp" line="712"/>
         <source>Save template and close editor</source>
         <comment>@info</comment>
         <translation>Сохранить шаблон и закрыть редактор</translation>
@@ -11609,112 +11679,112 @@
         <translation>Редактор шаблонов прокрутки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="797"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="800"/>
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>Выйти из полноэкранного режима</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="823"/>
         <source>Exit fullscreen (F11)</source>
         <comment>@action:button</comment>
         <translation>Выйти из полноэкранного режима (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="848"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="884"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="930"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="851"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="887"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Unsaved Changes</source>
         <comment>@title:window</comment>
         <translation>Несохранённые изменения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="849"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="852"/>
         <source>You have unsaved changes. What would you like to do?</source>
         <comment>@info</comment>
         <translation>У вас есть несохранённые изменения. Что вы хотите сделать?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="885"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="888"/>
         <source>Switching to %1 will load that screen&apos;s layout. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Переключение на %1 загрузит раскладку этого экрана. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="931"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="934"/>
         <source>Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Открытие другой раскладки заменит ту, которую вы редактируете. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="931"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="934"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Открытие чего-то другого заменит редактируемый шаблон. Что сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="958"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="961"/>
         <source>Import Layout</source>
         <comment>@title:window</comment>
         <translation>Импорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="959"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="971"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="962"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="974"/>
         <source>JSON files (*.json)</source>
         <comment>@item:inlistbox</comment>
         <translation>Файлы JSON (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="959"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="962"/>
         <source>All files (*)</source>
         <comment>@item:inlistbox</comment>
         <translation>Все файлы (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="970"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="973"/>
         <source>Export Layout</source>
         <comment>@title:window</comment>
         <translation>Экспорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1001"/>
         <source>Layout Editor Help</source>
         <comment>@title:window</comment>
         <translation>Справка редактора раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1001"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
         <translation>Справка редактора шаблонов</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1035"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1038"/>
         <source>Layout saved successfully</source>
         <comment>@info</comment>
         <translation>Раскладка успешно сохранена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1035"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1038"/>
         <source>Template saved</source>
         <comment>@info</comment>
         <translation>Шаблон сохранён</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1039"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1042"/>
         <source>Layout exported</source>
         <comment>@info</comment>
         <translation>Раскладка экспортирована</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1052"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1055"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось загрузить раскладку: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1056"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1059"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось сохранить раскладку: %1</translation>
@@ -11842,8 +11912,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/HelpDialogContent.qml.cpp" line="166"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="97"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="95"/>
         <source>Fill space</source>
         <translation>Заполнить пространство</translation>
     </message>
@@ -13520,7 +13590,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="43"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="49"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="47"/>
         <source>Duplicate zone</source>
         <translation>Дублировать зону</translation>
     </message>
@@ -13530,44 +13600,44 @@
         <translation>Клонировать выбранную зону</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="61"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="67"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="59"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="63"/>
         <source>Split horizontally</source>
         <translation>Разделить по горизонтали</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="62"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="60"/>
         <source>Divide selected zone into left and right halves</source>
         <translation>Разделить выбранную зону на левую и правую половины</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="75"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="79"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="85"/>
         <source>Split vertically</source>
         <translation>Разделить по вертикали</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="80"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="76"/>
         <source>Divide selected zone into top and bottom halves</source>
         <translation>Разделить выбранную зону на верхнюю и нижнюю половины</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="92"/>
         <source>Expand selected zone to fill surrounding empty area</source>
         <translation>Расширить выбранную зону, заполнив окружающее пустое пространство</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="107"/>
         <source>Reset shortcuts</source>
         <translation>Сбросить комбинации клавиш</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="116"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="108"/>
         <source>Restore all editor shortcuts to their default values</source>
         <translation>Восстановить все комбинации клавиш редактора к значениям по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="111"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="288"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="300"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/overlays/OverlaysAppearancePage.qml.cpp" line="332"/>
@@ -13575,87 +13645,92 @@
         <translation>Сбросить к значениям по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="139"/>
         <source>Grid snapping</source>
         <translation>Прилипание к сетке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="140"/>
         <source>Snap zones to a grid while dragging or resizing</source>
         <translation>Прилеплять зоны к сетке при перетаскивании или изменении размера</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="152"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="144"/>
         <source>Enable grid snapping</source>
         <translation>Включить прилипание к сетке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="162"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="154"/>
         <source>Edge snapping</source>
         <translation>Прилипание к краям</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="155"/>
         <source>Snap zones to edges of neighboring zones</source>
         <translation>Прилеплять зоны к краям соседних зон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="167"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="159"/>
         <source>Enable edge snapping</source>
         <translation>Включить прилипание к краям</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="178"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="174"/>
         <source>Grid interval X</source>
         <translation>Интервал сетки по X</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="179"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="171"/>
         <source>Horizontal grid spacing as percentage of screen width</source>
         <translation>Горизонтальный интервал сетки в процентах от ширины экрана</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="201"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="199"/>
         <source>Grid interval Y</source>
         <translation>Интервал сетки по Y</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="196"/>
         <source>Vertical grid spacing as percentage of screen height</source>
         <translation>Вертикальный интервал сетки в процентах от высоты экрана</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="225"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="229"/>
         <source>Override modifier</source>
         <translation>Переопределить модификатор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="222"/>
         <source>Hold this key to temporarily bypass snap behavior</source>
         <translation>Удерживайте эту клавишу, чтобы временно отключить прилипание</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="251"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="247"/>
         <source>Fill on Drop</source>
         <translation>Заполнение при отпускании</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="262"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="258"/>
         <source>Modifier key</source>
         <translation>Клавиша-модификатор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="263"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="259"/>
         <source>Hold this key while dropping a zone to expand it into available space</source>
         <translation>Удерживайте эту клавишу при отпускании зоны, чтобы расширить её на доступное пространство</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="266"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="262"/>
         <source>Fill on drop modifier key</source>
         <translation>Клавиша-модификатор заполнения при отпускании</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="293"/>
+        <source>Lower values let more of the desktop show through behind the editor</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/GeneralPage.qml.cpp" line="94"/>
@@ -13861,8 +13936,8 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="614"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="630"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="656"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="430"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="443"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="436"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="449"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="347"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="308"/>
         <source>All files (*)</source>
@@ -13889,120 +13964,146 @@
         <translation>Несохранённые изменения. Сохранение применит профиль «%1».</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="155"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="157"/>
         <source>Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.</source>
         <translation>Некоторые параметры на странице «%1» всё ещё сохраняются, поэтому изменения не применены. Повторите попытку через некоторое время.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="155"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="157"/>
         <source>Some settings on this page are still being saved, so it was left unchanged. Try again in a moment.</source>
         <translation>Некоторые параметры на этой странице всё ещё сохраняются, поэтому изменения не применены. Повторите попытку через некоторое время.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="163"/>
         <source>Your settings could not be written, so nothing was reset.</source>
         <translation>Не удалось записать параметры, поэтому ничего не сброшено.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="170"/>
         <source>Could not reach the PlasmaZones service, so %1 was left unchanged.</source>
         <translation>Не удалось связаться со службой PlasmaZones, поэтому изменения на странице «%1» не применены.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="170"/>
         <source>Could not reach the PlasmaZones service, so this page was left unchanged.</source>
         <translation>Не удалось связаться со службой PlasmaZones, поэтому эта страница осталась без изменений.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="200"/>
         <source>Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.</source>
         <translation>Некоторые параметры на странице «%1» всё ещё сохраняются, поэтому они не были применены. Повторите попытку через некоторое время.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="200"/>
         <source>Some settings on this page are still being saved, so they were left unchanged. Try again in a moment.</source>
         <translation>Некоторые параметры на этой странице всё ещё сохраняются, поэтому они не были применены. Повторите попытку через некоторое время.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="320"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="322"/>
+        <source>%1 cannot be read, so these pages may not show your settings and changes kept in that file cannot be saved. Repair that file to continue.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="377"/>
         <source>Running</source>
         <translation>Запущено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="320"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="377"/>
         <source>Stopped</source>
         <translation>Остановлено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="329"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="386"/>
         <source>Toggle daemon</source>
         <translation>Переключить службу</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="365"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="423"/>
         <source>Keyboard shortcuts</source>
         <translation>Комбинации клавиш</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="426"/>
         <source>Keyboard shortcuts (?)</source>
         <comment>@info:tooltip, ? is the keyboard shortcut</comment>
         <translation>Комбинации клавиш (?)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="385"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="386"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="443"/>
         <source>Page actions</source>
         <translation>Действия страницы</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="564"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="621"/>
         <source>Save did not complete. %1</source>
         <translation>Сохранение не завершено. %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="578"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="635"/>
         <source>No details were reported.</source>
         <translation>Подробности не сообщены.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="579"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="636"/>
         <source>Discard did not complete. %1</source>
         <translation>Отмена не завершена. %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="566"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="623"/>
         <source>Save did not complete. Some pages still have unsaved changes.</source>
         <translation>Сохранение не завершено. На некоторых страницах остались несохранённые изменения.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="568"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="167"/>
+        <source>Nothing was reset because %1 cannot be read. Repair that file, then try again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="181"/>
+        <source>Some of your settings were not saved because %1 cannot be read. Repair that file, then save again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="183"/>
+        <source>Some of your settings could not be saved. Try again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="190"/>
+        <source>The PlasmaZones service could not read your settings file, so it set it aside as %1 and started without it.</source>
+        <oldsource>The PlasmaZones service could not read your settings file, so it set it aside as %1 and started from the default settings.</oldsource>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="625"/>
         <source>Save did not complete. Still unsaved on: %1</source>
         <translation>Сохранение не завершено. Не сохранено на: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="748"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="805"/>
         <source>Reset page to defaults</source>
         <translation>Сбросить страницу к значениям по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="767"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="824"/>
         <source>Discard changes on this page</source>
         <translation>Отменить изменения на этой странице</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="885"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="942"/>
         <source>Advanced</source>
         <translation>Дополнительно</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="885"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="942"/>
         <source>Simple</source>
         <translation>Простой</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="925"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="982"/>
         <source>Toggle advanced settings</source>
         <translation>Переключить дополнительные параметры</translation>
     </message>
@@ -14745,7 +14846,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="276"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="180"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="354"/>
         <source>(missing: %1)</source>
         <comment>@info item missing</comment>
         <translation>(отсутствует: %1)</translation>
@@ -15585,7 +15686,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="457"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="199"/>
         <source>Save</source>
@@ -16378,7 +16479,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="458"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="487"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="230"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="411"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="417"/>
         <source>Delete</source>
         <translation>Удалить</translation>
     </message>
@@ -17198,19 +17299,19 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="105"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="166"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="172"/>
         <source>Profile name…</source>
         <translation>Название профиля…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="167"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="173"/>
         <source>Profile name</source>
         <translation>Название профиля</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="116"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="176"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="182"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="189"/>
         <source>Description (optional)…</source>
@@ -17218,19 +17319,19 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="183"/>
         <source>Profile description</source>
         <translation>Описание профиля</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="124"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="186"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="192"/>
         <source>Inherit from</source>
         <translation>Наследовать от</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="135"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="213"/>
         <source>Parent profile</source>
         <translation>Родительский профиль</translation>
     </message>
@@ -17448,89 +17549,89 @@
         <translation>Правила</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="180"/>
         <source>No profile</source>
         <translation>Нет профиля</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="181"/>
         <source>Active profile</source>
         <translation>Активный профиль</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="202"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="208"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="389"/>
         <source>Use this profile?</source>
         <translation>Использовать этот профиль?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="203"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="390"/>
         <source>You have changes you have not saved yet. Switching to “%1” replaces them with that profile&apos;s settings.</source>
         <translation>У вас есть несохранённые изменения. Переключение на «%1» заменит их параметрами этого профиля.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="207"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="388"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="394"/>
         <source>Use profile</source>
         <translation>Использовать профиль</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="135"/>
         <source>A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings. Save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.</source>
         <translation>Профиль сохраняет текущие параметры и правила. Хранится только то, что отличается от родительского профиля (или значений по умолчанию). Активация профиля подготавливает его параметры к применению. Сохраните, чтобы применить, или отмените, чтобы вернуть исходное состояние. Параметры, привязанные к конкретному экрану или оборудованию, не включаются, поэтому профиль остаётся переносимым между машинами.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="153"/>
         <source>Save everything as it is now as a new profile. Pick a parent to store only the differences from it.</source>
         <translation>Сохранить всё как есть сейчас в виде нового профиля. Выберите родителя, чтобы хранить только отличия от него.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="229"/>
         <source>Save the current settings as a profile</source>
         <translation>Сохранить текущие параметры как профиль</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="247"/>
         <source>Add a profile exported from PlasmaZones.</source>
         <translation>Добавить профиль, экспортированный из PlasmaZones.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="248"/>
         <source>Drop a profile file here to import it</source>
         <comment>@info drop-zone idle label</comment>
         <translation>Перетащите сюда файл профиля, чтобы импортировать его</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="249"/>
         <source>Release to import the profile</source>
         <comment>@info drop-zone hover label</comment>
         <translation>Отпустите, чтобы импортировать профиль</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="251"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="257"/>
         <source>Import a profile from a file</source>
         <translation>Импортировать профиль из файла</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="252"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="258"/>
         <source>Open the profiles folder</source>
         <translation>Открыть папку профилей</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="253"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="259"/>
         <source>Imported profile “%1”.</source>
         <comment>@info profile import success</comment>
         <translation>Импортирован профиль «%1».</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="254"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="260"/>
         <source>Could not import “%1”. The file must be a profile exported from PlasmaZones.</source>
         <comment>@info profile import failure</comment>
         <translation>Не удалось импортировать «%1». Файл должен быть профилем, экспортированным из PlasmaZones.</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="262"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="268"/>
         <source>%n profile</source>
         <translation>
             <numerusform>%n профиль</numerusform>
@@ -17539,33 +17640,33 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="269"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="275"/>
         <source>No profiles saved yet.</source>
         <translation>Пока нет сохранённых профилей.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="406"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="412"/>
         <source>Delete profile?</source>
         <translation>Удалить профиль?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="413"/>
         <source>“%1” will be permanently deleted. Any profiles inheriting from it will be re-based on its parent, keeping their own settings.</source>
         <translation>«%1» будет удалён без возможности восстановления. Все профили, наследующие от него, будут перепривязаны к его родителю с сохранением собственных параметров.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="435"/>
         <source>Export Profile</source>
         <translation>Экспорт профиля</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="430"/>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="443"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="436"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="449"/>
         <source>PlasmaZones Profile (*.json)</source>
         <translation>Профиль PlasmaZones (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="448"/>
         <source>Import Profile</source>
         <translation>Импорт профиля</translation>
     </message>
@@ -19982,7 +20083,7 @@
         <translation>Отключить %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="1065"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/Main.qml.cpp" line="1122"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="305"/>
         <source>Enable %1</source>
         <translation>Включить %1</translation>
@@ -22648,6 +22749,9 @@
         <translation>(недопустимо)</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/plasmazones/src/settings/qml/EditorPage.qml.cpp" line="306"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="372"/>
         <source>%1%</source>
         <comment>a whole-number percentage</comment>
