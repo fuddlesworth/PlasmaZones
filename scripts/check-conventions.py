@@ -80,10 +80,10 @@ CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
 # defers a missing header to the spdx rule when that rule will actually run.
 _SELECTED_RULES: set[str] = set()
 
-# Trees that are vendored or generated and are not ours to police. The
-# vendored tree is phosphor-libs/extern/ since the tier split; a bare "extern/"
-# matches nothing and would quietly start policing anything vendored there.
-EXCLUDED_PREFIXES = ("phosphor-libs/extern/", "build/", "build-off/", "build-nounity/",
+# Generated trees that are not ours to police. Nothing vendored is committed:
+# the third-party sources are pinned archives (cmake/PhosphorDependencies.cmake)
+# fetched into .cache/, which git ignores.
+EXCLUDED_PREFIXES = ("build/", "build-off/", "build-nounity/",
                      "build-release/", "build-relwithdebinfo/")
 
 

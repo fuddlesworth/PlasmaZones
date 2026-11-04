@@ -19,10 +19,19 @@
 # kwin-dev check further down).
 #
 # The .dsc deliberately has no Files:/Checksums-Sha256: section. OBS runs
-# debtransform (obs-build), which discovers the tarball fetched by the
-# download_files source service, folds in the debian.* files, and regenerates
-# the source package with correct checksums. A hand-written checksum would be
-# both unknowable at commit time and immediately wrong.
+# debtransform (obs-build), which takes the tarball named on the
+# DEBTRANSFORM-TAR line, folds in the debian.* files, and regenerates the
+# source package with correct checksums. A hand-written checksum would be both
+# unknowable at commit time and immediately wrong.
+#
+# DEBTRANSFORM-TAR names plasmazones_<version>.orig.tar.gz, which the release
+# workflow's publish-obs job builds (the tag's tree plus the pinned dependency
+# archives at packaging/deps, where debian/rules points CMake) and commits
+# beside this file. The line is required, not a preference: download_files
+# also fetches the spec's Source0, Source1 and Source2 into the same package
+# for the RPM targets, and without it debtransform finds four tarballs and
+# aborts rather than guess. publish-obs checks that the name here is the file
+# it built.
 
 set -euo pipefail
 
@@ -100,6 +109,7 @@ Maintainer: fuddlesworth <fuddlesworth@users.noreply.github.com>
 Homepage: https://github.com/fuddlesworth/PlasmaZones
 Standards-Version: 4.6.2
 Build-Depends: $BUILD_DEPENDS
+DEBTRANSFORM-TAR: plasmazones_$VERSION.orig.tar.gz
 EOF
 
 echo "Generated $OUTFILE (version $VERSION-$REVISION)" >&2

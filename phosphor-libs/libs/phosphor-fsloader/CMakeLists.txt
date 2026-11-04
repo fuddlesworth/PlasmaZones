@@ -57,19 +57,17 @@ find_package(Qt6 ${PHOSPHORFSLOADER_QT_MIN} REQUIRED COMPONENTS Core)
 # ═══════════════════════════════════════════════════════════════════════════════
 # valijson acquisition — header-only JSON Schema (Draft 7) validator.
 #
-# Committed source tarball by default (offline builds, mirroring the vendored
-# Luau in phosphor-scripting); system headers opt-in. valijson is header-only
-# and used only inside src/schemavalidator.cpp, so it is exposed as a PRIVATE
-# SYSTEM include (its warnings stay out of our -Wall/-Wextra build, and it
-# never leaks into the public ABI). No add_subdirectory: we want the headers,
-# not valijson's own install/export rules.
+# The archive cmake/PhosphorDependencies.cmake pins by default (from the
+# PHOSPHOR_DEPS_ARCHIVES directory in an offline packaging build, downloaded
+# with CPM otherwise); system headers opt-in. valijson is header-only and used
+# only inside src/schemavalidator.cpp, so it is exposed as a PRIVATE SYSTEM
+# include (its warnings stay out of our -Wall/-Wextra build, and it never leaks
+# into the public ABI). No add_subdirectory: we want the headers, not
+# valijson's own install/export rules.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 option(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON
-    "Use system-provided valijson headers instead of the committed extern/valijson-*.tar.gz" OFF)
-
-set(PHOSPHORFSLOADER_VALIJSON_VERSION "1.1.3")
-set(PHOSPHORFSLOADER_VALIJSON_SHA256 "887b53b1a924f6fe0b35fa3bbc9bbbe5ae8c72097b7f0f7c17b45f4cfa646029")
+    "Use system-provided valijson headers instead of the archive cmake/PhosphorDependencies.cmake pins" OFF)
 
 if(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
     find_path(VALIJSON_INCLUDE_DIR
@@ -79,43 +77,18 @@ if(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
         message(FATAL_ERROR
             "PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON but valijson headers "
             "(valijson/validator.hpp) were not found. Install valijson dev files "
-            "or unset the option to use the committed vendored tarball.")
+            "or unset the option to use the pinned archive.")
     endif()
 else()
-    # extern/ lives at the phosphor tier root; ../../extern resolves there
-    # whether this lib is configured as a subdirectory of the main project or
-    # built standalone for its own tests. Keep the relative spelling: a
-    # ${CMAKE_SOURCE_DIR}-anchored path works in-tree but points at
-    # <lib>/phosphor-libs/extern under a standalone configure, which is the mode
-    # this else() branch exists to serve.
-    set(_pz_valijson_tarball
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../extern/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}.tar.gz")
-    if(NOT EXISTS "${_pz_valijson_tarball}")
-        message(FATAL_ERROR
-            "Vendored valijson tarball missing at ${_pz_valijson_tarball}. It is "
-            "committed in the repository, so an incomplete checkout is the likely "
-            "cause — or pass -DPHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON to use system headers.")
+    # In-tree the root CMakeLists has already included the module at the top
+    # scope, which is where it has to be (it explains why). A standalone
+    # configure of this library reaches it by path.
+    if(NOT COMMAND phosphor_fetch_dependency)
+        include("${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/PhosphorDependencies.cmake")
     endif()
-    # Verify the committed blob before extracting unknown source from it.
-    file(SHA256 "${_pz_valijson_tarball}" _pz_valijson_actual_sha)
-    if(NOT _pz_valijson_actual_sha STREQUAL "${PHOSPHORFSLOADER_VALIJSON_SHA256}")
-        message(FATAL_ERROR
-            "Vendored valijson tarball SHA256 mismatch:\n  expected ${PHOSPHORFSLOADER_VALIJSON_SHA256}\n"
-            "  got      ${_pz_valijson_actual_sha}\nThe committed ${_pz_valijson_tarball} is corrupt or was swapped.")
-    endif()
-    # Extract once. The re-extract guard keys on a stamp written AFTER a
-    # successful extraction (not on a file the archiver writes early), so an
-    # aborted extract repairs itself on the next configure rather than passing
-    # the guard with a half-populated tree.
-    set(_pz_valijson_root "${CMAKE_CURRENT_BINARY_DIR}/_valijson")
-    set(_pz_valijson_stamp "${_pz_valijson_root}/.extracted-${PHOSPHORFSLOADER_VALIJSON_VERSION}")
-    if(NOT EXISTS "${_pz_valijson_stamp}")
-        file(MAKE_DIRECTORY "${_pz_valijson_root}")
-        file(ARCHIVE_EXTRACT INPUT "${_pz_valijson_tarball}" DESTINATION "${_pz_valijson_root}")
-        file(TOUCH "${_pz_valijson_stamp}")
-    endif()
-    set(VALIJSON_INCLUDE_DIR
-        "${_pz_valijson_root}/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}/include")
+    phosphor_fetch_dependency(valijson)
+    set(_pz_valijson_root "${valijson_SOURCE_DIR}")
+    set(VALIJSON_INCLUDE_DIR "${_pz_valijson_root}/include")
 endif()
 
 set(phosphorfsloader_SRCS
@@ -219,8 +192,7 @@ endif()
 # a scope that skips the extraction must not leave an install rule pointing at
 # a path that was never created.
 if(NOT PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
-    set(_pz_valijson_license
-        "${_pz_valijson_root}/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}/LICENSE")
+    set(_pz_valijson_license "${_pz_valijson_root}/LICENSE")
     if(EXISTS "${_pz_valijson_license}")
         install(FILES ${_pz_valijson_license}
             DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones

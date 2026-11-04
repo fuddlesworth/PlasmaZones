@@ -1004,7 +1004,9 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 #
 # REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
 # accepted) on PATH for shader_validate_animations, shader_validate_surface and
-# shader_validate_pointer. Every animation pack's fragment and declared vertex,
+# shader_validate_pointer. On x86-64 Linux the pinned Khronos release is put
+# there (phosphor_put_glslang_on_test_path in cmake/PhosphorDependencies.cmake),
+# so only other hosts need the system's glslang package. Every animation pack's fragment and declared vertex,
 # every surface pack's fragment, buffer passes and own declared vertex, and
 # every pointer pack's stages, are compiled for the compositor's classic-GL
 # branch (default-block uniforms, which QShaderBaker's SPIR-V target rejects by
@@ -1062,6 +1064,7 @@ if(BUILD_TESTING)
         # would need to wedge the run.
         set_tests_properties(${_pz_sv} PROPERTIES TIMEOUT 120)
     endforeach()
+    phosphor_put_glslang_on_test_path(shader_validate_animations shader_validate_surface shader_validate_pointer)
 endif()
 
 # Standalone settings app: independent of KDE System Settings, so it runs

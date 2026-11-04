@@ -286,6 +286,16 @@ jobs:
             ccache-arch-${{ matrix.kde }}-${{ needs.changes.outputs.ccache-restore-own }}
             ccache-arch-${{ matrix.kde }}-${{ needs.changes.outputs.ccache-restore-base }}
 
+      # The pinned third-party archives (cmake/PhosphorDependencies.cmake),
+      # which CPM downloads into .cache/cpm at configure time. Cached on the
+      # pin file, so a run downloads only after a pin changes and a GitHub
+      # hiccup on the archive URLs cannot fail an unrelated build.
+      - name: Restore the dependency archives
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ hashFiles('cmake/PhosphorDependencies.cmake') }}
+
       # What CI builds differs from CMake's Release in four ways, each for
       # time, none of them changing what the tests exercise:
       #   * ENABLE_LTO=OFF. LTO is on for Release, and it made every one of
@@ -610,10 +620,11 @@ jobs:
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
-  # a silently-skipped algorithm). The analyzer is built from the committed
-  # vendored Luau (phosphor-libs/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
-  # the runtime we ship — analysis stays deterministic across CI runs and only
-  # changes when we deliberately bump the vendored Luau.
+  # a silently-skipped algorithm). The analyzer is built from the Luau archive
+  # cmake/PhosphorDependencies.cmake pins, the one the runtime builds from, so
+  # the lint/type ruleset is exactly the runtime we ship — analysis stays
+  # deterministic across CI runs and only changes when we deliberately bump
+  # that pin.
   #
   # The bundled algorithms consume `pluau` as an injected global; plasmazones/data/algorithms/
   # .luaurc declares it so the analyzer resolves it (pluau.luau itself *defines*
@@ -635,30 +646,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The analyzer only changes when the vendored tarball does, so it is
-      # built once per tarball rather than on every run (two to three minutes
-      # each). The key is the tarball's hash; the toolchain is not in it,
-      # because the binary links only libc and libstdc++, and a newer image's
-      # copies of those still run a binary an older one built.
+      # The analyzer only changes when the Luau pin does, so it is built once
+      # per pin rather than on every run (two to three minutes each). The key
+      # is the pinned archive's SHA-256, read from the pin file; the toolchain
+      # is not in it, because the binary links only libc and libstdc++, and a
+      # newer image's copies of those still run a binary an older one built.
+      - name: Read the Luau pin
+        id: luau-pin
+        run: |
+          set -euo pipefail
+          sha=$(sed -n 's/^set(PHOSPHOR_DEP_luau_SHA256 "\([0-9a-f]\{64\}\)")$/\1/p' cmake/PhosphorDependencies.cmake)
+          if [ -z "$sha" ]; then
+            echo "::error::no PHOSPHOR_DEP_luau_SHA256 pin found in cmake/PhosphorDependencies.cmake"
+            exit 1
+          fi
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Restore luau-analyze
         id: luau-cache
         uses: actions/cache@v5
         with:
           path: luau-cli/luau-analyze
-          key: luau-analyze-${{ hashFiles('phosphor-libs/extern/luau-*.tar.gz') }}
+          key: luau-analyze-${{ steps.luau-pin.outputs.sha256 }}
 
       - name: Sync packages
         if: steps.luau-cache.outputs.cache-hit != 'true'
         run: bash .github/ci/sync-packages.sh
 
-      - name: Build luau-analyze from vendored Luau
+      - name: Build luau-analyze from the pinned Luau
         if: steps.luau-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          # Luau is vendored as a committed tarball; extract it before building
-          # the analyzer CLI from it (same source the runtime links).
+          # The fetch script downloads every pinned archive and checks its
+          # hash, so this builds from the same source the runtime links.
+          cmake -DPHOSPHOR_DEPS_FETCH=deps -P cmake/PhosphorDependencies.cmake
+          luau_file=$(sed -n 's/^set(PHOSPHOR_DEP_luau_FILE "\(.*\)")$/\1/p' cmake/PhosphorDependencies.cmake)
           mkdir -p luau-src
-          tar xzf phosphor-libs/extern/luau-*.tar.gz -C luau-src --strip-components=1
+          tar xzf "deps/$luau_file" -C luau-src --strip-components=1
           cmake -S luau-src -B luau-cli -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLUAU_BUILD_CLI=ON \

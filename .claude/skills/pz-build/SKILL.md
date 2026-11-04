@@ -55,8 +55,15 @@ cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
 - `BUILD_TOOLS=ON` adds `shader-render` and friends.
 - The `shader_validate_animations`, `shader_validate_surface` and
   `shader_validate_pointer` gates shell out to `glslangValidator` (or `glslang`)
-  and **hard-fail when neither is on PATH** rather than skipping. Install the
-  distro glslang package before running ctest.
+  and **hard-fail when neither is on PATH** rather than skipping. On x86-64 the
+  configure fetches the glslang release `cmake/PhosphorDependencies.cmake` pins
+  and puts it on those tests' PATH, so only another architecture needs the
+  distro glslang package.
+- The first configure of a fresh tree downloads the pinned Luau, valijson and
+  glslang archives with CPM into `.cache/cpm`, which every build dir shares.
+  With no network, pass `-DPHOSPHOR_DEPS_ARCHIVES=<dir>` holding the archives,
+  filled beforehand with
+  `cmake -DPHOSPHOR_DEPS_FETCH=<dir> -P cmake/PhosphorDependencies.cmake`.
 
 ## Build
 

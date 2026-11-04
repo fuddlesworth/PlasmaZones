@@ -50,7 +50,8 @@ License: LGPL-2.1-or-later
 # globbed: format-qml.cmake, PhosphorCPack.cmake, PhosphorTranslations.cmake,
 # post-install-sycoca.sh and uninstall.cmake.in are GPL-3 and must keep
 # resolving to the catch-all.
-Files: cmake/PhosphorLibTesting.cmake
+Files: cmake/PhosphorDependencies.cmake
+       cmake/PhosphorLibTesting.cmake
        cmake/PhosphorTestIsolation.cmake
        cmake/PhosphorTier.cmake
        cmake/test-session-bus.conf
@@ -183,14 +184,19 @@ Copyright: 2026 nikitamashchenko (https://www.shadertoy.com/)
            2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-# Vendored third-party sources, committed as tarballs and extracted at build
-# time. Not ours, and not GPL.
-Files: phosphor-libs/extern/luau-*.tar.gz
+# Third-party sources built into the package: the Luau and valijson release
+# archives pinned (version, URL, SHA-256) in cmake/PhosphorDependencies.cmake,
+# unpacked and compiled at build time. Not ours, and not GPL. The repository
+# does not track them. The Debian source package carries them at
+# packaging/deps inside its orig tarball, which the release workflow's
+# publish-obs job assembles, and its build-deb job fetches them to the same
+# place, which is where debian/rules points CMake.
+Files: packaging/deps/luau-*.tar.gz
 Copyright: 2019-2025 Roblox Corporation
            1994-2019 Lua.org, PUC-Rio
 License: MIT
 
-Files: phosphor-libs/extern/valijson-*.tar.gz
+Files: packaging/deps/valijson-*.tar.gz
 Copyright: 2016 Tristan Penman
            2016 Akamai Technologies, Inc.
 License: BSD-2-Clause
@@ -312,7 +318,7 @@ License: CC0-1.0
 # Retained upstream notice. Not a Files stanza: the files that incorporate this code
 # ship under the licence their own stanza declares, and this exists because BSD-3
 # clause 1 requires its condition list and disclaimer to travel with a source
-# redistribution. The MIT paragraph further up does the same job for the luau tarball
+# redistribution. The MIT paragraph further up does the same job for the luau archive
 # and for the gl-transitions ports, whose own stanza declares LGPL-2.1-or-later.
 #
 # There used to be a second copy of that text here under the name `Expat`, with a

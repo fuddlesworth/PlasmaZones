@@ -64,13 +64,13 @@ if (out.status == LuauEngine::CallStatus::Ok) {
 }
 ```
 
-## Vendored Luau
+## Bundled Luau
 
-Luau is vendored as a committed source tarball (`phosphor-libs/extern/luau-<ver>.tar.gz`,
-pinned to the version in `PHOSPHORSCRIPTING_LUAU_VERSION` in this library's
-`CMakeLists.txt`), extracted at configure time via `file(ARCHIVE_EXTRACT)` and
-built as part of this library, so source tarballs and offline distro builds are
-self-contained with no network. Pass `-DPLASMAZONES_SYSTEM_LUAU=ON` to link a
+Luau is built from source as part of this library, from the archive
+`cmake/PhosphorDependencies.cmake` pins by version, URL and SHA-256. A normal
+configure downloads it once with CPM into `.cache/cpm`. An offline build (every
+distro package) passes `-DPHOSPHOR_DEPS_ARCHIVES=<dir>` with the archive in it,
+and nothing is downloaded. Pass `-DPLASMAZONES_SYSTEM_LUAU=ON` to link a
 system-provided Luau instead. The Luau libraries are linked **PRIVATE** and the
 VM is built PIC, with `-fexceptions` force-enabled and unity builds disabled on
 the vendored targets only (Luau needs C++ unwinding for `lua_pcall`, and its
@@ -91,7 +91,7 @@ project's global build settings.
 ## Dependencies
 
 - `QtCore`, `Threads`
-- Vendored Luau (`phosphor-libs/extern/luau-*.tar.gz`), or a system Luau via `-DPLASMAZONES_SYSTEM_LUAU=ON`
+- Luau, the archive `cmake/PhosphorDependencies.cmake` pins, or a system Luau via `-DPLASMAZONES_SYSTEM_LUAU=ON`
 
 ## See also
 

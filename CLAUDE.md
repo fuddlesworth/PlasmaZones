@@ -189,8 +189,19 @@ On Linux (native):
 # and shader_validate_pointer gates shell out to `glslangValidator` (or the newer
 # `glslang`; either name works) to compile every animation, surface and pointer
 # pack for the compositor's classic-GL branch, and HARD-FAIL when neither is on
-# PATH rather than skipping. Install your distro's glslang package before running
-# ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
+# PATH rather than skipping. On x86-64 Linux the configure fetches the glslang
+# release cmake/PhosphorDependencies.cmake pins and puts it on those tests' PATH,
+# so nothing needs installing. Anywhere else install your distro's glslang
+# package before running ctest. Not needed with BUILD_TESTING=OFF.
+#
+# THIRD-PARTY SOURCES: Luau and valijson are pinned archives in
+# cmake/PhosphorDependencies.cmake (version, URL, SHA-256), not committed
+# files. The first configure downloads them with CPM into .cache/cpm, which
+# every build dir shares. An offline build passes
+# -DPHOSPHOR_DEPS_ARCHIVES=<dir> holding the archives instead, and
+# `cmake -DPHOSPHOR_DEPS_FETCH=<dir> -P cmake/PhosphorDependencies.cmake` fills
+# such a dir. The packaging recipes repeat each pin, and the dep-pins
+# conventions rule fails when one drifts.
 #
 # SECOND TEST-TIME DEPENDENCY: `appstreamcli` (distro package `appstream`).
 # ECM registers the `appstreamtest` test only when it finds appstreamcli AT
@@ -287,7 +298,6 @@ The tree is four product tiers plus repo-level support directories. Each tier ha
 phosphor-libs/           — tier 1: core LGPL libraries
   libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, ipc, service-idle, ...
   data/schemas/          — JSON schemas the libraries compile in
-  extern/                — vendored Luau + valijson tarballs
 phosphor-shell-libs/     — tier 2: shell libraries (BUILD_PHOSPHOR_SHELL)
   libs/phosphor-*/       — theme, popout, phosphor-shell*, phosphor-service-* (all but idle)
   examples/              — demos and CLI acceptance harnesses
@@ -321,11 +331,11 @@ plasmazones/             — tier 4: PlasmaZones
   data/pointer/          — Pointer shader packs
   data/curves/           — Animation easing curves
   data/schemas/          — Schemas for plasmazones-only documents (whatsnew, scrolling templates)
-cmake/                   — Shared CMake modules
+cmake/                   — Shared CMake modules, including the third-party pins (PhosphorDependencies.cmake)
 scripts/                 — Repo-level checks and dev harnesses
 .moon/                   — moon workspace config (see Build & Test)
 ```
-Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/`, `plasmazones/scripts/` (the installed support script) and `phosphor-libs/extern/` live inside their tiers. `phosphor-shell/` also carries its own `icons/` and `scripts/`.
+Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/` and `plasmazones/scripts/` (the installed support script) live inside their tiers. `phosphor-shell/` also carries its own `icons/` and `scripts/`.
 
 ## Testing
 - Qt Test: `QTEST_MAIN`, `QCOMPARE`, `QVERIFY`
