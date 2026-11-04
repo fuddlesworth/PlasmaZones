@@ -202,11 +202,11 @@ private Q_SLOTS:
         const QString id2 = QStringLiteral("test-double-2");
 
         auto* algo = new CustomTestAlgorithm(QStringLiteral("Double Test"));
-        registry->registerAlgorithm(id1, algo);
+        QVERIFY(registry->registerAlgorithm(id1, algo));
         QVERIFY(registry->hasAlgorithm(id1));
 
         QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered);
-        registry->registerAlgorithm(id2, algo);
+        QVERIFY(!registry->registerAlgorithm(id2, algo));
 
         QVERIFY(!registry->hasAlgorithm(id2));
         QCOMPARE(spy.count(), 0);
@@ -215,8 +215,9 @@ private Q_SLOTS:
 
         // Re-registering the SAME pointer under its OWN id is a safe no-op —
         // it must NOT fall through to the Replace path, which would wrap the
-        // already-owned pointer in a second shared_ptr and double-free it.
-        registry->registerAlgorithm(id1, algo);
+        // already-owned pointer in a second shared_ptr and double-free it. It
+        // reports success: the object IS the entry under id1.
+        QVERIFY(registry->registerAlgorithm(id1, algo));
         QVERIFY(registry->hasAlgorithm(id1));
         QCOMPARE(registry->algorithm(id1), algo); // still the same, still alive
         QCOMPARE(spy.count(), 0); // no re-registration signal
@@ -225,13 +226,34 @@ private Q_SLOTS:
         // delete it (the double-ownership guard runs before the id-validation
         // delete paths) — it stays owned + alive under id1. Reading its name
         // would be a use-after-free if the validation path had freed it.
-        registry->registerAlgorithm(QStringLiteral("autotile:bad"), algo);
+        QVERIFY(!registry->registerAlgorithm(QStringLiteral("autotile:bad"), algo));
         QVERIFY(registry->hasAlgorithm(id1));
         QCOMPARE(registry->algorithm(id1), algo);
         QCOMPARE(registry->algorithm(id1)->name(), QStringLiteral("Double Test")); // alive, not freed
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("autotile:bad")));
 
         registry->unregisterAlgorithm(id1);
+    }
+
+    // A fresh object under an id the registry refuses reports false, so a
+    // caller keeping its own per-id bookkeeping (ScriptedAlgorithmLoader) can
+    // tell it was refused. The registry has deleted the object by then.
+    void testRegister_refusedIdReturnsFalse()
+    {
+        auto* registry = m_scriptSetup.registry();
+        QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered);
+        for (const QString& id : {QString(), QStringLiteral("none"), QStringLiteral("autotile:x"),
+                                  QStringLiteral("has space"), QStringLiteral("slash/id")}) {
+            QVERIFY2(!registry->registerAlgorithm(id, new CustomTestAlgorithm()), qPrintable(id));
+            QVERIFY2(!registry->hasAlgorithm(id), qPrintable(id));
+        }
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!registry->registerAlgorithm(QStringLiteral("test-null"), nullptr));
+
+        const QString okId = QStringLiteral("test-refused-control");
+        QVERIFY(registry->registerAlgorithm(okId, new CustomTestAlgorithm()));
+        QVERIFY(registry->hasAlgorithm(okId));
+        registry->unregisterAlgorithm(okId);
     }
 
     // =========================================================================

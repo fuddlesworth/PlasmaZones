@@ -194,7 +194,7 @@ void AlgorithmRegistry::cleanup()
     }
 }
 
-void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
+bool AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
     // Deliberately does NOT delete `algorithm` on this path: the
     // double-ownership guard below has not run yet, so the object may already
@@ -202,11 +202,11 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // an off-thread call is a programming-error path that must never happen in
     // production; leaking there is strictly safer.
     if (!assertMainThread(__func__)) {
-        return;
+        return false;
     }
 
     if (!algorithm) {
-        return;
+        return false;
     }
 
     // Double-ownership guard — MUST run BEFORE the id-validation deletes below.
@@ -230,8 +230,11 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
                 qCWarning(PhosphorTiles::lcTilesLib)
                     << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
                     << "- cannot register as" << id;
+                return false;
             }
-            return;
+            // A redundant re-register under the same id: the object already is
+            // the entry under `id`, which is what the return value reports.
+            return true;
         }
     }
 
@@ -242,14 +245,14 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // registry once every check passes.
     std::unique_ptr<TilingAlgorithm> owned(algorithm);
     if (id.isEmpty()) {
-        return;
+        return false;
     }
     // Reserved namespace: "autotile:" is the prefix LayoutId uses to wrap
     // algorithm ids into composite LayoutPreview ids.
     if (PhosphorLayout::LayoutId::isAutotile(id)) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
-        return;
+        return false;
     }
     // The other reserved word: "none" is the explicit no-algorithm sentinel
     // (PhosphorZones::NoTilingAlgorithm — spelled as a literal here because
@@ -261,7 +264,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // the ENGINE the one word the engine must never see.
     if (id == QLatin1String("none")) {
         qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing the reserved no-algorithm id" << id;
-        return;
+        return false;
     }
     // IDs flow into LayoutPreview::id, JSON keys, D-Bus args, QML model roles.
     // Reject characters that would break a downstream parser. Allowed:
@@ -273,7 +276,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         if (!ok) {
             qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing algorithm id with invalid character"
                                                  << id << "(allowed: [A-Za-z0-9._:-])";
-            return;
+            return false;
         }
     }
 
@@ -306,6 +309,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         Q_EMIT algorithmRegistered(id);
     }
     Q_EMIT contentsChanged();
+    return true;
 }
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
