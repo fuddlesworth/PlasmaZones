@@ -87,6 +87,8 @@ public:
     // accidentally tear down the legitimate owner's binding on
     // destruction. Pass nullptr to drop the entry unconditionally
     // (administrative use, e.g. the shell's shutdown path).
+    // The subscriptions to the target end with it: each subscriber gets
+    // {"type":"error","id":<subscriptionId>,"code":"NO_SUCH_TARGET",...}.
     void unregisterTarget(const QString& name, QObject* object = nullptr);
 
     [[nodiscard]] QStringList listTargets() const;
