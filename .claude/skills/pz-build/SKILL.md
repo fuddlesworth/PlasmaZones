@@ -131,6 +131,11 @@ engine, effect, or shell sources:
 cmake --build build-nounity --parallel 6
 ```
 
+Test sources have a second hole of the same kind: every test target reuses one
+shared precompiled header (`cmake/PhosphorTestPch.cmake`), so a test can use a
+QtCore or standard header it never included. Configure the non-unity tree with
+`-DENABLE_PCH=OFF` as well when a change touches tests.
+
 The nastiest shape is not a missing include but a genuine cross-TU dependency on
 a function with internal linkage (a `static` in an anonymous namespace), which
 only ever links under unity.

@@ -479,6 +479,13 @@ endif()
 
 add_subdirectory(plasmazones)
 
+# One precompiled header shared by every test target, attached after all tiers
+# are declared because it walks the tree for them (cmake/PhosphorTestPch.cmake).
+if(BUILD_TESTING AND ENABLE_PCH)
+    include(PhosphorTestPch)
+    phosphor_share_test_pch()
+endif()
+
 # Custom uninstall target that cleans up directories properly.
 # QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation
 # (a subdirectory-scope variable there, so re-derived here for the configure

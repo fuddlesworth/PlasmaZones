@@ -53,6 +53,7 @@ License: LGPL-2.1-or-later
 Files: cmake/PhosphorDependencies.cmake
        cmake/PhosphorLibTesting.cmake
        cmake/PhosphorTestIsolation.cmake
+       cmake/PhosphorTestPch.cmake
        cmake/PhosphorTier.cmake
        cmake/test-session-bus.conf
        phosphor-libs/CMakeLists.txt

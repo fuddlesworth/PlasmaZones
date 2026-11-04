@@ -261,6 +261,14 @@ jobs:
       #   * CCACHE_COMPILERCHECK=content: the image's gcc has a fresh mtime in
       #     every container, so the mtime says nothing about which compiler it
       #     is; its contents do.
+      #   * CCACHE_SLOPPINESS lets ccache cache compiles that use a precompiled
+      #     header, which it otherwise runs uncached. pch_defines and
+      #     time_macros are what its manual requires for GCC PCH. The two
+      #     include_file_* entries are needed because the build writes each
+      #     .gch moments before the compiles that read it, and ccache refuses
+      #     to cache a compile that read a file newer than the compile itself.
+      #     CMake passes the PCH with -include and an absolute path, the form
+      #     ccache can follow without -fpch-preprocess.
       # The cache's size is not capped here. It is trimmed to what this run
       # used before it is saved (see "Trim the compiler cache"), so it never
       # carries more than one build of this flavour.
@@ -271,6 +279,7 @@ jobs:
             echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
             echo "CCACHE_NOHASHDIR=true"
             echo "CCACHE_COMPILERCHECK=content"
+            echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime"
             echo "CCACHE_START=$(date +%s)"
           } >> "$GITHUB_ENV"
 
@@ -296,7 +305,7 @@ jobs:
           path: .cache/cpm
           key: cpm-${{ hashFiles('cmake/PhosphorDependencies.cmake') }}
 
-      # What CI builds differs from CMake's Release in four ways, each for
+      # What CI builds differs from CMake's Release in three ways, each for
       # time, none of them changing what the tests exercise:
       #   * ENABLE_LTO=OFF. LTO is on for Release, and it made every one of
       #     the ~600 test executables a whole-program link that ccache cannot
@@ -307,9 +316,10 @@ jobs:
       #     floor on a cold build. The optimised build is release.yml's and the
       #     Nix jobs'. NDEBUG stays, as in Release, so asserts behave as in the
       #     shipped package.
-      #   * ENABLE_PCH=OFF. ccache cannot reuse a compile that read a
-      #     precompiled header, and only three targets have one.
       #   * mold as the linker, for the same ~600 links.
+      # Precompiled headers stay on: every test reuses the one shared PCH
+      # (cmake/PhosphorTestPch.cmake), and CCACHE_SLOPPINESS above lets ccache
+      # cache the compiles that read it.
       # The launcher goes on the cmake line, not CC/CXX: from the environment,
       # CMake would also run its one-off configure checks through ccache, which
       # only ever miss.
@@ -325,7 +335,6 @@ jobs:
             -DENABLE_LTO=OFF \
             "-DCMAKE_C_FLAGS_RELEASE=-O0 -DNDEBUG" \
             "-DCMAKE_CXX_FLAGS_RELEASE=-O0 -DNDEBUG" \
-            -DENABLE_PCH=OFF \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
