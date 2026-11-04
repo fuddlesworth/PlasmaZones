@@ -32,11 +32,11 @@ using PhosphorRules::Operator;
 /// groups by THIS classification, never by enum / emit order. The categories
 /// are deliberately fine-grained: a single flat "State" bucket is hard to
 /// scan, so the window-kind, taskbar/switcher-hint, and
-/// PlasmaZones-tiling concepts each get their own top-level fly-out. Items
+/// PlasmaZones-placement concepts each get their own top-level fly-out. Items
 /// within a category are sorted alphabetically by CategoryMenuButton; only the
 /// returned order int controls the relative position of the categories. The
 /// order ints below are assigned so the category labels sort alphabetically
-/// (Context, Identity, Size, State, Taskbar & switcher, Tiling, Type).
+/// (Context, Identity, Placement, Size, State, Taskbar & switcher, Type).
 PickerCategory fieldCategory(Field f)
 {
     switch (f) {
@@ -67,24 +67,25 @@ PickerCategory fieldCategory(Field f)
     case Field::IsResizable:
     case Field::IsMovable:
     case Field::IsMaximizable:
-        return {PhosphorI18n::tr("State"), 3};
+        return {PhosphorI18n::tr("State"), 4};
     // NETWM "skip" hints — whether the window opts out of the taskbar, pager,
     // or Alt+Tab switcher.
     case Field::SkipTaskbar:
     case Field::SkipPager:
     case Field::SkipSwitcher:
-        return {PhosphorI18n::tr("Taskbar & switcher"), 4};
-    // PlasmaZones-owned placement state.
+        return {PhosphorI18n::tr("Taskbar & switcher"), 5};
+    // PlasmaZones-owned placement state. Named for all three modes, not one:
+    // Snapped and Zone are snapping-mode fields, so a "Tiling" heading hid them.
     case Field::IsFloating:
     case Field::IsSnapped:
     case Field::IsTiled:
     case Field::Zone:
-        return {PhosphorI18n::tr("Tiling"), 5};
+        return {PhosphorI18n::tr("Placement"), 2};
     case Field::Width:
     case Field::Height:
     case Field::PositionX:
     case Field::PositionY:
-        return {PhosphorI18n::tr("Size"), 2};
+        return {PhosphorI18n::tr("Size"), 3};
     case Field::ScreenId:
     case Field::VirtualDesktop:
     case Field::Activity:
