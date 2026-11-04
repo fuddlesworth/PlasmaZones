@@ -37,7 +37,7 @@ def dep5_head(rel: str, repo) -> str | None:
 
     It does NOT meet the symlinked skill directories under .agents/, which an
     earlier version of this docstring claimed. tracked_files() filters on
-    is_file(), and all five tracked symlinks point at directories, so they never
+    is_file(), and every tracked symlink there points at a directory, so none
     reach this function by either route — whole-tree or the widened one, which
     also goes through tracked_files(). The is_file() guard below is therefore
     defensive on every production path. Reading a bounded slice keeps a

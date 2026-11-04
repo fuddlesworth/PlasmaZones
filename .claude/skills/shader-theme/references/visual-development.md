@@ -69,8 +69,8 @@ to survive visual critique before implementing the rest of the coverage matrix.
 
 Use the runtime's assembly, parameter translation and sampling contracts. The only
 scripted capture in the repo is `plasmazones-shader-render` (read
-`plasmazones/tools/shader-render/README.md` first), and it renders OVERLAY packs only, at device scale
-1.0. Nothing scripts a capture of window animations, surface chains or the settings preview:
+`plasmazones/tools/shader-render/README.md` first), and it renders OVERLAY packs and, with
+`--pointer`, POINTER packs, at device scale 1.0. Nothing scripts a capture of window animations, surface chains or the settings preview:
 the nested-KWin harness's `ScreenShot2` path (`scripts/nested-kwin/capture-output.py`)
 bypasses the effect chain by its own docstring and never shows PlasmaZones decorations or
 animations, and the nested-shell capture covers shell clients only. So animation, decoration

@@ -328,19 +328,26 @@ PlasmaZones.wiki/
 # -----------------------------------------------------------------------------
 # Claude Code
 # -----------------------------------------------------------------------------
-# .claude/ is ignored except the checked-in review/theme agents and the
-# code-audit, shader-theme and pz-* workflow skills
+# .claude/ is ignored except the checked-in agents, the hooks that
+# settings.json runs, and the code-audit, record-lesson, shader-theme and pz-*
+# workflow skills
 .claude/*
 !.claude/agents/
 .claude/agents/*
 !.claude/agents/review/
 !.claude/agents/shader-theme/
+!.claude/agents/triage/
+!.claude/agents/experts/
+!.claude/hooks/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/code-audit/
+!.claude/skills/record-lesson/
 !.claude/skills/shader-theme/
+!.claude/skills/pz-algorithm-api/
 !.claude/skills/pz-build/
 !.claude/skills/pz-add-setting/
+!.claude/skills/pz-shader-pack/
 !.claude/skills/pz-verify-live/
 !.claude/settings.json
 .mcp.json
