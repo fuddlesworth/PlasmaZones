@@ -87,6 +87,14 @@ find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 # alongside ECM's.
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${ECM_MODULE_PATH})
 
+# The pinned third-party archives (Luau, valijson, the test-time glslang) and
+# the CPM.cmake that downloads them. Included here, at the top scope, and not
+# from the libraries that use it: its pins and CPM's state are ordinary
+# variables, and a module first included in one library's directory would
+# leave them out of every sibling directory. Pass -DPHOSPHOR_DEPS_ARCHIVES=<dir>
+# for an offline build; the module's header explains both paths.
+include(PhosphorDependencies)
+
 # Test/tool toggles MUST be set before KDECMakeSettings, which calls
 # include(CTest) and locks BUILD_TESTING into the cache as ON. Declaring
 # them after KDECMakeSettings runs makes the option() call a no-op.
@@ -470,6 +478,13 @@ if(BUILD_PHOSPHOR_SHELL)
 endif()
 
 add_subdirectory(plasmazones)
+
+# One precompiled header shared by every test target, attached after all tiers
+# are declared because it walks the tree for them (cmake/PhosphorTestPch.cmake).
+if(BUILD_TESTING AND ENABLE_PCH)
+    include(PhosphorTestPch)
+    phosphor_share_test_pch()
+endif()
 
 # Custom uninstall target that cleans up directories properly.
 # QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation

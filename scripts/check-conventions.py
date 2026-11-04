@@ -80,10 +80,10 @@ CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
 # defers a missing header to the spdx rule when that rule will actually run.
 _SELECTED_RULES: set[str] = set()
 
-# Trees that are vendored or generated and are not ours to police. The
-# vendored tree is phosphor-libs/extern/ since the tier split; a bare "extern/"
-# matches nothing and would quietly start policing anything vendored there.
-EXCLUDED_PREFIXES = ("phosphor-libs/extern/", "build/", "build-off/", "build-nounity/",
+# Generated trees that are not ours to police. Nothing vendored is committed:
+# the third-party sources are pinned archives (cmake/PhosphorDependencies.cmake)
+# fetched into .cache/, which git ignores.
+EXCLUDED_PREFIXES = ("build/", "build-off/", "build-nounity/",
                      "build-release/", "build-relwithdebinfo/")
 
 
@@ -827,6 +827,20 @@ def rule_shared_param_text(files: list[str]) -> list[Violation]:
     return [Violation("shared-param-text", p, 0, m) for p, m in shared_param_problems(REPO)]
 
 
+# Rule: dep-pins — every packaging recipe that fetches the third-party archives
+# itself carries each pin from cmake/PhosphorDependencies.cmake exactly. The data and
+# the check live in conventions_dep_pins.py.
+def rule_dep_pins(files: list[str]) -> list[Violation]:
+    # `files` is unused for the reason rule_shared_param_text gives: the drift to catch
+    # is a commit that bumps the pin file and leaves a recipe, whose file is then the
+    # one NOT staged.
+    del files
+    _add_script_dir_to_path()
+    from conventions_dep_pins import dep_pin_problems
+
+    return [Violation("dep-pins", p, 0, m) for p, m in dep_pin_problems(REPO)]
+
+
 # --------------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------------
@@ -840,6 +854,7 @@ RULES = {
     "dep5": (rule_dep5, "packaging/debian/copyright declares each file's real license and holders"),
     "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
     "shared-param-text": (rule_shared_param_text, "a chain-resolved param's description matches on every pack"),
+    "dep-pins": (rule_dep_pins, "packaging recipes carry the third-party pins from cmake/PhosphorDependencies.cmake"),
 }
 
 

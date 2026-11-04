@@ -285,7 +285,10 @@ def _git_ls_files(repo) -> list[str]:
 # `debian/` is the assembled source package's own layout, not this repo's: dpkg reads
 # debian/copyright from the unpacked tree, where packaging/debian/ has been moved to
 # debian/. A stanza naming it is correct and permanently unmatched here.
-DEP5_BUILD_TIME_PREFIXES = ("debian/",)
+# `packaging/deps/` is the same kind of path: the pinned third-party archives
+# (cmake/PhosphorDependencies.cmake) sit there only in the Debian source package
+# and in a build-deb checkout that fetched them. git ignores the directory.
+DEP5_BUILD_TIME_PREFIXES = ("debian/", "packaging/deps/")
 
 
 def _dead_stanza_problems(stanzas: list[dict], dep5, repo, *,

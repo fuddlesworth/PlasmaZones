@@ -261,6 +261,14 @@ jobs:
       #   * CCACHE_COMPILERCHECK=content: the image's gcc has a fresh mtime in
       #     every container, so the mtime says nothing about which compiler it
       #     is; its contents do.
+      #   * CCACHE_SLOPPINESS lets ccache cache compiles that use a precompiled
+      #     header, which it otherwise runs uncached. pch_defines and
+      #     time_macros are what its manual requires for GCC PCH. The two
+      #     include_file_* entries are needed because the build writes each
+      #     .gch moments before the compiles that read it, and ccache refuses
+      #     to cache a compile that read a file newer than the compile itself.
+      #     CMake passes the PCH with -include and an absolute path, the form
+      #     ccache can follow without -fpch-preprocess.
       # The cache's size is not capped here. It is trimmed to what this run
       # used before it is saved (see "Trim the compiler cache"), so it never
       # carries more than one build of this flavour.
@@ -271,6 +279,7 @@ jobs:
             echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
             echo "CCACHE_NOHASHDIR=true"
             echo "CCACHE_COMPILERCHECK=content"
+            echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime"
             echo "CCACHE_START=$(date +%s)"
           } >> "$GITHUB_ENV"
 
@@ -286,7 +295,17 @@ jobs:
             ccache-arch-${{ matrix.kde }}-${{ needs.changes.outputs.ccache-restore-own }}
             ccache-arch-${{ matrix.kde }}-${{ needs.changes.outputs.ccache-restore-base }}
 
-      # What CI builds differs from CMake's Release in four ways, each for
+      # The pinned third-party archives (cmake/PhosphorDependencies.cmake),
+      # which CPM downloads into .cache/cpm at configure time. Cached on the
+      # pin file, so a run downloads only after a pin changes and a GitHub
+      # hiccup on the archive URLs cannot fail an unrelated build.
+      - name: Restore the dependency archives
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ hashFiles('cmake/PhosphorDependencies.cmake') }}
+
+      # What CI builds differs from CMake's Release in three ways, each for
       # time, none of them changing what the tests exercise:
       #   * ENABLE_LTO=OFF. LTO is on for Release, and it made every one of
       #     the ~600 test executables a whole-program link that ccache cannot
@@ -297,9 +316,10 @@ jobs:
       #     floor on a cold build. The optimised build is release.yml's and the
       #     Nix jobs'. NDEBUG stays, as in Release, so asserts behave as in the
       #     shipped package.
-      #   * ENABLE_PCH=OFF. ccache cannot reuse a compile that read a
-      #     precompiled header, and only three targets have one.
       #   * mold as the linker, for the same ~600 links.
+      # Precompiled headers stay on: every test reuses the one shared PCH
+      # (cmake/PhosphorTestPch.cmake), and CCACHE_SLOPPINESS above lets ccache
+      # cache the compiles that read it.
       # The launcher goes on the cmake line, not CC/CXX: from the environment,
       # CMake would also run its one-off configure checks through ccache, which
       # only ever miss.
@@ -315,7 +335,6 @@ jobs:
             -DENABLE_LTO=OFF \
             "-DCMAKE_C_FLAGS_RELEASE=-O0 -DNDEBUG" \
             "-DCMAKE_CXX_FLAGS_RELEASE=-O0 -DNDEBUG" \
-            -DENABLE_PCH=OFF \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -610,10 +629,11 @@ jobs:
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
-  # a silently-skipped algorithm). The analyzer is built from the committed
-  # vendored Luau (phosphor-libs/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
-  # the runtime we ship — analysis stays deterministic across CI runs and only
-  # changes when we deliberately bump the vendored Luau.
+  # a silently-skipped algorithm). The analyzer is built from the Luau archive
+  # cmake/PhosphorDependencies.cmake pins, the one the runtime builds from, so
+  # the lint/type ruleset is exactly the runtime we ship — analysis stays
+  # deterministic across CI runs and only changes when we deliberately bump
+  # that pin.
   #
   # The bundled algorithms consume `pluau` as an injected global; plasmazones/data/algorithms/
   # .luaurc declares it so the analyzer resolves it (pluau.luau itself *defines*
@@ -635,30 +655,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The analyzer only changes when the vendored tarball does, so it is
-      # built once per tarball rather than on every run (two to three minutes
-      # each). The key is the tarball's hash; the toolchain is not in it,
-      # because the binary links only libc and libstdc++, and a newer image's
-      # copies of those still run a binary an older one built.
+      # The analyzer only changes when the Luau pin does, so it is built once
+      # per pin rather than on every run (two to three minutes each). The key
+      # is the pinned archive's SHA-256, read from the pin file; the toolchain
+      # is not in it, because the binary links only libc and libstdc++, and a
+      # newer image's copies of those still run a binary an older one built.
+      - name: Read the Luau pin
+        id: luau-pin
+        run: |
+          set -euo pipefail
+          sha=$(sed -n 's/^set(PHOSPHOR_DEP_luau_SHA256 "\([0-9a-f]\{64\}\)")$/\1/p' cmake/PhosphorDependencies.cmake)
+          if [ -z "$sha" ]; then
+            echo "::error::no PHOSPHOR_DEP_luau_SHA256 pin found in cmake/PhosphorDependencies.cmake"
+            exit 1
+          fi
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Restore luau-analyze
         id: luau-cache
         uses: actions/cache@v5
         with:
           path: luau-cli/luau-analyze
-          key: luau-analyze-${{ hashFiles('phosphor-libs/extern/luau-*.tar.gz') }}
+          key: luau-analyze-${{ steps.luau-pin.outputs.sha256 }}
 
       - name: Sync packages
         if: steps.luau-cache.outputs.cache-hit != 'true'
         run: bash .github/ci/sync-packages.sh
 
-      - name: Build luau-analyze from vendored Luau
+      - name: Build luau-analyze from the pinned Luau
         if: steps.luau-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          # Luau is vendored as a committed tarball; extract it before building
-          # the analyzer CLI from it (same source the runtime links).
+          # The fetch script downloads every pinned archive and checks its
+          # hash, so this builds from the same source the runtime links.
+          cmake -DPHOSPHOR_DEPS_FETCH=deps -P cmake/PhosphorDependencies.cmake
+          luau_file=$(sed -n 's/^set(PHOSPHOR_DEP_luau_FILE "\(.*\)")$/\1/p' cmake/PhosphorDependencies.cmake)
           mkdir -p luau-src
-          tar xzf phosphor-libs/extern/luau-*.tar.gz -C luau-src --strip-components=1
+          tar xzf "deps/$luau_file" -C luau-src --strip-components=1
           cmake -S luau-src -B luau-cli -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLUAU_BUILD_CLI=ON \

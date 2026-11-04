@@ -50,10 +50,10 @@ plasma-activities
 vulkan-headers
 vulkan-icd-loader
 
-# Test-time tools: glslang for the shader_validate_* gates, xvfb and mesa
-# (llvmpipe) for the tests that need a display or a real GL context, cava and
-# ffmpeg for phosphor-audio.
-glslang
+# Test-time tools: xvfb and mesa (llvmpipe) for the tests that need a display
+# or a real GL context, cava and ffmpeg for phosphor-audio. The shader tests'
+# glslang is not here: on x86-64 the configure fetches the release
+# cmake/PhosphorDependencies.cmake pins and puts it on those tests' PATH.
 xorg-server-xvfb
 mesa
 cava

@@ -3357,6 +3357,14 @@ include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 # org.plasmazones with QDBus's default auto-start flag.
 phosphor_apply_directory_test_isolation()
 
+# The shader-pack validator tests run glslang out of process, as the
+# shader_validate_* gates do. Every test here gets the pinned glslang on PATH
+# (cmake/PhosphorDependencies.cmake), not a hand-kept list of the ones that
+# reach it today, so a new shader test cannot silently fall back to whatever
+# glslang the host has, or to none.
+get_property(_pz_unit_tests DIRECTORY . PROPERTY TESTS)
+phosphor_put_glslang_on_test_path(${_pz_unit_tests})
+
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
 
 # The drop-proxy drag test resolves the cursor's screen through the QScreen

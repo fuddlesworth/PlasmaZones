@@ -46,10 +46,22 @@ srpm: $(SPEC)
 
 	# Create source tarball matching Source0 pattern in the spec
 	# (no git in mock chroot — use tar with --transform to set prefix)
+	# .cache holds CPM's downloads from a local configure, and packaging/deps
+	# the Debian build's archives: neither belongs in the RPM's Source0.
 	mkdir -p /tmp/$(NAME)-srpm
 	tar czf /tmp/$(NAME)-srpm/$(NAME)-$(VERSION).tar.gz \
 		--transform 's,^\.,PlasmaZones-$(VERSION),' \
-		--exclude=.git --exclude='build*' --exclude=.moon/cache --exclude=.claude .
+		--exclude=.git --exclude='build*' --exclude=.moon/cache --exclude=.claude \
+		--exclude=./.cache --exclude=./packaging/deps .
+
+	# The spec's Source1 and Source2, the dependency archives pinned in
+	# cmake/PhosphorDependencies.cmake. rpmbuild -bs packs every Source into
+	# the SRPM and fails on a missing one, and the binary build then reads them
+	# offline from its source directory. The script mode downloads each one
+	# and checks its SHA-256. The SRPM chroot is minimal, so install cmake when
+	# absent, the same way git is above.
+	command -v cmake >/dev/null || dnf -y install cmake
+	cmake -DPHOSPHOR_DEPS_FETCH=/tmp/$(NAME)-srpm -P cmake/PhosphorDependencies.cmake
 
 	# Build SRPM
 	mkdir -p /tmp/$(NAME)-rpmbuild

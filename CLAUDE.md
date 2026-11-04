@@ -189,8 +189,19 @@ On Linux (native):
 # and shader_validate_pointer gates shell out to `glslangValidator` (or the newer
 # `glslang`; either name works) to compile every animation, surface and pointer
 # pack for the compositor's classic-GL branch, and HARD-FAIL when neither is on
-# PATH rather than skipping. Install your distro's glslang package before running
-# ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
+# PATH rather than skipping. On x86-64 Linux the configure fetches the glslang
+# release cmake/PhosphorDependencies.cmake pins and puts it on those tests' PATH,
+# so nothing needs installing. Anywhere else install your distro's glslang
+# package before running ctest. Not needed with BUILD_TESTING=OFF.
+#
+# THIRD-PARTY SOURCES: Luau and valijson are pinned archives in
+# cmake/PhosphorDependencies.cmake (version, URL, SHA-256), not committed
+# files. The first configure downloads them with CPM into .cache/cpm, which
+# every build dir shares. An offline build passes
+# -DPHOSPHOR_DEPS_ARCHIVES=<dir> holding the archives instead, and
+# `cmake -DPHOSPHOR_DEPS_FETCH=<dir> -P cmake/PhosphorDependencies.cmake` fills
+# such a dir. The packaging recipes repeat each pin, and the dep-pins
+# conventions rule fails when one drifts.
 #
 # SECOND TEST-TIME DEPENDENCY: `appstreamcli` (distro package `appstream`).
 # ECM registers the `appstreamtest` test only when it finds appstreamcli AT
@@ -222,12 +233,14 @@ ctest --test-dir build --output-on-failure
 # config paths, `.pragma library` inside Qt's 128-byte window in QML .js
 # libraries (see QML Style), the plain-prose rules on the user-facing strings it
 # can reach, that packaging/debian/copyright still declares every file's real
-# license and copyright holders, and that a chain-resolved shader param's
+# license and copyright holders, that a chain-resolved shader param's
 # DESCRIPTION reads identically on every pack that offers it (the twenty
 # roundBottomCorners copies; the check and its data live in
-# scripts/conventions_shared_text.py). Stdlib only, spread over six files:
-# the entry point plus conventions_dep5.py, conventions_prose.py,
-# conventions_shared_text.py, conventions_selftest.py and
+# scripts/conventions_shared_text.py), and that every packaging recipe repeats
+# the third-party pins of cmake/PhosphorDependencies.cmake exactly (the dep-pins
+# rule, in scripts/conventions_dep_pins.py). Stdlib only, spread over seven
+# files: the entry point plus conventions_dep5.py, conventions_dep_pins.py,
+# conventions_prose.py, conventions_shared_text.py, conventions_selftest.py and
 # conventions_selftest_rules.py.
 #
 # It also enforces one PRECONDITION that is not a rule and that --rules cannot
@@ -287,7 +300,6 @@ The tree is four product tiers plus repo-level support directories. Each tier ha
 phosphor-libs/           — tier 1: core LGPL libraries
   libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, ipc, service-idle, ...
   data/schemas/          — JSON schemas the libraries compile in
-  extern/                — vendored Luau + valijson tarballs
 phosphor-shell-libs/     — tier 2: shell libraries (BUILD_PHOSPHOR_SHELL)
   libs/phosphor-*/       — theme, popout, phosphor-shell*, phosphor-service-* (all but idle)
   examples/              — demos and CLI acceptance harnesses
@@ -321,11 +333,11 @@ plasmazones/             — tier 4: PlasmaZones
   data/pointer/          — Pointer shader packs
   data/curves/           — Animation easing curves
   data/schemas/          — Schemas for plasmazones-only documents (whatsnew, scrolling templates)
-cmake/                   — Shared CMake modules
+cmake/                   — Shared CMake modules, including the third-party pins (PhosphorDependencies.cmake)
 scripts/                 — Repo-level checks and dev harnesses
 .moon/                   — moon workspace config (see Build & Test)
 ```
-Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/`, `plasmazones/scripts/` (the installed support script) and `phosphor-libs/extern/` live inside their tiers. `phosphor-shell/` also carries its own `icons/` and `scripts/`.
+Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/` and `plasmazones/scripts/` (the installed support script) live inside their tiers. `phosphor-shell/` also carries its own `icons/` and `scripts/`.
 
 ## Testing
 - Qt Test: `QTEST_MAIN`, `QCOMPARE`, `QVERIFY`

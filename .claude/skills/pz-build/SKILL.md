@@ -55,8 +55,15 @@ cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
 - `BUILD_TOOLS=ON` adds `shader-render` and friends.
 - The `shader_validate_animations`, `shader_validate_surface` and
   `shader_validate_pointer` gates shell out to `glslangValidator` (or `glslang`)
-  and **hard-fail when neither is on PATH** rather than skipping. Install the
-  distro glslang package before running ctest.
+  and **hard-fail when neither is on PATH** rather than skipping. On x86-64 the
+  configure fetches the glslang release `cmake/PhosphorDependencies.cmake` pins
+  and puts it on those tests' PATH, so only another architecture needs the
+  distro glslang package.
+- The first configure of a fresh tree downloads the pinned Luau, valijson and
+  glslang archives with CPM into `.cache/cpm`, which every build dir shares.
+  With no network, pass `-DPHOSPHOR_DEPS_ARCHIVES=<dir>` holding the archives,
+  filled beforehand with
+  `cmake -DPHOSPHOR_DEPS_FETCH=<dir> -P cmake/PhosphorDependencies.cmake`.
 
 ## Build
 
@@ -123,6 +130,11 @@ engine, effect, or shell sources:
 ```bash
 cmake --build build-nounity --parallel 6
 ```
+
+Test sources have a second hole of the same kind: every test target reuses one
+shared precompiled header (`cmake/PhosphorTestPch.cmake`), so a test can use a
+QtCore or standard header it never included. Configure the non-unity tree with
+`-DENABLE_PCH=OFF` as well when a change touches tests.
 
 The nastiest shape is not a missing include but a genuine cross-TU dependency on
 a function with internal linkage (a `static` in an anonymous namespace), which

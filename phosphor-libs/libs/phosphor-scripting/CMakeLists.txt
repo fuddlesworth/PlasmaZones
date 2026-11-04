@@ -10,16 +10,14 @@
 # QVariant API. The lua_State is kept private so no Luau symbols leak across the
 # shared-library boundary.
 #
-# Luau is vendored as a committed source tarball (phosphor-libs/extern/luau-<ver>.tar.gz,
-# pinned to PHOSPHORSCRIPTING_LUAU_VERSION below), extracted from that LOCAL file at configure time and built as
-# part of this project by default; pass -DPLASMAZONES_SYSTEM_LUAU=ON to link a
-# system-provided Luau instead. Committing the tarball (not a submodule, not the
-# unpacked tree) keeps the repo to one ~2 MB blob while staying self-contained:
-# GitHub's auto-archive and every distro source tarball include it, so offline
-# packaging builds need no network and no special handling.
+# Luau is built from source as part of this project by default, from the archive
+# cmake/PhosphorDependencies.cmake pins (version, URL and SHA-256). It comes
+# from the PHOSPHOR_DEPS_ARCHIVES directory in an offline packaging build and
+# is downloaded with CPM otherwise. Pass -DPLASMAZONES_SYSTEM_LUAU=ON to link a
+# system-provided Luau instead.
 
-# 3.18 floor: the vendored-Luau acquisition uses file(ARCHIVE_EXTRACT ...)
-# (>= 3.18). A lower floor would fail mid-configure with an unknown-subcommand
+# 3.18 floor: the Luau acquisition (cmake/PhosphorDependencies.cmake) uses
+# file(ARCHIVE_EXTRACT ...) (>= 3.18). A lower floor would fail mid-configure with an unknown-subcommand
 # error instead of a clear minimum-version message.
 cmake_minimum_required(VERSION 3.18)
 
@@ -37,11 +35,6 @@ else()
     set(PHOSPHORSCRIPTING_QT_MIN "6.10.0")
 endif()
 
-# Pinned vendored Luau. To bump: drop the new phosphor-libs/extern/luau-<ver>.tar.gz in,
-# update both lines, and delete the old tarball.
-set(PHOSPHORSCRIPTING_LUAU_VERSION "0.737")
-set(PHOSPHORSCRIPTING_LUAU_SHA256 "767b872f084518ca9a79b021f83b40e6a051be4c1f91dd712a949417a4e979c6")
-
 if(NOT PROJECT_VERSION)
     project(PhosphorScripting VERSION ${PHOSPHORSCRIPTING_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -54,11 +47,11 @@ find_package(Qt6 ${PHOSPHORSCRIPTING_QT_MIN} REQUIRED COMPONENTS Core)
 find_package(Threads REQUIRED)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Luau acquisition — committed source tarball (default) or system (opt-in)
+# Luau acquisition — the pinned source archive (default) or system (opt-in)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 option(PLASMAZONES_SYSTEM_LUAU
-    "Link a system-provided Luau instead of the committed phosphor-libs/extern/luau-*.tar.gz" OFF)
+    "Link a system-provided Luau instead of building the archive cmake/PhosphorDependencies.cmake pins" OFF)
 
 if(PLASMAZONES_SYSTEM_LUAU)
     find_path(LUAU_INCLUDE_DIR NAMES lua.h PATH_SUFFIXES luau Luau)
@@ -67,7 +60,7 @@ if(PLASMAZONES_SYSTEM_LUAU)
     if(NOT LUAU_INCLUDE_DIR OR NOT LUAU_VM_LIBRARY OR NOT LUAU_COMPILER_LIBRARY)
         message(FATAL_ERROR
             "PLASMAZONES_SYSTEM_LUAU=ON but a system Luau (lua.h + Luau.VM + Luau.Compiler) "
-            "was not found. Install Luau dev files or unset the option to use the committed vendored tarball.")
+            "was not found. Install Luau dev files or unset the option to build the pinned archive.")
     endif()
     add_library(Luau.VM UNKNOWN IMPORTED)
     set_target_properties(Luau.VM PROPERTIES
@@ -78,42 +71,15 @@ if(PLASMAZONES_SYSTEM_LUAU)
         IMPORTED_LOCATION "${LUAU_COMPILER_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${LUAU_INCLUDE_DIR}")
 else()
-    # Where the committed tarball lives and where we extract it. Kept out of the
-    # NOT-TARGET guard so the licence-install below can find the extracted tree.
-    # CURRENT_SOURCE_DIR-relative, matching phosphor-fsloader: a
-    # ${CMAKE_SOURCE_DIR}-anchored path works in-tree but resolves to
-    # <lib>/phosphor-libs/extern under the standalone configure the project()
-    # guard above exists to serve.
-    set(_p_luau_tarball
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../extern/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}.tar.gz")
-    set(_p_luau_src "${CMAKE_BINARY_DIR}/_luau/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}")
+    # In-tree the root CMakeLists has already included the module at the top
+    # scope, which is where it has to be (it explains why). A standalone
+    # configure of this library reaches it by path.
+    if(NOT COMMAND phosphor_fetch_dependency)
+        include("${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/PhosphorDependencies.cmake")
+    endif()
     if(NOT TARGET Luau.VM)
-        if(NOT EXISTS "${_p_luau_tarball}")
-            message(FATAL_ERROR
-                "Vendored Luau tarball missing at ${_p_luau_tarball}. It is committed in "
-                "the repository, so an incomplete checkout is the likely cause — or pass "
-                "-DPLASMAZONES_SYSTEM_LUAU=ON to link a system Luau instead.")
-        endif()
-        # Verify the committed blob before building unknown source from it.
-        file(SHA256 "${_p_luau_tarball}" _p_luau_actual_sha)
-        if(NOT _p_luau_actual_sha STREQUAL "${PHOSPHORSCRIPTING_LUAU_SHA256}")
-            message(FATAL_ERROR
-                "Vendored Luau tarball SHA256 mismatch:\n  expected ${PHOSPHORSCRIPTING_LUAU_SHA256}\n"
-                "  got      ${_p_luau_actual_sha}\nThe committed ${_p_luau_tarball} is corrupt or was swapped.")
-        endif()
-        # Extract the committed tarball once (a LOCAL file — no network). The
-        # archive has a single luau-<ver>/ top-level dir. The re-extract guard
-        # keys on a stamp file written AFTER a successful extraction — keying
-        # on a file tar writes early (e.g. CMakeLists.txt) would let an
-        # aborted extraction (disk full, ^C mid-configure) pass the guard on
-        # every later reconfigure and fail confusingly inside the vendored
-        # build instead of repairing itself.
-        set(_p_luau_extract_stamp "${CMAKE_BINARY_DIR}/_luau/.extracted-${PHOSPHORSCRIPTING_LUAU_VERSION}")
-        if(NOT EXISTS "${_p_luau_extract_stamp}")
-            file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_luau")
-            file(ARCHIVE_EXTRACT INPUT "${_p_luau_tarball}" DESTINATION "${CMAKE_BINARY_DIR}/_luau")
-            file(TOUCH "${_p_luau_extract_stamp}")
-        endif()
+        phosphor_fetch_dependency(luau)
+        set(_p_luau_src "${luau_SOURCE_DIR}")
         set(LUAU_BUILD_CLI   OFF CACHE BOOL "" FORCE)
         set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         set(LUAU_BUILD_WEB   OFF CACHE BOOL "" FORCE)
@@ -248,7 +214,7 @@ endif()
 # system-Luau build links a separately-installed Luau that carries its own
 # licence, so skip it there.
 if(NOT PLASMAZONES_SYSTEM_LUAU)
-    # _p_luau_src is the extracted tarball tree (set in the acquisition
+    # _p_luau_src is the unpacked archive (set in the acquisition
     # block). Guarded on the file actually existing: a superbuild/parent
     # scope that pre-defines Luau.VM skips the extraction entirely, and an
     # unconditional rule would then fail at `cmake --install` time against

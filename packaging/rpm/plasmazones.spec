@@ -36,15 +36,25 @@ License:        GPL-3.0-or-later AND LGPL-2.1-or-later AND MIT AND BSD-2-Clause 
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
-# Luau and valijson are vendored as committed source tarballs
-# (phosphor-libs/extern/luau-<ver>.tar.gz, phosphor-libs/extern/valijson-<ver>.tar.gz) and built into the
-# shipped objects, so declare the bundled provides per Fedora's bundled-library
-# policy — this lets security tooling track CVEs against the bundled copies.
+# Luau and valijson: the release archives pinned (version, URL and SHA-256) in
+# cmake/PhosphorDependencies.cmake, fetched as sources of their own and built
+# into the shipped objects. The #/ fragment stores each under the file name
+# CMake looks for, and %%build hands the source directory to CMake as
+# PHOSPHOR_DEPS_ARCHIVES, which checks each archive against the SHA-256 below
+# before unpacking it, so the build never reaches the network. rpm has no hash
+# field of its own, so the hash sits in the comment beside its Source line,
+# and check-conventions.py's dep-pins rule fails when a URL or hash here stops
+# matching the pin. Bump them together.
+#
+# Both are bundled copies, so declare the bundled provides per Fedora's
+# bundled-library policy, which lets security tooling track CVEs against them.
 # valijson is header-only, which does not exempt it: its code still lands in
-# libPhosphorFsLoader. Keep both versions in sync with
-# PHOSPHORSCRIPTING_LUAU_VERSION in phosphor-libs/libs/phosphor-scripting/CMakeLists.txt and
-# PHOSPHORFSLOADER_VALIJSON_VERSION in phosphor-libs/libs/phosphor-fsloader/CMakeLists.txt.
-Provides:       bundled(luau) = 0.737
+# libPhosphorFsLoader. Keep both versions in step with the pins.
+# luau-0.745.tar.gz sha256 53c22773bace6cabbabaead576fbc08d11a0317fce11a3dbf9d027dda6849248
+Source1:        https://github.com/luau-lang/luau/archive/refs/tags/0.745.tar.gz#/luau-0.745.tar.gz
+# valijson-1.1.3.tar.gz sha256 887b53b1a924f6fe0b35fa3bbc9bbbe5ae8c72097b7f0f7c17b45f4cfa646029
+Source2:        https://github.com/tristanpenman/valijson/archive/refs/tags/v1.1.3.tar.gz#/valijson-1.1.3.tar.gz
+Provides:       bundled(luau) = 0.745
 Provides:       bundled(valijson) = 1.1.3
 
 # Plasma 6 / Wayland only
@@ -239,9 +249,13 @@ Features:
 # against nixpkgs (KWin 6.7) in the Nix jobs. Worth remembering when
 # changing the KWin floor: this is the path that compiles against Fedora's and
 # openSUSE's KWin, so it proves the build rather than the behaviour.
+#
+# %%autosetup above unpacks Source0 only. Source1 and Source2 stay archives in
+# the source directory, where PHOSPHOR_DEPS_ARCHIVES points CMake.
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DBUILD_TESTING=OFF
+    -DBUILD_TESTING=OFF \
+    -DPHOSPHOR_DEPS_ARCHIVES=%{_sourcedir}
 %cmake_build
 
 %install
@@ -290,9 +304,10 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
-# MIT licence of the vendored Luau runtime (phosphor-libs/extern/luau) and BSD-2-Clause
-# licence of the vendored valijson headers (phosphor-libs/extern/valijson), installed by the
-# phosphor-scripting / phosphor-fsloader CMake in the default vendored build.
+# MIT licence of the bundled Luau runtime (Source1) and BSD-2-Clause licence of
+# the bundled valijson headers (Source2), copied out of the unpacked archives
+# and installed by the phosphor-scripting / phosphor-fsloader CMake whenever it
+# builds them, rather than a system copy.
 %license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %license %{_datadir}/licenses/plasmazones/LICENSE.valijson
 %doc README.md
