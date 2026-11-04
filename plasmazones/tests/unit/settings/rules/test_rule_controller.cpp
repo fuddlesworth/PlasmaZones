@@ -477,9 +477,10 @@ void TestRuleController::authoringMetadata()
     // interleaves state/context, so assert grouping is by CATEGORY (via the
     // language-independent order), not by enum position. The formerly single
     // State bucket is split into fine-grained categories:
-    // Alphabetical by label: Context=0, Identity=1, Size=2, State=3,
-    // Taskbar & switcher=4, Tiling=5, Type=6.
+    // Alphabetical by label: Context=0, Identity=1, Placement=2, Size=3,
+    // State=4, Taskbar & switcher=5, Type=6.
     QHash<QString, int> fieldCategoryOrder;
+    QHash<QString, QString> fieldCategoryLabel;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(!f.value(QStringLiteral("category")).toString().isEmpty());
@@ -491,18 +492,26 @@ void TestRuleController::authoringMetadata()
             qPrintable(QStringLiteral("field %1 has no description").arg(f.value(QStringLiteral("wire")).toString())));
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
+        fieldCategoryLabel.insert(f.value(QStringLiteral("wire")).toString(),
+                                  f.value(QStringLiteral("category")).toString());
     }
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId"), -1), 1); // Identity
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType"), -1), 6); // Type
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient"), -1), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen"), -1), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized"), -1), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar"), -1), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher"), -1), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating"), -1), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone"), -1), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen"), -1), 4); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized"), -1), 4); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar"), -1), 5); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher"), -1), 5); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating"), -1), 2); // Placement
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isSnapped"), -1), 2); // Placement
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTiled"), -1), 2); // Placement
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone"), -1), 2); // Placement
+    // Snapped and Zone are snapping-mode fields: the heading names all three
+    // modes' placement state, not the tiling engine alone.
+    QCOMPARE(fieldCategoryLabel.value(QStringLiteral("zone")), QStringLiteral("Placement"));
+    QCOMPARE(fieldCategoryLabel.value(QStringLiteral("isSnapped")), QStringLiteral("Placement"));
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 3); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 3); // Size
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId"), -1), 0); // Context
     // ColorScheme is a context field, not a window-state one: it resolves per
     // screen/desktop/activity like screenId, so it belongs in the Context
