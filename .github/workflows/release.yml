@@ -9,15 +9,26 @@ on:
   push:
     tags:
       - "v*"
+  # Cache warming, not a release. A tag run can restore the default branch's
+  # caches but saves into the tag's own scope, which no later release can
+  # read, so the compiler caches the package builds restore are made here: the
+  # nightly run builds every package on main and publishes nothing. See the
+  # `gate` job, and "Restore the compiler cache" in build-deb.
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v3.0.0). Must already exist.'
-        required: true
+        description: 'Tag to release (e.g. v3.0.0). Must already exist. Leave empty only with warm_cache.'
+        required: false
       pkgrel:
         description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Leave empty for a normal release. A rebuild-only republish normally carries its revision in the tag itself (v3.4.17-r2, see the version job); set this only to republish a MUTABLE release under its original tag.'
         required: false
         default: ''
+      warm_cache:
+        description: 'Build every package to warm the compiler caches, and publish nothing. Ignores tag and pkgrel.'
+        type: boolean
+        default: false
 
 # Default scope is read-only. Only the `release` job opts into writes, via
 # its own permissions block. publish-aur and publish-obs deliberately have
@@ -37,8 +48,11 @@ permissions:
 # landed in two different concurrency groups, so a dispatch and a push for
 # the SAME tag could run simultaneously, which is exactly the case the
 # comment claimed to cover.
+#
+# A cache-warming run has no tag, so it gets a group of its own rather than
+# sharing the dispatched branch's with a release fired against that branch.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release-${{ (github.event_name == 'schedule' || github.event.inputs.warm_cache == 'true') && 'cache-warm' || github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -58,11 +72,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.gate.outputs.build }}
+      warm: ${{ steps.gate.outputs.warm }}
     steps:
       - name: Skip push events for revision tags
         id: gate
+        env:
+          WARM_INPUT: ${{ github.event.inputs.warm_cache }}
         run: |
           set -euo pipefail
+          # A cache-warming run (the nightly schedule, or a dispatch with
+          # warm_cache) builds every package and must never publish one. Every
+          # job that releases or uploads checks the version job's `warm`.
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "${WARM_INPUT:-}" == "true" ]]; then
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "warm=true" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          echo "warm=false" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" =~ -r[2-9][0-9]*$ ]]; then
               echo "::notice::$GITHUB_REF_NAME is a package-revision tag; it is released by the workflow_dispatch that cut it, not by its push. Nothing to do."
               echo "build=false" >> "$GITHUB_OUTPUT"
@@ -84,7 +110,17 @@ jobs:
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       pkgrel: ${{ steps.version.outputs.pkgrel }}
       release_tag: ${{ steps.version.outputs.release_tag }}
+      warm: ${{ needs.gate.outputs.warm }}
     steps:
+      # Checked out only for a cache-warming run, which has no tag to read a
+      # version from; see the first branch of "Extract version from tag".
+      - name: Checkout
+        if: needs.gate.outputs.warm == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - name: Extract version from tag
         id: version
         # Pass the user-supplied dispatch input through env (not via ${{ … }}
@@ -94,8 +130,30 @@ jobs:
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
           INPUT_PKGREL: ${{ github.event.inputs.pkgrel }}
+          WARM: ${{ needs.gate.outputs.warm }}
         run: |
           set -euo pipefail
+          # A cache-warming run builds the commit it was fired on, as the
+          # newest dated CHANGELOG.md version. Not CMakeLists.txt's: the
+          # Debian and RPM steps assert that the changelog they generate from
+          # CHANGELOG.md carries VERSION, and a version bump lands in
+          # CMakeLists.txt before its changelog entry is dated.
+          if [[ "$WARM" == "true" ]]; then
+              VERSION="$(awk -F'[][]' '/^## \[[0-9]/ && / - / { print $2; exit }' CHANGELOG.md)"
+              if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.?[0-9]+)?)?$ ]]; then
+                  echo "Error: newest dated CHANGELOG.md version '$VERSION' is not a release version" >&2
+                  exit 1
+              fi
+              {
+                  echo "ref=$GITHUB_SHA"
+                  echo "version=$VERSION"
+                  echo "is_prerelease=false"
+                  echo "pkgrel=1"
+                  echo "release_tag="
+              } >> "$GITHUB_OUTPUT"
+              echo "Cache-warming build of $GITHUB_SHA as $VERSION; nothing is published."
+              exit 0
+          fi
           # On push the ref is refs/tags/v<x>; on manual dispatch we
           # accept an explicit tag input. Fail loudly if neither yields
           # a tag-shaped value so downstream packaging steps don't see
@@ -244,6 +302,13 @@ jobs:
         suite: [unstable, testing]
     container:
       image: debian:${{ matrix.suite }}
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: deb-${{ matrix.suite }}
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
@@ -272,7 +337,7 @@ jobs:
           # git so actions/checkout does a real clone rather than falling back
           # to the REST tarball; dpkg-dev so `apt-get build-dep` can read the
           # source package below.
-          apt_install_with_retry git ca-certificates dpkg-dev fakeroot
+          apt_install_with_retry git ca-certificates dpkg-dev fakeroot ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -335,6 +400,40 @@ jobs:
           fi
           echo "Debian version: $GOT"
 
+      # The compiler cache. Each package build restores the newest cache saved
+      # for its flavour (distro, release and architecture). A tag run can
+      # restore the default branch's caches but would save into the tag's own
+      # scope, which no later release can read, so only branch runs save: the
+      # nightly cache-warming run on main, and kwin-rebuild-watch's
+      # dispatches. The job's CMAKE_<LANG>_COMPILER_LAUNCHER variables put
+      # ccache in front of the compiler through every packaging tool, because
+      # CMake reads them from the environment and makepkg, rpmbuild and
+      # dpkg-buildpackage all run it with the environment intact.
+      #
+      # ccache's defaults otherwise hold, deliberately. These builds compile
+      # with -g, and the cwd ccache hashes for that is what keeps the debug
+      # info's compilation directory right; the RPM builds run in a directory
+      # named after the version, so their cache hits only within a version
+      # (which is what a KWin rebuild of it is). No sloppiness either: nothing
+      # uses __DATE__ or __TIME__, and the three precompiled-header targets
+      # simply compile uncached.
+      #
+      # The cache directory sits outside the workspace, because the RPM jobs
+      # tar the workspace into the source RPM.
+      #
+      # Housekeeping only, so none of the cache steps can fail a release.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
         # bash builtins. The container's /bin/sh is dash, and GitHub's
@@ -357,6 +456,36 @@ jobs:
               mv ../*.ddeb dist/
           fi
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       # KWin baseline for the kwin-rebuild-watch workflow: the upstream KWin
       # version this .deb was compiled against. The effect plugin's IID embeds
       # it, so the package is inert the moment the distro ships a different
@@ -371,7 +500,7 @@ jobs:
           dpkg-query -W -f='${source:Upstream-Version}\n' kwin-dev \
             | tee baseline/debian-unstable
       - name: Upload KWin build baseline
-        if: matrix.suite == 'unstable'
+        if: matrix.suite == 'unstable' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-debian-unstable
@@ -386,7 +515,7 @@ jobs:
       # an artifact. Unstable is the one published because it matches the
       # Debian_Unstable OBS target and is the sharper signal of the two.
       - name: Upload artifact
-        if: matrix.suite == 'unstable'
+        if: matrix.suite == 'unstable' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: deb-debian-unstable
@@ -421,10 +550,17 @@ jobs:
             runner: ubuntu-24.04-arm
     container:
       image: fedora:${{ matrix.fedora }}
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: rpm-fedora-${{ matrix.fedora }}-${{ matrix.arch }}
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
-        run: dnf install -y git rpm-build rpmdevtools
+        run: dnf install -y git rpm-build rpmdevtools ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -499,6 +635,19 @@ jobs:
               -cf - . | tar -xf - -C "PlasmaZones-${VERSION}/"
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build RPM
         run: |
           cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
@@ -506,7 +655,38 @@ jobs:
           mkdir -p dist
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: rpm-fedora-${{ matrix.fedora }}-${{ matrix.arch }}
@@ -521,7 +701,7 @@ jobs:
           mkdir -p baseline
           rpm -q --qf '%{VERSION}\n' kwin-devel | tee baseline/fedora-${{ matrix.fedora }}
       - name: Upload KWin build baseline
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch == 'x86_64' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-fedora-${{ matrix.fedora }}
@@ -537,6 +717,13 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: opensuse/tumbleweed:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: rpm-opensuse-tumbleweed
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
@@ -584,7 +771,7 @@ jobs:
                   zypper -n install --allow-downgrade "$@"
               fi
           }
-          install_with_retry git rpm-build rpmdevtools
+          install_with_retry git rpm-build rpmdevtools ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -670,6 +857,19 @@ jobs:
               -cf - . | tar -xf - -C "PlasmaZones-${VERSION}/"
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build RPM
         run: |
           cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
@@ -677,7 +877,38 @@ jobs:
           mkdir -p dist
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: rpm-opensuse-tumbleweed
@@ -691,6 +922,7 @@ jobs:
           mkdir -p baseline
           rpm -q --qf '%{VERSION}\n' kwin6-devel | tee baseline/opensuse-tumbleweed
       - name: Upload KWin build baseline
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-opensuse-tumbleweed
@@ -706,12 +938,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: generic
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git tar
+          pacman -S --noconfirm git tar ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -738,8 +977,51 @@ jobs:
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DBUILD_TESTING=OFF
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build
         run: cmake --build build --parallel $(nproc)
+
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Install to AppDir
         run: |
@@ -790,6 +1072,7 @@ jobs:
           tar czf plasmazones-${VERSION}-linux-x86_64.tar.gz "$DIRNAME"
 
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: generic-linux-tarball
@@ -805,12 +1088,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: arch
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Setup build environment
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git sudo namcap
+          pacman -S --noconfirm base-devel git sudo namcap ccache
 
           # Create non-root user (makepkg refuses to run as root)
           useradd -m builder
@@ -894,11 +1184,58 @@ jobs:
           }
           PKGBUILD_EOF
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build package
         run: |
-          chown -R builder:builder .
+          # makepkg runs as builder, so builder owns the compiler cache too.
+          # su without --login keeps the environment, which is how ccache's
+          # variables and the CMake launchers reach makepkg's build().
+          mkdir -p "$CCACHE_DIR"
+          chown -R builder:builder . "$CCACHE_DIR"
           cd packaging/arch
           su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
+
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Validate package
         # continue-on-error rather than `|| true`, matching ci.yml's draft
@@ -917,6 +1254,7 @@ jobs:
           mv packaging/arch/*.pkg.tar.zst dist/
 
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: arch-package
@@ -934,6 +1272,7 @@ jobs:
           mkdir -p baseline
           pacman -Q kwin | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//' | tee baseline/arch
       - name: Upload KWin build baseline
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-arch
@@ -946,6 +1285,9 @@ jobs:
   build-nix:
     name: Verify Nix Build
     needs: version
+    # Nix builds in its sandbox, where no compiler cache reaches, so a
+    # cache-warming run has nothing to do here.
+    if: needs.version.outputs.warm != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -987,10 +1329,14 @@ jobs:
     name: Create GitHub Release
     needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
-    # No `if:` — the implicit success() gate is intentional. If any
-    # package build fails, the release is NOT cut: we don't ship a
-    # partial release. Fix the failing distro and re-run the tag.
+    # The implicit success() gate is intentional, and the `if:` below keeps
+    # it: an `if:` with no status function still requires every need to have
+    # succeeded. If any package build fails, the release is NOT cut: we
+    # don't ship a partial release. Fix the failing distro and re-run the
+    # tag. A cache-warming run never releases (and build-nix skips in one,
+    # which this gate would read as not-succeeded anyway).
     # Only this job writes release assets back to the repo.
+    if: needs.version.outputs.warm != 'true'
     permissions:
       contents: write
 
@@ -1244,7 +1590,7 @@ jobs:
     # Skip AUR publish for pre-releases. Single source of truth: the
     # version job's `is_prerelease` output — keeps this in sync with
     # the GH release's `--prerelease` flag automatically.
-    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout
@@ -1501,7 +1847,7 @@ jobs:
     # Skip pre-releases — the home:fuddlesworth repo users add with
     # `zypper addrepo` is a stable channel. Single source of truth: the
     # version job's `is_prerelease` output, same as publish-aur.
-    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout

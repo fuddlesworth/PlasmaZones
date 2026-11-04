@@ -5,8 +5,10 @@
 
 The repository's caches share 10 GB, and past that GitHub evicts the least
 recently used, which can be the very entry the next run on main restores. CI
-saves a new compiler cache on every run (.github/workflows/ci.yml), so without
-this the store fills with entries nothing reads:
+saves a new compiler cache on every run (.github/workflows/ci.yml), and so does
+every package build of a release branch run (.github/workflows/release.yml,
+ccache-release-<flavour>-<run>-<attempt>), so without this the store fills with
+entries nothing reads:
 
   * a closed pull request's caches, which only that pull request restores;
   * a deleted branch's, and a tag's, which no later run restores;
