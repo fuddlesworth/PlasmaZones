@@ -4,11 +4,14 @@
 // Frame-commit handling for TilingHandler: slotWindowFrameGeometryChanged,
 // which centres a tile whose client committed a smaller size than it was
 // asked for and reports a minimum size it discovers on the way,
-// reportMinSizeIfChanged, the min-size reporter it shares with the batch, and
-// reportStripCommit, which reports a strip window's answer to its offered
-// column (read by PlasmaZonesEffect::readColumnAnswer), and
-// cancelStripQuickTile, which takes KWin's quick tile back off a strip tile
-// through dropKWinTile and answerDroppedTileAck, which the batch shares.
+// reportMinSizeIfChanged, the min-size reporter it shares with the batch,
+// noteMinSizeDecorationChanged, which re-reports that minimum when the
+// window's decoration changes, reportStripCommit, which reports a strip
+// window's answer to its offered column (read by
+// PlasmaZonesEffect::readColumnAnswer), cancelStripQuickTile, which takes
+// KWin's quick tile back off a strip tile through dropKWinTile and
+// answerDroppedTileAck, which the batch shares, and
+// stripOutputMovedSinceBatch, whether a strip's output moved since its batch.
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
@@ -717,9 +720,24 @@ void TilingHandler::noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QS
     // on the window's next batch, and the engine needs it before then: the
     // effect flips a title bar on the window's own batch (the decoration
     // sweep at its end), after the poll ran.
-    if (w && m_effect->m_lastReportedMinSize.contains(windowId)) {
-        reportMinSizeIfChanged(windowId, declaredMinSize(w));
+    if (!w || !m_effect->m_lastReportedMinSize.contains(windowId)) {
+        return;
     }
+    // Not for the decoration a user's own maximize takes off (KWin's
+    // borderless maximized windows): the re-tile that report triggers clears
+    // the maximize (discussion #1182). The suppression counter covers the
+    // monocle arm's write on X11, where the decoration changes inside
+    // maximize() before the membership insert.
+    const KWin::Window* const kw = w->window();
+    const bool requestedMaximized = kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore;
+    const bool maximizeOwnedByTiling = isSuppressingMaximizeChanged() || m_monocleMaximizedWindows.contains(windowId)
+        || m_maximizedToEdgesWindows.contains(windowId);
+    if (!CentringDecisions::decorationChangeMovesTileMinimum(requestedMaximized, maximizeOwnedByTiling)) {
+        qCDebug(lcEffect) << "Decoration changed under a user maximize for" << windowId
+                          << "- keeping the tile's minimum";
+        return;
+    }
+    reportMinSizeIfChanged(windowId, declaredMinSize(w));
 }
 
 TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString& windowId, const QString& screenId,
