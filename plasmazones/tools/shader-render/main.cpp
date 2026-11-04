@@ -89,12 +89,14 @@ QString xdgPlasmaZonesDir(const QString& subdir)
     return {};
 }
 
-// Resolve a bundled data family from the source tree, relative to the cwd.
+// Resolve a bundled data family from the source tree.
 //
-// Two spellings, because the tier split moved the tree: `plasmazones/data/<f>`
-// when run from the repository root, `data/<f>` when run from inside
-// plasmazones/. Returns an empty string when neither exists, which is the
-// installed-invocation case.
+// Relative to the cwd first, in two spellings because the tier split moved the
+// tree: `plasmazones/data/<f>` when run from the repository root, `data/<f>`
+// when run from inside plasmazones/. Then the data tree of the checkout this
+// binary was built from (PZ_SHADER_RENDER_SOURCE_DATA_DIR), so a run from any
+// other directory still finds the tree. Returns an empty string when none
+// exists, which is the installed-invocation case.
 //
 // The repo-root spelling has to come first. Getting this wrong is silent: the
 // tool renders against the installed packs instead of the working tree and says
@@ -102,7 +104,8 @@ QString xdgPlasmaZonesDir(const QString& subdir)
 // prevent.
 QString sourceTreeDataDir(const QString& family)
 {
-    for (const QString& prefix : {QStringLiteral("plasmazones/data/"), QStringLiteral("data/")}) {
+    for (const QString& prefix : {QStringLiteral("plasmazones/data/"), QStringLiteral("data/"),
+                                  QStringLiteral(PZ_SHADER_RENDER_SOURCE_DATA_DIR "/")}) {
         const QString candidate = QDir(prefix + family).absolutePath();
         if (QDir(candidate).exists())
             return candidate;
