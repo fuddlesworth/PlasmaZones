@@ -5,16 +5,22 @@
 
 The repository's caches share 10 GB, and past that GitHub evicts the least
 recently used, which can be the very entry the next run on main restores. CI
-saves a new compiler cache on every run (.github/workflows/ci.yml), so without
-this the store fills with entries nothing reads:
+saves a new compiler cache on every run (.github/workflows/ci.yml), and so does
+every package build of a release branch run (.github/workflows/release.yml,
+ccache-release-<flavour>-<run>-<attempt>), so without this the store fills with
+entries nothing reads:
 
   * a closed pull request's caches, which only that pull request restores;
   * a deleted branch's, and a tag's, which no later run restores;
   * on a live ref, every entry of a cache family but the newest. A key is its
-    family plus a part that changes from one entry to the next: a run id and
-    attempt (ccache-arch-ON-<run>-<attempt>), an ISO week
-    (pacman-arch-<year>-<week>), or the timestamp the old ccache action used.
-    A run restores the newest entry of its family, so the older ones are dead.
+    family plus a part that changes from one entry to the next: the CI
+    image, the pull request's base and a run id and attempt
+    (ccache-arch-ON-i<image>-pr-<base>-<run>-<attempt>, or -branch- in place
+    of -pr-<base>- on a branch), a bare run id and attempt (the keys before
+    the CI image), an ISO week (pacman-arch-<year>-<week>), or the timestamp
+    the old ccache action used. A run restores the newest entry of its family
+    on a ref, so the older ones are dead: an entry from an older image or an
+    older base is one no restore key of a later run matches.
 
 Run by .github/workflows/cache-cleanup.yml. Needs gh with GH_REPO set and a
 token allowed actions: write. --dry-run lists what would go and deletes nothing.
@@ -28,7 +34,10 @@ import sys
 import time
 
 VOLATILE = re.compile(
-    r"-\d+-\d+$"  # <run id>-<attempt>
+    # <image>-<branch or pr-base>-<run id>-<attempt>; first, so it wins over the
+    # bare run id and attempt that ends it too.
+    r"-(?:i[0-9a-f]{12}|rolling)-(?:branch|pr-[0-9a-f]{12})-\d+-\d+$"
+    r"|-\d+-\d+$"  # <run id>-<attempt>
     r"|-\d{4}-\d{2}$"  # <ISO year>-<ISO week>
     r"|-\d{4}-\d{2}-\d{2}T[0-9:.]+Z$"  # the old ccache action's timestamp
 )

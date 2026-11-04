@@ -1,0 +1,100 @@
+# Build the CI image and warm main's compiler cache against it.
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# ci.yml's container jobs run in ghcr.io/<owner>/plasmazones-ci:latest, built
+# here from .github/ci/Dockerfile. The image pins the toolchain and the Qt/KF6
+# headers for a week, so the compiler cache keeps hitting between runs instead
+# of going cold whenever Arch ships an update (see the Dockerfile's header).
+#
+# After pushing, this dispatches ci.yml on main with warm_cache, which builds
+# both flavours in the new image and saves main's compiler cache for it. Pull
+# requests restore that cache, so the one cold build a new image costs is paid
+# here, on a schedule, rather than by the first pull request of the week.
+#
+# The package must be PUBLIC (github.com/users/<owner>/packages/container/
+# plasmazones-ci/settings → Change visibility). ci.yml checks for it without
+# credentials, so fork pull requests can pull it too, and falls back to a bare
+# archlinux:latest with a full package install while it is private or missing.
+
+name: CI image
+
+on:
+  schedule:
+    # Mondays 03:00 UTC.
+    - cron: "0 3 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - ".github/ci/**"
+      - ".github/workflows/ci-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-image
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push the CI image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      # To dispatch the cache-warming CI run on main.
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build
+        id: build
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/plasmazones-ci"
+          id="$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          docker build --pull \
+            --build-arg "IMAGE_ID=$id" \
+            --tag "$image:latest" \
+            --tag "$image:$id" \
+            .github/ci
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      # Proves the image can do what ci.yml asks of it before anything pulls
+      # it: every tool a job calls is on PATH.
+      - name: Smoke test
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          docker run --rm "$IMAGE:latest" bash -c '
+            set -e
+            for tool in git gcc g++ cmake ninja ccache mold clang-format \
+                        glslangValidator xvfb-run /usr/lib/qt6/bin/qmlformat; do
+              command -v "$tool" >/dev/null || { echo "missing: $tool" >&2; exit 1; }
+            done
+            gcc --version | head -1
+            pacman -Q qt6-base kwin kirigami
+          '
+
+      - name: Push
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+          ID: ${{ steps.build.outputs.id }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$ID"
+          docker push "$IMAGE:latest"
+
+      # workflow_dispatch is one of the two events a GITHUB_TOKEN may start a
+      # run with, so this works without a personal token.
+      - name: Warm main's compiler cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main -f warm_cache=true

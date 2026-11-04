@@ -27,7 +27,8 @@ FROM fedora:44
 # because the ENTRYPOINT configures with BUILD_PHOSPHOR_SHELL=ON: without
 # that flag the image built happily and `docker run ... ctest` reported
 # green having run none of the shell tier's suites, which is the trap
-# CLAUDE.md's Build & Test section describes. Mirrors ci.yml's build-shell.
+# CLAUDE.md's Build & Test section describes. CI does not build the shell
+# tier, so this image is where its suites run.
 RUN dnf install -y --setopt=install_weak_deps=False \
         /usr/bin/wayland-scanner \
         cmake \

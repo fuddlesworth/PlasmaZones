@@ -30,7 +30,8 @@ include_directories(
 # one class. Before the tier split they lived in the plasmazones test tree
 # and were deliberately ungated so the default (shell-off) configure still
 # built them; now the whole tier is entered only with BUILD_PHOSPHOR_SHELL
-# on, and the build-shell CI job is what runs them.
+# on. CI does not build the tier, so they run in a local shell-on build or
+# the root Dockerfile's image.
 #
 # The classes live in the GPL shell binary, so they are tested here rather
 # than from the LGPL bar module's own QuickTest suite (which covers the QML

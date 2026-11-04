@@ -2,11 +2,12 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# CI saves a compiler cache on every run (ci.yml), and the repository's caches
-# share 10 GB, past which GitHub evicts the least recently used: possibly the
-# very entry main's next run restores. scripts/trim-actions-caches.py deletes
-# the closed pull requests', the gone branches' and the replaced entries, so
-# the room stays with the caches builds read.
+# CI and the release builds save compiler caches (ci.yml, release.yml), and
+# the repository's caches share 10 GB, past which GitHub evicts the least
+# recently used: possibly the very entry main's next run restores.
+# scripts/trim-actions-caches.py deletes the closed pull requests', the gone
+# branches' and the replaced entries, so the room stays with the caches builds
+# read.
 
 name: Cache cleanup
 
@@ -16,9 +17,10 @@ on:
   # script, and checks out nothing from the pull request.
   pull_request_target:
     types: [closed]
-  # The entries a CI run's new caches replaced.
+  # The entries a CI or Release run's new caches replaced. Release saves the
+  # package builds' compiler caches from its nightly cache-warming run.
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, Release]
     types: [completed]
   workflow_dispatch:
     inputs:
