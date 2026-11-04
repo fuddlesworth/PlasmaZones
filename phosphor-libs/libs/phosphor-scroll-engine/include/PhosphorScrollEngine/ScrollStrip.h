@@ -399,23 +399,23 @@ public:
     /// than refusing: the policy already owns that column's position, which
     /// is the whole reason the branch exists.
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
-    /// Give every FULLY visible column an equal share of the work area's MAIN
-    /// extent (Karousel equalize; niri has no equivalent). Fully visible on
-    /// the same terms as centerVisibleColumns: a column clipped by either
-    /// viewport edge is what the split must not be dragged by. Written as
-    /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
-    /// division goes to the LAST column so the group still tiles the
+    /// Give every visible column an equal share of the work area's MAIN
+    /// extent (Karousel equalize; niri has no equivalent). Visible on
+    /// visibleColumnIndices' terms: a column clipped by either viewport edge
+    /// is on screen, so it is in the group the user sees and joins the split.
+    /// Written as Fixed pixels like adjustActiveColumnWidth, and the remainder
+    /// of the division goes to the LAST column so the group still tiles the
     /// viewport edge to edge. A column whose floor (columnMinExtentPx: its
     /// minimum size or a committed floor) exceeds its share keeps that floor
     /// and the rest share what is left.
     /// The group's lead column lands AT the viewport's lead edge: the anchor
     /// is re-derived after the rewrite so a column ahead of the active one
     /// growing does not slide the group under the active column, and a
-    /// lead-edge straddler is pushed fully out of view. The view is then
+    /// column clipped at either edge comes fully into view. The view is then
     /// DETACHED like a pan's (see the class doc), so the centering policy
     /// does not undo the edge-to-edge position on the next pass and a second
     /// press finds nothing to change. Refuses when fewer than two columns
-    /// are fully visible, when the active column is not one of them, when
+    /// are visible, when the active column is not one of them, when
     /// the floors alone fill the viewport, or when every extent is already
     /// what it would become.
     bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
@@ -713,15 +713,15 @@ public:
     /// Strip indices of the columns currently intersecting the viewport, in
     /// strip order — a viewport-intersection helper, NOT the zone-number
     /// space. Zone numbers are per-TILE and live one layer up, in
-    /// ScrollEngine::visibleTiles.
+    /// ScrollEngine::visibleTiles. The group equalizeVisibleColumnWidths
+    /// splits and rotateVisibleColumns rotates.
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
 
     /// Strip indices of the columns lying ENTIRELY inside the viewport, in
     /// strip order — the stricter twin of visibleColumnIndices, and the one
-    /// the width-distribution verbs and centerVisibleColumns walk. A column
-    /// clipped by either edge is excluded, which is what lets
-    /// equalizeVisibleColumnWidths refuse to drag a straddler into the split,
-    /// lets centerVisibleColumns leave it out of the span, and lets
+    /// expandActiveColumnToAvailableWidth and centerVisibleColumns walk. A
+    /// column clipped by either edge is excluded, which is what lets
+    /// centerVisibleColumns leave it out of the span, and lets
     /// expandActiveColumnToAvailableWidth reclaim a straddler's pixels the
     /// way niri does. Zero-extent (fully minimized) columns carry no strip
     /// position and are skipped, matching stripExtentPx.

@@ -605,21 +605,18 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
         return false; // degenerate area, the sibling width verbs' bail
     }
     // Drop the ACTIVE column's maximize-to-edges override BEFORE measuring —
-    // expandActiveColumnToAvailableWidth's drop-then-measure order, and for
-    // the same reason. A maximized column measures at the RAW main extent,
-    // which exceeds the gapped viewport whenever any main-axis outer gap is
-    // set, so it never appears in fullyVisibleColumnIndices and the
-    // group-membership test below refused the whole verb instead of
-    // equalizing. The drop is itself the change, the rule setActiveColumnWidth
-    // states. Other members' overrides drop in the loop below, which stays
-    // reachable in the zero-outer-gap case where the raw extent IS the
-    // viewport and a maximized column can therefore be fully visible.
+    // expandActiveColumnToAvailableWidth's drop-then-measure order. A
+    // maximized column measures at the RAW main extent, so the group below
+    // would be taken against a view the override is drawing rather than the
+    // one the stored widths make. The drop is itself the change, the rule
+    // setActiveColumnWidth states. Other members' overrides drop in the loop
+    // below.
     //
     // It is PROVISIONAL until the verb commits, though, because the measure it
-    // enables can still land on a bail: a lone column or a straddling active
+    // enables can still land on a bail: a lone column or an off-screen active
     // one refuses, and refusing while having silently un-maximized the column
-    // would be a change the user asked equalize for and did not get. Both
-    // bails put it back.
+    // would be a change the user asked equalize for and did not get. Every
+    // bail puts it back.
     Column* active = activeColumnMutable();
     const bool clearedEdges = active && active->maximizedToEdges;
     if (clearedEdges) {
@@ -631,10 +628,14 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
         }
         return false;
     };
-    // FULLY visible columns, the walk centerVisibleColumns performs and the
-    // one expandActiveColumnToAvailableWidth shares: a column clipped by
-    // either edge is exactly what must not be dragged into the split.
-    const QVector<int> visible = fullyVisibleColumnIndices(params);
+    // Every column with any part on screen, clipped ones included: what the
+    // user sees is the group they asked to split. Counting only the fully
+    // visible ones left the verb dead after the commonest way columns become
+    // unequal, a hand resize that widens one and pushes its neighbour part
+    // way past the edge, since one fully visible column has nothing to
+    // equalize against. The re-anchor below lands the group's lead column at
+    // the lead edge, so a clipped column taken in ends up whole on screen.
+    const QVector<int> visible = visibleColumnIndices(params);
     // One column has nothing to equalize against; "equal" would mean "full
     // width", which is maximize's job.
     const int n = visible.size();
@@ -643,8 +644,8 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     }
     // The active column must be IN the group: the anchor is re-derived
     // below to put the group's first column at the lead edge, and an active
-    // column that straddles an edge (a pan leaves it there) would be pushed
-    // fully off screen by that, where a detached view would then keep it.
+    // column a pan left wholly off screen would stay there, held by the
+    // detached view.
     if (!visible.contains(m_activeColumnIdx)) {
         return restoreEdges();
     }
@@ -729,9 +730,9 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     // whole group under the active column's pinned screen position and clip
     // the first column at the lead edge. The shares were measured against
     // the whole viewport, so the group's lead column now belongs AT the lead
-    // edge: re-derive the anchor to put it there. A lead-edge straddler is
-    // pushed fully out of view by that, which is the only place a column
-    // the group did not absorb can go.
+    // edge: re-derive the anchor to put it there. A column clipped at the
+    // lead edge is the group's lead column, so it comes fully into view, and
+    // one clipped at the trailing edge ends where the viewport does.
     //
     // And DETACH the view, the way a pan does: edge to edge is this verb's
     // promise, and under Always the next layout pass would otherwise

@@ -171,6 +171,7 @@ fsplash-sibling-size-scroll fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=scroll
 fsplash-sibling-size-tile fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=tile
 fsplash-sibling-size-snap fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=snap
 fresize-centred-edge fresize-centred-edge.sh 1 FS
+fresize-then-width-verbs fresize-then-width-verbs.sh 1 FS
 fscale-fixed-device-pixels fscale-fixed-device-pixels.sh 1 S
 fu-optout-inview-evacuee fu-optout-inview-evacuee.sh 2 -
 fu-optout-hidden-evacuee fu-optout-hidden-evacuee.sh 2 -

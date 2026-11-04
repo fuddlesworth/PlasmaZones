@@ -75,6 +75,7 @@ private Q_SLOTS:
     void refocusingTheActiveWindowHandsAPannedViewBack();
     void edgeAutoScrollThenCancelKeepsTheScrolledView();
     void equalizeAndMinimizeReportTheirFeedback();
+    void equalizeAfterAUserWidenRestoresTheSplit();
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
@@ -735,6 +736,51 @@ void TestScrollEngineVerbs::equalizeAndMinimizeReportTheirFeedback()
     QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize_heights"));
+}
+
+void TestScrollEngineVerbs::equalizeAfterAUserWidenRestoresTheSplit()
+{
+    // The commonest way columns become unequal: the user drags one column's
+    // trailing edge wider, which pushes its neighbour part way past the
+    // screen edge. Equalize must still split the screen between the two,
+    // since the neighbour is on screen; counting only fully visible columns
+    // left one column in the group and the verb refused.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    const QString a = QStringLiteral("app|a");
+    const QString b = QStringLiteral("app|b");
+    engine->windowOpened(a, QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(b, QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(a, QStringLiteral("S1"));
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    const QRect applied = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a);
+    QCOMPARE(Ax::mainLen(applied), ScrollTestUtils::kMainExtent / 2);
+
+    QRect widened = Ax::t(applied);
+    widened.setWidth(widened.width() + 200);
+    engine->onWindowResized(a, applied, Ax::t(widened), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    const QRect bClipped = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), b);
+    QVERIFY2(Ax::mainLen(ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a))
+                 == ScrollTestUtils::kMainExtent / 2 + 200,
+             "precondition: the user resize widened a");
+    QVERIFY2(Ax::mainPos(bClipped) < ScrollTestUtils::kMainExtent
+                 && Ax::mainPos(bClipped) + ScrollTestUtils::kMainExtent / 2 > ScrollTestUtils::kMainExtent,
+             "precondition: the widen pushed b part way past the screen edge");
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize"));
+    const QRect aAfter = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a);
+    const QRect bAfter = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), b);
+    QCOMPARE(Ax::mainPos(aAfter), 0);
+    QCOMPARE(Ax::mainLen(aAfter), ScrollTestUtils::kMainExtent / 2);
+    QCOMPARE(Ax::mainLen(bAfter), ScrollTestUtils::kMainExtent / 2);
+    QCOMPARE(Ax::mainPos(bAfter) + Ax::mainLen(bAfter), ScrollTestUtils::kMainExtent);
 }
 
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()

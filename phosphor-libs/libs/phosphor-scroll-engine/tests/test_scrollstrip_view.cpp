@@ -42,13 +42,13 @@ private Q_SLOTS:
     // doubles as the file's table of contents (the ops suite's rule).
     void scrollViewByDetachesTheViewFromTheCenteringPolicy();
     void viewDetachmentEndsAtFocusAndAtBothCenteringVerbs();
-    void equalizeSharesTheViewportAmongFullyVisibleColumns();
+    void equalizeSharesTheViewportAmongVisibleColumns();
     void minimizeColumnWidthTakesTheSmallestPreset();
     void resetToDefaultsRestoresEveryIntent();
     void viewDetachmentEndsWhenAStructuralChangeMovesFocus();
     void equalizeHoldsTheGroupsLeadEdgeWhenTheActiveColumnIsNotFirst();
-    void equalizeLeavesALeadEdgeStraddlerAlone();
-    void equalizeRefusesWhenTheActiveColumnStraddlesAnEdge();
+    void equalizeTakesALeadEdgeStraddlerIntoTheSplit();
+    void equalizeTakesAStraddlingActiveColumnIntoTheSplit();
     void equalizeDetachesTheViewSoAlwaysCenteringCannotUndoIt();
     void equalizeGivesAMinimumBoundColumnItsFloor();
     void expandReclaimsAStraddlersPixels();
@@ -220,30 +220,43 @@ void TestScrollStripView::viewDetachmentEndsAtFocusAndAtBothCenteringVerbs()
     QCOMPARE(refocused.viewAnchor(), anchorBefore);
 }
 
-void TestScrollStripView::equalizeSharesTheViewportAmongFullyVisibleColumns()
+void TestScrollStripView::equalizeSharesTheViewportAmongVisibleColumns()
 {
     const auto params = defaultParams();
     ScrollStrip strip;
-    // 0.30 + 0.30 fit the viewport with room to spare; the 0.55 third
-    // column straddles the trailing edge, which is the column the verb must
-    // leave alone. Focus stays on the first so the view sits at the start.
+    // 0.30 + 0.30 fit the viewport with room to spare, the 0.55 third column
+    // straddles the trailing edge, and the fourth lies wholly past it. The
+    // straddler is on screen, so it joins the split, and the fourth is the
+    // column the verb must leave alone. Focus stays on the first so the view
+    // sits at the start.
     QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.55), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("d"), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal, params));
     QVERIFY(strip.focusColumn(0, params));
-    const ColumnWidth straddlerBefore = strip.columns().at(2).width;
+    const ResolvedStrip before = strip.relayout(params);
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("c"))) < ScrollTestUtils::kMainExtent
+                 && Ax::mainPos(rectOf(before, QStringLiteral("c"))) + Ax::mainLen(rectOf(before, QStringLiteral("c")))
+                     > ScrollTestUtils::kMainExtent,
+             "fixture: c must straddle the trailing edge");
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("d"))) >= ScrollTestUtils::kMainExtent,
+             "fixture: d must lie wholly past the trailing edge");
+    const ColumnWidth offScreenBefore = strip.columns().at(3).width;
 
     QVERIFY(strip.equalizeVisibleColumnWidths(params));
-    // Two fully visible columns share the MAIN extent net of the gap between
-    // them: (1200 - 10) / 2 = 595 each, remainder 0. Written as Fixed, like
+    // Three visible columns share the MAIN extent net of the gaps between
+    // them: 1200 - 2*10 = 1180, 1180 / 3 = 393 r1, the odd pixel to the LAST
+    // column so nothing is left as dead space. Written as Fixed, like
     // adjustActiveColumnWidth.
-    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(595));
-    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(595));
-    // The straddler is untouched, intent and all.
-    QCOMPARE(strip.columns().at(2).width, straddlerBefore);
-    // The group tiles edge to edge: b ends exactly at the viewport's end.
+    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(393));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(393));
+    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(394));
+    // The off-screen column is untouched, intent and all.
+    QCOMPARE(strip.columns().at(3).width, offScreenBefore);
+    // The group tiles edge to edge: the former straddler ends exactly at the
+    // viewport's end.
     const ResolvedStrip after = strip.relayout(params);
-    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))) + Ax::mainLen(rectOf(after, QStringLiteral("b"))),
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("c"))) + Ax::mainLen(rectOf(after, QStringLiteral("c"))),
              ScrollTestUtils::kMainExtent);
 
     // Already equal: refuses, so the engine skips a pointless relayout and
@@ -585,48 +598,52 @@ void TestScrollStripView::equalizeHoldsTheGroupsLeadEdgeWhenTheActiveColumnIsNot
     QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
 }
 
-void TestScrollStripView::equalizeLeavesALeadEdgeStraddlerAlone()
+void TestScrollStripView::equalizeTakesALeadEdgeStraddlerIntoTheSplit()
 {
-    // Four 0.30 columns with the LAST focused: the view scrolls so d ends at
-    // the trailing edge, which clips a at the LEAD edge. a is the column the
-    // `viewPos >= 0` half of fullyVisibleColumnIndices exists for; the sibling test
-    // only ever clips the trailing edge.
+    // Five 0.30 columns with the LAST focused: the view scrolls so e ends at
+    // the trailing edge, which clips b at the LEAD edge and leaves a wholly
+    // before it. b is the column the lead-edge half of visibleColumnIndices'
+    // intersection test exists for; the sibling test only ever clips the
+    // trailing edge.
     const auto params = defaultParams();
     ScrollStrip strip;
-    for (const char* id : {"a", "b", "c", "d"}) {
+    for (const char* id : {"a", "b", "c", "d", "e"}) {
         QVERIFY(strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal,
                                    params));
     }
-    QCOMPARE(strip.activeWindowId(), QStringLiteral("d"));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("e"));
     const ResolvedStrip before = strip.relayout(params);
-    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("a"))) < 0, "fixture: a must straddle the lead edge");
-    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("b"))) >= 0, "fixture: b must be fully visible");
-    const ColumnWidth straddlerBefore = strip.columns().at(0).width;
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("a"))) + Ax::mainLen(rectOf(before, QStringLiteral("a"))) <= 0,
+             "fixture: a must lie wholly before the lead edge");
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("b"))) < 0
+                 && Ax::mainPos(rectOf(before, QStringLiteral("b"))) + Ax::mainLen(rectOf(before, QStringLiteral("b")))
+                     > 0,
+             "fixture: b must straddle the lead edge");
+    const ColumnWidth offScreenBefore = strip.columns().at(0).width;
 
     QVERIFY(strip.equalizeVisibleColumnWidths(params));
-    QCOMPARE(strip.columns().at(0).width, straddlerBefore);
-    // b, c, d share 1200 - 2*10 = 1180: 393, 393, 394.
-    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(393));
-    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(393));
-    QCOMPARE(strip.columns().at(3).width, ColumnWidth::makeFixed(394));
-    // The group now tiles the viewport from its lead edge, which pushes the
-    // straddler fully out of view rather than leaving it clipped under a
-    // group that no longer fits beside it.
+    QCOMPARE(strip.columns().at(0).width, offScreenBefore);
+    // b, c, d, e share 1200 - 3*10 = 1170: 292, 292, 292, 294.
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(292));
+    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(292));
+    QCOMPARE(strip.columns().at(3).width, ColumnWidth::makeFixed(292));
+    QCOMPARE(strip.columns().at(4).width, ColumnWidth::makeFixed(294));
+    // The group tiles the viewport from its lead edge, so the former
+    // straddler comes fully into view and the off-screen column stays out.
     const ResolvedStrip after = strip.relayout(params);
     QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))), 0);
-    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("d"))) + Ax::mainLen(rectOf(after, QStringLiteral("d"))),
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("e"))) + Ax::mainLen(rectOf(after, QStringLiteral("e"))),
              ScrollTestUtils::kMainExtent);
     QVERIFY(Ax::mainPos(rectOf(after, QStringLiteral("a"))) + Ax::mainLen(rectOf(after, QStringLiteral("a"))) <= 0);
+    // A second press finds the same group already split.
+    QVERIFY(!strip.equalizeVisibleColumnWidths(params));
 }
 
-void TestScrollStripView::equalizeRefusesWhenTheActiveColumnStraddlesAnEdge()
+void TestScrollStripView::equalizeTakesAStraddlingActiveColumnIntoTheSplit()
 {
-    // A pan can leave the FOCUSED column clipped at an edge. The verb's
-    // re-anchor puts the group's first column at the lead edge, which would
-    // push such an active column fully off screen, and the detached view it
-    // leaves behind would keep it there. So an active column outside the
-    // fully visible group is a refusal, and the pan's own latch is left as
-    // the verb found it.
+    // A pan can leave the FOCUSED column clipped at an edge. It is on screen,
+    // so it joins the split, and the re-anchor that puts the group's first
+    // column at the lead edge brings it fully into view.
     const auto params = defaultParams();
     ScrollStrip strip;
     for (const char* id : {"a", "b", "c", "d"}) {
@@ -641,13 +658,35 @@ void TestScrollStripView::equalizeRefusesWhenTheActiveColumnStraddlesAnEdge()
     QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("d"))) + Ax::mainLen(rectOf(before, QStringLiteral("d")))
                  > ScrollTestUtils::kMainExtent,
              "fixture: the active column must straddle the trailing edge");
-    const ColumnWidth bBefore = strip.columns().at(1).width;
-    const int anchorBefore = strip.viewAnchor();
 
-    QVERIFY(!strip.equalizeVisibleColumnWidths(params));
-    QCOMPARE(strip.columns().at(1).width, bBefore);
-    QCOMPARE(strip.viewAnchor(), anchorBefore);
-    QVERIFY(strip.viewDetached());
+    QVERIFY(strip.equalizeVisibleColumnWidths(params));
+    const ResolvedStrip after = strip.relayout(params);
+    QVERIFY(Ax::mainPos(rectOf(after, QStringLiteral("d"))) >= 0);
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("d"))) + Ax::mainLen(rectOf(after, QStringLiteral("d"))),
+             ScrollTestUtils::kMainExtent);
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("d"));
+
+    // A pan that leaves the active column wholly off screen is a refusal:
+    // the re-anchor puts the group's first column at the lead edge, and the
+    // detached view would then keep the focused column out of sight. The
+    // pan's own latch is left as the verb found it.
+    ScrollStrip panned;
+    for (const char* id : {"a", "b", "c", "d", "e", "f"}) {
+        QVERIFY(panned.insertWindow(QString::fromLatin1(id), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal,
+                                    params));
+    }
+    QCOMPARE(panned.activeWindowId(), QStringLiteral("f"));
+    QVERIFY(panned.scrollViewBy(-600, params));
+    const ResolvedStrip pannedBefore = panned.relayout(params);
+    QVERIFY2(Ax::mainPos(rectOf(pannedBefore, QStringLiteral("f"))) >= ScrollTestUtils::kMainExtent,
+             "fixture: the active column must lie wholly past the trailing edge");
+    const ColumnWidth bBefore = panned.columns().at(1).width;
+    const int anchorBefore = panned.viewAnchor();
+
+    QVERIFY(!panned.equalizeVisibleColumnWidths(params));
+    QCOMPARE(panned.columns().at(1).width, bBefore);
+    QCOMPARE(panned.viewAnchor(), anchorBefore);
+    QVERIFY(panned.viewDetached());
 }
 
 void TestScrollStripView::equalizeDetachesTheViewSoAlwaysCenteringCannotUndoIt()
