@@ -55,6 +55,7 @@ private Q_SLOTS:
     void zoneCountCappedAtMaxZones();
     void oversizedScriptRejected();
     void enumAndBoolCustomParamsParsed();
+    void invalidBoolAndEnumDefaultsReplaced();
     void onWindowRemovedHookRuns();
     void nonFiniteOverrideRejected();
     void scriptedMetadataFlagsExposed();
@@ -364,6 +365,53 @@ void TestLuauTileAlgorithm::enumAndBoolCustomParamsParsed()
     // bool params carry neither number bounds nor enum options.
     QVERIFY(!boolDef.contains(QStringLiteral("minValue")));
     QVERIFY(!boolDef.contains(QStringLiteral("enumOptions")));
+    // Valid defaults pass through untouched.
+    QCOMPARE(enumDef.value(QStringLiteral("defaultValue")).toString(), QStringLiteral("a"));
+    QCOMPARE(boolDef.value(QStringLiteral("defaultValue")).typeId(), QMetaType::Bool);
+    QCOMPARE(boolDef.value(QStringLiteral("defaultValue")).toBool(), true);
+}
+
+void TestLuauTileAlgorithm::invalidBoolAndEnumDefaultsReplaced()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // The settings page hands a declared default straight to its control when
+    // nothing is saved, so a default the control cannot show must be replaced
+    // at parse time, the way a number default is clamped. A string "true" in a
+    // QML switch is truthy whatever it says, and an enum default outside its
+    // options leaves the combo box with no selection.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("cpbad.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "cpbad", name = "CP Bad Defaults",
+                customParams = {
+                    { name = "strFlag", type = "bool", default = "true" },
+                    { name = "numFlag", type = "bool", default = 1 },
+                    { name = "noFlag", type = "bool" },
+                    { name = "badMode", type = "enum", default = "z", options = { "x", "y" } },
+                    { name = "numMode", type = "enum", default = 2, options = { "x", "y" } },
+                    { name = "noOptions", type = "enum", default = "q" },
+                },
+            },
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QHash<QString, QVariant> defaults;
+    for (const QVariant& v : algo.customParamDefList()) {
+        const QVariantMap def = v.toMap();
+        defaults.insert(def.value(QStringLiteral("name")).toString(), def.value(QStringLiteral("defaultValue")));
+    }
+    QCOMPARE(defaults.size(), 6);
+    for (const QString& name : {QStringLiteral("strFlag"), QStringLiteral("numFlag"), QStringLiteral("noFlag")}) {
+        QCOMPARE(defaults.value(name).typeId(), QMetaType::Bool);
+        QCOMPARE(defaults.value(name).toBool(), false);
+    }
+    QCOMPARE(defaults.value(QStringLiteral("badMode")).toString(), QStringLiteral("x"));
+    QCOMPARE(defaults.value(QStringLiteral("numMode")).toString(), QStringLiteral("x"));
+    QCOMPARE(defaults.value(QStringLiteral("noOptions")).toString(), QString());
 }
 
 void TestLuauTileAlgorithm::onWindowRemovedHookRuns()

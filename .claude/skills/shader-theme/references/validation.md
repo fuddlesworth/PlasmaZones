@@ -62,7 +62,7 @@ the repo's `plasmazones/data/`.
 ## 2. Shader compile: `plasmazones-shader-validate`
 
 Binary: `build/bin/plasmazones-shader-validate` (built by the default target). Needs `glslang`
-or `glslangValidator` on PATH for animation and pointer packs, and HARD-FAILS without it.
+or `glslangValidator` on PATH for animation, surface and pointer packs, and HARD-FAILS without it.
 
 ```bash
 build/bin/plasmazones-shader-validate --animation $P/animations/<id>
@@ -120,7 +120,7 @@ the suite reads clean without them: reconfigure with those flags before claiming
 Run the full suite before handing over: `ctest --test-dir build --output-on-failure`
 (use `dbus-run-session` if daemon tests complain about the bus).
 
-## 4. Prose and licence (no linter exists, check by hand)
+## 4. Prose and licence (`check-conventions.py` covers packs inside the repo; check a scratchpad pack by hand)
 
 ```bash
 grep -nE '"(name|description)".*(—|&mdash;| - |;)' $P/animations/<id>/metadata.json $P/overlays/<id>/metadata.json $P/surface/<id>/metadata.json

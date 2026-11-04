@@ -85,7 +85,14 @@ public:
     /// registry. Re-registering an existing id replaces the old
     /// algorithm; @c algorithmUnregistered(id, replacing=true) fires
     /// before @c algorithmRegistered(id).
-    virtual void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm) = 0;
+    ///
+    /// Returns true when @p algorithm is now the entry under @p id. Returns
+    /// false when the registry refused it: an empty or reserved id (@c none,
+    /// the @c autotile: prefix), an id with a character outside
+    /// [A-Za-z0-9._:-], or an object already registered under another id. A
+    /// refused object the registry did not already own has been deleted, so a
+    /// caller that keeps bookkeeping per id must skip it on false.
+    virtual bool registerAlgorithm(const QString& id, TilingAlgorithm* algorithm) = 0;
 
     /// Unregister and delete the algorithm with @p id. Returns true
     /// when an algorithm was found and removed.

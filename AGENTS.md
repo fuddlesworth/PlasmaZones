@@ -159,8 +159,11 @@ In-repo skills under `.claude/skills/` (symlinked into `.agents/skills/`). Invok
 - `pz-build` — configure, build and test. Carries the two `OFF`-by-default flags that make a suite silently run nothing, the warning-vs-error grep, the ctest D-Bus isolation, and the non-unity gate.
 - `pz-add-setting` — the six files a setting touches, in the store-backed shape.
 - `pz-verify-live` — nested-KWin harness for verifying placement and effect changes against a real compositor.
-- `code-audit` — multi-pass audit-and-fix loop.
+- `pz-algorithm-api` — extend the Luau tiling-algorithm API (ctx inputs, outputs, pluau helpers, metadata and capabilities), including the keys `LuauTileAlgorithm` silently drops.
+- `pz-shader-pack` — write, change or preview one shader pack, or change the uniform contract packs read.
+- `code-audit` — audit-then-remediate loop: read-only Phase A passes, then one Phase B fix with confirmation rounds.
 - `shader-theme` — build a cohesive shader theme.
+- `record-lesson` — put what a session learned where the next session will read it.
 
 ## Build & Test
 
@@ -373,6 +376,17 @@ Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazon
 - Never copy QObjects — Never hardcode colors/spacing — Never use indices for zones
 - Never emit without checking value changed — Never use raw string literals with Qt6
 - Keep QML for UI, C++ for logic
+
+## Lessons that cost a session
+Cross-cutting traps that each cost audit passes or a whole session. A trap owned by one domain lives in that reviewer's "Known past-bug shapes" instead (see the `record-lesson` skill).
+- **An absence is evidence only if the instrument ran.** A zero grep count, a build with no errors and a suite with no failures look the same when the target, binary or test did not exist (a mistyped `--target`, a stale binary, a `BUILD_TESTING=OFF` dir). Check the exit code and that the thing you measured exists before you trust a clean result.
+- **A test written with its fix proves the fix's premise.** Vacuous assertions have shipped green again and again. Before you count a test as coverage, revert the guard it pins and watch the test fail.
+- **Comments name symbols, never line numbers or counts.** "The other eleven" and "three sub-groups" went stale within a commit and misled the next fix. When a comment's claim has been wrong twice, delete the claim.
+- **A guard below a substitution cannot fire.** If a caller already swapped in a plausible fallback, the callee cannot tell the value is not real. Put the guard where the information still exists, check what every caller actually passes, and delete a guard that cannot fire.
+- **`QHash::value(key, f())` evaluates `f()` on every call.** The default is an ordinary argument, so if `f` inserts into the same container the lookup returns what `f` just wrote. Use `constFind` and resolve only on a miss.
+- **Agents sharing one working tree undo each other.** `git stash`, `reset --hard` and `checkout` run to check a pre-existing failure once wiped other agents' uncommitted work. Mutation checks run in a separate worktree or scratch copy, and nobody runs checkout, restore, stash or reset in a shared tree.
+- **Fractional scale hides one-pixel defects.** `QRectF::toRect()` and `qRound(logical * scale)` move an edge by a pixel at 1.15 or 1.25, which broke exact rect compares in the scroll engine, the snap engine and the editor. Check rect compares and scale-derived sizes at a fractional scale (the nested harness at 1.25).
+- **A new validation gate turns a producer/consumer disagreement into lost data.** Before adding a schema check or gate, check every producer against it. One gate rejected saves that clients still reported as successful.
 
 ## Support
 - Documentation: https://phosphor-works.github.io/plasmazones/

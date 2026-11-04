@@ -339,8 +339,13 @@ QStringList shaderIncludePaths()
     // Two spellings since the tier split: the tree is plasmazones/data/overlays
     // from the repository root and data/overlays from inside plasmazones/.
     // Probing only one of them puts us straight back in the state described
-    // above, where the preview is a render of the last install.
-    for (const QString& prefix : {QStringLiteral("plasmazones/data/overlays"), QStringLiteral("data/overlays")}) {
+    // above, where the preview is a render of the last install. The third
+    // entry is the overlays tree of the checkout this binary was built from,
+    // for a run from any other directory; it must match the pack directory
+    // sourceTreeDataDir() in main.cpp picked, or the packs and their shared
+    // includes would come from different trees.
+    for (const QString& prefix : {QStringLiteral("plasmazones/data/overlays"), QStringLiteral("data/overlays"),
+                                  QStringLiteral(PZ_SHADER_RENDER_SOURCE_DATA_DIR "/overlays")}) {
         const QString candidate = QDir(prefix).absolutePath();
         if (QDir(candidate).exists()) {
             pushRoot(candidate);
