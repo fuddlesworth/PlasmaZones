@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Subscribe / unsubscribe / broadcast / targeted-event paths for
-// IpcRouter. All four methods are members of IpcRouter and reach into the
-// same private state (m_subscriptionsBySocket); the split from ipcrouter.cpp is
-// purely organisational. Meta-helpers and the per-socket cap constants
-// live in ipcrouterdetail.h so dispatch() and handleSubscribe()
-// agree on the introspection floor and the cap value.
+// IpcRouter. All four methods are members of IpcRouter and reach into its
+// per-connection state (the subscriptions, the connection ids); the split
+// from ipcrouter.cpp is purely organisational. Meta-helpers and the
+// per-connection caps live in ipcrouterdetail.h: dispatch() and
+// handleSubscribe() share the introspection floor, and broadcastEvent()
+// and sendEvent() the output limit.
 
 #include <PhosphorIpc/IpcRouter.h>
 
@@ -72,6 +73,9 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
     // (the request id), so without this guard a client that calls
     // subscribe N times for the same signal receives N copies of
     // every event and inflates the write-side cost N-fold.
+    // Reject a subscriptionId already in use on the socket too: two
+    // streams under one id could not be told apart, and unsubscribe would
+    // end only one of them.
     for (const Subscription& existing : subs) {
         if (existing.target == targetName && existing.signalName == signalName) {
             socket->write(writeLine(
@@ -81,13 +85,20 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
                                .arg(existing.subscriptionId))));
             return;
         }
+        if (existing.subscriptionId == id) {
+            socket->write(writeLine(
+                buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
+                           QStringLiteral("subscriptionId %1 is already in use on this connection (by '%2.%3')")
+                               .arg(id)
+                               .arg(existing.target, existing.signalName))));
+            return;
+        }
     }
     // Subscription id == request id; clients use that on subsequent
     // unsubscribe and to demultiplex inbound events. The router
     // doesn't enforce uniqueness across all clients, id is scoped
     // per-socket because the wire identity is (socket, subscriptionId).
     Subscription sub;
-    sub.socket = socket;
     sub.subscriptionId = id;
     sub.target = targetName;
     sub.signalName = signalName;
@@ -120,7 +131,14 @@ void IpcRouter::handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscr
 
 void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalName, const QJsonArray& args)
 {
-    Q_ASSERT(thread() == QThread::currentThread());
+    // As in sendEvent: a target that finishes work on another thread must
+    // not race the router's sockets and subscription lists.
+    const bool onRouterThread = thread() == QThread::currentThread();
+    Q_ASSERT(onRouterThread);
+    if (!onRouterThread) {
+        qWarning("PhosphorIpc::IpcRouter::broadcastEvent: called off the router's thread; the event is dropped");
+        return;
+    }
     // Snapshot the matching (socket, subscriptionId) pairs BEFORE
     // any write/flush. QLocalSocket::write or flush can synchronously
     // emit errorOccurred / disconnected (peer closed the socket
@@ -200,7 +218,14 @@ void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalN
 bool IpcRouter::sendEvent(quint64 connectionId, const QString& targetName, const QString& signalName,
                           const QJsonArray& args)
 {
-    Q_ASSERT(thread() == QThread::currentThread());
+    // Targets that defer their replies finish work on other threads; an
+    // event sent from one would race the router's sockets and maps.
+    const bool onRouterThread = thread() == QThread::currentThread();
+    Q_ASSERT(onRouterThread);
+    if (!onRouterThread) {
+        qWarning("PhosphorIpc::IpcRouter::sendEvent: called off the router's thread; the event is dropped");
+        return false;
+    }
     if (targetName.isEmpty() || signalName.isEmpty()) {
         return false;
     }

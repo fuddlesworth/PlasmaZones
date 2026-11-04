@@ -26,25 +26,34 @@
 
 namespace PhosphorIpcTests {
 
+// Connect `socket` to the router at `path`. True once connected.
+inline bool connectClient(QLocalSocket& socket, const QString& path)
+{
+    socket.connectToServer(path);
+    return socket.waitForConnected(2000);
+}
+
+// Write one request line and flush it.
+inline void send(QLocalSocket& socket, const QJsonObject& request)
+{
+    socket.write(PhosphorIpc::writeLine(request));
+    socket.flush();
+}
+
 // Drain a QLocalSocket until N response lines arrive or timeout
 // fires. Returns the parsed objects in arrival order. Pre-drains
 // bytes already buffered so a second call against the same socket
-// doesn't deadlock waiting for a readyRead that already fired.
+// doesn't deadlock waiting for a readyRead that already fired. Takes
+// whole lines only: a line still arriving stays in the socket for the
+// next call.
 inline QList<QJsonObject> readLines(QLocalSocket& socket, int expectedCount, int timeoutMs = 2000)
 {
     QList<QJsonObject> out;
-    QByteArray buffer;
 
     auto drain = [&]() {
-        buffer.append(socket.readAll());
-        while (true) {
-            const int nl = buffer.indexOf('\n');
-            if (nl < 0) {
-                break;
-            }
-            QByteArray line = buffer.left(nl);
-            buffer.remove(0, nl + 1);
-            while (!line.isEmpty() && line.endsWith('\r')) {
+        while (socket.canReadLine()) {
+            QByteArray line = socket.readLine();
+            while (!line.isEmpty() && (line.endsWith('\n') || line.endsWith('\r'))) {
                 line.chop(1);
             }
             if (line.isEmpty()) {

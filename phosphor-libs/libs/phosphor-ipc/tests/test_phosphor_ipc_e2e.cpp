@@ -4,7 +4,7 @@
 // Full socket roundtrip. Spins up an IpcRouter on a temp socket
 // path, opens a QLocalSocket client in the same process, sends
 // NDJSON requests, and asserts response bytes. Exercises the same
-// wire bytes that bin/phosphorctl will produce.
+// wire bytes that phosphor-shell/cli/phosphorctl produces.
 
 #include "ipctesthelpers.h"
 
@@ -38,11 +38,13 @@
 #include <unistd.h>
 
 using namespace PhosphorIpc;
+using PhosphorIpcTests::connectClient;
 using PhosphorIpcTests::makeCallReq;
 using PhosphorIpcTests::makeReq;
 using PhosphorIpcTests::readLines;
 using PhosphorIpcTests::roundtrip;
 using PhosphorIpcTests::RouterFixture;
+using PhosphorIpcTests::send;
 
 namespace {
 
@@ -293,8 +295,7 @@ void TestPhosphorIpcE2e::roundtrip_malformedRequest()
         }
     });
 
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
     socket.write("{ not json\n");
     socket.flush();
     timeout.start(2000);
@@ -445,7 +446,7 @@ void TestPhosphorIpcE2e::start_afterStop_succeeds()
 
 void TestPhosphorIpcE2e::oversizedLineClosesConnection()
 {
-    // Verify the 1 MiB line-cap path in IpcRouter::handleClientReadyRead.
+    // Verify the 1 MiB line-cap path in IpcRouter::readFrames.
     // A peer that streams over 1 MiB of bytes without a newline must
     // receive a MALFORMED_REQUEST diagnostic and be force-closed; without
     // this guard a misbehaving client could pin unbounded memory in the
@@ -474,8 +475,7 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
         buffer.append(socket.readAll());
     });
 
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
     // Write 1 MiB + 1 byte without a newline in 64 KiB chunks. The
     // router's 1 MiB cap fires when server-side bytesAvailable
@@ -527,8 +527,7 @@ void TestPhosphorIpcE2e::consecutiveMalformedFramesClosesConnection()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
     // Frames 1..16: each must produce a MALFORMED_REQUEST diagnostic
     // and the connection MUST remain open. A regression that closes
@@ -577,8 +576,7 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(fx.sockPath);
-    QVERIFY(socket.waitForConnected(2000));
+    QVERIFY(connectClient(socket, fx.sockPath));
 
     // Pipeline FrameCount list requests in a single write so they
     // arrive as one readyRead burst on the server side.
@@ -632,8 +630,7 @@ void TestPhosphorIpcE2e::peerDisconnectMidRequest()
     // returning false despite the bytes being on the wire.
     {
         QLocalSocket a;
-        a.connectToServer(fx.sockPath);
-        QVERIFY(a.waitForConnected(2000));
+        QVERIFY(connectClient(a, fx.sockPath));
         a.write("{\"type\":\"list\",\"id\":1");
         a.flush();
         a.waitForBytesWritten(2000);
@@ -683,11 +680,8 @@ void TestPhosphorIpcE2e::slowSubscriberHitsWriteCap()
     QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket subscriber;
-    subscriber.connectToServer(fx.sockPath);
-    QVERIFY(subscriber.waitForConnected(2000));
-    subscriber.write(
-        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("bcast"), QStringLiteral("payload"))));
-    subscriber.flush();
+    QVERIFY(connectClient(subscriber, fx.sockPath));
+    send(subscriber, makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("bcast"), QStringLiteral("payload")));
     const QList<QJsonObject> ack = readLines(subscriber, 1);
     QCOMPARE(ack.size(), 1);
     QCOMPARE(ack.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));

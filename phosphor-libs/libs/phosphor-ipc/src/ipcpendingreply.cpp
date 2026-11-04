@@ -54,16 +54,33 @@ quint64 IpcPendingReply::connectionId() const
     return m_connectionId;
 }
 
-bool IpcPendingReply::finish(const QJsonValue& result)
+quint64 IpcPendingReply::takeToken()
 {
+    if (!m_router) {
+        // The router went, and with it the call: nothing can answer it.
+        m_token = 0;
+        return 0;
+    }
+    if (m_token == 0) {
+        return 0;
+    }
+    // The router's books are not thread-safe. Off its thread the call
+    // stays here, for an answer on the router's thread.
+    const bool onRouterThread = m_router->thread() == QThread::currentThread();
+    Q_ASSERT(onRouterThread);
+    if (!onRouterThread) {
+        qWarning("PhosphorIpc::IpcPendingReply: used off the router's thread; the call is not answered here");
+        return 0;
+    }
     // Give up the call before answering: whatever comes next, a second
     // finish() or fail() finds nothing to answer.
-    const quint64 token = std::exchange(m_token, 0);
-    if (token == 0 || !m_router) {
-        return false;
-    }
-    Q_ASSERT(m_router->thread() == QThread::currentThread());
-    return m_router->finishPendingCall(token, result);
+    return std::exchange(m_token, 0);
+}
+
+bool IpcPendingReply::finish(const QJsonValue& result)
+{
+    const quint64 token = takeToken();
+    return token != 0 && m_router->finishPendingCall(token, result);
 }
 
 bool IpcPendingReply::fail(const QString& message)
@@ -73,12 +90,9 @@ bool IpcPendingReply::fail(const QString& message)
 
 bool IpcPendingReply::fail(const QString& code, const QString& message)
 {
-    const quint64 token = std::exchange(m_token, 0);
-    if (token == 0 || !m_router) {
-        return false;
-    }
-    Q_ASSERT(m_router->thread() == QThread::currentThread());
-    return m_router->failPendingCall(token, code.isEmpty() ? QString::fromUtf8(ErrorCode::CallFailed) : code, message);
+    const quint64 token = takeToken();
+    return token != 0
+        && m_router->failPendingCall(token, code.isEmpty() ? QString::fromUtf8(ErrorCode::CallFailed) : code, message);
 }
 
 void IpcPendingReply::abandon()

@@ -12,7 +12,8 @@
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
-#include <QCoreApplication>
+#include <QByteArray>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -20,22 +21,27 @@
 #include <QList>
 #include <QLocalSocket>
 #include <QObject>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QString>
 #include <QTest>
+#include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 using namespace PhosphorIpc;
+using PhosphorIpcTests::connectClient;
 using PhosphorIpcTests::makeCallReq;
 using PhosphorIpcTests::makeReq;
 using PhosphorIpcTests::readLines;
 using PhosphorIpcTests::RouterFixture;
+using PhosphorIpcTests::send;
 
 static_assert(!std::is_copy_constructible_v<IpcPendingReply>);
 static_assert(!std::is_copy_assignable_v<IpcPendingReply>);
@@ -101,6 +107,19 @@ public:
         secondDeferralValid = deferReply().isValid();
         return -1;
     }
+    // Runs the test's hook inside a wire call, then reports what the call
+    // context says once the hook returned, and defers when asked to.
+    Q_INVOKABLE int runHook()
+    {
+        if (hook) {
+            hook();
+        }
+        connectionAfterHook = connectionId();
+        if (deferAfterHook) {
+            jobs.push_back(deferReply());
+        }
+        return 1;
+    }
 
     // Not wire-callable: what a target sees outside any call.
     bool deferOutsideCall()
@@ -116,6 +135,9 @@ public:
     quint64 lastConnection = 0;
     QString lastName;
     bool secondDeferralValid = true;
+    std::function<void()> hook;
+    bool deferAfterHook = false;
+    quint64 connectionAfterHook = 0;
 
 Q_SIGNALS:
     // The event the jobs send to their caller. Declared so the schema
@@ -123,19 +145,9 @@ Q_SIGNALS:
     void output(const QString& line); // NOLINT(modernize-use-trailing-return-type)
 };
 
-bool connectClient(QLocalSocket& socket, const QString& path)
-{
-    socket.connectToServer(path);
-    return socket.waitForConnected(2000);
-}
-
-void send(QLocalSocket& socket, const QJsonObject& request)
-{
-    socket.write(writeLine(request));
-    socket.flush();
-}
-
-// Frames that arrive within a short wait. For checks that nothing comes.
+// Frames that arrive within a short wait. For checks that nothing comes:
+// make sure first that the router has handled the request, or the check
+// passes before anything could come.
 QList<QJsonObject> framesWithin(QLocalSocket& socket, int ms = 150)
 {
     return readLines(socket, 1, ms);
@@ -155,6 +167,22 @@ quint64 connectionIdOf(QLocalSocket& socket, qint64 requestId)
         return 0;
     }
     return static_cast<quint64>(frames.first().value(QStringLiteral("result")).toDouble());
+}
+
+// Runs a nested event loop for `ms`, as a target method that waits on
+// something would.
+void spinNestedLoop(int ms)
+{
+    QEventLoop loop;
+    QTimer::singleShot(ms, &loop, &QEventLoop::quit);
+    loop.exec();
+}
+
+// The router's own end of its only client connection.
+QPointer<QLocalSocket> serverSocketOf(IpcRouter& router)
+{
+    const QList<QLocalSocket*> sockets = router.findChildren<QLocalSocket*>();
+    return sockets.size() == 1 ? sockets.first() : nullptr;
 }
 
 } // namespace
@@ -180,7 +208,17 @@ private Q_SLOTS:
     void sendEvent_overLimit_closesConnection();
     void connectionClosed_onceWithId_idsNotReused();
     void connectionClosed_onStopAndDestruction();
-    void schema_listsTargetedEvent();
+    void connectionClosed_slotDropsPendingReplies();
+    void connectionClosed_onMalformedClose();
+    void connectionClosed_slotDestroysRouter();
+    void deferredReply_answersOwnConnection();
+    void deferredReply_capPerConnection();
+    void deferredReply_undefinedResultIsNull();
+    void nestedLoop_clientGoes_socketOutlivesDispatch();
+    void nestedLoop_otherSlotsSeeNoCall();
+    void nestedLoop_laterRequestsWait();
+    void nestedLoop_oversizeLineStillCloses();
+    void stopInsideCall();
 };
 
 void TestPhosphorIpcDeferred::deferredReply_finishedAfterEventLoop()
@@ -196,6 +234,7 @@ void TestPhosphorIpcDeferred::deferredReply_finishedAfterEventLoop()
     send(client, makeCallReq(5, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("pkg")}));
 
     // The method returned, and the event loop ran: no reply yet.
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
     QCOMPARE(jobs.lastName, QStringLiteral("pkg"));
     QVERIFY(jobs.lastConnection != 0);
@@ -254,8 +293,8 @@ void TestPhosphorIpcDeferred::deferredReply_secondAnswerIgnored()
     QLocalSocket client;
     QVERIFY(connectClient(client, fx.sockPath));
     send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
-    QCOMPARE(jobs.jobs.size(), std::size_t(1));
 
     IpcPendingReply& reply = jobs.jobs.front();
     QVERIFY(reply.finish(QStringLiteral("first")));
@@ -281,8 +320,8 @@ void TestPhosphorIpcDeferred::deferredReply_failSendsError()
     send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
     send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("b")}));
     send(client, makeCallReq(3, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("c")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(3));
     QVERIFY(framesWithin(client).isEmpty());
-    QCOMPARE(jobs.jobs.size(), std::size_t(3));
 
     // Answered in another order than asked.
     QVERIFY(jobs.jobs.at(2).fail(QStringLiteral("NO_SPACE"), QStringLiteral("disk full")));
@@ -316,12 +355,13 @@ void TestPhosphorIpcDeferred::deferredReply_connectionClosed_droppedSilently()
         QVERIFY(connectClient(client, fx.sockPath));
         send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
         send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("b")}));
+        send(client, makeCallReq(3, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("c")}));
+        QTRY_COMPARE(jobs.jobs.size(), std::size_t(3));
         QVERIFY(framesWithin(client).isEmpty());
         client.disconnectFromServer();
     }
     QTRY_COMPARE(closed.count(), 1);
     QCOMPARE(closed.first().first().value<quint64>(), jobs.lastConnection);
-    QCOMPARE(jobs.jobs.size(), std::size_t(2));
 
     // Dropped, with no warning: the client is gone, nothing went wrong.
     QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
@@ -330,8 +370,11 @@ void TestPhosphorIpcDeferred::deferredReply_connectionClosed_droppedSilently()
     QVERIFY(!jobs.jobs.at(1).fail(QStringLiteral("late")));
     QVERIFY(!fx.router.sendEvent(jobs.lastConnection, QStringLiteral("jobs"), QStringLiteral("output"),
                                  QJsonArray{QStringLiteral("late")}));
-    // Destroying an unanswered reply for a closed connection is silent too.
+    // Destroying the reply that was never answered is silent too: it
+    // abandons a call whose connection is gone.
+    QVERIFY(jobs.jobs.at(2).isValid());
     jobs.jobs.clear();
+    QCOMPARE(closed.count(), 1);
 }
 
 void TestPhosphorIpcDeferred::deferredReply_destroyedUnfinished_failsCall()
@@ -347,6 +390,7 @@ void TestPhosphorIpcDeferred::deferredReply_destroyedUnfinished_failsCall()
 
     // Destroyed after the method returned.
     send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
     jobs.jobs.clear();
     QList<QJsonObject> frames = readLines(client, 1);
@@ -367,8 +411,8 @@ void TestPhosphorIpcDeferred::deferredReply_destroyedUnfinished_failsCall()
     // Overwritten by a move: the call it held is abandoned.
     send(client, makeCallReq(3, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("c")}));
     send(client, makeCallReq(4, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("d")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(2));
     QVERIFY(framesWithin(client).isEmpty());
-    QCOMPARE(jobs.jobs.size(), std::size_t(2));
     jobs.jobs.at(0) = std::move(jobs.jobs.at(1));
     frames = readLines(client, 1);
     QCOMPARE(frames.size(), 1);
@@ -416,9 +460,9 @@ void TestPhosphorIpcDeferred::deferredReply_failedDuringCall_errorAnswers()
     // A second deferral in one call holds nothing; the first still answers.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("deferred already")));
     send(client, makeCallReq(3, QStringLiteral("jobs"), QStringLiteral("deferTwice")));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
     QVERIFY(!jobs.secondDeferralValid);
-    QCOMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(jobs.jobs.front().finish(3));
     frames = readLines(client, 1);
     QCOMPARE(frames.size(), 1);
@@ -436,8 +480,16 @@ void TestPhosphorIpcDeferred::deferredReply_move()
     QLocalSocket client;
     QVERIFY(connectClient(client, fx.sockPath));
     send(client, makeCallReq(9, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
-    QCOMPARE(jobs.jobs.size(), std::size_t(1));
+
+    // Assigned to itself, a reply keeps its call: nothing is abandoned.
+    // Through a second name, as a self-assignment usually comes about.
+    IpcPendingReply& self = jobs.jobs.front();
+    IpcPendingReply& alias = jobs.jobs.front();
+    self = std::move(alias);
+    QVERIFY(self.isValid());
+    QVERIFY(framesWithin(client).isEmpty());
 
     IpcPendingReply moved(std::move(jobs.jobs.front()));
     QVERIFY(!jobs.jobs.front().isValid()); // NOLINT(bugprone-use-after-move)
@@ -473,6 +525,7 @@ void TestPhosphorIpcDeferred::deferReply_withoutConnection()
     QCOMPARE(jobs.connectionOutsideCall(), quint64(0));
 
     // A direct invoke has no connection and no client to answer later.
+    jobs.lastConnection = ~quint64(0);
     IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
     QString message;
     const QVariant result =
@@ -513,6 +566,7 @@ void TestPhosphorIpcDeferred::sendEvent_reachesOnlyThatConnection_beforeReply()
     QLocalSocket caller;
     QVERIFY(connectClient(caller, fx.sockPath));
     send(caller, makeCallReq(7, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("pkg")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(caller).isEmpty());
     const quint64 id = jobs.lastConnection;
     QVERIFY(id != 0);
@@ -596,8 +650,9 @@ void TestPhosphorIpcDeferred::sendEvent_overLimit_closesConnection()
     const quint64 id = connectionIdOf(client, 1);
     QVERIFY(id != 0);
 
-    // ~1 MiB per event, and the client never reads: the kernel buffer
-    // fills, then the router's write queue, until it passes 16 MiB.
+    // ~1 MiB per event, and the client never reads. Nothing is flushed
+    // without a turn of the event loop, so the router's write queue grows
+    // with each event until it passes 16 MiB.
     const QJsonArray big{QString(1024 * 1024, QLatin1Char('x'))};
     constexpr int MaxEvents = 64;
     int sent = 0;
@@ -682,6 +737,7 @@ void TestPhosphorIpcDeferred::connectionClosed_onStopAndDestruction()
     QLocalSocket client;
     QVERIFY(connectClient(client, fx.sockPath));
     send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
     QVERIFY(framesWithin(client).isEmpty());
     const quint64 id = jobs.lastConnection;
 
@@ -708,22 +764,379 @@ void TestPhosphorIpcDeferred::connectionClosed_onStopAndDestruction()
     QVERIFY(connectClient(held, doomed->sockPath));
     const quint64 heldId = connectionIdOf(held, 1);
     QVERIFY(heldId != 0);
+    send(held, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("x")}));
+    send(held, makeCallReq(3, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("y")}));
+    QTRY_COMPARE(doomedJobs.jobs.size(), std::size_t(2));
     doomed.reset();
     QCOMPARE(announced, QList<quint64>{heldId});
     QTRY_COMPARE(held.state(), QLocalSocket::UnconnectedState);
+
+    // A pending reply that outlives its router drops its answer, and one
+    // destroyed unanswered abandons nothing, both without a warning.
+    QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
+    QVERIFY(!doomedJobs.jobs.front().finish(1));
+    QVERIFY(!doomedJobs.jobs.front().isValid());
+    QVERIFY(doomedJobs.jobs.back().isValid()); // still holds its call
+    doomedJobs.jobs.clear();
 }
 
-void TestPhosphorIpcDeferred::schema_listsTargetedEvent()
+void TestPhosphorIpcDeferred::connectionClosed_slotDropsPendingReplies()
 {
-    IpcRouter router;
+    RouterFixture fx;
+    QVERIFY(fx.valid());
     JobTarget jobs;
-    QVERIFY(router.registerTarget(QStringLiteral("jobs"), &jobs));
-    const QJsonArray signalList = router.schemaFor(QStringLiteral("jobs")).value(QStringLiteral("signals")).toArray();
-    bool found = false;
-    for (const QJsonValue& entry : signalList) {
-        found = found || entry.toObject().value(QStringLiteral("name")).toString() == QLatin1String("output");
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    // What a target does with a client's work when the client goes: drop
+    // its pending replies right in the slot, with no warning.
+    int slotRuns = 0;
+    QObject::connect(&fx.router, &IpcRouter::connectionClosed, &jobs, [&jobs, &slotRuns](quint64 closedId) {
+        ++slotRuns;
+        std::erase_if(jobs.jobs, [closedId](const IpcPendingReply& reply) {
+            return reply.connectionId() == closedId;
+        });
+    });
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("b")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(2));
+
+    QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
+    client.disconnectFromServer();
+    QTRY_COMPARE(slotRuns, 1);
+    QVERIFY(jobs.jobs.empty());
+}
+
+void TestPhosphorIpcDeferred::connectionClosed_onMalformedClose()
+{
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("consecutive malformed frames; closing")));
+
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+    QSignalSpy closed(&fx.router, &IpcRouter::connectionClosed);
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    const quint64 id = connectionIdOf(client, 1);
+    QVERIFY(id != 0);
+
+    // One more garbage line than the router puts up with in a row.
+    QByteArray garbage;
+    for (int i = 0; i < 17; ++i) {
+        garbage += "not json\n";
     }
-    QVERIFY(found);
+    client.write(garbage);
+    client.flush();
+    QTRY_COMPARE(closed.count(), 1);
+    QCOMPARE(closed.first().first().value<quint64>(), id);
+    QTest::qWait(50);
+    QCOMPARE(closed.count(), 1);
+}
+
+void TestPhosphorIpcDeferred::connectionClosed_slotDestroysRouter()
+{
+    // Against the lifetime rule, but the router does not read its own
+    // freed memory when a slot does it.
+    auto fx = std::make_unique<RouterFixture>();
+    QVERIFY(fx->valid());
+    JobTarget jobs;
+    QVERIFY(fx->router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx->router.start(fx->sockPath));
+    int slotRuns = 0;
+    QObject::connect(&fx->router, &IpcRouter::connectionClosed, &jobs, [&fx, &slotRuns](quint64) {
+        ++slotRuns;
+        fx.reset();
+    });
+
+    QLocalSocket a;
+    QLocalSocket b;
+    QVERIFY(connectClient(a, fx->sockPath));
+    QVERIFY(connectClient(b, fx->sockPath));
+    QVERIFY(connectionIdOf(a, 1) != 0);
+    QVERIFY(connectionIdOf(b, 1) != 0);
+    // Both closes are booked before the one flush that announces them. The
+    // slot destroys the router at the first; the router's destructor
+    // announces the second, and the flush that was running stops.
+    fx->router.stop();
+    QTRY_VERIFY(!fx);
+    QTest::qWait(50);
+    QCOMPARE(slotRuns, 2);
+}
+
+void TestPhosphorIpcDeferred::deferredReply_answersOwnConnection()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    QLocalSocket a;
+    QLocalSocket b;
+    QVERIFY(connectClient(a, fx.sockPath));
+    QVERIFY(connectClient(b, fx.sockPath));
+    send(a, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
+    send(b, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("b")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(2));
+    QVERIFY(jobs.jobs.at(0).connectionId() != jobs.jobs.at(1).connectionId());
+
+    // Answered in the other order: each answer reaches its own caller.
+    QVERIFY(jobs.jobs.at(1).finish(QStringLiteral("for b")));
+    QVERIFY(jobs.jobs.at(0).finish(QStringLiteral("for a")));
+    const QList<QJsonObject> toA = readLines(a, 1);
+    const QList<QJsonObject> toB = readLines(b, 1);
+    QCOMPARE(toA.size(), 1);
+    QCOMPARE(toA.first().value(QStringLiteral("result")).toString(), QStringLiteral("for a"));
+    QCOMPARE(toB.size(), 1);
+    QCOMPARE(toB.first().value(QStringLiteral("result")).toString(), QStringLiteral("for b"));
+    QVERIFY(framesWithin(a).isEmpty());
+    QVERIFY(framesWithin(b).isEmpty());
+}
+
+void TestPhosphorIpcDeferred::deferredReply_capPerConnection()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    constexpr int Cap = IpcRouter::MaxPendingCallsPerConnection;
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    for (int i = 1; i <= Cap; ++i) {
+        send(client, makeCallReq(i, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("j")}));
+    }
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(Cap));
+    QVERIFY(framesWithin(client).isEmpty());
+
+    // One past the cap fails, and holds nothing to answer later.
+    send(client,
+         makeCallReq(Cap + 1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("j")}));
+    QList<QJsonObject> frames = readLines(client, 1);
+    QCOMPARE(frames.size(), 1);
+    QCOMPARE(frames.first().value(QStringLiteral("id")).toInt(), Cap + 1);
+    QCOMPARE(frames.first().value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::CallFailed));
+    QCOMPARE(jobs.jobs.size(), std::size_t(Cap + 1));
+    QVERIFY(!jobs.jobs.back().isValid());
+
+    // Another connection has a cap of its own.
+    QLocalSocket other;
+    QVERIFY(connectClient(other, fx.sockPath));
+    send(other, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("o")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(Cap + 2));
+    QVERIFY(jobs.jobs.back().isValid());
+
+    // An answered call makes room.
+    QVERIFY(jobs.jobs.front().finish(0));
+    QCOMPARE(readLines(client, 1).size(), 1);
+    send(client,
+         makeCallReq(Cap + 2, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("j")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(Cap + 3));
+    QVERIFY(jobs.jobs.back().isValid());
+    QVERIFY(framesWithin(client).isEmpty());
+}
+
+void TestPhosphorIpcDeferred::deferredReply_undefinedResultIsNull()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    send(client, makeCallReq(1, QStringLiteral("jobs"), QStringLiteral("start"), QJsonArray{QStringLiteral("a")}));
+    QTRY_COMPARE(jobs.jobs.size(), std::size_t(1));
+    QVERIFY(jobs.jobs.front().finish(QJsonValue(QJsonValue::Undefined)));
+    const QList<QJsonObject> frames = readLines(client, 1);
+    QCOMPARE(frames.size(), 1);
+    QVERIFY(frames.first().contains(QStringLiteral("result")));
+    QVERIFY(frames.first().value(QStringLiteral("result")).isNull());
+}
+
+void TestPhosphorIpcDeferred::nestedLoop_clientGoes_socketOutlivesDispatch()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+    QSignalSpy closed(&fx.router, &IpcRouter::connectionClosed);
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    QVERIFY(connectionIdOf(client, 1) != 0);
+    QPointer<QLocalSocket> serverSide = serverSocketOf(fx.router);
+    QVERIFY(serverSide);
+
+    // The client goes while the method waits in a nested event loop. The
+    // router's end of the connection must live until the dispatch that
+    // runs the method is off the stack.
+    bool aliveAfterLoop = false;
+    jobs.hook = [&] {
+        client.abort();
+        spinNestedLoop(100);
+        aliveAfterLoop = !serverSide.isNull();
+    };
+    send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("runHook")));
+    QTRY_VERIFY(closed.count() == 1);
+    QVERIFY(aliveAfterLoop);
+    QTRY_VERIFY(serverSide.isNull());
+}
+
+void TestPhosphorIpcDeferred::nestedLoop_otherSlotsSeeNoCall()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    const quint64 id = connectionIdOf(client, 1);
+    QVERIFY(id != 0);
+
+    // A timer slot on the target, run by a nested loop inside the call,
+    // is not the call. A deferral there does nothing, and says so.
+    QTest::ignoreMessage(QtWarningMsg,
+                         QRegularExpression(QStringLiteral("deferReply: called from a nested event loop")));
+    quint64 seenBySlot = ~quint64(0);
+    bool slotDeferred = true;
+    jobs.hook = [&] {
+        QEventLoop loop;
+        QTimer::singleShot(0, &jobs, [&] {
+            seenBySlot = jobs.connectionOutsideCall();
+            slotDeferred = jobs.deferOutsideCall();
+            loop.quit();
+        });
+        loop.exec();
+    };
+    send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("runHook")));
+    const QList<QJsonObject> frames = readLines(client, 1);
+    QCOMPARE(frames.size(), 1);
+    QCOMPARE(frames.first().value(QStringLiteral("result")).toInt(), 1);
+    QCOMPARE(seenBySlot, quint64(0));
+    QVERIFY(!slotDeferred);
+    // The method itself still sees its call after the loop.
+    QCOMPARE(jobs.connectionAfterHook, id);
+}
+
+void TestPhosphorIpcDeferred::nestedLoop_laterRequestsWait()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+
+    // More requests than the router handles in one go (Batch is the
+    // router's detail::MaxFramesPerReadyRead), so the rest run from its
+    // queued follow-up, which Qt's own readyRead recursion guard does not
+    // cover; the last of them waits in a nested loop while another request
+    // comes. That request is answered after it.
+    constexpr int Batch = 64;
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    jobs.hook = [&] {
+        send(
+            client,
+            makeCallReq(Batch + 2, QStringLiteral("jobs"), QStringLiteral("echo"), QJsonArray{QStringLiteral("late")}));
+        spinNestedLoop(100);
+    };
+    QByteArray burst;
+    for (int i = 1; i <= Batch; ++i) {
+        burst +=
+            writeLine(makeCallReq(i, QStringLiteral("jobs"), QStringLiteral("echo"), QJsonArray{QStringLiteral("e")}));
+    }
+    burst += writeLine(makeCallReq(Batch + 1, QStringLiteral("jobs"), QStringLiteral("runHook")));
+    client.write(burst);
+    client.flush();
+
+    const QList<QJsonObject> frames = readLines(client, Batch + 2, 5000);
+    QCOMPARE(frames.size(), Batch + 2);
+    for (int i = 0; i < frames.size(); ++i) {
+        QCOMPARE(frames.at(i).value(QStringLiteral("id")).toInt(), i + 1);
+    }
+}
+
+void TestPhosphorIpcDeferred::nestedLoop_oversizeLineStillCloses()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+    QSignalSpy closed(&fx.router, &IpcRouter::connectionClosed);
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    QVERIFY(connectionIdOf(client, 1) != 0);
+
+    // While the method waits in a nested loop, the client sends more than
+    // a line may hold, with no newline. The router fills its read buffer
+    // there without a pass of its own, and has to notice once the method
+    // returns, or the connection stalls for good.
+    jobs.hook = [&] {
+        const QByteArray flood(1024 * 1024 + 1, 'A');
+        client.write(flood);
+        for (int i = 0; i < 50 && client.bytesToWrite() > 0; ++i) {
+            spinNestedLoop(20);
+        }
+        spinNestedLoop(100);
+    };
+    send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("runHook")));
+    const QList<QJsonObject> frames = readLines(client, 2, 5000);
+    QCOMPARE(frames.size(), 2);
+    QCOMPARE(frames.at(0).value(QStringLiteral("id")).toInt(), 2);
+    QCOMPARE(frames.at(1).value(QStringLiteral("code")).toString(), QString::fromUtf8(ErrorCode::MalformedRequest));
+    QTRY_COMPARE(closed.count(), 1);
+}
+
+void TestPhosphorIpcDeferred::stopInsideCall()
+{
+    RouterFixture fx;
+    QVERIFY(fx.valid());
+    JobTarget jobs;
+    QVERIFY(fx.router.registerTarget(QStringLiteral("jobs"), &jobs));
+    QVERIFY(fx.router.start(fx.sockPath));
+    QSignalSpy closed(&fx.router, &IpcRouter::connectionClosed);
+
+    QLocalSocket client;
+    QVERIFY(connectClient(client, fx.sockPath));
+    const quint64 id = connectionIdOf(client, 1);
+    QVERIFY(id != 0);
+    QPointer<QLocalSocket> serverSide = serverSocketOf(fx.router);
+    QVERIFY(serverSide);
+
+    // The method stops the router, then defers: the call's connection is
+    // gone, and its socket lives until the dispatch unwinds.
+    bool aliveAfterStop = false;
+    jobs.hook = [&] {
+        fx.router.stop();
+        aliveAfterStop = !serverSide.isNull();
+    };
+    jobs.deferAfterHook = true;
+    send(client, makeCallReq(2, QStringLiteral("jobs"), QStringLiteral("runHook")));
+    QTRY_COMPARE(closed.count(), 1);
+    QCOMPARE(closed.first().first().value<quint64>(), id);
+    QVERIFY(aliveAfterStop);
+    QTRY_VERIFY(serverSide.isNull());
+    QTRY_COMPARE(client.state(), QLocalSocket::UnconnectedState);
+    // The deferral holds the call, with nowhere to answer it.
+    QCOMPARE(jobs.jobs.size(), std::size_t(1));
+    QVERIFY(jobs.jobs.front().isValid());
+    QVERIFY(!jobs.jobs.front().finish(1));
+    QVERIFY(readLines(client, 1, 100).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestPhosphorIpcDeferred)

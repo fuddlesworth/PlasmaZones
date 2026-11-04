@@ -32,8 +32,8 @@ endif()
 function(phosphoripc_add_test name)
     add_executable(${name} ${name}.cpp)
     # Qt6::Network is propagated transitively by PhosphorIpc (PUBLIC, for
-    # QLocalServer/QLocalSocket) — only the e2e/subscribe socket suites
-    # actually use it, so it is not linked explicitly here.
+    # QLocalServer/QLocalSocket) — only the socket suites (e2e, subscribe,
+    # deferred) actually use it, so it is not linked explicitly here.
     target_link_libraries(${name}
         PRIVATE
             PhosphorIpc::PhosphorIpc

@@ -200,7 +200,9 @@ QJsonObject buildReply(qint64 id, const QJsonValue& result)
     QJsonObject obj;
     obj.insert(QLatin1String(Field::Type), QLatin1String(ResponseType::Reply));
     obj.insert(QLatin1String(Field::Id), static_cast<double>(id));
-    obj.insert(QLatin1String(Field::Result), result);
+    // QJsonObject::insert drops the key for an undefined value, and a
+    // reply always carries `result`.
+    obj.insert(QLatin1String(Field::Result), result.isUndefined() ? QJsonValue(QJsonValue::Null) : result);
     return obj;
 }
 

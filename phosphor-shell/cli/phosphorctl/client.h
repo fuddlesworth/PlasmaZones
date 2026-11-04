@@ -8,6 +8,7 @@
 #include <QString>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <functional>
 #include <optional>
 
 namespace Phosphorctl {
@@ -54,8 +55,14 @@ public:
     // same readyRead burst as the subscribe ack would silently drop
     // that first event. Returns the parsed response object, or
     // std::nullopt on read timeout / disconnect / parse error.
-    // errorMessage populated on failure.
-    [[nodiscard]] std::optional<QJsonObject> request(const QJsonObject& req, int timeoutMs = 2000);
+    // errorMessage populated on failure. A timeoutMs of 0 waits for the
+    // response without a deadline (a deferred call answers when its work
+    // ends). With `onEvent` set, event frames that arrive before the
+    // response go to it as they come, and are not kept for
+    // takePendingBytes; those that arrive with the response, after it,
+    // are kept either way.
+    [[nodiscard]] std::optional<QJsonObject> request(const QJsonObject& req, int timeoutMs = 2000,
+                                                     const std::function<void(const QJsonObject&)>& onEvent = {});
 
     [[nodiscard]] QString errorMessage() const;
 
