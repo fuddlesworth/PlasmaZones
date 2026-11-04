@@ -1,11 +1,8 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Every issue goes through one of the forms here. Only the bug report requires a plasmazones-report archive.
 blank_issues_enabled: false
 contact_links:
-  - name: Bug Reports
-    url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=bug-reports
-    about: Report a bug or unexpected behavior
-  - name: Ideas
-    url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=ideas
-    about: Suggest a new feature or improvement
-  - name: Questions
-    url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=q-a
-    about: Ask a question about usage or configuration
+  - name: Documentation
+    url: https://phosphor-works.github.io/plasmazones/
+    about: Setup, troubleshooting and the D-Bus scripting guide

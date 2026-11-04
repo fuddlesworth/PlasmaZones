@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Question
+description: Ask how to set something up or how something works
+title: '[Question] '
+labels: ['question']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about PlasmaZones? Please check the [documentation](https://phosphor-works.github.io/plasmazones/) and search the open and closed issues first.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What you're trying to do
+      description: Optional. The goal behind the question, and what you have tried so far.

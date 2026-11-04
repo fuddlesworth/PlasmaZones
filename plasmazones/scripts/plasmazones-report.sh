@@ -6,7 +6,7 @@
 #
 # Collects the daemon's redacted Markdown report, config files, layout files,
 # and journal logs into a timestamped .tar.gz archive for attaching to
-# GitHub Issues or Discussions.
+# GitHub issues.
 #
 # The D-Bus report (report.md) already contains config/session/rules/layout
 # summaries, but we also include the raw files (the whole config dir plus
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $(basename "$0") [--since MINUTES] [--output DIR]"
             echo ""
-            echo "Generate a PlasmaZones support report archive for bug reports/discussions."
+            echo "Generate a PlasmaZones support report archive to attach to a GitHub issue."
             echo ""
             echo "Options:"
             echo "  --since MINUTES  Minutes of journal logs to include (0 = default 30, max: $MAX_SINCE_MINUTES)"
@@ -660,4 +660,4 @@ echo "Contents:"
 # attach instruction below for a report that succeeded.
 tar -tzf "$ARCHIVE_PATH" | sed 's|^./||' | grep -v '^$' | sed 's/^/  /' || true
 echo ""
-echo "Attach this file to your GitHub Issue or Discussion."
+echo "Attach this file to your GitHub issue."
