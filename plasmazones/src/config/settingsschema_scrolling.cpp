@@ -712,8 +712,8 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::viewPageForwardKey(), CD::scrollingViewPageForwardShortcut(), QMetaType::QString,
          QStringLiteral("Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.")},
         {CD::equalizeColumnWidthsKey(), CD::scrollingEqualizeColumnWidthsShortcut(), QMetaType::QString,
-         QStringLiteral("Gives every column fully on screen an equal share of the screen. Columns clipped at an edge "
-                        "are left alone.")},
+         QStringLiteral("Gives every column on screen an equal share of the screen. A column clipped at an edge "
+                        "comes fully into view.")},
         {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused column to the smallest size preset.")},
         {CD::equalizeWindowHeightsKey(), CD::scrollingEqualizeWindowHeightsShortcut(), QMetaType::QString,

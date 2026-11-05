@@ -688,8 +688,8 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="318"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="421"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="319"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="422"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="137"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="166"/>
@@ -1127,6 +1127,11 @@
         <translation>Przełącza aktywną kolumnę między zakryciem całego obszaru roboczego bez odstępów a jej zwykłym rozmiarem. Stan zakrycia to ten, który pokazuje przycisk maksymalizacji okna.</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="462"/>
+        <source>Gives every column on screen an equal share of the screen. A column clipped at an edge comes fully into view.</source>
+        <translation>Przydziela każdej widocznej kolumnie równą część ekranu. Kolumna przycięta przy krawędzi staje się w pełni widoczna.</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="488"/>
         <source>Toggles the focused window between filling its column and the height it had before, or an even share with the other windows there if it had none.</source>
         <translation>Przełącza aktywne okno między wypełnieniem swojej kolumny a wysokością, którą miało wcześniej. Jeśli żadnej nie miało, dostaje równy udział z pozostałymi oknami w tej kolumnie.</translation>
@@ -1155,11 +1160,6 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="518"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Przewija widok o cały ekran w stronę końca pasa. Uaktywnienie pozostaje na miejscu.</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="462"/>
-        <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
-        <translation>Przydziela każdej w pełni widocznej kolumnie równą część ekranu. Kolumny przycięte przy krawędzi pozostają bez zmian.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="459"/>
@@ -2034,9 +2034,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="82"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="317"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="418"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="318"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
@@ -2047,210 +2046,210 @@
         <translation>Kafelkowanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="87"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="88"/>
         <source>Size</source>
         <translation>Rozmiar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="99"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="100"/>
         <source>Context</source>
         <translation>Kontekst</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="595"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="101"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="102"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
         <source>Other</source>
         <translation>Inne</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="112"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="113"/>
         <source>The application&apos;s ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.</source>
         <translation>Identyfikator aplikacji (Wayland app_id / wpis pulpitu), np. org.kde.konsole.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="114"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="115"/>
         <source>The window&apos;s class as the compositor reports it, which is the WM_CLASS pair &quot;resourceName resourceClass&quot;. Konsole, for example, reports &quot;konsole konsole&quot;, not just &quot;konsole&quot;, so use contains or ends with rather than is.</source>
         <translation>Klasa okna w postaci zgłaszanej przez kompozytor, czyli para WM_CLASS „resourceName resourceClass”. Na przykład Konsole zgłasza „konsole konsole”, a nie samo „konsole”, więc użyj zawiera lub kończy się zamiast jest.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="120"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="121"/>
         <source>The application&apos;s desktop entry file name.</source>
         <translation>Nazwa pliku wpisu pulpitu aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="122"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="123"/>
         <source>The window&apos;s X11 role (WM_WINDOW_ROLE). Empty for Wayland-native windows.</source>
         <translation>Rola X11 okna (WM_WINDOW_ROLE). Pusta dla okien natywnych Wayland.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="124"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="125"/>
         <source>The window&apos;s process ID.</source>
         <translation>Identyfikator procesu okna.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="126"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="127"/>
         <source>The window&apos;s title-bar text.</source>
         <translation>Tekst na pasku tytułu okna.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="128"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="129"/>
         <source>The window&apos;s type (Normal, Dialog, Utility, Notification, …).</source>
         <translation>Typ okna (Normalne, Okno dialogowe, Narzędziowe, Powiadomienie, …).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="130"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="131"/>
         <source>Whether the window is shown on all virtual desktops.</source>
         <translation>Czy okno jest widoczne na wszystkich wirtualnych pulpitach.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="136"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="137"/>
         <source>Whether the window is fullscreen.</source>
         <translation>Czy okno jest w trybie pełnego ekranu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="137"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="138"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
         <translation>Okno przewijania w trybie pełnoekranowym w oknie liczy się tutaj jako pełnoekranowe.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="139"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="140"/>
         <source>Whether the window is minimized.</source>
         <translation>Czy okno jest zminimalizowane.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="141"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="142"/>
         <source>Whether the window is maximized.</source>
         <translation>Czy okno jest zmaksymalizowane.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="143"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="144"/>
         <source>Whether the window currently has keyboard focus.</source>
         <translation>Czy okno ma obecnie uaktywnienie klawiatury.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="145"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="146"/>
         <source>Whether the window is a transient (a dialog or popup owned by another window).</source>
         <translation>Czy okno jest tymczasowe (okno dialogowe lub wyskakujące należące do innego okna).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="147"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="148"/>
         <source>Whether the window is a notification or on-screen display.</source>
         <translation>Czy okno jest powiadomieniem lub komunikatem ekranowym.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="149"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="150"/>
         <source>The window&apos;s width in pixels.</source>
         <translation>Szerokość okna w pikselach.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="151"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="152"/>
         <source>The window&apos;s height in pixels.</source>
         <translation>Wysokość okna w pikselach.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="153"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="154"/>
         <source>Whether the window is set to stay above other windows (always on top).</source>
         <translation>Czy okno jest ustawione tak, aby pozostawało nad innymi oknami (zawsze na wierzchu).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="155"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="156"/>
         <source>Whether the window is set to stay below other windows.</source>
         <translation>Czy okno jest ustawione tak, aby pozostawało pod innymi oknami.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="157"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="158"/>
         <source>Whether the window is hidden from the taskbar.</source>
         <translation>Czy okno jest ukryte na pasku zadań.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="159"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="160"/>
         <source>Whether the window is hidden from the pager.</source>
         <translation>Czy okno jest ukryte w pagerze.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="161"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="162"/>
         <source>Whether the window is hidden from the window switcher (Alt+Tab).</source>
         <translation>Czy okno jest ukryte w przełączniku okien (Alt+Tab).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="163"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="164"/>
         <source>Whether the window is a modal dialog.</source>
         <translation>Czy okno jest modalnym oknem dialogowym.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="165"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="166"/>
         <source>Whether the window has a server-side title-bar and border.</source>
         <translation>Czy okno ma pasek tytułu i obramowanie po stronie serwera.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="167"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="168"/>
         <source>Whether the window can be resized.</source>
         <translation>Czy można zmieniać rozmiar okna.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="173"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="174"/>
         <source>The window&apos;s left-edge X position in pixels.</source>
         <translation>Pozycja X lewej krawędzi okna w pikselach.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="175"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="176"/>
         <source>The window&apos;s top-edge Y position in pixels.</source>
         <translation>Pozycja Y górnej krawędzi okna w pikselach.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="177"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="178"/>
         <source>The window&apos;s title without the application-name suffix the window manager adds.</source>
         <translation>Tytuł okna bez przyrostka z nazwą aplikacji dodawanego przez menedżera okien.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="181"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="182"/>
         <source>Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).</source>
         <translation>Czy okno jest przyciągnięte do strefy (tryb ręcznych stref, w którym okna kafelkowane nie są przyciągane).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="191"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="192"/>
         <source>The monitor the window is on.</source>
         <translation>Ekran, na którym znajduje się okno.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="193"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="194"/>
         <source>The virtual desktop the window is on.</source>
         <translation>Wirtualny pulpit, na którym znajduje się okno.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="195"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="196"/>
         <source>The KDE Activity the window is on.</source>
         <translation>Aktywność KDE, na której znajduje się okno.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="199"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="200"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>Ile okien jest kafelkowanych na tym ekranie i pulpicie. Pozwala regule zmienić algorytm kafelkowania w miarę otwierania i zamykania okien, na przykład wyśrodkowany układ jednego okna, który ustępuje po otwarciu drugiego okna.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="208"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="209"/>
         <source>The monitor&apos;s width in device pixels, counted before display scaling. A rotated monitor swaps its width and height. Lets a rule pick a different layout or algorithm when the same monitor runs at another resolution.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="213"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="214"/>
         <source>The monitor&apos;s height in device pixels, counted before display scaling. A rotated monitor swaps its width and height. Lets a rule pick a different layout or algorithm when the same monitor runs at another resolution.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="219"/>
         <source>The monitor&apos;s shape, rounded to the nearest common ratio such as 16:9 or 32:9. Lets a rule pick a different layout or algorithm when a monitor changes shape, for example when its split mode halves its width.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="223"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="224"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
         <translation>Układ aktywny obecnie na monitorze lub używany tam szablon przewijania. Pozwala regule zmienić odstępy, nakładkę lub stan blokady dla ekranu wyświetlającego dany układ albo szablon. Nie może zmienić, który układ jest przypisany, byłoby to zapętlone.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="228"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="229"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
         <translation>Czy zestaw kolorów systemu jest jasny czy ciemny. Pozwala regule wybrać inne odstępy, barwy nakładki lub układy, gdy pulpit przełącza się między motywem dziennym a nocnym. Reguły są stosowane ponownie zaraz po zmianie motywu.</translation>
     </message>
@@ -2457,7 +2456,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="292"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="293"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="574"/>
@@ -2487,8 +2486,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="316"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="412"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="317"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="413"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="56"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="29"/>
@@ -2509,12 +2508,12 @@
         <translation>Automatyczne kafelkowanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="426"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Zone rectangles</source>
         <translation>Prostokąty stref</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="429"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="430"/>
         <source>Layout preview</source>
         <translation>Podgląd układu</translation>
     </message>
@@ -2524,37 +2523,37 @@
         <translation>Ustaw tryb silnika</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="169"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="170"/>
         <source>Whether the window can be moved.</source>
         <translation>Czy okno można przesuwać.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="172"/>
         <source>Whether the window can be maximized.</source>
         <translation>Czy okno można zmaksymalizować.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="179"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="180"/>
         <source>Whether the window has been floated out of tiling (snapping or tiling mode).</source>
         <translation>Czy okno zostało uczynione pływającym poza kafelkowaniem (przyciąganie lub tryb kafelkowania).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="184"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="185"/>
         <source>Whether the window is managed by the tiling engine.</source>
         <translation>Czy oknem zarządza silnik kafelkowania.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="186"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
         <source>The zone the window is snapped into, in snapping mode. A window spanning several zones counts as being in the first of them. It suits rules about how a window looks or stacks while it sits in a zone, not rules about where a window opens.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="197"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="198"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
         <translation>Tryb silnika, w którym okno jest umieszczane (przyciąganie, kafelkowanie lub przewijanie).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="205"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
         <translation>Czy ekran jest w orientacji pionowej czy poziomej. Pozwala regule wybrać inny układ lub algorytm na obróconym ekranie.</translation>
     </message>
@@ -3568,168 +3567,168 @@
         <translation>Wskaźnik kart obok kolumny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="240"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="241"/>
         <source>is</source>
         <translation>jest</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="242"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="243"/>
         <source>contains</source>
         <translation>zawiera</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="244"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="245"/>
         <source>starts with</source>
         <translation>zaczyna się od</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="246"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="247"/>
         <source>ends with</source>
         <translation>kończy się na</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="248"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="249"/>
         <source>matches regex</source>
         <translation>pasuje do wyrażenia regularnego</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="250"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="251"/>
         <source>matches app-id</source>
         <translation>pasuje do app-id</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="253"/>
         <source>greater than</source>
         <translation>większe niż</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="255"/>
         <source>less than</source>
         <translation>mniejsze niż</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="282"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="283"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="289"/>
         <source>Unknown</source>
         <translation>Nieznane</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="283"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="284"/>
         <source>Normal window</source>
         <translation>Zwykłe okno</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="285"/>
         <source>Dialog</source>
         <translation>Okno dialogowe</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="285"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="286"/>
         <source>Utility</source>
         <translation>Narzędzie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="286"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="287"/>
         <source>Toolbar</source>
         <translation>Pasek narzędzi</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="287"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="288"/>
         <source>Splash screen</source>
         <translation>Ekran powitalny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="288"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
         <source>Tooltip</source>
         <translation>Podpowiedź</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="291"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="81"/>
         <source>Notification</source>
         <translation>Powiadomienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="291"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="292"/>
         <source>Dock / panel</source>
         <translation>Dok / panel</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="293"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
         <source>On-screen display</source>
         <translation>Komunikat na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
         <source>Popup</source>
         <translation>Okno wyskakujące</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <source>Plasma applet popup</source>
         <translation>Okno wyskakujące apletu Plasmy</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="322"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="323"/>
         <source>Landscape</source>
         <translation>Poziomo</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="323"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="324"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
         <source>Portrait</source>
         <translation>Pionowo</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="327"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="328"/>
         <source>Light</source>
         <translation>Jasny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="327"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="328"/>
         <source>Dark</source>
         <translation>Ciemny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="380"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
         <source>%1 (portrait)</source>
         <comment>screen aspect ratio such as 9:16, marked as taller than wide</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="398"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="238"/>
         <source>%1 px</source>
         <comment>a screen size in pixels, such as 2,560 px</comment>
         <translation type="unfinished">%1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="434"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
         <source>End of stack</source>
         <translation>Koniec stosu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="437"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
         <source>After focused window</source>
         <translation>Za aktywnym oknem</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="440"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
         <source>As master</source>
         <translation>Jako główne</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="445"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="446"/>
         <source>Float overflow windows</source>
         <translation>Uczyń nadmiarowe okna pływającymi</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="448"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
         <source>Unlimited (no cap)</source>
         <translation>Bez ograniczeń</translation>
     </message>
@@ -3860,7 +3859,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="494"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="495"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3877,7 +3876,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="488"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="489"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="652"/>
@@ -3896,7 +3895,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="491"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="492"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/TriggerLabels.qml.cpp" line="53"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="190"/>
@@ -3916,7 +3915,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="497"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3968,19 +3967,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="543"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="544"/>
         <source>Match the screen shape</source>
         <translation>Dopasuj do kształtu ekranu</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="546"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="547"/>
         <source>Side to side</source>
         <translation>Obok siebie</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="549"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="550"/>
         <source>Top to bottom</source>
         <translation>Jedno pod drugim</translation>
     </message>
@@ -4079,7 +4078,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="532"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="533"/>
         <source>Restore only</source>
         <translation>Tylko przywracaj</translation>
     </message>
@@ -4105,7 +4104,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="453"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
         <source>Float on drag</source>
         <translation>Uczyń pływającym przy przeciąganiu</translation>
     </message>
@@ -4126,19 +4125,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="461"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="462"/>
         <source>Never</source>
         <translation>Nigdy</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="464"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="465"/>
         <source>Always</source>
         <translation>Zawsze</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="192"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="467"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="468"/>
         <source>On overflow</source>
         <translation>Przy przepełnieniu</translation>
     </message>
@@ -4193,55 +4192,55 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="510"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="511"/>
         <source>Right of the focused column</source>
         <translation>Na prawo od aktywnej kolumny</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="513"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="514"/>
         <source>Left of the focused column</source>
         <translation>Na lewo od aktywnej kolumny</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="516"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="517"/>
         <source>Start of the strip</source>
         <translation>Początek pasa</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="519"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="520"/>
         <source>End of the strip</source>
         <translation>Koniec pasa</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="220"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="522"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="523"/>
         <source>Into the focused column</source>
         <translation>Do aktywnej kolumny</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="472"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
         <source>Normal</source>
         <translation>Zwykła</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="225"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="475"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
         <source>Tabbed</source>
         <translation>W kartach</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="480"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="481"/>
         <source>Titled chips</source>
         <translation>Etykiety z tytułem</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="230"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="483"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="484"/>
         <source>Segment bar</source>
         <translation>Pasek segmentów</translation>
     </message>
@@ -4272,42 +4271,42 @@
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="456"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Reorder in stack</source>
         <translation>Zmień kolejność w stosie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="502"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="503"/>
         <source>New column</source>
         <translation>Nowa kolumna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="505"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="506"/>
         <source>Consume into focused column</source>
         <translation>Wciągnij do aktywnej kolumny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="529"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="530"/>
         <source>Treat as normal windows</source>
         <translation>Traktuj jak zwykłe okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="535"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="536"/>
         <source>Ignore entirely</source>
         <translation>Całkowicie ignoruj</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="554"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="555"/>
         <source>Above other windows</source>
         <translation>Nad innymi oknami</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="557"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="558"/>
         <source>Normal stacking</source>
         <translation>Zwykłe ułożenie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="560"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="561"/>
         <source>Below other windows</source>
         <translation>Pod innymi oknami</translation>
     </message>
@@ -4327,12 +4326,12 @@
         <translation>Ukrywaj numery stref</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="800"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="801"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
         <translation>Wyrażenie regularne, np. ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="803"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="804"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
         <translation>Dopasowuje według segmentów odwróconego DNS, więc „firefox” pasuje też do „org.mozilla.firefox”.</translation>
     </message>
@@ -10390,7 +10389,7 @@
         <translation>Nie udało się zaktualizować proporcji: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="404"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="405"/>
         <source>Template: %1</source>
         <translation>Szablon: %1</translation>
     </message>
@@ -10437,6 +10436,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="111"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="83"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="116"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="206"/>
         <source>Placement</source>

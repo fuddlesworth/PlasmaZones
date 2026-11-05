@@ -48,7 +48,7 @@ namespace PhosphorScrollEngine {
 /// then leaves the anchor entirely alone — not even a re-clamp, for the reason
 /// that function documents. `equalizeVisibleColumnWidths` detaches too: it
 /// positions the group edge to edge on purpose, and a policy that re-centered
-/// the active column afterwards would hand a second press a different group.
+/// the active column afterwards would clip the group again on the next pass.
 /// `reanchorForDropCommit` detaches outside the centering policies, because a
 /// drop owns the view the way a pan does.
 /// Any focus-driven or structural re-anchor (every reanchorAfterFocusChange
@@ -56,8 +56,18 @@ namespace PhosphorScrollEngine {
 /// insertWindowIntoColumnAt, the expel verbs, a removal that has to scroll
 /// focus back into view), an active column that vanished, the first column
 /// of an empty strip, the Always policy's own re-centering, or either
-/// centering verb re-attaches it and the policy takes the view back. A
-/// bystander's removal that leaves focus where it was does not.
+/// centering verb re-attaches it and the policy takes the view back. So does
+/// a successful width verb on the ACTIVE column (setActiveColumnWidth, the
+/// preset cycle, adjust, both maximize toggles, expand, minimize), because a
+/// column resized under a fixed view can be left mostly off screen. That
+/// includes the maximize-to-edges toggle the compositor's maximize
+/// interception dispatches when it lands on the active column, in either
+/// direction and whether the user or the client asked, since the column's
+/// width changes either way. A successful resetToDefaults re-attaches too,
+/// whatever it reset, because it puts the whole layout back. A bystander's
+/// removal that leaves focus where it was does not, and neither does
+/// reconcileWindowSize, whose resize the user released exactly where they
+/// wanted it.
 ///
 /// The TILE-focus ops here never re-anchor, so ScrollEngine clears the latch
 /// through `setViewDetached` on their behalf: the tile-focus verb macro
@@ -328,7 +338,7 @@ public:
     ///
     /// "Already maximized" is decided on RESOLVED PIXELS, not on the stored
     /// intent value, so every route to a full-width column un-maximizes —
-    /// preset cycling, expand, equalize, a restore from disk. Three arms sit
+    /// preset cycling, expand, a restore from disk. Three arms sit
     /// behind the simple description:
     ///
     ///  - The stored pre-maximize width is re-validated against the current
@@ -349,12 +359,12 @@ public:
     /// The same verb aimed at the column OWNING @p windowId rather than at the
     /// active one. Refuses (false) when this strip does not hold the window.
     ///
-    /// The distinction is load-bearing for the compositor's maximize
-    /// interception: that arrives for ONE named window (a titlebar click, a
-    /// client's own request from a window that never took focus) and the
-    /// active column is frequently a different one, so aiming at the active
-    /// column would cancel the clicked window's maximize and resize somebody
-    /// else's column.
+    /// The distinction is load-bearing for a request that names ONE window
+    /// (the D-Bus toggleMaximizeColumn with a window id, which the shell's
+    /// placement map sends): the active column is frequently a different one,
+    /// so aiming at the active column would resize somebody else's column.
+    /// The compositor's maximize interception goes to the maximize-to-edges
+    /// twin below, not here.
     bool toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params);
     /// Toggle the active column's maximize-to-edges state (niri
     /// maximize-window-to-edges, generalized to the column): full raw work
@@ -399,25 +409,32 @@ public:
     /// than refusing: the policy already owns that column's position, which
     /// is the whole reason the branch exists.
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
-    /// Give every FULLY visible column an equal share of the work area's MAIN
-    /// extent (Karousel equalize; niri has no equivalent). Fully visible on
-    /// the same terms as centerVisibleColumns: a column clipped by either
-    /// viewport edge is what the split must not be dragged by. Written as
-    /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
-    /// division goes to the LAST column so the group still tiles the
-    /// viewport edge to edge. A column whose floor (columnMinExtentPx: its
-    /// minimum size or a committed floor) exceeds its share keeps that floor
-    /// and the rest share what is left.
+    /// Give every visible column an equal share of the work area's MAIN
+    /// extent (Karousel equalize; niri has no equivalent). Visible on
+    /// visibleColumnIndices' terms: every column whose strip span intersects
+    /// the viewport joins the split, a column clipped by either edge included.
+    /// That is the strip model's answer, so a straddler the engine's edge
+    /// clamp parks for showing too thin a sliver joins as well and comes back
+    /// as a full share. Written as Fixed pixels like adjustActiveColumnWidth,
+    /// and the remainder of the division goes to the last column not held at
+    /// its floor, so the group still tiles the viewport edge to edge. A column
+    /// whose floor (columnMinExtentPx: its minimum size or a committed floor)
+    /// exceeds its share keeps that floor and the rest share what is left.
     /// The group's lead column lands AT the viewport's lead edge: the anchor
     /// is re-derived after the rewrite so a column ahead of the active one
     /// growing does not slide the group under the active column, and a
-    /// lead-edge straddler is pushed fully out of view. The view is then
-    /// DETACHED like a pan's (see the class doc), so the centering policy
-    /// does not undo the edge-to-edge position on the next pass and a second
-    /// press finds nothing to change. Refuses when fewer than two columns
-    /// are fully visible, when the active column is not one of them, when
-    /// the floors alone fill the viewport, or when every extent is already
-    /// what it would become.
+    /// column clipped at either edge comes fully into view. A group whose
+    /// shares already match but which is not flush at the lead edge (a small
+    /// pan, or a centering policy re-centering it) is brought flush, and that
+    /// alone is a change. The view is then DETACHED like a pan's (see the
+    /// class doc), so the centering policy does not undo the edge-to-edge
+    /// position on the next pass and a second press finds nothing to change.
+    /// Refuses when fewer than two columns are visible, when the active
+    /// column is not one of them, when the gaps between the group leave less
+    /// than a pixel per column, when the floors alone fill the viewport, when
+    /// a share would fall below MinColumnWidthFraction of the work area, or
+    /// when every extent is already what it would become and the group is
+    /// already flush.
     bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
     /// The active column at its narrowest: the smallest preset, or
     /// MinColumnWidthFraction when the preset list is empty (Karousel
@@ -713,15 +730,15 @@ public:
     /// Strip indices of the columns currently intersecting the viewport, in
     /// strip order — a viewport-intersection helper, NOT the zone-number
     /// space. Zone numbers are per-TILE and live one layer up, in
-    /// ScrollEngine::visibleTiles.
+    /// ScrollEngine::visibleTiles. The group equalizeVisibleColumnWidths
+    /// splits and rotateVisibleColumns rotates.
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
 
     /// Strip indices of the columns lying ENTIRELY inside the viewport, in
     /// strip order — the stricter twin of visibleColumnIndices, and the one
-    /// the width-distribution verbs and centerVisibleColumns walk. A column
-    /// clipped by either edge is excluded, which is what lets
-    /// equalizeVisibleColumnWidths refuse to drag a straddler into the split,
-    /// lets centerVisibleColumns leave it out of the span, and lets
+    /// expandActiveColumnToAvailableWidth and centerVisibleColumns walk. A
+    /// column clipped by either edge is excluded, which is what lets
+    /// centerVisibleColumns leave it out of the span, and lets
     /// expandActiveColumnToAvailableWidth reclaim a straddler's pixels the
     /// way niri does. Zero-extent (fully minimized) columns carry no strip
     /// position and are skipped, matching stripExtentPx.
@@ -808,7 +825,8 @@ public:
     /// neighbour still fits on screen beside it. A maximized-to-edges column
     /// keeps its one correct position (focusAnchorFor's reason). This arm SETS
     /// the detach latch, so the drop owns the view the way a pan does and the
-    /// centering policy cannot take it back until the next focus change.
+    /// centering policy cannot take it back until something re-attaches it
+    /// (the class doc's View detachment section lists them).
     ///
     /// The EXCEPTION is a policy that pins the focused column to the middle
     /// whatever put it there — CenterFocusedColumn::Always, and the
@@ -1078,6 +1096,20 @@ private:
     void noteActiveColumnChanged()
     {
         m_viewDetached = false;
+    }
+    /// The re-attach half of a successful width verb on the ACTIVE column
+    /// (the class doc lists them). Resizing the focused column moves its edges
+    /// under a view a pan or an equalize fixed in place, and updateViewForFocus
+    /// leaves a detached view alone, so without this a grown column stays
+    /// clipped until the next focus change. Clearing the latch hands the view
+    /// back to the policy on the next layout pass, the tile-focus verbs' way.
+    /// Returns @p changed so a verb can wrap its success return in it.
+    bool reattachViewIf(bool changed)
+    {
+        if (changed) {
+            m_viewDetached = false;
+        }
+        return changed;
     }
 
     QVector<Column> m_columns;

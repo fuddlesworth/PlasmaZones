@@ -7,7 +7,9 @@
 // cross-output and cross-mode focus/move crossings (along the strip, across
 // it, and from an empty screen). The strip math those verbs sit on is covered
 // in test_scrollstrip_ops; what this file owns is the feedback contract,
-// the activation/echo bookkeeping and the focus-side float memory.
+// the activation/echo bookkeeping and the focus-side float memory, plus the
+// odd end-to-end case where a verb's verdict depends on what an earlier
+// engine path (an interactive resize, say) left in the strip.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/WindowRegistry.h>
@@ -26,6 +28,7 @@ using namespace PhosphorScrollEngine;
 
 namespace Ax = ScrollTestUtils::Ax;
 
+using ScrollTestUtils::makeGappedProviderEngine;
 using ScrollTestUtils::makeProviderEngine;
 using ScrollTestUtils::TrailNeighbourResolver;
 
@@ -75,6 +78,7 @@ private Q_SLOTS:
     void refocusingTheActiveWindowHandsAPannedViewBack();
     void edgeAutoScrollThenCancelKeepsTheScrolledView();
     void equalizeAndMinimizeReportTheirFeedback();
+    void equalizeAfterAUserWidenRestoresTheSplit();
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
@@ -735,6 +739,64 @@ void TestScrollEngineVerbs::equalizeAndMinimizeReportTheirFeedback()
     QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize_heights"));
+}
+
+void TestScrollEngineVerbs::equalizeAfterAUserWidenRestoresTheSplit()
+{
+    // The commonest way columns become unequal: the user drags one column's
+    // trailing edge wider, which pushes its neighbour part way past the
+    // screen edge. Equalize must still split the screen between the two,
+    // since the neighbour intersects the viewport; counting only fully
+    // visible columns left one column in the group and the verb refused.
+    // Run on the GAPPED fixture so the split's gap term is observable at the
+    // engine layer too.
+    QObject owner;
+    ScrollEngine* engine = makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
+    const auto params = ScrollTestUtils::gappedEngineParams();
+    const int even = (ScrollTestUtils::kMainExtent - ScrollTestUtils::kEngineInnerGap) / 2;
+    const QString a = QStringLiteral("app|a");
+    const QString b = QStringLiteral("app|b");
+    engine->windowOpened(a, QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(b, QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(a, QStringLiteral("S1"));
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const QRect applied = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a);
+    QCOMPARE(Ax::mainLen(applied), even);
+
+    QRect widened = Ax::t(applied);
+    widened.setWidth(widened.width() + 200);
+    engine->onWindowResized(a, applied, Ax::t(widened), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(Ax::mainLen(ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a)) == even + 200,
+             "precondition: the user resize widened a");
+    // Asked of the model rather than of b's applied rect, which the edge
+    // clamp may have shortened: b intersects the viewport without lying
+    // wholly inside it.
+    QCOMPARE(state->strip().visibleColumnIndices(params), QVector<int>({0, 1}));
+    QCOMPARE(state->strip().fullyVisibleColumnIndices(params), QVector<int>({0}));
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize"));
+    const QRect aAfter = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), a);
+    const QRect bAfter = ScrollTestUtils::tileRectOn(engine, QStringLiteral("S1"), b);
+    QCOMPARE(Ax::mainPos(aAfter), 0);
+    QCOMPARE(Ax::mainLen(aAfter), even);
+    QCOMPARE(Ax::mainLen(bAfter), even);
+    QCOMPARE(Ax::mainPos(bAfter) + Ax::mainLen(bAfter), ScrollTestUtils::kMainExtent);
+
+    // The engine's own layout pass ran between the presses, so this is the
+    // convergence the strip tests pin, seen through the engine.
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
 }
 
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()

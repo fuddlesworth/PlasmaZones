@@ -12,6 +12,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Equalize Column Widths works after you resize a column by hand**: dragging a scrolling column wider pushes its neighbour part way off the screen, and Equalize Column Widths then did nothing, because it only shared the screen between columns that were wholly on it. It now counts every column that reaches onto the screen, clipped ones included, and brings the clipped ones fully into view. A press also lines the columns back up with the screen's edges when their widths already match but a small scroll or a centering setting left one cut off. A width shortcut on the focused column, such as Maximize Column or Increase Column Width, now keeps that column in view after an equalize or a scroll by hand instead of leaving it partly off screen.
 - **Tiling algorithm settings open on a value they can show**: an algorithm's on/off or choice setting whose declared default was not a real true or false, or not one of its own choices, opened in Settings as a switch that read as on whatever it said, or as a list with nothing picked. Such a default now falls back to off, or to the first choice.
 - **A tiling algorithm with a reserved id no longer counts as loaded**: a user algorithm that declared an id PlasmaZones keeps for itself, such as `none`, was refused but still counted toward the script limit, and deleting its file later announced a change to every open view. It is now skipped like any other refused script.
 
