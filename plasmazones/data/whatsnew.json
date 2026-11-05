@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.5.5",
+            "date": "2026-11-04",
+            "highlights": [
+                "New: A slider sets how much of the desktop shows through the layout editor's background, in the editor and under Settings → Editor → Appearance (#1161)",
+                "Changed: Luau and valijson are downloaded at build time as pinned archives instead of shipping in the source, and Luau moves to 0.745 (#1190)",
+                "Fixed: Editor settings changed in the Settings app reach an editor that is already open (#1161)",
+                "Fixed: The Settings app no longer undoes a change the layout editor made while it was open (#1172)",
+                "Fixed: A config file that cannot be read is no longer overwritten by a running PlasmaZones (#1172)",
+                "Fixed: Equalize Column Widths works when a column is partly off screen after a resize (#1195)",
+                "Fixed: A tiled window you maximize stays maximized with borderless maximized windows on (#1182)",
+                "Fixed: The rule editor lists Floating, Snapped, Tiled and Zone under Placement instead of Tiling (#1194)",
+                "Fixed: Tiling algorithm settings with an unusable default open on off or on the first choice (#1191)"
+            ]
+        },
+        {
             "version": "3.5.4",
             "date": "2026-11-02",
             "highlights": [
