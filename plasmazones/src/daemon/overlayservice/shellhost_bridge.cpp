@@ -1,0 +1,447 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Bridge methods that wire OverlayService to PhosphorOverlay::ShellHost:
+// the post-create / pre-destroy callbacks, the per-screen shim wrappers
+// (ensurePassiveShellFor / destroyPassiveShell), the warm-up loop, and
+// the surface-mapped-state sync that computes the three predicates
+// ShellHost::syncSurfaceState expects. The first two come from PZ-content
+// slot visibility. The keyboard predicate deliberately does not, since it
+// has to release on the first edge of dismissal rather than when the
+// slot's fade finishes.
+//
+// Extracted from osd.cpp where these methods accumulated during the
+// Phase 2-4 ShellHost lift. They are not OSD-specific, they belong
+// with the shell-host wiring conceptually.
+
+#include "internal.h"
+#include "daemon/overlayservice.h"
+#include "core/platform/logging.h"
+#include "phosphor_roles.h"
+#include "phosphor_slot_keys.h"
+
+#include <PhosphorOverlay/ShellHost.h>
+
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+#include <PhosphorLayer/Surface.h>
+
+#include <QGuiApplication>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QScreen>
+#include <QStringList>
+
+namespace PlasmaZones {
+
+namespace {
+// Whether a modal slot (snap assist, layout picker, cheatsheet) is visible,
+// i.e. whether the shell must take pointer input. Shared by
+// ensurePassiveShellFor's defensive input-flag write and
+// syncPassiveShellSurfaceState's grab predicate so the two cannot disagree.
+bool anyModalSlotVisible(const PerScreenOverlayState& s)
+{
+    auto isVisible = [](QQuickItem* item) {
+        return item != nullptr && item->isVisible();
+    };
+    return isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
+}
+} // namespace
+
+// Once-only screenAdded hook: after the first warm-up sweep, every
+// freshly-attached screen gets its passive overlay shell created so
+// the OSD path is ready by the time the user fires their first
+// hot-plug-induced shortcut. The m_notificationsWarmed flag gates
+// whether new screens get a per-screen passive overlay shell after
+// the initial warm-up. As with the sweep, the shell is unmapped again
+// once its prime frame lands, so this never leaves an idle surface on
+// the new output.
+void OverlayService::ensureOsdScreenAddedConnected()
+{
+    if (m_screenAddedConnected) {
+        return;
+    }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
+        if (!m_notificationsWarmed) {
+            return;
+        }
+        auto* mgr2 = m_screenManager;
+        const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+        const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
+        for (const QString& sid : ids) {
+            ensurePassiveShellFor(sid, screen);
+        }
+    });
+    m_screenAddedConnected = true;
+}
+
+OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(const QString& effectiveId,
+                                                                             QScreen* physScreen)
+{
+    // Library-side lifecycle delegated to ShellHost. The SurfaceFactory /
+    // PostCreate callbacks registered in the OverlayService ctor handle
+    // the PZ-specific surface creation (role + qmlSource + warmed-surface
+    // pipeline) and slot wiring; this shim caches the lib's stable
+    // ShellState pointer on the daemon's PerScreenOverlayState so every
+    // downstream consumer of `state->shell` reaches the lib's single
+    // source of truth.
+    auto* shellState = m_shellHost->ensureShell(effectiveId, physScreen);
+    // Helper: enforce the "non-null shell pointer ⇒ live surface"
+    // contract on either failure-return path by nulling any stale
+    // cached pointer (a previous successful ensure may have wired
+    // pState.shell to a ShellState whose fields have since been
+    // zeroed by destroyShell). Callers gate on shell->shellSurface()
+    // today, but keeping the cache true to the contract removes a
+    // class of latent bugs.
+    auto returnExistingClearingStaleShell = [this, &effectiveId]() -> PerScreenOverlayState* {
+        auto it = m_screenStates.find(effectiveId);
+        if (it == m_screenStates.end()) {
+            return nullptr;
+        }
+        it->shell = nullptr;
+        return &it.value();
+    };
+    if (!shellState) {
+        return returnExistingClearingStaleShell();
+    }
+    // Surface-live gate: a zeroed state (sticky failure or self-
+    // teardown from wirePassiveShellSlots's null-shellWindow recovery)
+    // must not be cached on the daemon's parallel state, and the
+    // defensive flag-set below must not touch a zombie window.
+    if (!shellState->shellSurface()) {
+        return returnExistingClearingStaleShell();
+    }
+    // Defensive re-assert: every successful ensure leaves the shell
+    // window click-through unless a modal slot is up. The companion
+    // syncPassiveShellSurfaceState call is the authoritative setter, but
+    // a missed sync (e.g. during screen power-cycle re-entry where the lib
+    // returns the cached state without re-firing PostCreate) would
+    // otherwise inherit a stale wantTransparent=false from a prior modal
+    // popup. The value comes from the same modal predicate the sync uses,
+    // not a hardcoded true: several callers ensure and then bail before
+    // any sync (a deduplicated or layout-less navigation OSD, an empty
+    // layout picker, an overlay type flip), and a hardcoded true there
+    // left a modal that was already up unable to take clicks.
+    //
+    // The keyboard axis deliberately gets no equivalent default here. It is
+    // owned solely by syncSurfaceState, which the modal-show paths call in the
+    // same tick, and unlike the input flag it has no stale-inheritance hazard
+    // to guard: the re-entry case this defends against keeps the same
+    // transport handle, and the only writer of that handle's interactivity is
+    // the sync itself.
+    auto& pState = m_screenStates[effectiveId];
+    pState.shell = shellState;
+    if (auto* window = shellState->shellWindow()) {
+        window->setFlag(Qt::WindowTransparentForInput, !anyModalSlotVisible(pState));
+    }
+    return &pState;
+}
+
+void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
+{
+    // Look up the per-content slot Items by their QML object names -
+    // exposed as `osdSlotItem` / `snapAssistSlotItem` / … on the shell
+    // window root via QML aliases - and cache them under the daemon's
+    // slot-key vocabulary in the lib's generic slot map. Per-show
+    // writeQmlProperty / animator beginShow target these Items via
+    // the PerScreenOverlayState::xxxSlot() accessors.
+    auto* window = shellState.shellWindow();
+    if (!window) {
+        // QML hasn't materialized the wrapper window yet (async path).
+        // The lib's ensureShell already set shellState.m_shellSurface
+        // before invoking this callback; if we only called markFailure
+        // the next ensureShell would short-circuit on the live
+        // shellSurface BEFORE consulting the failure flag and return
+        // the same half-wired state forever.
+        //
+        // Tear down the shell synchronously (zeroes shellSurface so
+        // the next call falls through to the failure-flag check) AND
+        // mark the failure so subsequent attempts no-op until a
+        // hot-plug clearFailure unblocks a clean re-create.
+        qCWarning(lcOverlay) << "wirePassiveShellSlots: shellWindow null at PostCreate for screen=" << screenId
+                             << "- tearing down half-wired shell and marking failure";
+        m_shellHost->destroyShell(screenId);
+        m_shellHost->markFailure(screenId);
+        return;
+    }
+
+    auto wireSlot = [&](const QString& slotKey, const char* qmlObjectName, const PhosphorLayer::Role& role,
+                        const char* descriptionForLog) {
+        auto* item = qvariant_cast<QQuickItem*>(window->property(qmlObjectName));
+        if (!item) {
+            qCWarning(lcOverlay) << "PassiveOverlayShell on screen=" << screenId << "did not expose `" << qmlObjectName
+                                 << "`:" << descriptionForLog << "will fail. Check QML resource.";
+            // Skip the insert. With no entry under the key, hideSlot's
+            // "no slot" path runs (which now fires completion synchronously)
+            // rather than the "null item" path on a SlotEntry{nullptr, role}
+            // - the absent-entry shape makes the breakage visible in
+            // failure logs instead of silently looking like a successful hide.
+            return;
+        }
+        shellState.slots.insert(slotKey, PhosphorOverlay::SlotEntry{item, role});
+    };
+
+    wireSlot(PhosphorSlotKeys::Osd(), "osdSlotItem", PhosphorRoles::Osd, "OSD content writes");
+    wireSlot(PhosphorSlotKeys::SnapAssist(), "snapAssistSlotItem", PhosphorRoles::SnapAssist,
+             "snap-assist on this screen");
+    wireSlot(PhosphorSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PhosphorRoles::LayoutPicker,
+             "picker on this screen");
+    wireSlot(PhosphorSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PhosphorRoles::ZoneSelector,
+             "selector on this screen");
+    wireSlot(PhosphorSlotKeys::MainOverlay(), "mainOverlaySlotItem", PhosphorRoles::ZoneOverlay,
+             "main overlay on this screen");
+    wireSlot(PhosphorSlotKeys::Cheatsheet(), "cheatsheetSlotItem", PhosphorRoles::Cheatsheet,
+             "cheatsheet on this screen");
+    wireSlot(PhosphorSlotKeys::ScrollDropIndicator(), "scrollDropIndicatorSlotItem", PhosphorRoles::ScrollDropIndicator,
+             "scroll drag drop indicator on this screen");
+
+    // Wire QML signals → animator-driven slot hide / forward.
+    // String-based SIGNAL/SLOT macros are required here because the source
+    // signals are declared on `PassiveOverlayShell.qml` (a QML object's
+    // dynamic signal list), not on a C++ type - the function-pointer form
+    // can't resolve them at compile time.
+    QObject::connect(window, SIGNAL(osdDismissRequested()), this, SLOT(onOsdDismissRequested()));
+    QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
+    QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
+                     SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+    QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
+    QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
+    QObject::connect(window, SIGNAL(cheatsheetDismissRequested()), this, SLOT(onCheatsheetDismissRequested()));
+    // No zoneSelectorZoneSelected wiring: the zone-selector slot is input-
+    // transparent by design and hit-testing runs in C++ via
+    // updateSelectorPosition. ZoneSelectorContent's zone previews declare no
+    // pointer handlers, so input-transparency holds by construction on the
+    // QML side too.
+
+    // Render one frame through the freshly built shell, then unmap it.
+    // The QML scene and its scene-graph resources persist across the
+    // unmap, so the first user-triggered slot show pays only the remap
+    // and swapchain rebuild rather than the whole first-frame setup.
+    primeSurfaceRenderPipeline(shellState.shellSurface());
+}
+
+// Pre-create the per-screen passive overlay shell for every effective
+// screen the manager knows about, then mark notifications warmed and
+// ensure the screenAdded hot-plug hook is installed.
+//
+// Each shell is primed (one frame mapped) and then unmapped, so the
+// sweep leaves no surface on the wlr Overlay layer while idle. Slot
+// consumers (snapassist / selector / osd / overlay) still call
+// ensurePassiveShellFor on their show paths, which covers a screen the
+// sweep skipped because it had no QScreen yet. A shell whose creation
+// failed is not retried there: the failure is sticky until
+// clearShellFailuresForPhysicalScreen runs on the next hot-plug.
+void OverlayService::warmUpNotifications()
+{
+    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
+    int createdCount = 0;
+    for (const QString& sid : effectiveIds) {
+        // effectiveIds is empty unless m_screenManager is non-null, so the
+        // loop body only runs when it is.
+        QScreen* physScreen = m_screenManager->physicalScreenFor(sid).qscreen;
+        if (physScreen) {
+            auto* state = ensurePassiveShellFor(sid, physScreen);
+            if (state && state->shell && state->shell->shellSurface()) {
+                ++createdCount;
+            }
+        }
+    }
+    m_notificationsWarmed = true;
+    qCInfo(lcOverlay) << "Pre-warmed passive overlay shell windows for" << createdCount << "of" << effectiveIds.size()
+                      << "effective screens";
+    ensureOsdScreenAddedConnected();
+}
+
+void OverlayService::destroyPassiveShell(const QString& screenId)
+{
+    // Library-side teardown delegated to ShellHost::destroyShell. The
+    // PreDestroy callback (wirePassiveShellSlots' inverse) clears every
+    // PZ-content sentinel on the daemon's PerScreenOverlayState before
+    // the lib schedules the shell surface for deletion; the lib then
+    // nulls its own ShellState mechanism fields. The shell QQuickWindow
+    // owns every slot QQuickItem as a scene-graph descendant so the
+    // single deleteLater on the surface cascades through every slot.
+    m_shellHost->destroyShell(screenId);
+}
+
+void OverlayService::unwirePassiveShellSlots(const QString& screenId)
+{
+    auto it = m_screenStates.find(screenId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    // The lib's destroyShell clears ShellState::slots after this hook
+    // runs, so no slot-pointer nulling is needed here. We only have to
+    // clear the daemon's PZ-content sentinels and disconnect the geom
+    // watcher - those are the parallel-state bookkeeping the lib does
+    // not know about.
+    //
+    // The drop indicator's two per-screen maps DO belong here. Its guard
+    // follows the monotonic EXCEPTION: m_scrollDropIndicatorHideGuard must
+    // never restart, so it stays. Dropping the rect cache
+    // matters for more than the leak — it is the change gate, so a retained
+    // entry would make an identical rect after a shell teardown compare equal
+    // and early-return, and the indicator would silently never show again.
+    m_scrollDropIndicatorHidePending.remove(screenId);
+    m_lastScrollDropIndicatorRect.remove(screenId);
+    // The paint overrides go too: they belong to the torn-down shell's
+    // context, and nothing else drops them.
+    m_scrollDropIndicatorOverrides.remove(screenId);
+    QObject::disconnect(it->overlayGeomConnection);
+    it->overlayGeomConnection = {};
+    it->overlayPhysScreen = nullptr;
+    it->overlayGeometry = QRect();
+    it->labelsTextureHash = 0;
+    it->zoneSelectorPhysScreen = nullptr;
+    it->zoneSelectorGeometry = QRect();
+}
+
+void OverlayService::removeShellStates(const QString& screenId)
+{
+    // destroyShell only zeroes a ShellState's fields; the entry itself survives
+    // in the host's map, so a hot-plug cycle would slowly grow it with dead
+    // keys.
+    m_shellHost->removeState(screenId);
+}
+
+void OverlayService::clearShellFailuresForPhysicalScreen(const QString& physicalScreenId)
+{
+    // Drop sticky creation-failure sentinels for every screen id rooted on this
+    // physical monitor. Without this, reconnecting the same monitor inherits
+    // the stale flag and we silently refuse to recreate its shells. Matching is
+    // prefix-based because virtual-screen ids embed the physical id as their
+    // prefix, and the bare physical id is checked for equality.
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    const QString vsPrefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
+    for (const QString& flagged : m_shellHost->failureScreenIds()) {
+        if (flagged == physicalScreenId || flagged.startsWith(vsPrefix)) {
+            m_shellHost->clearFailure(flagged);
+        }
+    }
+}
+
+void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
+{
+    // Compute PZ-specific visibility predicates from the parallel slot
+    // pointers on PerScreenOverlayState, then hand the resulting booleans
+    // to the library. The lib decides the mapping + input-region toggle;
+    // PZ decides what counts as "live" and "input-grabbing".
+    //
+    // Input-region rationale (Qt::WindowTransparentForInput): pre-shell-
+    // migration each overlay had its own wl_surface sized to its visible
+    // content, so clicks outside the toast / card naturally fell through
+    // to underlying windows. Post-shell every passive overlay shares the
+    // screen-sized shell surface - there's no per-slot input region the
+    // daemon can hand to the compositor. The pragmatic split: only MODAL
+    // slots (snap-assist, layout picker, cheatsheet) grab input. OSD /
+    // main overlay / zone-selector are purely visual:
+    //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
+    //     inside the OSD content is the accepted casualty - the
+    //     alternative is the daemon eating every click on the screen
+    //     for the OSD's full lifetime, which the user reported as worse
+    //     than losing click-dismiss. The OSD-card-over-modal variant of
+    //     that casualty (an OSD firing while a modal is up would occlude
+    //     modal content AND, since the modal grabs input, the card's
+    //     MouseArea would eat clicks on its rect) no longer exists: the
+    //     osdSlot's z binding in PassiveOverlayShell.qml drops the OSD
+    //     below the modal slots (3 -> 1.5) whenever one is visible, so
+    //     the modal both paints over and hit-tests before the card.
+    //   - Main overlay during drag is driven by KWin's drag stream
+    //     (cursor pushes via OverlayService::updateMousePosition);
+    //     it never needs Qt-level input on its own.
+    //   - Zone selector during drag is the same - D-Bus
+    //     updateSelectorPosition pushes cursor coords; the zone is
+    //     committed via drag-end-on-hovered-zone, not a Qt click.
+    auto it = m_screenStates.constFind(effectiveId);
+    if (it == m_screenStates.constEnd()) {
+        return;
+    }
+    const auto& s = *it;
+    auto isVisible = [](QQuickItem* item) {
+        return item != nullptr && item->isVisible();
+    };
+    // anyVisible drives the wl_surface map/unmap edge. The main overlay
+    // slot stays setVisible(true) for the entire drag (even across
+    // modifier-trigger drag pauses set by setIdleForDragPause, which
+    // only flip the slot's `_idled` property to blank the rendered
+    // content) so a mid-drag trigger thrash does not churn the shell's
+    // wl_surface map state. The slot transitions to !isVisible only when
+    // hide() dismisses it (dismissOverlayWindow), which drag end does
+    // through WindowDragAdaptor::hideOverlayAndSelector - that is the
+    // right edge for the shell to actually unmap when no other slot is up.
+    //
+    // The same rule covers single-monitor mode: the outputs the cursor is
+    // not on are only _idled, so their shells stay mapped (blank) for the
+    // rest of the drag and a fullscreen window there is composited until
+    // the drop. Hiding those slots instead would remap a shell on every
+    // monitor crossing.
+    const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot())
+        || isVisible(s.scrollDropIndicatorSlot());
+    const bool anyInputGrabbing = anyModalSlotVisible(s);
+
+    // Keyboard grab: the cheatsheet alone, because its search field is the
+    // only overlay content that reads typed characters. Snap assist and the
+    // picker stay kbd-None on purpose — both answer only to global shortcuts,
+    // which KWin routes ahead of surface delivery, so taking the keyboard
+    // would buy them nothing and cost the focused window its input.
+    //
+    // Keyed on m_cheatsheetVisible, NOT on the slot's isVisible(): the slot
+    // item stays visible for the whole fade-out, and holding the session's
+    // keyboard across an animation would swallow whatever the user typed into
+    // the window they were returning to. The flag is cleared, and the surface
+    // re-synced, on the first edge of every dismissal path that keeps the
+    // surface alive. Teardown paths release implicitly instead, when the
+    // surface itself is destroyed. Under KWin the early drop to None is
+    // only a request: KWin never deactivates a window whose interactivity
+    // drops, so focus actually returns to the user's window when the shell
+    // unmaps after the fade, or, if another slot keeps the shell mapped, when
+    // the user next clicks a window. Escape
+    // itself is unaffected either way — it reaches the daemon through the
+    // ad-hoc global grab (daemon/cheatsheet.cpp), never through this surface.
+    const bool anyKeyboardGrabbing = m_cheatsheetVisible && m_cheatsheetScreenId == effectiveId;
+
+    m_shellHost->syncSurfaceState(effectiveId,
+                                  {
+                                      .visible = anyVisible,
+                                      .inputGrabbing = anyInputGrabbing,
+                                      .keyboardGrabbing = anyKeyboardGrabbing,
+                                  });
+}
+
+bool OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)
+{
+    if (!surface) {
+        return false;
+    }
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (it.value().shell && it.value().shell->shellSurface() == surface) {
+            syncPassiveShellSurfaceState(it.key());
+            return true;
+        }
+    }
+    return false;
+}
+
+QString OverlayService::currentKeyForSlotItem(const QPointer<QQuickItem>& slotItem, const QString& issuedId) const
+{
+    if (!slotItem) {
+        return issuedId;
+    }
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (!it.value().shell) {
+            continue;
+        }
+        for (const auto& entry : std::as_const(it.value().shell->slots)) {
+            if (entry.item == slotItem) {
+                return it.key();
+            }
+        }
+    }
+    return issuedId;
+}
+
+} // namespace PlasmaZones

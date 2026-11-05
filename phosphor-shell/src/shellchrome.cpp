@@ -1,0 +1,395 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "ShellChrome.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorSurface/DecorationProfile.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
+#include <PhosphorSurface/SurfaceThemeResolve.h>
+#include <PhosphorTheme/PaletteStore.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
+#include <QDBusVariant>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLoggingCategory>
+#include <QStandardPaths>
+
+#include <algorithm>
+
+Q_LOGGING_CATEGORY(lcShellChrome, "phosphorshell.chrome")
+
+namespace PhosphorShellApp {
+
+namespace {
+
+QVariant unwrapDBusVariant(QVariant value)
+{
+    while (value.canConvert<QDBusVariant>()) {
+        value = value.value<QDBusVariant>().variant();
+    }
+    return value;
+}
+
+QColor tokenOr(const PhosphorTheme::PaletteStore* palette, const QString& name, const QColor& fallback)
+{
+    if (!palette) {
+        return fallback;
+    }
+    const QColor c = palette->token(name);
+    return c.isValid() ? c : fallback;
+}
+
+} // namespace
+
+ShellChrome::ShellChrome(QObject* parent)
+    : ShellChrome(defaultPackSearchPaths(), parent)
+{
+    subscribeToDaemon();
+    fetchTree();
+    // BESIDE fetchTree, and for the identical reason. The two subscribe triggers are
+    // the settingsChanged signal and WatchForRegistration, and neither fires in the
+    // normal startup order: the daemon already owns the name when the shell starts,
+    // so serviceRegistered does not fire, and settingsChanged only fires on a real
+    // edit. Without this the chrome composed at the 1.0 identity and ignored the
+    // user's configured blur tier until they happened to touch any setting.
+    fetchBlurScaleMultiplier();
+}
+
+ShellChrome::ShellChrome(const QStringList& packSearchPaths, QObject* parent)
+    : QObject(parent)
+    , m_registry(std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr))
+    , m_presetStore(std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr))
+{
+    if (!packSearchPaths.isEmpty()) {
+        // Last path is the user's, as the daemon orders them.
+        m_registry->setUserPath(packSearchPaths.last());
+        m_registry->addSearchPaths(packSearchPaths);
+    }
+
+    // The SURFACE family only: that is the one the shell resolves. A family the shell
+    // does not consult would still cost a QFileSystemWatcher and a whole-directory
+    // re-parse on every preset the user saves, which is the reason every other
+    // consumer names its families too.
+    m_presetStore->load(PhosphorShaders::standardUserPresetRoot(), {PhosphorShaders::ShaderFamily::Surface});
+
+    // Pack-declared presets live in each pack's metadata.json, which only the pack
+    // registry parses, so push what it has now and again on every reload. The
+    // projection is the shared `seedPackPresets`, not a local copy.
+    const auto seedPresets = [this]() {
+        PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Surface,
+                                         m_registry->availableEffects());
+    };
+    seedPresets();
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, m_presetStore.get(),
+            seedPresets);
+    // A preset retuned anywhere — this process, the settings app, a text editor — has
+    // to move the chrome that is already on screen. `revision` is what every QML
+    // binding here re-resolves on.
+    connect(&m_presetStore->registry(), &PhosphorShaders::ShaderPresetRegistry::presetsChanged, this,
+            [this](PhosphorShaders::ShaderFamily family, const QString&) {
+                if (family == PhosphorShaders::ShaderFamily::Surface) {
+                    bump();
+                }
+            });
+
+    // HERE, not in subscribeToDaemon(). These are registry concerns, and that
+    // function is only called by the OTHER constructor, so a chrome built with
+    // explicit search paths had neither of them: a pack installed or edited under it
+    // re-resolved nothing. The default constructor delegates to this one, so moving
+    // them makes both reachable either way.
+    //
+    // The registry watches its directories; a pack installed while the shell runs
+    // re-resolves too.
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, &ShellChrome::bump);
+    // The second tick, and deliberately not folded into bump(): that one also fires on
+    // a tree or palette change, where re-baking every stage would be waste. Only a
+    // committed rescan can have changed a pack's shader SOURCE, which is the case
+    // recomposing the chain misses because the composition comes out identical.
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        ++m_decorationReloadGeneration;
+        Q_EMIT decorationReloadGenerationChanged();
+    });
+}
+
+void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
+{
+    if (m_palette == palette) {
+        return;
+    }
+    // Signal and slot are both named rather than left as a blanket
+    // disconnect(sender, nullptr, this, nullptr). That is a readability choice, NOT a
+    // safety one, and it cuts the other way from how it reads: this is a
+    // replace-the-borrow setter, so severing EVERY connection to the outgoing store is
+    // the correct outcome, and the named form is the one that would leak. PaletteStore
+    // declares three signals (paletteChanged, sourcePathChanged, loadError), so a
+    // future second connection from this object to a different one of them would
+    // survive here where the blanket form would have cleaned it up. Naming both signal
+    // and slot does mean a second SLOT on paletteChanged is distinguishable without a
+    // stored handle, which is what the daemon's lambda connections need instead.
+    if (m_palette) {
+        disconnect(m_palette, &PhosphorTheme::PaletteStore::paletteChanged, this, &ShellChrome::bump);
+    }
+    m_palette = palette;
+    if (m_palette) {
+        connect(m_palette, &PhosphorTheme::PaletteStore::paletteChanged, this, &ShellChrome::bump);
+    }
+    bump();
+}
+
+ShellChrome::~ShellChrome() = default;
+
+int ShellChrome::revision() const
+{
+    return m_revision;
+}
+
+QObject* ShellChrome::decorationComponent() const
+{
+    return m_decorationComponent;
+}
+
+void ShellChrome::setDecorationComponent(QObject* component)
+{
+    if (m_decorationComponent == component) {
+        return;
+    }
+    m_decorationComponent = component;
+    Q_EMIT decorationComponentChanged();
+}
+
+QStringList ShellChrome::defaultPackSearchPaths()
+{
+    // The daemon's setupSurfaceShaderEffects, verbatim: system dirs lowest
+    // priority first, the user dir last and materialised so the loader can
+    // watch it.
+    const QString packSubdir = PhosphorSurfaceShaders::surfacePackDataSubdir();
+    QStringList dirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, packSubdir, QStandardPaths::LocateDirectory);
+    std::reverse(dirs.begin(), dirs.end());
+    const QString userDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + packSubdir;
+    if (!dirs.contains(userDir)) {
+        dirs.append(userDir);
+    }
+    QDir().mkpath(userDir);
+    return dirs;
+}
+
+const PhosphorSurfaceShaders::DecorationProfileTree& ShellChrome::tree() const
+{
+    return m_tree;
+}
+
+bool ShellChrome::setTreeJson(const QString& json)
+{
+    // An EMPTY payload is the expected answer from a daemon that does not know this
+    // key (see the getSetting comment below), so it is a debug line rather than a
+    // warning. Warning on it fired on every settingsChanged against an older daemon,
+    // while the blur-multiplier twin handled the same case silently.
+    if (json.trimmed().isEmpty()) {
+        qCDebug(lcShellChrome) << "decorationProfileTree is empty; keeping the current tree";
+        return false;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcShellChrome) << "decorationProfileTree is not a JSON object; keeping the current tree";
+        return false;
+    }
+    auto tree = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
+    if (tree == m_tree) {
+        return true;
+    }
+    m_tree = std::move(tree);
+    bump();
+    return true;
+}
+
+QVariantList ShellChrome::chainFor(const QString& surfacePath) const
+{
+    QVariantList stages;
+    // FLATTENED, like every other surface consumer. `resolve()` walks the tree but does
+    // not apply presets, and `effectiveParameters()` below is the post-flatten read —
+    // so without this a surface naming a preset rendered without its values, and
+    // without the declared-range clamp `resolveParams` applies.
+    const PhosphorSurfaceShaders::DecorationProfile& profile = resolvedProfile(surfacePath);
+    const QStringList chain = profile.enabledChain();
+    if (chain.isEmpty()) {
+        return stages;
+    }
+    const QVariantMap allParams = profile.effectiveParameters();
+    // The pack flag resolver's theme: the spectrum's own tokens, so a pack
+    // that asks for the accent gets the focus colour of the chrome around it.
+    const PhosphorSurfaceShaders::SurfaceThemeColors theme{
+        tokenOr(m_palette, QStringLiteral("primary"), QColor(0x3b, 0x82, 0xf6)),
+        tokenOr(m_palette, QStringLiteral("outline"), QColor(0x33, 0x41, 0x55)),
+        tokenOr(m_palette, QStringLiteral("surface"), QColor(0x0b, 0x10, 0x20)),
+        tokenOr(m_palette, QStringLiteral("on_surface"), QColor(0xe6, 0xed, 0xff)),
+    };
+    // One silhouette for the whole chain, resolved before any stage is composed.
+    // A backdrop pack that squares its bottom corners against the panel edge has
+    // to take the border and halo packs with it, or they trace an outline the
+    // pane no longer has. See chainRoundBottomCorners.
+    const QVariant chainBottomCorners = PhosphorSurfaceShaders::chainRoundBottomCorners(*m_registry, chain, allParams);
+    for (const QString& packId : chain) {
+        if (!m_registry->hasEffect(packId)) {
+            qCDebug(lcShellChrome) << surfacePath << ": pack" << packId << "is not installed; stage skipped";
+            continue;
+        }
+        const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+        if (!effect.isValid()) {
+            qCDebug(lcShellChrome) << surfacePath << ": pack" << packId << "has no fragment shader; stage skipped";
+            continue;
+        }
+        QVariantMap params = allParams.value(packId).toMap();
+        PhosphorSurfaceShaders::resolveThemeParamColors(effect, params, theme);
+        // Injected for every stage; a pack that does not declare the control has
+        // the key dropped by translateSurfaceParams.
+        if (chainBottomCorners.isValid()) {
+            params.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
+        }
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params, m_blurScaleMultiplier));
+    }
+    return stages;
+}
+
+double ShellChrome::outerPaddingFor(const QString& surfacePath) const
+{
+    // Flattened for the same reason chainFor is: a preset can move the very parameter
+    // a pack's padding request is computed from, so reading the unflattened map here
+    // would size the chrome's margin against values the stages do not draw with.
+    const PhosphorSurfaceShaders::DecorationProfile& profile = resolvedProfile(surfacePath);
+    const QVariantMap allParams = profile.effectiveParameters();
+    double padding = 0.0;
+    const QStringList chain = profile.enabledChain();
+    for (const QString& packId : chain) {
+        // No hasEffect() probe: effect() answers a default-constructed effect for an
+        // id the registry does not hold, and that has an empty id so isValid() is
+        // already false. With no diagnostic on either arm the probe was a second
+        // lookup for the same answer, the shape chainRoundBottomCorners documents.
+        const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+        if (!effect.isValid()) {
+            continue;
+        }
+        padding = std::max(padding, PhosphorSurfaceShaders::paddingRequest(effect, allParams.value(packId).toMap()));
+    }
+    return std::clamp(padding, 0.0, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+}
+
+void ShellChrome::subscribeToDaemon()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    const QString service = QString(PhosphorProtocol::Service::Name);
+    const QString path = QString(PhosphorProtocol::Service::ObjectPath);
+    const QString settings = QString(PhosphorProtocol::Service::Interface::Settings);
+    // Any setting change refetches: the tree is one key and the signal
+    // carries none, so this is the daemon's own contract for followers.
+    bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchTree()));
+    bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchBlurScaleMultiplier()));
+    // A daemon that (re)appears publishes a fresh tree.
+    auto* watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForRegistration, this);
+    connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchTree);
+    connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchBlurScaleMultiplier);
+}
+
+void ShellChrome::fetchTree()
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("getSetting"));
+    call << QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QVariant> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcShellChrome) << "decorationProfileTree unavailable:" << reply.error().message();
+            return;
+        }
+        setTreeJson(unwrapDBusVariant(reply.value()).toString());
+    });
+}
+
+void ShellChrome::fetchBlurScaleMultiplier()
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("getSetting"));
+    call << QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QVariant> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcShellChrome) << "decorationBlurScaleMultiplier unavailable:" << reply.error().message();
+            return;
+        }
+        // Numeric-or-bust, the same guard the compositor's loader applies and for
+        // the same reason: an older daemon answers an unknown key with a valid
+        // EMPTY reply, and QVariant("").toReal() is 0.0, which composeStageMap
+        // would read as unusable and fall back to 1.0 anyway. Rejecting it here
+        // keeps the stored value meaning what it says.
+        bool ok = false;
+        const qreal raw = unwrapDBusVariant(reply.value()).toReal(&ok);
+        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
+            return;
+        }
+        // NO BOUNDARY CLAMP HERE, and the claim that this matches the compositor's
+        // loader is dropped rather than made true. That loader additionally qBounds
+        // into DecorationDefaults' declared band, on the principle that a separate
+        // process's reply is not trusted with the range, but this file cannot reach
+        // that constant: the shell target does not link PhosphorCompositor, and
+        // pulling it in for one header-only constexpr costs more than it buys.
+        // composeStageMap bounds the PRODUCT into [kMinBufferScale, kMaxBufferScale]
+        // regardless, so an out-of-band reply saturates rather than misbehaving. What
+        // is lost is only that the stored member can hold a value outside the band.
+        const qreal m = raw;
+        if (qFuzzyCompare(m_blurScaleMultiplier + 1.0, m + 1.0)) {
+            return;
+        }
+        m_blurScaleMultiplier = m;
+        // Recompose: the stage maps carry the folded scales, so a tier change has
+        // to rebuild them. bump() is the single invalidation point.
+        bump();
+    });
+}
+
+const PhosphorSurfaceShaders::DecorationProfile& ShellChrome::resolvedProfile(const QString& surfacePath) const
+{
+    const auto it = m_resolvedCache.constFind(surfacePath);
+    if (it != m_resolvedCache.constEnd()) {
+        return *it;
+    }
+    // The flatten, for the reason each caller used to state itself: the tree resolve does
+    // not apply presets and `effectiveParameters()` is the post-flatten read, so an
+    // unflattened profile renders without the preset's values and without the
+    // declared-range clamp `resolveParams` applies.
+    //
+    // The returned reference lives in m_resolvedCache, a QHash, so it is invalidated by
+    // the next insert. Callers must finish with it before resolving a DIFFERENT surface
+    // path; chainFor and outerPaddingFor each take one profile and never re-enter.
+    return *m_resolvedCache.insert(surfacePath,
+                                   PhosphorSurfaceShaders::withPresetsResolved(m_tree.resolve(surfacePath),
+                                                                               m_presetStore->registry(),
+                                                                               PhosphorShaders::ShaderFamily::Surface));
+}
+
+void ShellChrome::bump()
+{
+    // The flattened-profile memo is scoped to one revision, so it goes here rather than at
+    // each mutation site: every path that changes a tree, a pack set or a preset ends up
+    // calling bump(), which is what makes this the single invalidation point.
+    m_resolvedCache.clear();
+    ++m_revision;
+    Q_EMIT revisionChanged();
+}
+
+} // namespace PhosphorShellApp

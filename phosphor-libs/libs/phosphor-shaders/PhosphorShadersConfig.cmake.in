@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Qt6 @PHOSPHORSHADERS_QT_MIN@ COMPONENTS Core Gui)
+find_dependency(PhosphorFsLoader)
+find_dependency(PhosphorRegistry)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorShadersTargets.cmake")
+
+check_required_components(PhosphorShaders)

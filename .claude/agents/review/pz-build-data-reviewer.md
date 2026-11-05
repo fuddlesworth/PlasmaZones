@@ -1,6 +1,6 @@
 ---
 name: pz-build-data-reviewer
-description: PlasmaZones build/test/data reviewer. Use for audit partitions covering CMakeLists.txt files, tests/, data/ JSON assets (layouts, whatsnew), translations, CHANGELOG.md, docs, and packaging. Luau algorithm sources go to pz-luau-algorithm-reviewer; shader sources and pack metadata go to pz-glsl-shader-reviewer. Expert in the CMake/Qt6 build, Qt Test + ctest D-Bus isolation, licensing boundaries, and the user-facing prose rules.
+description: PlasmaZones build/test/data reviewer. Use for audit partitions covering CMakeLists.txt files, plasmazones/tests/, plasmazones/data/ JSON assets (layouts, whatsnew), translations, CHANGELOG.md, docs, and packaging. Luau algorithm sources go to pz-luau-algorithm-reviewer; shader sources and pack metadata go to pz-glsl-shader-reviewer. Expert in the CMake/Qt6 build, Qt Test + ctest D-Bus isolation, licensing boundaries, and the user-facing prose rules.
 ---
 
 <!--
@@ -32,7 +32,7 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 ## Build expertise to apply
 - `qt_add_qml_module()` (the repo uses the versionless spelling) must list EVERY QML file — a missing entry is a runtime "not a type" error, not a build error; cross-check module file lists against the directory contents.
 - AUTOMOC traps: a `Q_OBJECT` class defined after a multi-line raw string containing `//` is hidden from moc — check new raw strings in headers.
-- `USE_KDE_FRAMEWORKS=ON/OFF` must both stay buildable: KF6-only code (`KCMUtils`, `GlobalAccel`, optional `Activities`) needs guards; pluggable backends (`IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`) keep the portable build honest.
+- `USE_KDE_FRAMEWORKS=ON/OFF` must both stay buildable: KF6-only code (`KCMUtils`, `GlobalAccel`, optional `Activities`) needs guards; pluggable backends (`PhosphorConfig::IBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`) keep the portable build honest.
 - `find_package` ordering/visibility for phosphor-* libs has bitten before — verify new targets link what they include.
 - Never suggest `cmake --install` or sudo steps; the user installs.
 
@@ -41,10 +41,19 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - ctest MUST run under the D-Bus isolation setup (TEST_LAUNCHER `dbus-run-session` with a no-servicedir conf) — a test reaching the stock session bus can activate the installed daemon and hang ctest via the stdout pipe. Any new test target must inherit the launcher.
 - `QVERIFY` inside a data-driven loop aborts the remaining rows — flag loops where later rows silently never run.
 - A guard-claim in a fix deserves a mutation check: if a test exists to prove a guard, deleting the guard should fail it.
-- Licensing: top-level `tests/**` is GPL-3.0-or-later, but `libs/phosphor-*/tests/**` follows the library (LGPL-2.1-or-later). A GPL header inside a phosphor lib's tests is a finding.
+- Licensing: top-level `plasmazones/tests/**` is GPL-3.0-or-later, but `phosphor-libs/libs/phosphor-*/tests/**` AND `phosphor-shell-libs/libs/phosphor-*/tests/**` follow their library (LGPL-2.1-or-later). A GPL header inside a phosphor lib's tests is a finding.
 
 ## Data/prose expertise to apply
-- All user-visible text in `data/**/*.json` (`description`/`name`), `data/whatsnew.json`, and `CHANGELOG.md` must follow CLAUDE.md's plain-prose rules (`.luau` metadata prose is covered by pz-luau-algorithm-reviewer): no em-dash clause splices, no clause-joining semicolons, no ` - ` stand-in dashes, no dramatic "Label: payload" colons, no rule-of-three flourish. Keep-a-Changelog `**Term**:` lead-ins and literal separators like `%1 — %2` are fine.
+- All user-visible text in `plasmazones/data/**/*.json` (`description`/`name`), `plasmazones/data/whatsnew.json`, and `CHANGELOG.md` must follow CLAUDE.md's plain-prose rules (`.luau` metadata prose is covered by pz-luau-algorithm-reviewer): no em-dash clause splices, no clause-joining semicolons, no ` - ` stand-in dashes, no dramatic "Label: payload" colons, no rule-of-three flourish. Keep-a-Changelog `**Term**:` lead-ins and literal separators like `%1 — %2` are fine.
 - CHANGELOG.md: Keep-a-Changelog structure with version compare links present for every version.
 - Layout JSON uses relative geometry (0.0–1.0) and zone QUuids; validate new data files parse against what the loaders expect.
 - SPDX headers on every file including CMakeLists.txt and test files; conventional commit style if commit content is in scope.
+
+## Known past-bug shapes to check for (from prior audits)
+- **Tests that cannot fail.** The recurring forms: a loop over a possibly empty collection with no size assert; a substring or regex exclusion a sibling arm satisfies (`(compositor)` matched `OK (compositor GLES)`, a HIGH in PR #1143); two captures of the same context compared to each other; asserting the value the test just wrote; `QString()` passing a `!= REJECTED` compare. Ask which mutation of the code under test each new assertion catches.
+- **Assertions that leave the lambda, not the test.** `QCOMPARE` inside a lambda returns from the lambda, so capture the value and assert afterwards. An unguarded `.first()` on a possibly empty container is undefined behaviour, not a failure.
+- **Fixture teardown order.** A `std::unique_ptr` declared after the `QObject` parent it is wired to dangles when an early `QVERIFY` return unwinds (four sites in `test_wta_capture_guards.cpp`). Declare owned objects before the parent.
+- **Nested-KWin probes that cannot fail.** Under `scripts/nested-kwin/regression/`: greps for text the log never contains, checks that read only post-restart logs, `stage_fail` inside `$( )` running cleanup in a subshell while the probe carried on, ignored `setSetting` results (use `gsetting_ok`), and staging gates accepting "not floating" as "tiled". Each check needs a baseline it fails on.
+- **CHANGELOG claims and conflicts.** Entries overclaimed against the code (behaviour that sibling findings left open, scope wider or narrower than the diff), and `[Unreleased]` conflicted with main in three audited PRs. Check each sentence against the code, and merge main before closing.
+- **Catalog drift.** New `i18n()`/`tr()` strings shipped without `update-ts`, and pt_BR action labels and tooltips mixed third-person forms (`Adiciona`, `Define`, `Exclui`) with the infinitive over many rounds. A fix to one string sweeps its siblings in the same catalog.
+- **Build graph out of step with the links.** An installed `PhosphorTilesConfig.cmake.in` lacked the `find_dependency` for a new PUBLIC link, and a test linked a target that exists only under `BUILD_PHOSPHOR_SHELL`, which broke the documented configure so no test built. Gate optional links on `TARGET`, and update the Config file with the link set.

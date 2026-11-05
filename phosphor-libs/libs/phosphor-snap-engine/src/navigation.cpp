@@ -1,0 +1,159 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/GeometryUtils.h>
+#include <PhosphorZones/GeometryUtils.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include "snapenginelogging.h"
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorZones/Zone.h>
+
+namespace PhosphorSnapEngine {
+
+using PhosphorEngine::ZoneAssignmentEntry;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Snap-mode resnap coordination
+//
+// The navigation verbs (focus, move, swap, span, cycle, rotate) are in
+// navigation_actions.cpp; all but rotate resolve their targets through
+// SnapNavigationTargetResolver (snapnavigationtargets.cpp). What remains here
+// is the batch work the daemon triggers on layout or mode changes: the
+// layout-switch resnap, the current-assignment resnap, the autotile → snap
+// resnap, and snap-all.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SnapEngine::resnapToNewLayout()
+{
+    resnapToNewLayout(ResnapFeedback::Report);
+}
+
+void SnapEngine::resnapToNewLayout(ResnapFeedback feedback)
+{
+    qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: calculating entries from previous layout buffer";
+    QVector<ZoneAssignmentEntry> resnapEntries = calculateResnapFromPreviousLayout();
+
+    if (resnapEntries.isEmpty()) {
+        // A layout switch that leaves nothing to move is not news: the
+        // switch's own OSD already answered the user (F489).
+        if (feedback == ResnapFeedback::Silent) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: nothing to resnap";
+            return;
+        }
+        PhosphorZones::Layout* layout = m_layoutManager ? m_layoutManager->activeLayout() : nullptr;
+        if (!layout) {
+            qCWarning(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: no active layout";
+            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),
+                                      QString(), m_lastActiveScreenId);
+        } else {
+            qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                << "resnapToNewLayout: buffer empty, activeLayout=" << layout->name()
+                << "zones=" << layout->zoneCount();
+            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
+                                      QString(), QString(), m_lastActiveScreenId);
+        }
+        return;
+    }
+
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(resnapEntries);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << resnapEntries.size() << "windows to new layout";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
+void SnapEngine::resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows)
+{
+    resnapCurrentAssignments(screenFilter, onlyWindows, ResnapFeedback::Report);
+}
+
+void SnapEngine::resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows,
+                                          ResnapFeedback feedback)
+{
+    QVector<ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenFilter, onlyWindows);
+
+    if (entries.isEmpty()) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "No windows to resnap from current assignments";
+        if (feedback == ResnapFeedback::Silent) {
+            return;
+        }
+        Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
+                                  QString(), screenFilter.isEmpty() ? m_lastActiveScreenId : screenFilter);
+        return;
+    }
+
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << entries.size() << "windows to current zone assignments";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
+void SnapEngine::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
+{
+    QVector<ZoneAssignmentEntry> entries = calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
+
+    if (entries.isEmpty()) {
+        return; // calculateResnapEntriesFromAutotileOrder already tried fallback
+    }
+
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Resnapping" << entries.size() << "windows from autotile order";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
+QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                                 const QString& screenId,
+                                                                                 const QStringList& preClaimedZoneIds)
+{
+    QVector<ZoneAssignmentEntry> entries =
+        calculateResnapFromAutotileOrder(autotileWindowOrder, screenId, preClaimedZoneIds);
+
+    if (entries.isEmpty()) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateResnapEntriesFromAutotileOrder: no entries from autotile order,"
+            << "falling back to current assignments for screen" << screenId;
+        entries = calculateResnapFromCurrentAssignments(screenId);
+    }
+
+    return entries;
+}
+
+void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
+{
+    if (entries.isEmpty()) {
+        return;
+    }
+    QString resnapData = PhosphorEngine::GeometryUtils::serializeZoneAssignments(entries);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "Emitting batched resnap for" << entries.size() << "windows";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
+PhosphorProtocol::SnapAllResultList SnapEngine::calculateSnapAllWindows(const QStringList& windowIds,
+                                                                        const QString& screenId)
+{
+    QVector<ZoneAssignmentEntry> entries = calculateSnapAllWindowEntries(windowIds, screenId);
+
+    PhosphorProtocol::SnapAllResultList result;
+    result.reserve(entries.size());
+    for (const auto& entry : entries) {
+        PhosphorProtocol::SnapAllResultEntry r;
+        r.windowId = entry.windowId;
+        r.targetZoneId = entry.targetZoneId;
+        r.sourceZoneId = entry.sourceZoneId;
+        r.x = entry.targetGeometry.x();
+        r.y = entry.targetGeometry.y();
+        r.width = entry.targetGeometry.width();
+        r.height = entry.targetGeometry.height();
+        result.append(r);
+    }
+
+    qCDebug(PhosphorSnapEngine::lcSnapEngine) << "Calculated snap-all for" << result.size() << "windows";
+    return result;
+}
+
+void SnapEngine::snapAllWindows(const QString& screenId)
+{
+    qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapAllWindows called for screen=" << screenId;
+    Q_EMIT snapAllWindowsRequested(screenId);
+}
+
+} // namespace PhosphorSnapEngine

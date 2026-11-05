@@ -1,0 +1,206 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// D-Bus subscription wiring for SettingsController.
+//
+// Centralises every daemon-broadcast subscription the settings UI relies
+// on for live updates:
+//   * Settings reload, the Editor.*-only reload, and the async
+//     running-windows reply (Settings interface)
+//   * Layout list / property / assignment mutations + quick-slot updates
+//     (LayoutRegistry interface)
+//   * Virtual-desktop + activity changes (LayoutRegistry interface)
+//   * Window-rules `rulesChanged` broadcast — reloads the settings-side
+//     mirror store (`m_localRuleStore`) so the in-process LayoutRegistry's
+//     assignment cascade sees daemon-driven rule edits without a process
+//     restart.
+//   * Scrolling strip wake-ups (Scrolling interface) — relayed straight back
+//     out as `scrollingStripChanged` for the Monitors page's live thumbnail.
+//   * Screen geometry changes (Screen interface) — refresh the cached primary
+//     scale behind the local fixed-zone previews.
+//
+// The D-Bus wire-up is a natural seam away from `settingscontroller.cpp`. The
+// helper lambda and subscriptions are cohesive, only call into D-Bus
+// session-bus APIs and the controller's own slot table, and don't touch the
+// page-controller construction graph. Same class, separate translation unit,
+// no API change.
+
+#include "settingscontroller.h"
+
+#include "core/platform/logging.h"
+#include "settings/utils/dbusutils.h"
+
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorRules/RuleStore.h>
+
+#include <QDBusConnection>
+#include <QString>
+#include <QStringList>
+
+namespace PlasmaZones {
+
+void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscriptions)
+{
+    // QDBusConnection::connect's API is fundamentally string-based (signal
+    // name + SLOT() signature) — it can't use the modern member-function-
+    // pointer connect syntax because D-Bus signals are dynamically named.
+    // The lambda just factors the repeated `service + objectPath` tuple
+    // out of every call site so each subscription is one line, and
+    // centralises failure logging in one place.
+    //
+    // The const-char* SLOT signature is normalised through
+    // QMetaObject::normalizedSignature inside QDBusConnection, so spacing
+    // variations between call sites are harmless — but the helper takes
+    // the un-normalised string so call sites can be grep'd consistently.
+    //
+    // Failed subscriptions are accumulated in @p failedSubscriptions so
+    // the constructor can surface ALL missing routes in one post-loop
+    // warning line rather than scattering per-call warnings across the
+    // boot log. Helps diagnose the "daemon not up yet at construct time"
+    // case where many signals miss together.
+    const auto subscribeDaemonSignal = [this, &failedSubscriptions](const QString& interfaceName,
+                                                                    const QString& signalName, const char* slot) {
+        const bool ok = QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                                              QString(PhosphorProtocol::Service::ObjectPath),
+                                                              interfaceName, signalName, this, slot);
+        if (!ok) {
+            qCWarning(PlasmaZones::lcCore)
+                << "SettingsController: failed to connect D-Bus signal" << signalName << "on" << interfaceName;
+            failedSubscriptions.append(interfaceName + QStringLiteral(".") + signalName);
+        }
+    };
+
+    // Listen for external settings changes from the daemon.
+    const QString settingsIface = QString(PhosphorProtocol::Service::Interface::Settings);
+    subscribeDaemonSignal(settingsIface, QStringLiteral("settingsChanged"), SLOT(onExternalSettingsChanged()));
+    // A reload that moved only Editor.* settings (typically the layout
+    // editor's own write) is announced on its own signal, so the daemon's
+    // other settingsChanged subscribers are spared it.
+    subscribeDaemonSignal(settingsIface, QStringLiteral("editorSettingsChanged"),
+                          SLOT(onExternalEditorSettingsChanged()));
+    // Not runningChanged: the daemon takes its bus name before its config
+    // migration runs, so a look at config.json then can still find the file
+    // the migration is about to move aside. daemonReady comes after.
+    subscribeDaemonSignal(QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("daemonReady"),
+                          SLOT(onDaemonReady()));
+
+    // Async window picker reply channel. Emitted by SettingsAdaptor whenever
+    // the KWin effect answers a runningWindowsRequested call via
+    // provideRunningWindows(). The signal carries the JSON payload directly
+    // so clients don't need a follow-up blocking fetch.
+    subscribeDaemonSignal(settingsIface, QStringLiteral("runningWindowsAvailable"),
+                          SLOT(onRunningWindowsAvailable(QString)));
+
+    // Connect layout D-Bus signals for live updates — route through the 50 ms
+    // scheduleLayoutLoad() debounce slot so a burst of signals (e.g. editor
+    // save → layoutChanged + layoutListChanged together, or KCM property
+    // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
+    // one loadLayoutsAsync() call instead of recomputing the full preview
+    // list + D-Bus round-trip for every hit.
+    const QString layoutIface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutCreated"), SLOT(scheduleLayoutLoad()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutDeleted"), SLOT(scheduleLayoutLoad()));
+    // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutChanged"), SLOT(scheduleLayoutLoad()));
+    // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
+    // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
+    // triggers a full reload so the layout list view refreshes, but the daemon side
+    // saved a full JSON serialization per mutation by not emitting layoutChanged.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutPropertyChanged"), SLOT(scheduleLayoutLoad()));
+    // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutListChanged"), SLOT(scheduleLayoutLoad()));
+    // scrollingTemplatesChanged fires on template store CRUD (save, delete,
+    // duplicate, rescan) — reload the LOCAL read view first so the bundle's
+    // template source and export/open-file answer fresh, then the debounced
+    // layout reload refreshes the cards.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("scrollingTemplatesChanged"),
+                          SLOT(onScrollingTemplatesChanged()));
+    // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
+    subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
+                          SLOT(onScreenLayoutChanged(QString, QString, int)));
+    // activeLayoutForScreenChanged reports a change to a screen's resolved
+    // layout, whether a desktop switch, a rule edit or an assignment edit
+    // moved it, where screenLayoutChanged reports only assignment edits.
+    // screenStatesChanged reports a change to any field getScreenStates
+    // answers except the display names, so a desktop or activity switch that keeps the layout and a
+    // change in a screen's tiled-window count arrive too. All three re-read
+    // the cached screen states the Rules page's monitor tiles evaluate
+    // against. The Rules page coming into view and the window regaining
+    // focus re-read them as well, which also covers a signal missed while the
+    // daemon was restarting.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("activeLayoutForScreenChanged"),
+                          SLOT(scheduleScreenStatesRefresh()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("screenStatesChanged"), SLOT(scheduleScreenStatesRefresh()));
+    // quickLayoutSlotsChanged fires when quick layout slots are modified externally
+    subscribeDaemonSignal(layoutIface, QStringLiteral("quickLayoutSlotsChanged"), SIGNAL(quickLayoutSlotsChanged()));
+
+    // Connect virtual desktop / activity D-Bus signals for reactive updates
+    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopCountChanged"), SLOT(onVirtualDesktopsChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopNamesChanged"), SLOT(onVirtualDesktopsChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("activitiesChanged"), SLOT(onActivitiesChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
+
+    // Strip wake-ups for the Monitors page's live thumbnail. Relayed straight
+    // to the QML-facing signal rather than through a slot: this side adds no
+    // state, and the page that draws the strip owns both the coalescing and
+    // the decision to re-read (its timer owns EVERY strip read, so a read
+    // started here would be a second one in the same frame).
+    //
+    // The relayed signal carries the daemon's contract with it: a wake-up,
+    // not a difference. It fires per step of a drag and can fire without a
+    // visible tile moving, so a receiver coalesces and compares rather than
+    // repainting on every hit. It is also one-directional — a settings or
+    // template push can reshape the strip without emitting it at all — so the
+    // page's periodic poll stays as the backstop for what it misses, along
+    // with an emission that arrived while the daemon was down and a placement
+    // change on a context that only later becomes current.
+    const QString scrollingIface = QString(PhosphorProtocol::Service::Interface::Scrolling);
+    subscribeDaemonSignal(scrollingIface, QStringLiteral("stripChanged"), SIGNAL(scrollingStripChanged(QString)));
+
+    // Screen geometry changes, a settled fractional scale among them, refresh
+    // the cached primary scale that recalcLocalLayouts reads. Not filtered to
+    // the primary screen here: the refresh asks for the current primary and
+    // reloads only on a real change, so a change on another screen costs one
+    // asynchronous round trip and nothing else.
+    subscribeDaemonSignal(QString(PhosphorProtocol::Service::Interface::Screen),
+                          QStringLiteral("screenGeometryChanged"), SLOT(refreshPrimaryScreenScale()));
+
+    // Window-rules → settings-side mirror store. The daemon owns
+    // rules.json; when it persists a change via setAllRules() the
+    // adaptor emits `rulesChanged(persisted)`. Without this hook the
+    // settings-app's `m_localRuleStore` (which backs the in-process
+    // LayoutRegistry's assignment cascade) keeps serving the snapshot
+    // it scanned at process start, so daemon-driven rule edits don't
+    // affect the settings-side layout preview computation until the
+    // next launch. RuleStore::load() is idempotent — a no-change
+    // reload doesn't re-emit rulesChanged (per its documented contract).
+    //
+    // The RuleController also subscribes to this same broadcast
+    // on its own connection to drive its model reload; the two
+    // subscriptions are independent and the daemon delivers each
+    // sessionBus().connect target separately.
+    const QString rulesIface = QString(PhosphorProtocol::Service::Interface::Rules);
+    const bool rulesOk = QDBusConnection::sessionBus().connect(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath), rulesIface,
+        QStringLiteral("rulesChanged"), this, SLOT(reloadLocalRuleStore(bool)));
+    if (!rulesOk) {
+        qCWarning(PlasmaZones::lcCore) << "SettingsController: failed to connect D-Bus signal rulesChanged on"
+                                       << rulesIface;
+        failedSubscriptions.append(rulesIface + QStringLiteral(".rulesChanged"));
+    }
+}
+
+void SettingsController::reloadLocalRuleStore(bool persisted)
+{
+    Q_UNUSED(persisted)
+    // Reload the on-disk rules.json mirror. Idempotent — the store's
+    // load() compares hashes and only emits rulesChanged when the file
+    // content actually differs from the in-memory set, so a same-process
+    // round-trip (the unlikely case of our own apply triggering this) is
+    // free of feedback amplification.
+    if (m_localRuleStore) {
+        m_localRuleStore->load();
+    }
+}
+
+} // namespace PlasmaZones

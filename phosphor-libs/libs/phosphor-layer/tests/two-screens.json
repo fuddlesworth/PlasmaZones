@@ -1,0 +1,39 @@
+{
+    "_comment": [
+        "SPDX-FileCopyrightText: 2026 fuddlesworth",
+        "SPDX-License-Identifier: LGPL-2.1-or-later",
+        "",
+        "Offscreen-QPA screen configuration for pl_test_registry.",
+        "",
+        "syncToScreens() drops the surfaces belonging to a screen that went away.",
+        "Observing that needs two outputs: with the single screen the offscreen",
+        "plugin provides by default, removing it leaves nothing to compare the",
+        "survivors against, and the test skipped itself with 'Need at least two",
+        "screens'.",
+        "",
+        "The offscreen platform plugin accepts this file via",
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>."
+    ],
+    "screens": [
+        {
+            "name": "TEST-0",
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        },
+        {
+            "name": "TEST-1",
+            "x": 1920,
+            "y": 0,
+            "width": 1280,
+            "height": 1024,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        }
+    ]
+}

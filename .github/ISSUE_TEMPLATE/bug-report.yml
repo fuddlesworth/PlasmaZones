@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Bug report
+description: Something doesn't work, crashes or behaves wrong
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please search the open and closed issues first, in case it is already known.
+
+        The support report below is required. It carries your PlasmaZones, Plasma, Qt and kernel versions, your settings, layouts and rules, and recent logs, so you don't need to type any of that out.
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Placement mode
+      description: The mode the screen where it happens is running.
+      options:
+        - Snapping
+        - Tiling
+        - Scrolling
+        - More than one
+        - Not related to a mode (settings app, editor, shortcuts, effects)
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Snap a window to a zone
+        2. Move it to another desktop
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Support report
+      description: |
+        Run `plasmazones-report` in a terminal and drag the `.tar.gz` file it names here. It is written to `/tmp` (or `$TMPDIR`) with home paths redacted, but it still contains window titles, your rule patterns and the model and serial number of your monitors, so look it over before posting it.
+        If the command fails because PlasmaZones isn't running, paste its output here along with the output of `journalctl --user -b -t plasmazonesd`.
+      placeholder: Drop the plasmazones-report .tar.gz file here
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or video
+      description: Optional. Drag them here.

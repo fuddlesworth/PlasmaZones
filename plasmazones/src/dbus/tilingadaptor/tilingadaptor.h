@@ -1,0 +1,948 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "plasmazones_export.h"
+
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <QDBusAbstractAdaptor>
+#include <QPointer>
+#include <QHash>
+#include <QObject>
+#include <QSet>
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QVariant>
+#include <QVector>
+
+#include <functional>
+#include <optional>
+
+namespace PhosphorScreens {
+class ScreenManager;
+}
+
+namespace PhosphorEngine {
+class IPlacementEngine;
+class WindowRegistry;
+struct WindowMetadata;
+}
+
+namespace PlasmaZones {
+
+class WindowTrackingAdaptor;
+
+/**
+ * @brief D-Bus adaptor for the shared tiling-family transport
+ *
+ * Provides D-Bus interface: org.plasmazones.Tiling
+ *
+ * The engine-NEUTRAL wire surface shared by every tiling-family placement
+ * engine (autotile, scrolling): the effect keeps ONE engine-managed screen
+ * set and ONE tile-apply pipeline, so window lifecycle notifications flow
+ * in through this interface and geometry/focus/float requests flow out of
+ * it, regardless of which engine owns the screen. The adaptor dispatches
+ * per screen/window through IPlacementEngine only — it never sees a
+ * concrete engine type. Engine-SPECIFIC verbs live on the sibling
+ * interfaces org.plasmazones.Autotile and org.plasmazones.Scrolling.
+ *
+ * All engine→adaptor signal connections are made at the composition root
+ * (init_engines.cpp), not by the adaptor itself. Most land on a relay entry
+ * point that gates or reshapes the payload before the D-Bus signal goes out.
+ * focusWindowRequested is the exception, and the only unconditional direct
+ * signal-to-signal forward from both engines, because there is nothing to
+ * gate. tilingChanged is a direct forward from the autotile engine but a
+ * GATED relay from the scroll engine, which drops the tick while edge
+ * auto-scroll is running (see the connect in init_engines.cpp).
+ */
+class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Tiling")
+
+    Q_PROPERTY(bool enabled READ enabled NOTIFY enabledChanged)
+    Q_PROPERTY(QStringList managedScreens READ managedScreens NOTIFY managedScreensChanged)
+    Q_PROPERTY(QVariantMap activeLayouts READ activeLayouts NOTIFY activeLayoutsChanged)
+
+public:
+    /**
+     * @brief Construct a TilingAdaptor
+     *
+     * @param screenManager Screen manager (for panel-geometry deferral)
+     * @param parent Parent QObject (typically the daemon)
+     */
+    explicit TilingAdaptor(PhosphorScreens::ScreenManager* screenManager, QObject* parent = nullptr);
+    ~TilingAdaptor() override = default;
+
+    /// Wire the WindowTrackingAdaptor (post-construction, to break the
+    /// construction-order cycle) so the tiling open path can resolve
+    /// RouteToScreen / RouteToDesktop rules, and a window the snap open path
+    /// routes onto a tiling screen reaches its engine. Pass nullptr on shutdown.
+    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta);
+
+    /// Set the ordered list of engines sharing this interface's lifecycle
+    /// pipeline (primary first — it is the fallback when no engine claims a
+    /// screen/window mid-transition). The adaptor dispatches each inbound
+    /// lifecycle call to whichever listed engine owns the screen/window —
+    /// through IPlacementEngine only. A further engine joining the pipeline
+    /// is one list entry here plus its outbound-signal connects at the
+    /// composition root (wired to the relay entry points below).
+    /// Engines are borrowed. Teardown goes through clearEngine(), which also
+    /// voids the announce generation and every per-session queue/dedup cache
+    /// — the empty-list form of THIS setter clears only the parked opens and
+    /// exists for symmetry, with no production caller.
+    void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Engines that take part in DESKTOP-MEMBERSHIP reconciliation but not in
+    /// the lifecycle pipeline — snapping.
+    ///
+    /// Separate from setLifecycleEngines on purpose. That list drives window
+    /// dispatch, the replay cache and the relay entry points, and snapping
+    /// belongs to none of them; but a window that leaves a desktop must stop
+    /// being an occupant of the zone it was snapped into, because zone
+    /// occupancy is queried across EVERY store rather than the one in view, so
+    /// a stale entry stays a live navigation target. Their releases come
+    /// out of their own membership pass (reconcileWindowMemberships), and the
+    /// adaptor re-captures the record and tells the effect's zone cache,
+    /// rather than running the pipeline release, which carries re-announce
+    /// bookkeeping they have no use for. Borrowed; cleared by clearEngine().
+    void setMembershipEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
+
+    /// Subscribe to the compositor-fed WindowRegistry so a window's CONTEXT
+    /// membership is reconciled against the engine states here, in the one
+    /// place that can see every state at once, whatever context is in view.
+    ///
+    /// Desktop AND activity, the two axes of the state key a window moves
+    /// along. Both strand a slot the same way, and both are answered from the
+    /// registry rather than from what the compositor happens to be showing.
+    ///
+    /// Every prior fix for "a window moved between virtual desktops left its
+    /// slot behind" (#1076 and its family) added an arm to the KWin effect,
+    /// which decides whether to release a window from proxies of the desktop
+    /// in view: the managed-screen set, the tracked set, the catch-scan on
+    /// desktop return. None of those knows which desktop's state still lists
+    /// the window, so each (window moved, desktop in view, mode per desktop)
+    /// combination needed its own arm and each was a place to forget one.
+    /// The engines own the membership, and the registry carries the
+    /// window's authoritative desktop set, so the invariant is enforced here:
+    /// whenever a window's desktop set changes, any state holding it under a
+    /// desktop the window no longer belongs to releases it. The effect's arms
+    /// keep doing their effect-side work (pre-tile stash, decoration) and
+    /// their placement of the arrival; the membership question is no longer
+    /// theirs. Pass nullptr on shutdown. Not owned.
+    ///
+    /// Both sides speak x11 desktop NUMBERS, which Plasma renumbers when a desktop is added, removed or moved in
+    /// the middle. That is safe only because the daemon re-keys the scroll engine's state and the registry's
+    /// records on every such change (IPlacementEngine::remapDesktops, WindowRegistry::remapDesktops), and snap's
+    /// and autotile's on a removal only; without it the numberings drift and every window on a shifted desktop
+    /// reads as having left it (an insert or a move still does that for snap and autotile). A screen
+    /// pinned to one desktop is the other case where the key is not a
+    /// compositor desktop, and the reconcile skips those.
+    ///
+    /// Snapping is in scope, through setMembershipEngines rather than the
+    /// lifecycle list. It has no stack to close a gap in, so it takes no part
+    /// in the reflow half, but a zone assignment left behind on a desktop the
+    /// window has left is not merely stale bookkeeping: zone occupancy is read
+    /// across every store, so the entry stays a live navigation target.
+    void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
+
+    /// The reconcile setWindowRegistry subscribes: run every engine's
+    /// per-window membership pass for @p windowId against @p span, so the
+    /// contexts the window left are released and the context its screen is
+    /// showing is adopted when the span covers it. Both movable axes of the
+    /// key, desktop and activity; an unknown span (no desktop stamped yet)
+    /// changes nothing. The screen is the third component and deliberately
+    /// not part of it: a window does not leave a screen the way it leaves a
+    /// desktop, and the effect relays an output transfer with its own release.
+    ///
+    /// A window that holds no context in a lifecycle engine afterwards is
+    /// released from the pipeline with the bookkeeping the engine cannot do
+    /// itself; a snap release re-captures the record and tells the effect's
+    /// zone cache.
+    ///
+    /// Public so the contract is testable directly, without driving a registry
+    /// round-trip to reach it.
+    void reconcileWindowMembership(const QString& windowId, const PhosphorEngine::DesktopSpan& span);
+
+    /// What decides whether a window is in view: its screen and its registry span.
+    using InViewTest = std::function<bool(const QString& screenId, const PhosphorEngine::DesktopSpan& span)>;
+    /// First half of the removed-desktop re-adoption (F800). KWin moves a
+    /// removed desktop's windows to its successor, but the engines still
+    /// number their states the old way when the daemon's renumber runs, so
+    /// pruneStatesForDesktop releases those windows with the context. Called
+    /// before the renumber's prunes: remembers each of @p candidates a
+    /// lifecycle engine holds on one of @p removedDesktops, with its screen
+    /// and minimum size.
+    void noteRenumberEvictees(const QStringList& candidates, const QSet<int>& removedDesktops);
+    /// Second half, called once the renumber has moved every engine and the
+    /// window registry and each screen has been told the desktop it shows:
+    /// a remembered window no lifecycle engine holds any more, not minimized,
+    /// on a screen a lifecycle engine runs and in view by @p inView, goes back
+    /// to that engine with no open claim and no rule routing. A window out
+    /// of view is left to the desktop switch's re-announce. The list is
+    /// dropped either way, and an empty @p inView only drops it.
+    void readoptRenumberEvictees(const InViewTest& inView);
+
+    /// The screen-wide form: every engine gives every window whose span
+    /// covers @p screenId's current context a place in it and takes back the
+    /// places the span no longer covers. The daemon runs it after a desktop
+    /// switch on that screen and, for every screen, after an activity switch,
+    /// once the engines' active-screen sets have been recomputed for the new
+    /// context (the tiling engines gate on that set).
+    void reconcileDesktopMemberships(const QString& screenId);
+
+    // ── Engine relay entry points ────────────────────────────────────────
+    // The composition root connects every pipeline engine's signals here
+    // (this adaptor makes no engine connections itself, keeping it
+    // type-agnostic).
+
+    /// Tile-request JSON from any pipeline engine (the engines' windowsTiled
+    /// payload contract) — parsed and re-emitted as windowsTileRequested.
+    /// While a coalesced screens announce is queued the batch is HELD and
+    /// goes out right behind it (m_tileBatchesHeldForAnnounce documents why).
+    void relayTileRequestsJson(const QString& tileRequestsJson);
+    /// Float-state relay with the last-broadcast dedup gate — REQUIRED for
+    /// every producer since multiple engines feed one D-Bus signal.
+    void relayWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+    /// Released-window relay (the in-process signal's QSet argument is not
+    /// D-Bus-marshallable; the caller strips it).
+    void relayWindowsReleased(const QStringList& windowIds);
+    /// Screen-set change on any pipeline engine: re-emits the UNION set
+    /// plus the enabled state (they flip together). COALESCED onto a 0ms
+    /// single shot: a mode flip moves a screen between two engines in one
+    /// synchronous pass, and announcing after the FIRST engine's change
+    /// would broadcast an intermediate union without the screen — the
+    /// effect would run its full per-window restore and immediately re-add
+    /// (restore-then-retile churn). One deferred emission carries the final
+    /// state of the whole pass.
+    void notifyEngineScreensChanged(bool isDesktopSwitch);
+    /// Run @p work right behind a queued screens announce, or now when none
+    /// is queued. For a placement the effect judges against the managed set
+    /// it last heard: a desktop switch off a scrolling desktop re-applies snap
+    /// zones and re-states single windows in the same pass that queues the
+    /// announce, and sent first, those were judged as if the screen still
+    /// tiled (#1151). SnapAdaptor hands every zone batch and re-statement it
+    /// emits through here. Runs after the held tile batches, in arrival
+    /// order, and is swept by clearEngine with the announce. The work runs
+    /// behind whichever announce goes out next, whether or not the effect
+    /// accepts it.
+    void runBehindScreensAnnounce(std::function<void()> work);
+    /// Per-screen tab-indicator model from the scroll engine, cached for the
+    /// scrollTabStrips replay query and re-emitted as scrollTabStripsChanged.
+    /// A "[]" (or empty) payload retracts the screen: the cache entry is
+    /// dropped rather than stored, so a replaying effect sees the screen
+    /// absent instead of having to special-case an empty array. Ungated
+    /// otherwise — the scroll engine already gates on its own last payload
+    /// (m_lastTabStripPayload in engine_apply.cpp) and emits only on a real
+    /// model change, so a second gate here could only duplicate that one.
+    void relayScrollTabStrips(const QString& screenId, const QString& stripsJson);
+    /// Per-screen tab-indicator PAINT overrides resolved from context rules
+    /// (a Set tab style / colour rule scoped to a screen, desktop or
+    /// activity): the ScrollTab paint keys, keyed by WindowPaintKeys /
+    /// WindowColorKeys spellings. That is tabStyle, gapsBetweenTabs,
+    /// cornerRadius, the three colours and the five font keys — eleven in all,
+    /// as ServiceConstants.h describes the same map. Only the keys a
+    /// rule actually set are present. An EMPTY map clears the screen (the
+    /// cache entry is dropped, the signal carries the empty map so the effect
+    /// falls back to the global settings). Change-gated: the daemon resolves
+    /// these on every per-screen config pass, most of which change nothing.
+    void setScrollTabPaintOverrides(const QString& screenId, const QVariantMap& overrides);
+    /// Clear the tab paint overrides of every screen @p pred accepts, by
+    /// pushing an empty map through setScrollTabPaintOverrides (so each
+    /// cleared screen gets its empty-map signal and the effect falls back to
+    /// the global look). The predicate lives with the caller for the same
+    /// reason as OverlayService::clearScrollDropIndicatorOverridesWhere: which
+    /// screen ids still exist is the daemon's knowledge, which ids this
+    /// adaptor holds state for is ours. Needed because the ordinary
+    /// departing-screen clear runs off the engine's active set, which a
+    /// hot-removed screen has already left.
+    void clearScrollTabPaintOverridesWhere(const std::function<bool(const QString&)>& pred);
+    /// All-windows tab-colour invalidation broadcast (empty id, empty map).
+    /// Fired from the daemon's rules-changed and colour-scheme triggers, both
+    /// of which move every window's verdict at once. Nothing is resolved here:
+    /// the receiver re-queries scrollTabColors for the windows it paints.
+    void relayScrollTabColorsChanged();
+    /// Targeted tab-colour re-drive for ONE window, fired by the daemon when
+    /// that window's registry record changes (a tab-colour rule on its title,
+    /// state flags or desktop can flip with no rules edit, F699). Resolves
+    /// through the WTA and carries the map, so the effect does not have to
+    /// round-trip a query.
+    ///
+    /// Gated on the strip cache naming the window: the effect only paints
+    /// pills for windows that are tabs, so relaying for anything else would
+    /// grow its per-window colour cache with entries it never draws, on every
+    /// record change of every window in the session. The effect evicts a window's
+    /// cached verdict when it stops being a tab anywhere, so a window that
+    /// becomes a tab (again) is re-queried when its strip arrives and cannot
+    /// carry a verdict this relay skipped while it was not a tab. Change-gated
+    /// on the resolved map as well.
+    void relayScrollTabColorsForWindow(const QString& windowId);
+    /// Enabled-state change on any pipeline engine: re-emits the combined
+    /// any-engine-enabled state (deduped — multiple engines feed the one
+    /// signal, same rationale as the float-broadcast gate).
+    void relayEnabledChanged();
+
+    /**
+     * @brief Number of windowOpened entries waiting for panel geometry
+     *
+     * Observable state for tests: returns the size of the deferred
+     * windowOpened queue (see windowsOpenedBatch rationale).
+     * Always zero once @c panelGeometryReady has fired.
+     */
+    int pendingWindowOpensCount() const;
+    /// Test seam: the deferral queue's capacity, so the overflow-valve test
+    /// trips the real cap rather than hardcoding a number that would silently
+    /// stop testing the valve if @c kMaxPendingOpens were retuned.
+    static constexpr int pendingWindowOpensCapacity()
+    {
+        return static_cast<int>(kMaxPendingOpens);
+    }
+    /// Test seam: parked mid-flip opens awaiting the screens-announce
+    /// retry (the m_unclaimedOpens queue).
+    int pendingUnclaimedOpensCount() const
+    {
+        return m_unclaimedOpens.size();
+    }
+    /// Test seam: tile batches held behind the pending screens announce
+    /// (the m_tileBatchesHeldForAnnounce queue).
+    int pendingHeldTileBatchCount() const
+    {
+        return m_tileBatchesHeldForAnnounce.size();
+    }
+
+    // Property accessors
+    bool enabled() const;
+    QStringList managedScreens() const;
+    QVariantMap activeLayouts() const
+    {
+        return m_activeLayouts;
+    }
+
+    /// Daemon-facing push of the per-screen rules-visible active layout map
+    /// (screenId → snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>"
+    /// / bare sentinel). Owns the emit-on-change gate — the daemon pushes
+    /// unconditionally from every updateEngineScreens pass, and multiple
+    /// triggers (desktop switch, rule edit, template swap) collapse to one
+    /// broadcast per actual change (same rationale as relayEnabledChanged).
+    /// Deliberately NOT cleared by clearEngine(): a restart's fresh push
+    /// covers it, and broadcasting an empty map at shutdown would make the
+    /// effect misfire negated ActiveLayout rules against a daemon that is
+    /// merely restarting (mirrors the empty-union guard in the coalesced
+    /// screens announce). The effect's bring-up Properties.Get self-corrects
+    /// any window where a rule query ran before the first push landed.
+    void setActiveLayouts(const QVariantMap& activeLayouts);
+
+public Q_SLOTS:
+    /**
+     * @brief Force retiling of windows
+     * @param screenId Screen to retile, or empty for all screens
+     */
+    void retile(const QString& screenId);
+
+    /**
+     * @brief Force retiling of all engine-managed screens
+     *
+     * External-client convenience (equivalent to retile("")) — no in-tree
+     * caller remains; the effect's border-width handler stopped retiling
+     * when the geometry-inset border era ended. Kept as contract surface.
+     */
+    void retileAllScreens();
+
+    /**
+     * @brief Notify the engine that a window was opened
+     *
+     * Called by KWin effect when a window genuinely opens. Routes the window
+     * to whichever pipeline engine owns the (possibly rule-routed) screen.
+     * The only announce that may take focus ("Focus new windows").
+     *
+     * @param windowId Window identifier from KWin
+     * @param screenId Screen where the window appeared
+     * @param minWidth Window minimum width in pixels (0 if unconstrained)
+     * @param minHeight Window minimum height in pixels (0 if unconstrained)
+     */
+    void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+
+    /**
+     * @brief Hand an already-shown window (back) to the tiling engines
+     *
+     * Same placement as windowOpened, for a window that did not just open: a
+     * desktop-switch catch-scan, a cross-output re-add, an unminimize. A
+     * re-placement never takes focus, so KWin's own pick stands.
+     */
+    void windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+
+    /**
+     * @brief Batch window-opened notifications
+     *
+     * Processes multiple windowOpened in one D-Bus call. Used on daemon
+     * startup/restart and mode toggle-on to avoid per-window D-Bus
+     * round-trips.
+     *
+     * Compositor-only (DbusHelpers::admitCompositorReport, #1155): any bus
+     * caller but the registered bridge is answered with AccessDenied. The
+     * bridge is trusted on size: batch size is deliberately unbounded on the
+     * panel-ready path (the deferral queue's kMaxPendingOpens is a depth
+     * valve that processes on overflow, never a drop cap), and the numeric
+     * in-args are sign-clamped only.
+     *
+     * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
+     */
+    void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
+
+    /**
+     * @brief Update a window's minimum size at runtime
+     *
+     * Called by KWin effect when a window's minimum size changes after
+     * initial windowOpened. Triggers retiling if the value differs.
+     *
+     * @param windowId Window identifier from KWin
+     * @param minWidth New minimum width in pixels (0 if unconstrained)
+     * @param minHeight New minimum height in pixels (0 if unconstrained)
+     */
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+
+    /**
+     * @brief Notify the engine that a window was closed
+     *
+     * Called by KWin effect when a window is closed. Removes the window
+     * from its owning engine's tracking and triggers retiling.
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void windowClosed(const QString& windowId);
+
+    /**
+     * @brief Drop a LIVE window from engine tracking without a close
+     *
+     * The effect's tracking drops for a window that stays open, such as one
+     * crossing to another output or desktop, floated onto another screen, or
+     * no longer tileable. The desktop-membership reconcile is a further
+     * caller and goes through the private overload below.
+     * Unlike windowClosed, NO placement capture runs: the window is not
+     * dying, and its current frame is transient state that must never be
+     * recorded as a float-back.
+     *
+     * The owning engine is resolved by window id, which is right for these
+     * callers because each is the effect telling the daemon about a window
+     * whose engine it does not know. reconcileWindowMembership has already
+     * identified the holding engine and uses the private overload instead.
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void releaseWindowTracking(const QString& windowId);
+
+    /**
+     * @brief Notify the daemon that a window has been focused
+     *
+     * Called by KWin effect when a window gains focus. This allows the
+     * owning engine to track the focused window for focus cycling and
+     * updates the window-to-screen mapping for correct per-screen tiling.
+     *
+     * @param windowId Window ID that gained focus
+     * @param screenId Screen where the window is located
+     */
+    void notifyWindowFocused(const QString& windowId, const QString& screenId);
+
+    /**
+     * @brief Every screen's current tab-indicator model
+     *
+     * Replay half of scrollTabStripsChanged, for an effect that loads after
+     * the strips were last laid out. Screens with no tabbed column are
+     * absent from the map.
+     *
+     * @return screenId → tab-strip JSON string
+     */
+    QVariantMap scrollTabStrips() const;
+
+    /**
+     * @brief Every screen's current tab-indicator paint overrides
+     *
+     * Replay half of scrollTabPaintOverridesChanged, for an effect that loads
+     * after the overrides were last resolved. Screens with no override are
+     * absent from the map.
+     *
+     * @return screenId → QVariantMap of paint/colour key to value
+     */
+    QVariantMap scrollTabPaintOverrides() const;
+
+    /**
+     * @brief Per-window tab colours resolved from the window rules
+     *
+     * Delegates to WindowTrackingAdaptor::tabColorRuleParams (which owns the
+     * resolve and its memo). Empty map when no WTA is wired or no rule sets a
+     * tab colour for the window.
+     *
+     * @param windowId Window ID to resolve colours for
+     * @return activeColor / inactiveColor / urgentColor → colour string
+     */
+    QVariantMap scrollTabColors(const QString& windowId);
+
+    /**
+     * @brief Replay of the last tile batch that named a screen
+     *
+     * The placement map's bring-up read: a JSON array of the last
+     * windowsTileRequested batch's entries for @p screenId, with the keys
+     * relayTileRequestsJson parses (windowId, x, y, width, height, screenId,
+     * monocle, floating) plus zoneId, which the parser does not read: it is
+     * reserved and always empty. One batch per screen, replaced by each
+     * newer batch naming it; entries are pruned when their window closes or
+     * is released, and the screen's batch is dropped when it leaves the
+     * managed set. "[]" when nothing is held. Implemented in mapmodel.cpp.
+     *
+     * @param screenId Screen whose last batch to replay
+     * @return JSON array string
+     */
+    QString currentTilesJson(const QString& screenId) const;
+
+    /**
+     * @brief The engine-managed focused window on a screen
+     *
+     * Routed to whichever pipeline engine claims @p screenId (strict
+     * ownership, no primary fallback: a screen nobody owns has no managed
+     * focus). Empty for a snapping screen, which is outside this pipeline.
+     * The live answer, not the broadcast memory. Implemented in mapmodel.cpp.
+     *
+     * @param screenId Screen to ask about
+     * @return Window id, or empty
+     */
+    QString managedFocusedWindow(const QString& screenId) const;
+
+    // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
+    // all float operations are now routed through the unified methods —
+    // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
+    // org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional.
+
+Q_SIGNALS:
+    /**
+     * @brief Emitted when the pipeline enabled state changes
+     * @param enabled True while any pipeline engine is enabled
+     */
+    void enabledChanged(bool enabled);
+
+    /**
+     * @brief Emitted when the set of engine-managed screens changes
+     *
+     * Also re-emitted with an UNCHANGED set on a desktop/activity switch
+     * between contexts with identical NON-EMPTY managed sets
+     * (isDesktopSwitch=true, discussion #219) — the effect's catch-scan keys
+     * on that wakeup; an empty identical set skips the re-emit.
+     *
+     * @param screenIds List of screen IDs currently engine-managed
+     * @param isDesktopSwitch True if the change is due to desktop/activity switch
+     * @param screenDesktops screenId -> virtual desktop (int) the announced set
+     *        was RESOLVED AGAINST. See the interface XML for why the stamp is
+     *        required rather than informational: without it a receiver cannot
+     *        distinguish a late announce for the desktop it just left from a
+     *        fresh one for the desktop it is on. Every screen the daemon can
+     *        resolve a desktop for is stamped, not only the announced ones —
+     *        the receiver's destructive pass is driven by the REMOVED set.
+     */
+    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
+
+    /**
+     * @brief Emitted when any screen's rules-visible active layout changes
+     *
+     * The KWin effect listens to this to stamp Field::ActiveLayout onto its
+     * window-domain rule queries and to invalidate its rule-verdict caches.
+     *
+     * @param activeLayouts screenId → rules-visible active layout id string
+     */
+    void activeLayoutsChanged(const QVariantMap& activeLayouts);
+
+    /**
+     * @brief Emitted when tiling layout changes for a screen
+     * @param screenId Screen that was retiled
+     */
+    void tilingChanged(const QString& screenId);
+
+    /**
+     * @brief Emitted when windows should be moved to new geometries (batch)
+     *
+     * The KWin effect listens to this signal and applies geometries to all
+     * windows in a single slot invocation, avoiding race conditions when
+     * many windows are retiled (e.g. rotate).
+     *
+     * @param tileRequests Typed list of TileRequestEntry structs, wire shape
+     *        a(siiiissbbbbssiiibsb): (windowId, x, y, width, height, zoneId,
+     *        screenId, monocle, floating, windowedFullscreen, maximizedToEdges,
+     *        stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos,
+     *        tabFrom, viewImmediate)
+     */
+    void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
+
+    /**
+     * @brief Emitted when a window should be focused
+     *
+     * The KWin effect listens to this signal and activates the specified window.
+     *
+     * @param windowId Window ID to focus
+     */
+    void focusWindowRequested(const QString& windowId);
+
+    /**
+     * @brief Emitted when windows are released from engine management
+     *
+     * Fired when screens leave an engine-managed mode (e.g., switching to
+     * manual snapping). NOTE: no effect-side subscriber exists — the
+     * restore actually runs through the daemon-internal in-process
+     * `windowsReleased` wiring plus the resnap path; this D-Bus signal is
+     * external contract surface only.
+     *
+     * NOTE: This is the D-Bus-facing signal and carries only @p windowIds —
+     * the in-process `PlacementEngineBase::windowsReleased` signal
+     * additionally carries a `QSet<QString>` of released screen IDs for
+     * internal daemon wiring. QSet is not marshallable over D-Bus, so the
+     * relay strips that second argument before forwarding.
+     *
+     * @param windowIds Window IDs no longer under engine control
+     */
+    void windowsReleasedFromTiling(const QStringList& windowIds);
+
+    /**
+     * @brief Emitted when a screen's tab-indicator model changes
+     *
+     * The KWin effect listens to this to paint tab pills on tabbed scrolling
+     * columns. See the XML DocString for the JSON shape; "[]" retracts the
+     * screen's indicators.
+     *
+     * @param screenId Effective screen id the model belongs to
+     * @param stripsJson JSON array of tabbed-column entries
+     */
+    void scrollTabStripsChanged(const QString& screenId, const QString& stripsJson);
+
+    /**
+     * @brief A screen's context-rule tab-indicator paint overrides changed
+     *
+     * @param screenId Effective screen id
+     * @param overrides Paint/colour key to value; empty clears the screen
+     */
+    void scrollTabPaintOverridesChanged(const QString& screenId, const QVariantMap& overrides);
+
+    /**
+     * @brief Emitted when rule-resolved tab colours may have changed
+     *
+     * Two shapes. The BROADCAST (relayScrollTabColorsChanged) carries two
+     * empty arguments and means "every window's verdict may have moved" — the
+     * receiver re-queries scrollTabColors for the windows it paints. The
+     * TARGETED form (relayScrollTabColorsForWindow) names one window and
+     * carries its resolved map, so no query is needed.
+     *
+     * @param windowId Window whose colours changed, empty for the broadcast
+     * @param colors Resolved colours; empty on the broadcast, and also on a
+     * targeted relay for a window with no tab-colour rule (windowId alone is
+     * the discriminator)
+     */
+    void scrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
+
+    /**
+     * @brief Emitted when a window's floating state changes in an engine
+     *
+     * The KWin effect listens to this signal to restore pre-tile geometry
+     * when floating, and to update its floating cache.
+     *
+     * @param windowId Window ID whose floating state changed
+     * @param isFloating New floating state
+     * @param screenId Screen where the window is located
+     */
+    void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+
+    /**
+     * @brief The engine-managed focused window on a screen changed
+     *
+     * Emit-on-change per screen (refreshFocusedWindow owns the gate and the
+     * memory). Empty @p windowId means nothing engine-managed holds focus
+     * there any more, including a screen that left the managed set.
+     *
+     * @param screenId Screen whose focused window changed
+     * @param windowId The window now focused there, or empty
+     */
+    void focusedWindowChanged(const QString& screenId, const QString& windowId);
+
+private Q_SLOTS:
+    /**
+     * @brief Flush any windowOpened events that were deferred waiting for panel geometry
+     *
+     * Connected to PhosphorScreens::ScreenManager::panelGeometryReady. See the rationale comment on
+     * windowsOpenedBatch() for why deferral is needed.
+     */
+    void flushPendingWindowOpens();
+
+private:
+    /**
+     * @brief Check that the pipeline has engines, logging warning if not
+     * @param methodName Name of the calling method for logging
+     * @return true if at least one pipeline engine is set
+     */
+    bool ensurePipeline(const char* methodName) const;
+
+    /**
+     * @brief Forward a single window-opened notification to its owning engine
+     *
+     * Shared tail between windowOpened(), windowsOpenedBatch(), and
+     * flushPendingWindowOpens() so all three paths validate arguments and
+     * invoke the engine identically.
+     */
+    void dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEntry& entry);
+    /// Shared body of windowOpened and windowReannounced: validation, the
+    /// panel-geometry deferral and the dispatch, with the entry stamped with
+    /// @p focusEligible ("Focus new windows" applies to genuine opens only).
+    void announceWindow(const char* method, const QString& windowId, const QString& screenId, int minWidth,
+                        int minHeight, bool focusEligible);
+
+    /**
+     * @brief Decide whether an incoming windowOpened must be deferred
+     *
+     * Returns true if panel geometry is not yet ready (the caller should queue the
+     * entry and return). Lazily connects flushPendingWindowOpens() on first deferral.
+     * Exposed as a helper so windowOpened() and windowsOpenedBatch() share the gate.
+     *
+     * @param incomingCount Entries the caller is about to queue — returns false
+     *        (process now, unreserved geometry) rather than growing the queue
+     *        past @c kMaxPendingOpens, draining the backlog first so replay
+     *        order still holds. See the overflow rationale in the body.
+     */
+    bool deferUntilPanelReady(qsizetype incomingCount);
+
+    /// Ceiling on the panel-geometry deferral queue. Sized well above any
+    /// plausible startup window count so the valve only trips when
+    /// panelGeometryReady never arrives.
+    static constexpr qsizetype kMaxPendingOpens = 512;
+
+    /// Merge every pipeline engine's active screen set for the D-Bus
+    /// screen-set surface (property read + change signal payload).
+    QStringList combinedManagedScreens() const;
+    /// Emit the batches parked in m_tileBatchesHeldForAnnounce, in order.
+    /// Called from the coalesced announce right after it emits.
+    void flushTileBatchesHeldForAnnounce();
+    /// The pipeline engine whose live set claims @p screenId, else the
+    /// primary (first) engine — screen-keyed dispatch for open/focus.
+    PhosphorEngine::IPlacementEngine* engineOwningScreen(const QString& screenId) const;
+    /// EVERY pipeline engine tracking @p windowId, in any context, primary
+    /// first: window-keyed dispatch for close, release and min-size. With
+    /// per-desktop modes a multi-desktop window is held by autotile on one
+    /// desktop and by scrolling on another at once, and a close or release
+    /// through only the first left the other's tile or column behind.
+    QVector<PhosphorEngine::IPlacementEngine*> enginesTrackingWindow(const QString& windowId) const;
+
+    /// Engines sharing the lifecycle pipeline, primary first (see
+    /// setLifecycleEngines). Interface-only borrows.
+    QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
+    /// Membership-only engines (snapping) — see setMembershipEngines.
+    QVector<PhosphorEngine::IPlacementEngine*> m_membershipEngines;
+    /// The registry subscription setWindowRegistry made, so a re-wire
+    /// replaces it rather than stacking a second reconcile per change.
+    QMetaObject::Connection m_registryDesktopConnection;
+    /// The registry the membership pass reads desktop spans from. Borrowed.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
+    /// A window's span as the engines' membership pass reads it, from its
+    /// registry metadata: sticky from the stamped bit (the service's own
+    /// report is the fallback), desktops from the span list or the single
+    /// desktop, unknown when neither is stamped.
+    PhosphorEngine::DesktopSpan spanFor(const PhosphorEngine::WindowMetadata& meta,
+                                        const QString& canonicalWindowId) const;
+    /// The query the engines' screen-wide pass takes, over the registry.
+    PhosphorEngine::DesktopSpanQuery desktopSpanQuery() const;
+    /// Drive the bookkeeping a membership pass leaves to the adaptor; see
+    /// reconcileWindowMembership.
+    void applyMembershipResult(PhosphorEngine::IPlacementEngine* engine, bool lifecycleEngine,
+                               const PhosphorEngine::MembershipReconcileResult& result);
+    /// A window noteRenumberEvictees found on a removed desktop.
+    struct RenumberEvictee
+    {
+        QString windowId;
+        QString screenId;
+        QSize minSize;
+    };
+    QList<RenumberEvictee> m_renumberEvictees;
+    /// Last floating state broadcast per window (the dedup gate's memory).
+    QHash<QString, bool> m_lastFloatBroadcast;
+    /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow
+    /// (its change gate's memory): a retitle that moves no verdict — the
+    /// common case, a window with no tab-colour rule retitling per command —
+    /// must not put a signal on the bus. Evicted beside m_lastFloatBroadcast
+    /// on close / destroy / prune, and dropped by clearEngine.
+    QHash<QString, QVariantMap> m_lastScrollTabColorsRelay;
+    /// Announce generation: bumped by clearEngine so a queued coalesced
+    /// announce from the previous session drops instead of pairing with a
+    /// restart's fresh announce (a double emit for one logical change).
+    quint64 m_announceGeneration = 0;
+    /// Coalescing state for notifyEngineScreensChanged (see its doc).
+    bool m_screensAnnouncePending = false;
+    bool m_pendingIsDesktopSwitch = false;
+    /// Tile batches relayed while the coalesced screens announce was still
+    /// queued, emitted in arrival order right behind it. The effect answers
+    /// a desktop-switch announce by voiding every in-flight staggered apply,
+    /// so a batch that reached it first lost every entry past the one it
+    /// applied synchronously (relayTileRequestsJson documents the shape).
+    /// Swept by clearEngine with the announce it was waiting on.
+    QList<PhosphorProtocol::TileRequestList> m_tileBatchesHeldForAnnounce;
+    /// runBehindScreensAnnounce's queue, in arrival order.
+    QList<std::function<void()>> m_workHeldForAnnounce;
+    /// Last enabled value broadcast (unset until the first emission).
+    std::optional<bool> m_lastEnabledBroadcast;
+    /// Last tab-strip payload per screen, the scrollTabStrips replay cache.
+    /// Retracted screens are removed, never stored as an empty array.
+    QHash<QString, QString> m_lastScrollTabStrips;
+    /// Last context-rule tab paint overrides per screen, the
+    /// scrollTabPaintOverrides replay cache. Cleared screens are removed.
+    QHash<QString, QVariantMap> m_scrollTabPaintOverrides;
+    /// Per-screen rules-visible active layout map (see setActiveLayouts).
+    QVariantMap m_activeLayouts;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
+    /// tiling open path can resolve RouteToScreen / RouteToDesktop rules
+    /// (the rule store + evaluator live on the WTA). Null in tests / when unset —
+    /// routing is then skipped and windows open on their spawn screen.
+    WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr;
+
+    // Window-opened events received before the first panel D-Bus query completed.
+    // Processing them immediately would compute zones against the unreserved screen rect
+    // (the s_availableGeometryCache in PhosphorScreens::ScreenManager is still empty), so we queue them
+    // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
+    PhosphorProtocol::WindowOpenedList m_pendingOpens;
+    bool m_pendingOpensListenerInstalled = false;
+    /// Opens that arrived while NO pipeline engine claimed their screen AND
+    /// a screens announce was pending (the mid-flip window). An
+    /// autotile↔scrolling flip keeps the UNION unchanged, so the effect's
+    /// managedScreensChanged batch re-add never fires for it — these are
+    /// retried ONCE from the coalesced screens announce (the flip has
+    /// settled by then; still-unclaimed entries are dropped, never
+    /// re-parked). Order-preserving: replay order decides strip column
+    /// order and master assignment. Rule routing is baked into the parked
+    /// entry's screenId so its side effects run once. Entries are dropped
+    /// on close and on clearEngine.
+    /// A parked open carries its claim eligibility with it: routing is
+    /// baked into the parked entry's screenId and is not re-run on retry, so
+    /// without the flag a rule-routed entry took the retry path's default
+    /// and was offered to the reopen claim after all — the rule won
+    /// on the first dispatch and lost on the retry.
+    struct ParkedOpen
+    {
+        PhosphorProtocol::WindowOpenedEntry entry;
+        bool allowCrossScreenClaim = true;
+    };
+    QList<ParkedOpen> m_unclaimedOpens;
+    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
+                                      bool allowCrossScreenClaim = true);
+    void removeUnclaimedOpen(const QString& windowId);
+    /// The panel-geometry deferral queue's twin of removeUnclaimedOpen —
+    /// every close path calls both, so a window that opens and closes inside
+    /// the startup panel-query window is never dispatched post-mortem at
+    /// panelGeometryReady.
+    void removePendingOpen(const QString& windowId);
+
+    // ── Placement map state (mapmodel.cpp) ───────────────────────────────
+    /// Keep @p requests as the last batch of every screen it names, one
+    /// entry list per screen. Called at both windowsTileRequested emit sites
+    /// so the replay and the wire can never disagree about what went out.
+    void recordTileBatch(const PhosphorProtocol::TileRequestList& requests);
+    /// Drop @p windowId from every screen's retained batch: the window is
+    /// gone, and a replay must not resurrect it. Every close path calls it
+    /// beside the dedup-cache evictions.
+    void forgetTileEntriesForWindow(const QString& windowId);
+    /// The strict-ownership focus read behind managedFocusedWindow: the
+    /// engine whose live set claims @p screenId, or nobody (empty answer).
+    /// Deliberately NOT engineOwningScreen's primary fallback, whose whole
+    /// point is delivering a report to an engine that might repair itself;
+    /// a query has nothing to repair and must not report the primary
+    /// engine's focus for a screen it does not own.
+    QString ownerFocusedWindow(const QString& screenId) const;
+    /// The screen whose engine tracks @p windowId, or empty. Strict, for
+    /// the same reason as ownerFocusedWindow.
+    QString trackedScreenForWindow(const QString& windowId) const;
+
+    /// Shared body of releaseWindowTracking, with the two engine-dependent
+    /// steps parameterised.
+    ///
+    /// @param owner The engine to release from, or nullptr to release from
+    ///        every engine tracking the window (enginesTrackingWindow). Naming
+    ///        it matters when the CALLER already knows: the id-based
+    ///        resolution runs isWindowTracked, whose contract is per-engine
+    ///        (ScrollEngine answers off the raw reverse-map key, so a phantom
+    ///        entry can win). A caller that identified the holder through the
+    ///        membership-grade heldKeyForWindow must not have that answer
+    ///        re-derived by a weaker predicate. The screen read for the focus
+    ///        refresh is taken from the same engine for the same reason.
+    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner);
+    /// Per-screen map state that follows the managed set: every screen the
+    /// coalesced announce dropped loses its retained batch and, if it had a
+    /// broadcast focus, announces the empty one; every announced screen is
+    /// re-read. Called from the announce lambda after the wire emission.
+    void reconcileMapStateWithAnnounce(const QStringList& announced);
+
+    /// Last batch entries per screen, the currentTilesJson replay cache.
+    QHash<QString, PhosphorProtocol::TileRequestList> m_lastTileBatchPerScreen;
+    /// Last focused window broadcast per screen: refreshFocusedWindow's
+    /// change gate. Absent and empty read the same, so a screen never
+    /// broadcast for stays silent when its answer is empty.
+    QHash<QString, QString> m_lastFocusedBroadcast;
+
+public:
+    /**
+     * @brief Re-read a screen's managed focused window and announce a change
+     *
+     * The one writer of focusedWindowChanged. Compares the owning engine's
+     * live answer against the last value broadcast for @p screenId and emits
+     * only on a difference, so every hook that calls it (the focus report,
+     * the engine-driven activation relay, the tilingChanged relay, the close
+     * paths, the coalesced announce) coalesces to one emission per actual
+     * change. Plain method, not a slot: it is an in-process hook point, not
+     * a D-Bus surface. Empty @p screenId is ignored. Implemented in
+     * mapmodel.cpp.
+     */
+    void refreshFocusedWindow(const QString& screenId);
+
+    /**
+     * @brief Clear the engine list during shutdown
+     *
+     * Called by Daemon::stop() before the engines' unique_ptrs are reset,
+     * so that any late D-Bus calls (arriving between engine destruction and
+     * adaptor destruction) hit ensurePipeline()'s empty check instead of a
+     * dangling pointer.
+     */
+    void clearEngine();
+
+    /**
+     * @brief Unconditional per-window teardown, driven by the in-process
+     * WindowLifecycleRelay::windowClosed notice.
+     *
+     * The D-Bus windowClosed relay is gated effect-side on the close screen
+     * still being engine-managed, so a window floated on a managed screen
+     * whose screen later left the managed set never reaches windowClosed here
+     * and its m_lastFloatBroadcast and m_lastScrollTabColorsRelay entries
+     * (and any parked open) leaked for the process — suppressing the first
+     * genuine float broadcast or tab-colour relay of a reused id. The same
+     * gate skips the relay for a window that closes while its tiling
+     * desktop is out of view, so this also closes it in every engine that
+     * still tracks it (a no-op after a relay).
+     * Plain method, NOT a slot: it must not become a D-Bus surface. It runs
+     * AFTER the WTS teardown (the signal's contract), so it uses only the raw
+     * id — shadowWindowId may no longer resolve a mutated-class canonical
+     * form, which the prune sweep below catches instead.
+     */
+    void onTrackedWindowDestroyed(const QString& windowId);
+
+    /**
+     * @brief Alive-set sweep of the float-broadcast and tab-colour-relay
+     * dedup caches, called from WindowTrackingAdaptor::pruneStaleWindows via
+     * the daemon wiring.
+     *
+     * Swept in the INSTANCE-id key space: the maps hold both raw and
+     * canonical composites (see windowClosed's dual removal), and only the
+     * instance component survives a class rename. Plain method, not a slot.
+     * List payload matching WindowLifecycleRelay::stalePruned.
+     */
+    void pruneStaleFloatBroadcasts(const QStringList& aliveInstances);
+
+    /// Forget @p windowId's float broadcast in both key forms, so its next edge
+    /// on this channel goes out: for engine float changes that never reach this
+    /// channel (the daemon's passive float syncs) and for a fresh adoption
+    /// (F593, F604). Plain method, not a slot.
+    void forgetFloatBroadcast(const QString& windowId);
+};
+
+} // namespace PlasmaZones

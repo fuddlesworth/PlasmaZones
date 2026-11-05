@@ -1,0 +1,265 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorEngine/IWindowRegistry.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
+#include <phosphorengine_export.h>
+#include <QHash>
+#include <QMultiHash>
+#include <QObject>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <optional>
+
+namespace PhosphorEngine {
+
+class DesktopRemap;
+
+struct WindowMetadata
+{
+    QString appId;
+    QString desktopFile;
+    QString title;
+    QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
+    int pid = 0; ///< process id; 0 = unknown
+    /// 1-based x11 desktop number; 0 = all desktops / unknown. KWin renumbers on a mid-list change, and the
+    /// registry follows (WindowRegistry::remapDesktops) for every record the effect has not re-pushed.
+    int virtualDesktop = 0;
+    /// Full desktop list when the window spans SEVERAL (but not all) desktops;
+    /// empty for the common single-desktop / sticky / unknown cases. When
+    /// non-empty, virtualDesktop equals the first entry.
+    QList<int> virtualDesktops{};
+    QString activity{}; ///< activity UUID; empty = all activities / unknown
+    PhosphorProtocol::WindowType windowType = PhosphorProtocol::WindowType::Unknown;
+
+    // ── Extended window properties. The kwin-effect snapshots these at metadata-push
+    // time so the daemon's window-rule resolvers (shouldFloatByRule /
+    // shouldRestoreFloatedPosition) can match the same KWin-property / geometry
+    // fields the effect path resolves live. std::optional so an absent value (the
+    // compositor could not report it — e.g. no underlying KWin::Window) leaves the
+    // corresponding WindowQuery field disengaged, keeping a predicate over it inert,
+    // mirroring window_query.cpp's engage-only-when-known contract. ──
+    std::optional<bool> isMinimized{}; ///< Kept current as of the LAST DELIVERED push, unlike isFocused:
+                                       ///< the effect re-pushes full metadata on every minimizedChanged
+                                       ///< edge, so mode-swap seed/restore decisions can rely on it —
+                                       ///< with the one-edge propagation delay that implies, and
+                                       ///< disengaged when the compositor never reported the field
+                                       ///< (consumers treat that as "cannot vouch", not "visible").
+    std::optional<bool> isDemandingAttention{}; ///< Urgency (KWin's demandsAttention). Kept current the same way
+                                                ///< isMinimized is — the effect re-pushes full metadata on every
+                                                ///< demandsAttentionChanged edge — because urgency is only useful
+                                                ///< while it is live. Disengaged when the compositor never
+                                                ///< reported it, which consumers read as "not urgent" (an unknown
+                                                ///< urgency must not light a window up).
+    std::optional<bool> isFullscreen{};
+    std::optional<bool> isSticky{}; ///< on all virtual desktops
+    std::optional<bool> isMaximized{}; ///< MaximizeFull (both axes)
+    std::optional<bool> isFocused{}; ///< focused at metadata-push time (point-in-time, NOT
+                                     ///< refreshed on focus change) — the open-path Float /
+                                     ///< RestorePosition resolvers read it at window-open, where
+                                     ///< it is fresh; the effect path reads live isFocused for
+                                     ///< continuously-evaluated border / opacity rules.
+    std::optional<bool> isTransient{}; ///< dialog/utility/popup/menu/tooltip/splash family or has a transient parent
+    std::optional<bool> isNotification{}; ///< notification / critical-notification / on-screen-display
+    std::optional<bool> keepAbove{};
+    std::optional<bool> keepBelow{};
+    std::optional<bool> skipTaskbar{};
+    std::optional<bool> skipPager{};
+    std::optional<bool> skipSwitcher{};
+    std::optional<bool> isModal{};
+    std::optional<bool> hasDecoration{}; ///< server-side title-bar / border
+    std::optional<bool> isResizable{};
+    std::optional<bool> isMovable{}; ///< window can be moved
+    std::optional<bool> isMaximizable{}; ///< window can be maximized
+    std::optional<int> width{}; ///< frame width in px
+    std::optional<int> height{}; ///< frame height in px
+    std::optional<int> positionX{}; ///< frame left edge X in px
+    std::optional<int> positionY{}; ///< frame top edge Y in px
+    std::optional<QString> captionNormal{}; ///< title without the WM-added app-name suffix
+    /// Full activity list when the window is on SEVERAL (but not all)
+    /// activities; empty otherwise. When non-empty, activity equals the first
+    /// entry. Appended last (installed struct).
+    QStringList activities{};
+    /// Maximized on ONE axis (vertical or horizontal). Separate from isMaximized,
+    /// which rules match on and which stays full-maximize only (F65). Appended last.
+    std::optional<bool> isAxisMaximized{};
+
+    bool operator==(const WindowMetadata& other) const
+    {
+        return appId == other.appId && desktopFile == other.desktopFile && title == other.title
+            && windowRole == other.windowRole && pid == other.pid && virtualDesktop == other.virtualDesktop
+            && virtualDesktops == other.virtualDesktops && activity == other.activity && windowType == other.windowType
+            && isMinimized == other.isMinimized && isDemandingAttention == other.isDemandingAttention
+            && isFullscreen == other.isFullscreen && isSticky == other.isSticky && isMaximized == other.isMaximized
+            && isFocused == other.isFocused && isTransient == other.isTransient
+            && isNotification == other.isNotification && keepAbove == other.keepAbove && keepBelow == other.keepBelow
+            && skipTaskbar == other.skipTaskbar && skipPager == other.skipPager && skipSwitcher == other.skipSwitcher
+            && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
+            && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
+            && height == other.height && positionX == other.positionX && positionY == other.positionY
+            && captionNormal == other.captionNormal && activities == other.activities
+            && isAxisMaximized == other.isAxisMaximized;
+    }
+    bool operator!=(const WindowMetadata& other) const
+    {
+        return !(*this == other);
+    }
+};
+
+class PHOSPHORENGINE_EXPORT WindowRegistry : public QObject, public IWindowRegistry
+{
+    Q_OBJECT
+
+public:
+    explicit WindowRegistry(QObject* parent = nullptr);
+    ~WindowRegistry() override;
+
+    void upsert(const QString& instanceId, const WindowMetadata& metadata);
+    /// Remove metadata and canonical state, emitting windowDisappeared exactly
+    /// once while the canonical mapping remains available to subscribers.
+    /// An upsert a subscriber makes during the emit is replayed after it and
+    /// keeps the instance's canonical mapping; inside clear() that replay is dropped.
+    void remove(const QString& instanceId);
+
+    std::optional<WindowMetadata> metadata(const QString& instanceId) const;
+    /// The window's own context for per-window mode resolution: its virtual
+    /// desktop (0 = all/unknown), the full desktop list when it spans several
+    /// (empty otherwise), and activity (empty = all/unknown), read without
+    /// copying the full ~30-field metadata record — this sits on the
+    /// per-query float-resolver path. nullopt when the instance is unknown.
+    struct WindowContext
+    {
+        int virtualDesktop = 0;
+        QList<int> virtualDesktops;
+        QString activity;
+        QStringList activities; ///< full list when on several activities (appended last)
+
+        /// Effective desktop for per-window mode resolution: the window's own
+        /// desktop when known (virtualDesktop > 0), never the screen's current
+        /// one — reading through the screen's current desktop is what made the
+        /// effective float answer flip across per-output desktop switches.
+        /// EXCEPTION: a window spanning SEVERAL desktops resolves to
+        /// @p screenCurrentDesktop when that is one of them — the visible
+        /// spanned desktop is the live context governing the window, not the
+        /// arbitrary first entry virtualDesktop pins to. Sticky / unknown
+        /// (virtualDesktop 0) falls back to @p screenCurrentDesktop.
+        int effectiveDesktop(int screenCurrentDesktop) const
+        {
+            if (virtualDesktops.size() > 1 && virtualDesktops.contains(screenCurrentDesktop)) {
+                return screenCurrentDesktop;
+            }
+            return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
+        }
+
+        /// Effective activity, the activity axis of effectiveDesktop: a window
+        /// on several activities resolves to @p currentActivity when that is
+        /// one of them, else its own (first) activity when known, else
+        /// @p currentActivity (F426).
+        QString effectiveActivity(const QString& currentActivity) const
+        {
+            if (activities.size() > 1 && activities.contains(currentActivity)) {
+                return currentActivity;
+            }
+            return activity.isEmpty() ? currentActivity : activity;
+        }
+    };
+    std::optional<WindowContext> windowContext(const QString& instanceId) const;
+    Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
+    /// Live compositor minimize state, collapsed to a bool: unknown reads as
+    /// false. Prefer minimizedState() wherever "unknown" must not be treated
+    /// as "not minimized" (seeding, capture guards). Accepts either a bare
+    /// instance id or a composite appId|instanceId window id.
+    bool isMinimized(const QString& windowId) const;
+    /// Tri-state minimize state (IWindowRegistry contract): engaged when a
+    /// record exists AND the compositor reported the field; nullopt when the
+    /// window is unknown or the field was never delivered. Accepts either a
+    /// bare instance id or a composite appId|instanceId window id.
+    std::optional<bool> minimizedState(const QString& windowId) const override;
+    /// IWindowRegistry::fillsOutputState over the reported maximize (either
+    /// axis) and fullscreen fields. Accepts a bare instance id or a composite id.
+    std::optional<bool> fillsOutputState(const QString& windowId) const override;
+    std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
+    /// Every instance currently recorded under @p appId, most recently indexed
+    /// first (QMultiHash::values(key)). An appId change re-indexes the instance
+    /// at the head, so this is not arrival order: callers that need a FIFO
+    /// sequence must order the result themselves.
+    QStringList instancesWithAppId(const QString& appId) const;
+    /// Every instance holding a METADATA RECORD, unordered. Canonical-only
+    /// instances (a canonical id frozen before any metadata push arrived) are
+    /// NOT listed: they carry no context to seed from, which is what every
+    /// consumer of this wants (the dynamic-workspaces population census seeds
+    /// derived per-window state at attach time rather than replaying history).
+    /// Use contains() for the same record-backed question about one id.
+    QStringList instanceIds() const;
+    bool contains(const QString& instanceId) const;
+    int size() const;
+    /// Remove every record and canonical mapping, firing windowDisappeared
+    /// for each. TEST SEAM: production tears windows down per-window
+    /// (remove() on windowClosed, pruneStaleInstances for missed closes);
+    /// only tests bulk-reset the registry.
+    void clear();
+
+    Q_INVOKABLE QString canonicalizeWindowId(const QString& rawWindowId) override;
+    Q_INVOKABLE QString canonicalizeForLookup(const QString& rawWindowId) const override;
+
+    /// Defensive cleanup for windows that died WITHOUT a close signal reaching
+    /// the registry (compositor crash, lost D-Bus call): drop every metadata
+    /// record AND canonical-id translation whose instance id is absent from
+    /// @p aliveInstanceIds, firing windowDisappeared for each so subscribers
+    /// (e.g. saved-autotile-order cleanup) drop their ghost state too. Returns
+    /// the count removed. @p aliveInstanceIds are the uuid components
+    /// (WindowId::extractInstanceId), matching this registry's keying. The
+    /// normal per-window path is remove() on windowClosed; this is the batch
+    /// backstop the WTA alive-ids report drives. An EMPTY @p aliveInstanceIds
+    /// is refused (returns 0 with a warning) while any record or mapping
+    /// exists: the effect's first alive report can come before restored apps map.
+    int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
+
+    /// Snapshot the recorded instances as the ones a coming desktop renumber
+    /// applies to. Called when KWin's desktop list starts changing (the
+    /// desktop manager's desktopListChanging): any upsert or remove after this
+    /// drops its instance from the snapshot, since its push already carries
+    /// the new numbering.
+    void beginDesktopRenumber();
+    /// Move the desktop fields of every instance still in the snapshot through
+    /// @p remap (a removed desktop goes to its successor, where KWin sends its
+    /// windows), emit metadataChanged for each record that changed, and end the
+    /// snapshot. Without a beginDesktopRenumber first it changes nothing.
+    /// Returns the count changed (F763).
+    int remapDesktops(const DesktopRemap& remap);
+
+Q_SIGNALS:
+    void windowAppeared(const QString& instanceId);
+    void metadataChanged(const QString& instanceId, const WindowMetadata& oldMetadata,
+                         const WindowMetadata& newMetadata);
+    void windowDisappeared(const QString& instanceId);
+
+private:
+    QHash<QString, WindowMetadata> m_records;
+    QMultiHash<QString, QString> m_appIdIndex;
+    QHash<QString, QString> m_canonicalByInstance;
+    /// Instances currently inside remove()'s windowDisappeared emit. A re-entrant remove() of the same instance emits
+    /// nothing further and cancels any upsert queued for it during this emit. A re-entrant upsert() is deferred into
+    /// m_pendingUpserts and replayed after the removal completes.
+    QSet<QString> m_disappearingInstances;
+    QHash<QString, WindowMetadata> m_pendingUpserts;
+    /// Depth counter, non-zero while clear() drives a removal loop: remove()
+    /// then DROPS re-entrant pending upserts instead of replaying them, so a
+    /// subscriber re-inserting from windowDisappeared cannot make the INSTANCE
+    /// BEING REMOVED survive the bulk reset. (A subscriber upserting a
+    /// different, brand-new instance mid-clear does survive — clear() only
+    /// sweeps the ids snapshotted before its loop; acceptable for a test
+    /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must
+    /// not un-flag the outer one on its way out.
+    int m_clearing = 0;
+    /// beginDesktopRenumber's snapshot (appended last: installed class).
+    QSet<QString> m_desktopRenumberPending;
+
+    void indexInsert(const QString& instanceId, const QString& appId);
+    void indexRemove(const QString& instanceId, const QString& appId);
+};
+
+} // namespace PhosphorEngine

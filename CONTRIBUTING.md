@@ -8,7 +8,7 @@ Clone the repo and build it locally first. The README has build instructions, bu
 
 ```bash
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
 cmake --build . -j$(nproc)
 ```
 
@@ -19,7 +19,7 @@ Debug builds are slower but give you better error messages and assert failures a
 We follow KDE coding conventions. There's a `.clang-format` in the repo root - run it on your changes before submitting:
 
 ```bash
-clang-format -i src/path/to/your/file.cpp
+clang-format -i plasmazones/src/path/to/your/file.cpp
 ```
 
 The highlights:
@@ -55,11 +55,11 @@ Write decent commit messages. First line should be a short summary, then a blank
 
 ## Testing
 
-The test suite lives in `tests/`. Run it with:
+The test suites live in `plasmazones/tests/`, `phosphor-shell/tests/` and each library's own `tests/`. Run them all with:
 
 ```bash
 cd build
-ctest --output-on-failure
+ctest --output-on-failure --no-tests=error
 ```
 
 If you're adding new functionality, add tests for it. If you're fixing a bug, a test that would have caught it is appreciated.
@@ -70,9 +70,9 @@ PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. C++ uses `Phosp
 
 - **Extract strings** after changing user-visible text:
   `cmake --build build --target update-ts`
-  This runs `lupdate` and updates `translations/*.ts`. Commit the results.
+  This runs `lupdate` and updates `plasmazones/translations/*.ts`. Commit the results.
 
-- **Add or update a translation**: see `translations/README.md`.
+- **Add or update a translation**: see `plasmazones/translations/README.md`.
 
 - **Build/install**: `.ts` files are compiled to `.qm` and installed automatically.
 

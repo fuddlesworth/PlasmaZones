@@ -1,0 +1,286 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "tilingadaptor.h"
+
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+
+#include "core/platform/logging.h"
+
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/WindowId.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
+
+#include <algorithm>
+#include <utility>
+
+namespace PlasmaZones {
+
+namespace {
+// The window's desktop set as the engines key their states: x11 numbering,
+// exactly what the effect stamps into the registry from
+// VirtualDesktop::x11DesktopNumber. A multi-desktop span carries the full
+// list in virtualDesktops with virtualDesktop equal to its first entry, so
+// the list is preferred when present. Empty for a sticky window or one whose
+// desktop is unknown; DesktopSpan tells those two apart.
+QSet<int> desktopSetOf(const PhosphorEngine::WindowMetadata& meta)
+{
+    QSet<int> desktops;
+    for (const int desktop : meta.virtualDesktops) {
+        if (desktop > 0) {
+            desktops.insert(desktop);
+        }
+    }
+    // Falls through when the span list is absent OR filtered away to nothing,
+    // rather than returning an empty set from inside the span branch. The
+    // registry only ever stores positive entries, so the second case is
+    // unreachable today, but reading a list of junk as "sticky" would be the
+    // wrong answer if that ever changed.
+    if (desktops.isEmpty() && meta.virtualDesktop > 0) {
+        desktops.insert(meta.virtualDesktop);
+    }
+    return desktops;
+}
+
+// Whether two metadata records describe the same context membership. The
+// registry re-emits for every metadata edit, title ticks included, and the
+// overwhelming majority of those leave the context fields untouched, so the
+// cheap field compare comes first and only a difference pays for the sets.
+// The desktops are compared as the set the span is built from (desktopSetOf):
+// the same span listed in another order, or led by another of its desktops
+// (#1147), is not a move, and reconciling it would only churn the engines.
+// The activities stay field-compared: the span carries the lead activity
+// itself, as a carry's destination.
+bool sameContextFields(const PhosphorEngine::WindowMetadata& a, const PhosphorEngine::WindowMetadata& b)
+{
+    if (a.activity != b.activity || a.activities != b.activities || a.isSticky != b.isSticky) {
+        return false;
+    }
+    if (a.virtualDesktop == b.virtualDesktop && a.virtualDesktops == b.virtualDesktops) {
+        return true;
+    }
+    return desktopSetOf(a) == desktopSetOf(b);
+}
+} // namespace
+
+PhosphorEngine::DesktopSpan TilingAdaptor::spanFor(const PhosphorEngine::WindowMetadata& meta,
+                                                   const QString& canonicalWindowId) const
+{
+    PhosphorEngine::DesktopSpan span;
+    span.activity = meta.activity;
+    span.activities = meta.activities;
+    // The effect stamps the on-all-desktops bit into the same metadata push
+    // that carries the desktop set, so the two are one snapshot. The
+    // service's own sticky report (setWindowSticky) is the fallback for a
+    // push that never carried the field, and it arrives BEFORE the metadata
+    // push for the same transition, so it is never behind it.
+    if (meta.isSticky.has_value()) {
+        span.sticky = *meta.isSticky;
+    } else if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        span.sticky = m_windowTrackingAdaptor->service()->isWindowSticky(canonicalWindowId);
+    }
+    span.desktops = span.sticky ? QSet<int>{} : desktopSetOf(meta);
+    // A window with no desktop stamped is UNKNOWN, not sticky: reading the
+    // empty set as "every desktop" adopted such a window into every desktop
+    // the user visited.
+    span.known = span.sticky || !span.desktops.isEmpty();
+    return span;
+}
+
+PhosphorEngine::DesktopSpanQuery TilingAdaptor::desktopSpanQuery() const
+{
+    return [this](const QString& windowId) -> PhosphorEngine::DesktopSpan {
+        if (!m_windowRegistry) {
+            return {};
+        }
+        const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        if (!meta) {
+            return {};
+        }
+        return spanFor(*meta, m_windowRegistry->canonicalizeForLookup(windowId));
+    };
+}
+
+void TilingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* registry)
+{
+    QObject::disconnect(m_registryDesktopConnection);
+    m_registryDesktopConnection = {};
+    m_windowRegistry = registry;
+    if (!registry) {
+        return;
+    }
+    m_registryDesktopConnection =
+        QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                         [this, registry](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+                                          const PhosphorEngine::WindowMetadata& newMeta) {
+                             // Only a change to the CONTEXT a window belongs to is a
+                             // move. The registry re-emits for every metadata edit,
+                             // title ticks included, and those must not cost an engine
+                             // walk each.
+                             if (sameContextFields(oldMeta, newMeta)) {
+                                 return;
+                             }
+                             // The engines key by the canonical composite id; the registry
+                             // signals with the bare instance id.
+                             const QString windowId = registry->canonicalizeForLookup(instanceId);
+                             reconcileWindowMembership(windowId, spanFor(newMeta, windowId));
+                         });
+}
+
+void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engine, bool lifecycleEngine,
+                                          const PhosphorEngine::MembershipReconcileResult& result)
+{
+    if (result.isEmpty()) {
+        return;
+    }
+    // Windows that lost EVERY context in this engine. For a lifecycle engine
+    // that is a full release and carries the pipeline bookkeeping the engine
+    // cannot do itself: the replay cache, the float-relay dedup and the
+    // parked opens. The engine's own windowClosed is a no-op by then, so the
+    // bookkeeping is the whole point.
+    QSet<QString> fullyReleased;
+    for (const auto& [windowId, key] : result.released) {
+        if (lifecycleEngine && !engine->heldKeyForWindow(windowId)) {
+            fullyReleased.insert(windowId);
+        }
+        if (!lifecycleEngine && m_windowTrackingAdaptor) {
+            // Keep the persisted placement record honest. The release changed
+            // the window's snap state, and the engine signal that normally
+            // reports such a change also clears the tiling engines' float
+            // markers, which would be wrong for a window legitimately floating
+            // on the desktop it moved TO — so the record is refreshed directly
+            // instead. fromStateChange because an engine state change is
+            // authoritative even for a minimized window.
+            m_windowTrackingAdaptor->captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+            // The effect keeps its own per-window zone cache, fed by
+            // windowStateChanged, and the IsSnapped / Zone rule-match fields
+            // read it. Left unsaid it keeps naming the zone this window has
+            // just been released from, so rules scoped to that zone go on
+            // matching a window that is no longer in it. This is the second
+            // of the two consumers a context release must drive by hand; see
+            // relayWindowReleasedFromContext for why the engine signal that
+            // would drive all of them at once is wrong here.
+            m_windowTrackingAdaptor->relayWindowReleasedFromContext(windowId, key.screenId);
+        }
+    }
+    if (lifecycleEngine) {
+        for (const QString& windowId : std::as_const(fullyReleased)) {
+            qCInfo(lcDbusTiling) << "reconcileWindowMembership: window" << windowId
+                                 << "holds no context in its engine any more — releasing it from the pipeline";
+            // Released through the engine that ANSWERED, not by re-resolving
+            // the id: enginesTrackingWindow decides on isWindowTracked, which
+            // is not the same predicate across engines, and the other engine
+            // may legitimately still hold the window on another desktop.
+            releaseWindowTrackingVia(windowId, engine);
+        }
+    }
+}
+
+void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const PhosphorEngine::DesktopSpan& span)
+{
+    if (windowId.isEmpty() || !span.known) {
+        // A window whose desktop is not known yet has nothing to check; the
+        // log line is the only way to tell a deliberate no-op from a missed
+        // reconcile in a journal.
+        qCDebug(lcDbusTiling) << "reconcileWindowMembership:" << windowId
+                              << "has no known desktop yet — nothing to check";
+        return;
+    }
+    const PhosphorEngine::DesktopSpanQuery spanOf = [&span](const QString&) {
+        return span;
+    };
+    // Each engine adopts the window into the context its screen is showing
+    // when the span covers it, and releases the contexts the span no longer
+    // covers — desktop AND activity, the two axes of the key a window moves
+    // along. The screen is the third component and deliberately not part of
+    // it: an output move is released elsewhere, by the effect's relay for an
+    // in-view hold and by IPlacementEngine::releaseWindowOffScreen (the snap
+    // commit, a free window's screen change, the drop) for a background one.
+    // Memberships under a screen's sticky pin are left to the engine's unpin
+    // migration.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        applyMembershipResult(engine, /*lifecycleEngine=*/true, engine->reconcileWindowMemberships(windowId, spanOf));
+    }
+    // Snapping, which keeps per-context stores like the tiling engines but is
+    // not in their pipeline. A window that left a desktop must stop being an
+    // occupant of the zone it was snapped into there: zone occupancy is
+    // resolved across EVERY store rather than the one in view, so a stale entry
+    // remains a live navigation target and activating it drags the user back to
+    // the desktop the window is really on.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_membershipEngines)) {
+        applyMembershipResult(engine, /*lifecycleEngine=*/false, engine->reconcileWindowMemberships(windowId, spanOf));
+    }
+    // A window parked for an output that went away keeps no context on a
+    // desktop or activity it left while away: KWin still returns it, and the
+    // re-seat must not put it back where it no longer is.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->dropParkedOutsideSpan(windowId, span);
+    }
+}
+
+void TilingAdaptor::reconcileDesktopMemberships(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    const PhosphorEngine::DesktopSpanQuery spanOf = desktopSpanQuery();
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        applyMembershipResult(engine, /*lifecycleEngine=*/true, engine->reconcileDesktopMemberships(screenId, spanOf));
+    }
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_membershipEngines)) {
+        applyMembershipResult(engine, /*lifecycleEngine=*/false, engine->reconcileDesktopMemberships(screenId, spanOf));
+    }
+}
+
+void TilingAdaptor::noteRenumberEvictees(const QStringList& candidates, const QSet<int>& removedDesktops)
+{
+    m_renumberEvictees.clear();
+    if (removedDesktops.isEmpty()) {
+        return;
+    }
+    for (const QString& windowId : candidates) {
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            const std::optional<PhosphorEngine::PlacementStateKey> key = engine->heldKeyForWindow(windowId);
+            if (key && removedDesktops.contains(key->desktop)) {
+                // Read now: the prune drops the engine's minimum size with the window.
+                m_renumberEvictees.append({windowId, key->screenId, engine->windowMinimumSize(windowId)});
+                break;
+            }
+        }
+    }
+}
+
+void TilingAdaptor::readoptRenumberEvictees(const InViewTest& inView)
+{
+    const QList<RenumberEvictee> evictees = std::exchange(m_renumberEvictees, {});
+    if (!inView || !m_windowRegistry) {
+        return;
+    }
+    for (const RenumberEvictee& evictee : evictees) {
+        const bool held = std::any_of(m_lifecycleEngines.cbegin(), m_lifecycleEngines.cend(), [&](auto* engine) {
+            return engine->isWindowTracked(evictee.windowId);
+        });
+        const bool managed = std::any_of(m_lifecycleEngines.cbegin(), m_lifecycleEngines.cend(), [&](auto* engine) {
+            return engine->isActiveOnScreen(evictee.screenId);
+        });
+        if (held || !managed) {
+            continue;
+        }
+        const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(evictee.windowId));
+        if (!meta || meta->isMinimized.value_or(false) || !inView(evictee.screenId, spanFor(*meta, evictee.windowId))) {
+            continue;
+        }
+        qCInfo(lcDbusTiling) << "readoptRenumberEvictees:" << evictee.windowId
+                             << "left a removed desktop for the one in view on" << evictee.screenId;
+        // Straight to the engine running the screen, not through the open
+        // path: KWin moved the window, it did not open, so no open claim and
+        // no rule routing (F1050, l24_rule_on_leave).
+        PhosphorProtocol::WindowOpenedEntry entry{evictee.windowId, evictee.screenId, qMax(0, evictee.minSize.width()),
+                                                  qMax(0, evictee.minSize.height())};
+        entry.focusEligible = false;
+        dispatchOpenToClaimingEngine(entry, /*allowPark=*/true, /*allowCrossScreenClaim=*/false);
+    }
+}
+
+} // namespace PlasmaZones

@@ -134,7 +134,7 @@ Envelope ratio is the feel: enter : release ≈ 1 : 4. Stagger 6–30 ms per ite
 outward from the focus point, never top-to-bottom for its own sake. Reduced motion: release
 180 ms, enter loses overshoot, reveal becomes a 120 ms opacity enter, breathe stops.
 
-Curve files to add under `data/curves/`: `phosphor-release.json` and
+Curve files to add under `plasmazones/data/curves/`: `phosphor-release.json` and
 `phosphor-settle.json`. Breathe is not among them — an undamped spring is not
 expressible as a curve, so it is built from two release halves (A1 §3.3).
 `Motion.qml` gains `enter` / `release` / `settle` and the four durations;
@@ -195,8 +195,9 @@ accent that came from the wallpaper, it is not Phosphor.
 
 ## 10. Build notes
 
-- First cut is buildable on existing D-Bus (A2 §8). Seven `[NEW]` daemon surfaces are listed
-  there in priority order; `Scrolling.stripModelJson` and `Tiling.currentTilesJson` first.
+- First cut is buildable on existing D-Bus (A2 §8). The seven `[NEW]` daemon surfaces listed
+  there have all since SHIPPED (phases 1 to 6), so that list is a record of what this document
+  asked for rather than work outstanding. A2's own preamble says the same.
 - Retired: `BarHost.qml` socket/pocket machinery and `BarCanvas.sockets`, `Slot.qml` chip
   rectangles, `barThickness 44`, `screenInset spacing_xl`, `ElevationShadow` on chrome, the
   tile-grid `ControlCenter.qml`, the centred `OsdHost`, the top-right toast stack.

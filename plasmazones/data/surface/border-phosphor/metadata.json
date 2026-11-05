@@ -1,0 +1,111 @@
+{
+    "id": "border-phosphor",
+    "name": "Phosphor Border",
+    "description": "Rounded corners and a window border carrying the Phosphor brand gradient from cyan to rose, flowing slowly around the frame with a soft gleam orbiting the band. The whole band dims when the surface loses focus.",
+    "author": "PlasmaZones",
+    "version": "1.1",
+    "category": "Borders",
+    "providesBorder": true,
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 4,
+            "min": 1,
+            "max": 20,
+            "description": "Thickness of the gradient band (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 64,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in the chain that offers this setting follows one answer, so their bottom corners are all rounded or all square. Set it on any pack and the whole chain follows. Where two packs have it set differently, the one earliest in the chain wins."
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Flow speed",
+            "type": "float",
+            "default": 0.06,
+            "min": 0.0,
+            "max": 0.5,
+            "description": "How many times per second the gradient flows around the border"
+        },
+        {
+            "id": "gleamSpeed",
+            "name": "Gleam speed",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How many times per second the gleam travels around the border"
+        },
+        {
+            "id": "gleamStrength",
+            "name": "Gleam strength",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Brightness of the travelling gleam, 0 to disable"
+        },
+        {
+            "id": "opacity",
+            "name": "Opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 1.0,
+            "description": "Overall opacity of the border band. The band replaces the frame edge rather than tinting it, so a low value leaves a see-through ring there, and a backdrop pack is the way to get rounded corners without a band."
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient cyan",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "First stop of the brand gradient"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient blue",
+            "type": "color",
+            "default": "#ff3b82f6",
+            "description": "Second stop of the brand gradient"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient purple",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Third stop of the brand gradient"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient rose",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Fourth stop of the brand gradient"
+        }
+    ]
+}

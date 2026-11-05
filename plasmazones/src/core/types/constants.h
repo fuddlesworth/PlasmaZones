@@ -1,0 +1,276 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/EngineTypes.h>
+
+#include <QLatin1String>
+#include <QString>
+
+// Shared shapes (per-side gap struct + aspect-ratio classification) live in
+// libs/phosphor-layout-api so every layout/tile provider can consume them
+// without forcing them to depend on PlasmaZones internals.  Referenced
+// qualified below — no aliases here.
+#include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/ZoneDefaults.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
+
+// NOTE: PhosphorTiles::AutotileJsonKeys / PhosphorTiles::AutotileDefaults previously lived inline here and
+// were re-exported from <PhosphorTiles/AutotileConstants.h> via a transitive
+// include.  That transitive chain forced every PlasmaZones consumer (including
+// libraries like PhosphorZones that have no use for autotile symbols) to
+// resolve the PhosphorTiles include path.  Consumers that genuinely need the
+// autotile namespaces now include `<PhosphorTiles/AutotileConstants.h>`
+// directly.
+
+namespace PlasmaZones {
+
+/// Dynamic QCoreApplication property carrying the GPU-preference environment
+/// variable names this process exported (a QStringList; see
+/// daemon/rendering/vulkansupport.h). Spawn sites remove these names from a
+/// child's environment so an inherited export cannot trip the child's
+/// pre-set-value guards and freeze it on this process's stale GPU pin. The
+/// constant lives here (not in vulkansupport.h) so plasmazones_core spawn
+/// sites can read the property without a link dependency on the executables
+/// that compile vulkansupport.cpp.
+inline constexpr const char* PGpuExportedVarsProperty = "_p_gpuExportedVars";
+
+/// Companion property: environment variables this process CLEARED for the GPU
+/// preference (a QVariantMap of name to the original value). A session-wide
+/// NVIDIA offload export is cleared in-process when the pinned GPU is not
+/// NVIDIA; children have no stake in that clear, so spawn sites restore these
+/// into the child environment after scrubbing the exported names.
+inline constexpr const char* PGpuClearedVarsProperty = "_p_gpuClearedVars";
+
+// PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones —
+// `PhosphorZones::Zone.h` declares it inside `namespace PlasmaZones` so it's
+// visible to existing callers via the same name.  No alias needed here;
+// consumers that need the enum include `<PhosphorZones/Zone.h>` directly.
+
+/**
+ * @brief Default values for zone appearance and core module constants
+ *
+ * These defaults are used by core module files that can't depend on config.
+ * For user-configurable settings, see ConfigDefaults.
+ *
+ * PhosphorZones::Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
+ * structural constants for built-in layouts.
+ */
+namespace Defaults {
+// PhosphorZones::Zone-presentation defaults + layout-factory ratios live in
+// `PhosphorZones::ZoneDefaults` (libs/phosphor-zones).  All in-tree
+// callers reference them qualified directly — no using-alias here.
+
+// PlasmaZones-side defaults that aren't part of the zone-presentation
+// surface — daemon overlay / settings / geometry constants.
+constexpr int InnerGap = 8;
+constexpr int OuterGap = 8; // Gap at screen edges (separate from the inner gap between zones)
+// Maximum for inner gap and outer gap settings. Hand-mirrored from
+// PhosphorEngine::GeometryDefaults::MaxGap, which the LGPL engines clamp
+// against and which cannot be reached from here without dragging an interface
+// header into this widely-included file. The pair is pinned by a static_assert
+// in src/core/utils/geometryutils.cpp, next to the InnerGap / OuterGap ones.
+constexpr int MaxGap = 200;
+// EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
+constexpr qreal EdgeThreshold = 15.0;
+
+// Performance and behavior constants (configurable via Settings)
+constexpr int PollIntervalMs = 50; // Window move detection polling interval (20 FPS)
+constexpr int MinimumZoneSizePx = 100; // Minimum zone size for window snapping
+constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (clipping threshold)
+}
+
+// AspectRatioClass + ScreenClassification helpers live in
+// libs/phosphor-layout-api as `PhosphorLayout::AspectRatioClass` /
+// `PhosphorLayout::ScreenClassification`. All PlasmaZones-side callers
+// reference them qualified directly — no aliases here.
+
+/**
+ * @brief XDG-relative subdirectory for scripted tiling algorithm Luau files.
+ *
+ * Used by every in-tree @c PhosphorTiles::ScriptedAlgorithmLoader constructor
+ * (daemon, editor, settings) and by the settings-side helpers that resolve
+ * the user-writable directory under @c QStandardPaths::GenericDataLocation.
+ * Keeping this in one place prevents the three callers from drifting when
+ * the subdirectory ever needs to change.
+ */
+inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"};
+
+/**
+ * @brief Maximum length for user-visible layout and zone names.
+ *
+ * Client-side cap in the QML text fields that author a name (editor
+ * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml, all via
+ * @c maximumLength). The UI cap is advisory only: callers can bypass it
+ * entirely over D-Bus, and @c QQuickTextInput::maximumLength truncates by
+ * UTF-16 code units so even the UI can produce a name that needs repair.
+ * Every name-producing entry point therefore re-applies the cap via
+ * @ref clampName — the layout adaptor's D-Bus boundary and the settings-side
+ * layout controller (@c settingscontroller_layouts.cpp).
+ */
+inline constexpr int MaxLayoutNameLength = 40;
+
+/**
+ * @brief Maximum length for a scrolling template's free-text description.
+ *
+ * The sibling of @ref MaxLayoutNameLength for the one template field that
+ * has no name-length counterpart. Three points enforce it: the editor's
+ * TemplatePropertyPanel.qml mirrors the cap client-side via
+ * @c maximumLength, EditorTemplateModel::setDescription clamps at the model
+ * setter, and the layout adaptor's D-Bus boundary re-applies it via
+ * @ref clampName — a direct D-Bus caller can hand us an unbounded string
+ * that then lands in the store's JSON file and in every picker tooltip.
+ */
+inline constexpr int MaxTemplateDescriptionLength = 500;
+
+/**
+ * @brief Clamp a user-visible name to @p maxLength UTF-16 code units without
+ * splitting a surrogate pair.
+ *
+ * QString::left() counts UTF-16 code units, so a bare
+ * @c left(MaxLayoutNameLength) can cut between the two halves of a surrogate
+ * pair (any character outside the BMP, e.g. an emoji), storing a lone high
+ * surrogate that serializes as U+FFFD.
+ *
+ * The repair runs on ANY input, not only on a name this clamp itself cut:
+ * @c QQuickTextInput::maximumLength truncates by UTF-16 code units too, so
+ * the editor can hand the D-Bus boundary a name of exactly @p maxLength units
+ * that already ends in a lone high surrogate. A size-only fast path would
+ * return that name untouched and it would serialize as U+FFFD — precisely the
+ * failure this clamp exists to prevent. A trailing high surrogate is always
+ * lone (a well-formed pair ends in a LOW surrogate), so dropping it is always
+ * correct. Trailing whitespace goes with it, whether the cut exposed it or the
+ * name arrived that way: a stored name ending in a space is never what a user
+ * meant, and the D-Bus boundary has no other trim. The template DESCRIPTION
+ * callers (the adaptor boundary and EditorTemplateModel::setDescription)
+ * route free text through the same trim; that is accepted for them too,
+ * since the description is trimmed at save anyway. Leading whitespace is the
+ * callers' sanitizers' concern, not the clamp's. Names that are within the
+ * limit and already end well-formed are returned unchanged, without a copy.
+ *
+ * @p maxLength defaults to @ref MaxLayoutNameLength; the duplicate-layout
+ * boundary clamp passes a reduced budget so the " (Copy)" suffix it
+ * re-appends still fits. A non-positive budget leaves no room for any name and
+ * yields an empty string — QString::left() compares its argument as size_t, so
+ * a negative length would wrap and return the whole string unclamped.
+ */
+inline QString clampName(const QString& name, int maxLength = MaxLayoutNameLength)
+{
+    if (maxLength <= 0) {
+        return QString();
+    }
+    const auto needsRepair = [](QChar c) {
+        return c.isHighSurrogate() || c.isSpace();
+    };
+    if (name.size() <= maxLength && (name.isEmpty() || !needsRepair(name.back()))) {
+        return name;
+    }
+    QString clamped = name.size() > maxLength ? name.left(maxLength) : name;
+    while (!clamped.isEmpty() && needsRepair(clamped.back())) {
+        clamped.chop(1);
+    }
+    return clamped;
+}
+
+/**
+ * @brief Editor-specific constants
+ */
+namespace EditorConstants {
+// PhosphorZones::Zone size constraints (relative coordinates 0.0-1.0)
+constexpr qreal MinZoneSize = 0.05; // 5% minimum zone size
+
+// Fixed geometry constraints (absolute pixel coordinates)
+constexpr int MinFixedZoneSize = 50; // Minimum fixed zone dimension in pixels
+
+// Snapping thresholds (relative coordinates 0.0-1.0, used in SnappingService)
+constexpr qreal EdgeThreshold = 0.02; // 2% threshold for snapping to zone edges
+constexpr qreal DefaultSnapInterval = 0.1; // 10% default grid snap interval
+
+// PhosphorZones::Zone duplication offset
+constexpr qreal DuplicateOffset = 0.02; // 2% offset when duplicating zones
+constexpr int DuplicateOffsetPixels = 20; // 20px offset when duplicating fixed zones
+
+// Keyboard step for fixed geometry zones
+constexpr int KeyboardStepPixels = 10; // 10px step for keyboard move/resize of fixed zones
+
+// Floating-point tolerances (relative coordinates 0.0-1.0)
+constexpr qreal OverlapThreshold = 0.002; // Epsilon for zone overlap detection
+constexpr qreal CoordDedupeThreshold = 0.001; // Coordinate deduplication tolerance
+constexpr qreal MinExpansionThreshold = 0.005; // Minimum expansion to accept
+constexpr qreal AdjacencyThreshold = 0.02; // Default adjacency detection threshold
+constexpr qreal ExpansionStep = 0.01; // 1% increment for fill expansion
+constexpr qreal GeometryBoundsTolerance = 0.001; // Tolerance for coordinate bounds checking
+
+// Default zone colors (hex strings for QML compatibility)
+inline constexpr QLatin1String DefaultHighlightColor{"#800078D4"};
+inline constexpr QLatin1String DefaultInactiveColor{"#40808080"};
+inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
+}
+
+/**
+ * @brief JSON keys for serialization
+ */
+namespace JsonKeys {
+// PhosphorZones::Zone & layout wire-format keys live in `PhosphorZones::ZoneJsonKeys`
+// (libs/phosphor-zones).  All in-tree callers reference them qualified
+// directly — no using-aliases here.
+//
+// What remains below is the part of the screen-info D-Bus reply that this
+// namespace owns: fields `fetchScreens()` (src/settings/utils/screenprovider.cpp)
+// parses out of getScreenInfo, and the screen's scale and size in device
+// pixels, which the shared parseDaemonScreenScale
+// (plasmazones/src/common/daemonscreenscale.h) reads for both the layout
+// editor and the settings app.  It does not cover the whole reply — the
+// connector name and the geometry sub-keys come from ZoneJsonKeys.
+//
+// Only the fields with a caller are kept. Dropping the unread ones is safe
+// because the producer does not consume these: PhosphorScreens deliberately
+// keeps its own private copy of the key strings
+// (libs/phosphor-screens/src/dbusscreenadaptor.cpp) so the library stays
+// self-contained.
+inline constexpr QLatin1String ScreenId{"screenId"};
+inline constexpr QLatin1String Geometry{"geometry"};
+inline constexpr QLatin1String Manufacturer{"manufacturer"};
+inline constexpr QLatin1String Model{"model"};
+inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
+inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
+inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
+inline constexpr QLatin1String PixelSize{"pixelSize"};
+// Where pixelSize came from: "reported" (the compositor's report, once the
+// daemon accepted it), "seeded" (the size last accepted for that monitor, in
+// this session or an earlier one) or "estimated" (logical size times scale). The daemon's rules see a
+// size only for the first two.
+inline constexpr QLatin1String PixelSizeSource{"pixelSizeSource"};
+inline constexpr QLatin1String PixelSizeSourceReported{"reported"};
+inline constexpr QLatin1String PixelSizeSourceSeeded{"seeded"};
+}
+
+namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
+
+/**
+ * @brief Sentinel value used as targetZoneId when restoring pre-tiling geometry
+ *
+ * When a window is released from autotile, its zone assignment entry uses this
+ * sentinel instead of a real zone UUID to signal that the window should be
+ * restored to its original (pre-tiling) geometry rather than snapped to a zone.
+ */
+inline constexpr auto& RestoreSentinel = PhosphorEngine::RestoreSentinel;
+
+// D-Bus identity constants for the daemon protocol AND the settings / editor
+// sub-application instances live in PhosphorProtocol::Service (daemon
+// interfaces) and PhosphorProtocol::Service::Apps (sub-app instances).
+// Consumers reference them qualified directly — no aliases here.
+
+// LayoutId lives in libs/phosphor-layout-api as `PhosphorLayout::LayoutId`.
+// All PlasmaZones-side callers reference it qualified directly — no alias
+// here.
+
+// EdgeGaps lives in libs/phosphor-layout-api as `PhosphorLayout::EdgeGaps`.
+// All PlasmaZones-side callers now reference it qualified directly — no
+// `using EdgeGaps = ...` alias here.
+
+} // namespace PlasmaZones

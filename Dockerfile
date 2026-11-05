@@ -7,7 +7,7 @@
 # Usage:
 #   docker build -t plasmazones-build .
 #   docker run --rm -v "$PWD":/src plasmazones-build
-#   docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure
+#   docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure --no-tests=error
 
 FROM fedora:44
 
@@ -17,11 +17,22 @@ FROM fedora:44
 # --- Plasma 6.7 / KWin 6.7 (spec: Fedora path) ---
 # Plus the package providing /usr/bin/dbus-run-session,
 # which cmake/PhosphorTestIsolation.cmake uses to give ctest a private session bus.
-# Plus glslang, which the shader_validate_animations test needs to compile the
-# compositor-only animation packs (plasmazones-shader-validate shells out to it;
-# that test FAILS rather than skips without it). Not a build dep, so it is
+# Plus glslang, which the shader_validate_animations, shader_validate_surface and
+# shader_validate_pointer tests need to compile those packs' compositor-only
+# classic-GL branch (plasmazones-shader-validate shells out to it; those tests
+# FAIL rather than skip without it). Not a build dep, so it is
 # deliberately absent from the packaging specs this list was copied from --
 # those all configure with -DBUILD_TESTING=OFF, and this image does not.
+# On an x86-64 host the configure fetches the glslang release that
+# cmake/PhosphorDependencies.cmake pins and uses that instead. The package is
+# still needed because this image is for macOS, and on Apple silicon it runs
+# as aarch64, which Khronos publishes no Linux build for.
+# The last four packages are the shell tier's dependencies. They are here
+# because the ENTRYPOINT configures with BUILD_PHOSPHOR_SHELL=ON: without
+# that flag the image built happily and `docker run ... ctest` reported
+# green having run none of the shell tier's suites, which is the trap
+# CLAUDE.md's Build & Test section describes. CI does not build the shell
+# tier, so this image is where its suites run.
 RUN dnf install -y --setopt=install_weak_deps=False \
         /usr/bin/wayland-scanner \
         cmake \
@@ -50,6 +61,10 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         plasma-activities-devel \
         systemd-rpm-macros \
         /usr/bin/dbus-run-session \
+        pipewire-devel \
+        polkit-qt6-1-devel \
+        pam-devel \
+        ddcutil-devel \
     && dnf clean all
 
 WORKDIR /build
@@ -64,8 +79,10 @@ ENTRYPOINT ["/bin/bash", "-c", "\
         -DCMAKE_BUILD_TYPE=Debug \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
         -DBUILD_TESTING=ON \
+        -DBUILD_PHOSPHOR_SHELL=ON \
+        -DBUILD_TOOLS=ON \
     && cmake --build /build --parallel $(nproc) \
     && export XDG_RUNTIME_DIR=\"$(mktemp -d)\" \
     && \"$@\"", "--"]
 
-CMD ["ctest", "--output-on-failure"]
+CMD ["ctest", "--output-on-failure", "--no-tests=error"]

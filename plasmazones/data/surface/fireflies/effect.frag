@@ -1,0 +1,126 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Fireflies surface shader — a small swarm of soft sparks drifting around
+// the window in the padded outer margin (this pack declares
+// `paddingParam: flyRange`, so the host inflates the capture canvas the
+// same way it does for the glow pack). Each spark gets hash-derived orbit
+// speed, direction, radial breathing, blink rhythm and colour mix, so the
+// swarm reads organic without any per-frame state. Sparks composite
+// BEHIND the window (over transparency only), so they duck under the
+// frame edge instead of crossing the content. Dims when unfocused.
+//
+// ANIMATED (references iTime): metadata declares "animated": true so the
+// daemon host ticks the item; the compositor detects the linked iTime
+// uniform itself and repaints the window continuously while decorated.
+
+#include <surface_noise.glsl>
+
+const int kMaxFlies = 16;
+
+vec4 pSurface(vec2 uv) {
+    vec4 window = surfaceTexel(uv);
+
+    if (surfaceFrameDegenerate()) {
+        return window;
+    }
+
+    vec2 px = surfacePixel(uv);
+    vec2 halfSz = 0.5 * uSurfaceFrameSize;
+    vec2 cen = uSurfaceFrameTopLeft + halfSz;
+
+    float reach = max(p_flyRange, 4.0) * uSurfaceScale;
+    float size = max(p_flySize, 0.5) * max(uSurfaceScale, 0.001);
+    float t = iTime * max(p_driftSpeed, 0.0);
+    float count = clamp(p_flyCount, 1.0, float(kMaxFlies));
+
+    vec3 glow = vec3(0.0);
+    float alpha = 0.0;
+    // Hoisted: the boundary solve below is two divides per spark per fragment, on a
+    // padded full-canvas pass, per decorated window, per frame, for a value that does
+    // not change across the iterations.
+    vec2 invHalf = 1.0 / max(halfSz, vec2(1.0));
+    for (int i = 0; i < kMaxFlies; ++i) {
+        if (float(i) >= count) {
+            break;
+        }
+        float h1 = hashSin1(float(i) + 0.13);
+        float h2 = hashSin1(float(i) + 7.71);
+        float h3 = hashSin1(float(i) + 42.9);
+
+        // Slow orbit around the frame, direction and rate per spark, with the
+        // offset breathing between the frame edge and the margin's reach so paths
+        // interleave instead of forming a ring.
+        //
+        // OFFSET FROM THE RECT BOUNDARY, not from an inscribed ellipse. This was
+        // `vec2(cos(ang) * (halfSz.x + off), sin(ang) * (halfSz.y + off))`, an
+        // ellipse with semi-axes (hx + off, hy + off) about the frame centre. An
+        // ellipse like that only escapes the rectangle where one of its terms
+        // exceeds the matching half-extent, which near the diagonals needs off to
+        // be about 0.41 of the half-extent. `off` is a fraction of flyRange and the
+        // half-extents are window-sized, so on a normally sized window most of each
+        // path lay INSIDE the frame rect, where the slab composite hides the spark
+        // entirely: the swarm collapsed to four blinking arcs at the edge midpoints
+        // and vanished around every corner.
+        //
+        // Now the radial distance TO THE RECT BOUNDARY along this direction, plus
+        // off, so the spark is outside the frame at every angle. The boundary along
+        // a unit direction sits at 1/k where k is the larger of the two normalized
+        // components.
+        //
+        // The trade is that the angle is no longer a uniform-speed parameter. With
+        // the point on a long edge the along-edge speed goes as hy/sin(theta)^2, so a
+        // spark crawls at the edge midpoints and whips around the corners, by a
+        // factor of 1 + (hx/hy)^2: 2:1 on a square pane but about 17:1 on a 1600x400
+        // window. The old ellipse was a gentler 4:1 there. Arc-length
+        // parametrisation is the fix if it ever reads badly. The edge midpoints are unchanged, since there the boundary
+        // radius IS the half-extent, so only the part of the path that was hidden
+        // moves. The spark stays inside the capture margin too: it is off beyond the
+        // boundary RADIALLY, so its perpendicular distance from the rect is at most
+        // off, and the pack's paddingParam is flyRange.
+        float dir = h3 > 0.5 ? 1.0 : -1.0;
+        float ang = TAU * fract(h1 + dir * t * (0.02 + 0.035 * h2));
+        float off = reach * (0.25 + 0.6 * (0.5 + 0.5 * sin(t * (0.5 + 0.8 * h2) + h1 * TAU)));
+        vec2 orbitDir = vec2(cos(ang), sin(ang));
+        float k = max(abs(orbitDir.x) * invHalf.x, abs(orbitDir.y) * invHalf.y);
+        vec2 pos = cen + orbitDir * (1.0 / max(k, 1e-4) + off);
+
+        // Soft gaussian body with a per-spark blink (cubed sine reads as a
+        // firefly's pulse: mostly dim with bright peaks).
+        float dist = length(px - pos);
+        float body = exp(-dist * dist / (2.0 * size * size));
+        float blinkWave = 0.5 + 0.5 * sin(t * (1.2 + 2.0 * h1) + h2 * TAU);
+        float blink = 0.25 + 0.75 * blinkWave * blinkWave * blinkWave;
+
+        vec4 col = mix(p_colorA, p_colorB, h3);
+        glow += col.rgb * body * blink * col.a;
+        alpha += body * blink * col.a;
+    }
+    // CANVAS-EDGE FEATHER, the same one haloFalloff gives glow and shadow. A
+    // spark centre sits up to 0.85 of the reach beyond the frame edge and its
+    // gaussian body extends further still, so on a host that grants less margin
+    // than the reach the swarm was cut off in a hard rectangle at the capture
+    // boundary. That is precisely the failure the glow pack's header says the
+    // shared halo exists to prevent. The phosphor-motes sibling carries the same
+    // block for the same reason. Same profile and the same 12-logical-px cap as
+    // the shared helper, so all four fade alike.
+    float edgeFade = surfaceCanvasEdgeFade(px, reach);
+    glow *= edgeFade;
+    alpha *= edgeFade;
+
+    // BOTH sides of the premultiplied pair. glow and alpha are accumulated as a
+    // matched pair above and every colour channel is at most 1, so glow <= alpha
+    // holds through the loop; clamping alpha alone breaks it at the first spark
+    // overlap that pushes the sum past 1, leaving rgb > a. Same fault and same
+    // cure as the phosphor-motes sibling.
+    alpha = clamp(alpha, 0.0, 1.0);
+    glow = min(glow, vec3(alpha));
+
+    // Focus cue: the swarm dims on unfocused surfaces, like the border family.
+    float dim = focusDim(0.55);
+    vec4 pane = vec4(glow * dim, alpha * dim);
+
+    // Behind-the-window composite: sparks light only the transparent
+    // margin (and any translucency), never crossing the content.
+    return slabComposite(window, pane);
+}

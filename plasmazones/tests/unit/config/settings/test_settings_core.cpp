@@ -1,0 +1,1858 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_settings_core.cpp
+ * @brief Unit tests for Settings: reset, save/load roundtrip, signal emission
+ *
+ * Split from test_settings.cpp. Tests cover reset() correctness, save/load
+ * round-trip fidelity, signal emission on the reload paths and the setters,
+ * stale-key purging, profile staging, commit failure, the profile round trip,
+ * and the defaults export, each section headed below.
+ *
+ * Companion test files:
+ *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
+ *     per-field signals, aggregate-setter merge semantics
+ *   - test_settings_shader_tree.cpp       — ShaderProfileTree persistence,
+ *     prune-on-write/read, autoAssignAllLayouts master toggle
+ */
+
+#include <QScopeGuard>
+#include <QSet>
+#include <QTest>
+#include <QColor>
+#include <QFile>
+#include <QGuiApplication>
+#include <QPalette>
+#include <QSignalSpy>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QUuid>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include "config/configbackends.h"
+#include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorConfig/Schema.h>
+#include <PhosphorConfig/Store.h>
+
+#include "config/settings.h"
+#include "config/configmigration.h"
+#include "config/settingsschema.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/types/enums.h"
+#include "core/types/overlayshadertree.h"
+#include "config/configdefaults.h"
+#include "core/types/constants.h"
+#include "helpers/IsolatedConfigGuard.h"
+
+using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+class TestSettingsCore : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // =========================================================================
+    // P0: crash/data-loss prevention
+    // =========================================================================
+
+    /**
+     * reset() must delete the "Updates" config group so that the dismissed
+     * update version is cleared. Regression: if Updates group survives reset,
+     * the user can never see update notifications again.
+     */
+    void testReset_deletesUpdatesGroup()
+    {
+        IsolatedConfigGuard guard;
+
+        // Write a value into the Updates group
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto updates = backend->group(QStringLiteral("Updates"));
+            updates->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("99.0.0"));
+            updates.reset();
+            backend->sync();
+        }
+
+        // Create Settings and reset
+        Settings settings;
+        settings.reset();
+
+        // Verify the Updates group is gone
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")), "reset() must delete the Updates group");
+    }
+
+    /**
+     * reset() must delete per-screen override groups (ZoneSelector:*, AutotileScreen:*,
+     * SnappingScreen:*) to prevent stale per-screen configuration from surviving a reset.
+     */
+    void testReset_deletesPerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Write per-screen overrides
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+                g->writeInt(QStringLiteral("Position"), 3);
+            }
+            {
+                auto g = backend->group(QStringLiteral("AutotileScreen:HDMI-A-1"));
+                g->writeInt(QStringLiteral("AutotileMasterCount"), 2);
+            }
+            {
+                auto g = backend->group(QStringLiteral("SnappingScreen:DP-1"));
+                g->writeBool(QStringLiteral("SnapAssistEnabled"), true);
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.reset();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+        for (const QString& g : groups) {
+            QVERIFY2(!g.startsWith(QLatin1String("ZoneSelector:")),
+                     qPrintable(QStringLiteral("Per-screen ZoneSelector group survived reset: %1").arg(g)));
+            QVERIFY2(!g.startsWith(QLatin1String("AutotileScreen:")),
+                     qPrintable(QStringLiteral("Per-screen AutotileScreen group survived reset: %1").arg(g)));
+            QVERIFY2(!g.startsWith(QLatin1String("SnappingScreen:")),
+                     qPrintable(QStringLiteral("Per-screen SnappingScreen group survived reset: %1").arg(g)));
+        }
+    }
+
+    /**
+     * Snapping focus-behavior settings default off and return to the default on
+     * reset(). Both gate runtime focus changes (the daemon focus-new-windows emit
+     * and the effect focus-follows-mouse), so a flipped default would silently
+     * change focus behavior for every user.
+     */
+    void testSnappingFocusSettings_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.snappingFocusNewWindows(), ConfigDefaults::snappingFocusNewWindows());
+        QCOMPARE(settings.snappingFocusFollowsMouse(), ConfigDefaults::snappingFocusFollowsMouse());
+        QCOMPARE(settings.snappingFocusNewWindows(), false);
+        QCOMPARE(settings.snappingFocusFollowsMouse(), false);
+
+        settings.setSnappingFocusNewWindows(true);
+        settings.setSnappingFocusFollowsMouse(true);
+        QCOMPARE(settings.snappingFocusNewWindows(), true);
+        QCOMPARE(settings.snappingFocusFollowsMouse(), true);
+
+        settings.reset();
+        QCOMPARE(settings.snappingFocusNewWindows(), ConfigDefaults::snappingFocusNewWindows());
+        QCOMPARE(settings.snappingFocusFollowsMouse(), ConfigDefaults::snappingFocusFollowsMouse());
+    }
+
+    /**
+     * The decoration window-filtering knobs (Decorations.WindowFiltering group)
+     * must return to their defaults on reset(). Regression: the group has to be
+     * listed in managedGroupNames() or reset() leaves the user's values on disk,
+     * and the schema-claimed group is never otherwise purged, so a factory reset
+     * would silently fail to restore the three Window Appearance filter knobs.
+     */
+    void testDecorationWindowFiltering_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+
+        settings.setDecorationExcludeTransientWindows(false);
+        settings.setDecorationMinimumWindowWidth(300);
+        settings.setDecorationMinimumWindowHeight(200);
+        QCOMPARE(settings.decorationExcludeTransientWindows(), false);
+        QCOMPARE(settings.decorationMinimumWindowWidth(), 300);
+        QCOMPARE(settings.decorationMinimumWindowHeight(), 200);
+
+        settings.reset();
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+    }
+
+    /**
+     * After save() then load(), every property must equal what was set.
+     * This validates the full round-trip for a representative subset of settings
+     * across all config groups.
+     *
+     * createDefaultConfigBackend() reads from
+     * $XDG_CONFIG_HOME/plasmazones/config.json. The IsolatedConfigGuard
+     * redirects XDG_CONFIG_HOME to a temp directory, so each test gets a fresh file.
+     */
+    void testSave_load_roundtrip_allGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        // Set non-default values across different groups. Inner/outer gaps are
+        // config-backed (the Gaps group); their save/reload round-trip is covered
+        // by testConfigBackedGap_roundTripsAndEmits, so they're omitted here to
+        // avoid duplicating that coverage.
+        settings.setBorderWidth(5);
+        settings.setBorderRadius(25);
+        settings.setActiveOpacity(0.8);
+        settings.setInactiveOpacity(0.2);
+        settings.setShowZoneNumbers(false);
+        settings.setToggleActivation(true);
+        settings.setSnappingFocusNewWindows(true);
+        settings.setSnappingFocusFollowsMouse(true);
+        settings.setZoneSpanToggleMode(true);
+        settings.setZoneSelectorEnabled(false);
+        settings.setZoneSelectorTriggerDistance(100);
+        settings.setZoneSelectorGridColumns(3);
+        settings.setAutotileSplitRatio(0.7);
+        settings.setAutotileMasterCount(3);
+        settings.setAnimationDuration(300);
+        settings.setAnimationSequenceMode(0);
+        settings.setLabelFontWeight(400);
+        // The four release graces, deliberately given FOUR DISTINCT values.
+        // They all share one key spelling ("ReleaseGraceMs") and are told apart
+        // only by their group, so writing the same number to all four would
+        // pass even if two of them aliased each other onto one group.
+        settings.setDragActivationGraceMs(110);
+        settings.setZoneSpanGraceMs(120);
+        settings.setAutotileDragInsertGraceMs(130);
+        settings.setScrollingDragInsertGraceMs(140);
+        settings.setSnapAssistGraceMs(160);
+
+        settings.save();
+
+        // Verify the round-trip by reading from a fresh config backend
+        // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
+            QCOMPARE(border->readInt(ConfigDefaults::widthKey(), 0), 5);
+            QCOMPARE(border->readInt(ConfigDefaults::radiusKey(), 0), 25);
+        }
+        {
+            auto opacity = backend->group(ConfigDefaults::snappingZonesOpacityGroup());
+            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::activeKey(), 0.0), 0.8));
+            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::inactiveKey(), 0.0), 0.2));
+        }
+        {
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
+            QCOMPARE(labels->readInt(ConfigDefaults::fontWeightKey(), 0), 400);
+        }
+
+        {
+            auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
+            QCOMPARE(effects->readBool(ConfigDefaults::showNumbersKey(), true), false);
+        }
+
+        {
+            auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+            QCOMPARE(behavior->readBool(ConfigDefaults::focusNewWindowsKey(), false), true);
+            QCOMPARE(behavior->readBool(ConfigDefaults::focusFollowsMouseKey(), false), true);
+            QCOMPARE(behavior->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 110);
+        }
+
+        {
+            auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
+            QCOMPARE(zoneSpan->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+            // Its own value, not the parent group's 110. Snapping.Behavior and
+            // Snapping.Behavior.ZoneSpan hold the same key name, and on disk the
+            // parent's scalar sits as a sibling of the ZoneSpan child object.
+            QCOMPARE(zoneSpan->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 120);
+        }
+
+        {
+            auto snapAssist = backend->group(ConfigDefaults::snappingBehaviorSnapAssistGroup());
+            QCOMPARE(snapAssist->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 160);
+        }
+
+        {
+            auto tiling = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            QCOMPARE(tiling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 130);
+        }
+
+        {
+            auto scrolling = backend->group(ConfigDefaults::scrollingBehaviorGroup());
+            QCOMPARE(scrolling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 140);
+        }
+
+        {
+            auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
+            QCOMPARE(zoneSelector->readBool(ConfigDefaults::enabledKey(), true), false);
+            QCOMPARE(zoneSelector->readInt(ConfigDefaults::triggerDistanceKey(), 0), 100);
+            QCOMPARE(zoneSelector->readInt(ConfigDefaults::gridColumnsKey(), 0), 3);
+        }
+
+        {
+            auto algo = backend->group(ConfigDefaults::tilingAlgorithmGroup());
+            double readRatio = algo->readDouble(ConfigDefaults::splitRatioKey(), 0.0);
+            QVERIFY2(qAbs(readRatio - 0.7) < 0.001,
+                     qPrintable(QStringLiteral("SplitRatio: expected 0.7, got %1").arg(readRatio)));
+            QCOMPARE(algo->readInt(ConfigDefaults::masterCountKey(), 0), 3);
+        }
+
+        {
+            // Phase 4 sub-commit 6: animation settings persist as a
+            // single Profile JSON blob under `Animations/Profile`
+            // (decision S). The per-field setters compose into that
+            // blob — verify the on-disk shape carries both values.
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            const QString profileJson = animations->readString(ConfigDefaults::animationProfileKey(), QString());
+            QVERIFY2(!profileJson.isEmpty(), "Animations/Profile blob missing from persisted config");
+            const QJsonDocument doc = QJsonDocument::fromJson(profileJson.toUtf8());
+            QVERIFY(doc.isObject());
+            const QJsonObject obj = doc.object();
+            QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
+            QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
+        }
+    }
+
+    // =========================================================================
+    // P1: functional correctness -- signal emission
+    // =========================================================================
+
+    /**
+     * load() must emit settingsChanged() exactly once when reloading actually
+     * changes values, so listeners re-read them. Exercised via the discard
+     * flow: an unsaved in-memory edit is reverted by load()'s reparse, which
+     * must announce the change through the single aggregate emission.
+     */
+    void testLoad_emitsSettingsChanged()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        const int committed = settings.adjacentThreshold();
+        settings.setAdjacentThreshold(committed == 15 ? 20 : 15);
+
+        QSignalSpy spy(&settings, &Settings::settingsChanged);
+        QVERIFY(spy.isValid());
+
+        settings.load();
+
+        QCOMPARE(settings.adjacentThreshold(), committed);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /**
+     * A reload that leaves the effective (palette-derived) values unchanged
+     * must stay silent. The zone colours follow the palette by default (empty
+     * theme-fallback sentinel, resolved in the getters), so a themed reload
+     * carries no colour writes at all; a reload of unchanged on-disk state
+     * must fire neither a colour NOTIFY nor settingsChanged.
+     */
+    void testLoad_noSignal_whenUnchanged()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.highlightColorRaw(), QString()); // default: follows the palette
+        settings.save(); // commit the default state to disk
+
+        const QColor resolvedHighlight = settings.highlightColor();
+
+        QSignalSpy spy(&settings, &Settings::settingsChanged);
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy fontColorSpy(&settings, &Settings::labelFontColorChanged);
+        QVERIFY(spy.isValid());
+
+        settings.load();
+
+        // The reload kept the palette-resolved colour...
+        QCOMPARE(settings.highlightColor(), resolvedHighlight);
+        // ...without any signal traffic.
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(fontColorSpy.count(), 0);
+
+        // The pinned leg gives the guard teeth beyond the trivially-default
+        // case: a CONCRETE stored colour reloaded from unchanged disk state
+        // must be equally silent, which is what actually exercises the
+        // same-value early-return against a non-default value.
+        settings.setHighlightColorRaw(QStringLiteral("#ff123456"));
+        settings.save();
+        highlightSpy.clear();
+        spy.clear();
+        settings.load();
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff123456"));
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+    }
+
+    /**
+     * A pinned zone colour must survive save() → fresh Settings → read-back:
+     * the four keys moved from QMetaType::QColor to QMetaType::QString with
+     * a new validator underneath them, so the stored JSON type and the
+     * read-side coercion both changed and nothing else round-trips them.
+     */
+    void testSave_load_pinnedZoneColorsRoundTrip()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+            settings.setInactiveColorRaw(QStringLiteral("#40223344"));
+            settings.setBorderColorRaw(QStringLiteral("#c8334455"));
+            settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+            settings.save();
+        }
+
+        Settings fresh;
+        QCOMPARE(fresh.highlightColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(fresh.inactiveColorRaw(), QStringLiteral("#40223344"));
+        QCOMPARE(fresh.borderColorRaw(), QStringLiteral("#c8334455"));
+        QCOMPARE(fresh.labelFontColorRaw(), QStringLiteral("#ffddeeff"));
+        // The resolved getters serve the pins, not palette-derived values.
+        QCOMPARE(fresh.highlightColor(), QColor(QStringLiteral("#80112233")));
+        QCOMPARE(fresh.labelFontColor(), QColor(QStringLiteral("#ffddeeff")));
+    }
+
+    /**
+     * The scrolling drop indicator's two colours are the same theme-fallback
+     * pair as the zone quartet, so they owe the same four guarantees: the raw
+     * accessor owns the stored sentinel, the resolved getter never serves an
+     * invalid colour, the QColor setter pins through the raw key, and an
+     * INVALID QColor un-pins rather than storing opaque black.
+     */
+    void testDropIndicatorColorsResolveAndPin()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        // Following the palette: the resolved value is the live Highlight
+        // forced opaque. Read from qGuiApp rather than compared against a
+        // literal — a hardcoded colour here would be a second source of truth
+        // for the resolution rule. The alpha is forced on the EXPECTATION too,
+        // because this file does not control the process palette: a platform
+        // theme shipping a translucent Highlight is exactly what the forcing
+        // exists for, so comparing against the raw palette colour would fail
+        // this test in the one environment the production code handles. The
+        // forcing itself is pinned against a deliberately translucent palette
+        // by dropIndicatorFollowsPaletteOpaquely in
+        // test_settings_system_palette_tracking.cpp, which owns palette state.
+        QColor expected = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        expected.setAlpha(255);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), expected);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), expected);
+        const QColor livePaletteHighlight = expected;
+
+        settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(QStringLiteral("#80112233")));
+
+        settings.setScrollingDropIndicatorColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
+
+        // The border's own pin and un-pin, not just the fill's: the two go
+        // through separate macro invocations, so a setter wired to the wrong
+        // raw key would survive a fill-only check.
+        settings.setScrollingDropIndicatorBorderColor(QColor(QStringLiteral("#ff445566")));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QStringLiteral("#ff445566"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        settings.setScrollingDropIndicatorBorderColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+
+        // Junk in a hand-edited config. The load-bearing assertion is that the
+        // SCHEMA VALIDATOR snapped it to the sentinel on the way in: asserting
+        // only that the getter still returns something valid proves nothing,
+        // because resolveThemeColor's unparseable branch would answer the same
+        // way even with the validator gone.
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("not-a-colour"));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+    }
+
+    /**
+     * The no-palette fallback colour is spelled twice — ConfigDefaults for the
+     * config layer, isettings_detail for the interface's own default bodies —
+     * because the dependency runs config→core and neither is constexpr, so no
+     * static_assert can pin them. This is that pin, and both spellings' doc
+     * comments name it.
+     */
+    void dropIndicatorFallbackMatchesInterfaceDefault()
+    {
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor(),
+                 isettings_detail::opaqueDropIndicatorFallback());
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor().alpha(), 255);
+    }
+
+    /**
+     * reset() must return the theme-fallback colour keys to the empty sentinel
+     * (the schema default), after which the resolved getters follow the palette
+     * again. The drop indicator's pair is included because reset() only reaches
+     * a group listed in managedGroupNames(), and a group left off that list
+     * fails exactly here and nowhere else.
+     */
+    void testReset_returnsThemeFallbackColorsToSentinel()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+        settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.setScrollingDropIndicatorColorRaw(QStringLiteral("#ff778899"));
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("#ffaabbcc"));
+        settings.reset();
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
+    }
+
+    /**
+     * Setters must emit both the specific signal and settingsChanged() when the
+     * value actually changes.
+     */
+    void testSetter_emitsSettingsChanged_onValueChange()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
+        QVERIFY(generalSpy.isValid());
+        QVERIFY(specificSpy.isValid());
+
+        int current = settings.adjacentThreshold();
+        int next = (current == 15) ? 20 : 15;
+
+        settings.setAdjacentThreshold(next);
+
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+    }
+
+    /**
+     * Setters must NOT emit signals when the value is unchanged (guard check).
+     */
+    void testSetter_noSignal_onSameValue()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setAdjacentThreshold(15); // force a known value
+
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
+
+        settings.setAdjacentThreshold(15); // same value again
+
+        QCOMPARE(specificSpy.count(), 0);
+        QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * setDefaultLayoutId accepts the reserved no-layout word ("no default at
+     * all" — the library card's Clear Default) even though it is not a UUID,
+     * while any other malformed id keeps the no-op protection. Regression
+     * guard: the UUID normalizer used to degrade the word to empty and hit
+     * the malformed-input guard, making the sentinel silently unwritable.
+     */
+    void testSetDefaultLayoutId_acceptsSentinel_rejectsOtherNonUuids()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        const QString realId = QUuid::createUuid().toString();
+        settings.setDefaultLayoutId(realId);
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // A malformed non-UUID stays a no-op (typo protection).
+        settings.setDefaultLayoutId(QStringLiteral("not-a-uuid"));
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // The reserved word is stored verbatim and emits. Spelled as a literal
+        // on purpose: the setter compares against PhosphorZones::NoSnappingLayout,
+        // so this doubles as an exact-spelling pin that fails loudly if the
+        // constant is ever respelled without the config surface following.
+        QSignalSpy spy(&settings, &Settings::defaultLayoutIdChanged);
+        settings.setDefaultLayoutId(QStringLiteral("none"));
+        QCOMPARE(settings.defaultLayoutId(), QStringLiteral("none"));
+        QCOMPARE(spy.count(), 1);
+
+        // And it survives a save / reload round trip. This is the value the
+        // daemon's default-layout provider reads at the NEXT start, so an
+        // in-memory-only pin would miss a persistence path that dropped it —
+        // sparse persistence deletes default-equal keys, and the sentinel is
+        // not the default, so it must be written.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.defaultLayoutId(), QStringLiteral("none"));
+    }
+
+    /**
+     * The context-lock toggle is a read-modify-write over the whole
+     * lockedScreens list (the daemon and the settings app are concurrent
+     * writers, guarded by refreshCleanBackendFromDisk at the top of
+     * setContextLocked). Pin the round-trip, the same-state no-op, and the
+     * loud refusal of the unrepresentable (screen, 0, activity) shape —
+     * silently composing a whole-screen lock there would be data loss.
+     */
+    void testContextLock_roundTripNoOpAndInvalidShape()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QSignalSpy lockSpy(&settings, &Settings::lockedScreensChanged);
+
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QVERIFY(settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Locking an already-locked context is a no-op: no write, no signal.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QCOMPARE(lockSpy.count(), 1);
+
+        // (screen, 0, activity) has no representable form — refused loudly,
+        // nothing written, instead of degrading to a whole-screen lock.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("activity supplied without")));
+        settings.setContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work"), true);
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Unlock round-trips back to empty.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), false);
+        QVERIFY(!settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QVERIFY(settings.lockedScreens().isEmpty());
+        QCOMPARE(lockSpy.count(), 2);
+    }
+
+    /**
+     * REGRESSION GUARD (PR #331 review).
+     *
+     * load() must emit per-property NOTIFY signals when the on-disk value
+     * differs from the in-memory value at the time of the call. This is
+     * the discard-changes UX flow: the user mutates a setting, the in-memory
+     * Store now disagrees with disk, then calls load() to revert. QML
+     * bindings rely on the specific NOTIFY signal — settingsChanged() alone
+     * is not enough.
+     *
+     * The bug being guarded: pre-fix, load() reparseConfiguration()'d BEFORE
+     * snapshotting properties. Store-backed getters read on demand from the
+     * just-reloaded backend, so snapshot==reloaded value, the comparison
+     * loop never detected a difference, and no NOTIFY signal fired —
+     * leaving the QML binding stuck on the user's pre-discard value.
+     *
+     * Fix: snapshot must be taken BEFORE reparseConfiguration() so the
+     * pre-discard in-memory value is captured.
+     */
+    void testLoad_emitsSpecificNotifyOnDiscardChanges()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed disk with a known value via save().
+        {
+            Settings settings;
+            settings.setBorderWidth(3);
+            settings.save();
+        }
+
+        // Open Settings — getter now reads 3 from the freshly loaded backend.
+        Settings settings;
+        QCOMPARE(settings.borderWidth(), 3);
+
+        // Mutate in-memory only — disk still says 3.
+        settings.setBorderWidth(7);
+        QCOMPARE(settings.borderWidth(), 7);
+
+        // The discard-changes flow: load() reverts in-memory state to
+        // disk and must emit borderWidthChanged() so QML rebinds.
+        QSignalSpy specificSpy(&settings, &Settings::borderWidthChanged);
+        QVERIFY(specificSpy.isValid());
+
+        settings.load();
+
+        QCOMPARE(settings.borderWidth(), 3);
+        QCOMPARE(specificSpy.count(), 1);
+    }
+
+    /**
+     * The Editor.* settings have no Q_PROPERTY on Settings, so load()'s
+     * property snapshot cannot see them. A reload that changes only an editor
+     * setting must still announce it: its own signal, then the
+     * editorSettingsChanged aggregate the daemon relays to the open editor
+     * (issue #1161). It must NOT fire settingsChanged, whose daemon and
+     * compositor subscribers read no Editor.* key and would otherwise re-fetch
+     * their whole state on every editor save. Two instances on one config
+     * stand in for the settings app (writer) and the daemon (reloader).
+     */
+    void testLoad_announcesEditorOnlyChange()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings daemon;
+        QCOMPARE(daemon.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacity());
+
+        {
+            Settings settingsApp;
+            settingsApp.setEditorBackgroundOpacity(0.25);
+            settingsApp.setEditorGridSnappingEnabled(!ConfigDefaults::editorGridSnappingEnabled());
+            QVERIFY(settingsApp.save());
+        }
+
+        QSignalSpy aggregateSpy(&daemon, &Settings::settingsChanged);
+        QSignalSpy editorAggregateSpy(&daemon, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&daemon, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy gridSpy(&daemon, &Settings::editorGridSnappingEnabledChanged);
+        QVERIFY(aggregateSpy.isValid() && editorAggregateSpy.isValid() && opacitySpy.isValid() && gridSpy.isValid());
+        // A consumer reacting to the signal reads the getter, so the getter
+        // must already answer the new value when the signal fires.
+        qreal opacitySeenInSlot = -1.0;
+        connect(&daemon, &Settings::editorBackgroundOpacityChanged, this, [&]() {
+            opacitySeenInSlot = daemon.editorBackgroundOpacity();
+        });
+
+        daemon.load();
+
+        QCOMPARE(daemon.editorBackgroundOpacity(), 0.25);
+        QCOMPARE(opacitySeenInSlot, 0.25);
+        QCOMPARE(daemon.editorGridSnappingEnabled(), !ConfigDefaults::editorGridSnappingEnabled());
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(gridSpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 0);
+
+        // A second reload of the same file changes nothing and stays silent.
+        daemon.load();
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(gridSpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 0);
+    }
+
+    /**
+     * Every Editor.* key the schema declares must be announced by a reload
+     * that changes only it. The keys reach the reload's change detection
+     * through a hand-kept table in settings.cpp, so a key added to the schema
+     * and forgotten there would reload silently and never reach an open
+     * editor. Walking the schema rather than a list here is what catches that.
+     */
+    void testLoad_announcesEveryEditorKey()
+    {
+        const PhosphorConfig::Schema& schema = cachedSettingsSchema();
+        const QString editorPrefix = ConfigDefaults::editorGroup() + QLatin1Char('.');
+        QStringList failures;
+        int checked = 0;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            if (!it.key().startsWith(editorPrefix)) {
+                continue;
+            }
+            for (const PhosphorConfig::KeyDef& def : it.value()) {
+                const QString name = it.key() + QLatin1Char('/') + def.key;
+                // Candidates the key's validator keeps, so a coerced pick
+                // fails loudly below instead of passing vacuously.
+                QVariantList candidates;
+                switch (def.expectedType) {
+                case QMetaType::Bool:
+                    candidates = {!def.defaultValue.toBool()};
+                    break;
+                case QMetaType::Int:
+                    candidates = {int(Qt::AltModifier), int(Qt::MetaModifier), int(Qt::ShiftModifier)};
+                    break;
+                case QMetaType::Double:
+                    candidates = {0.25, 0.5, 0.05};
+                    break;
+                case QMetaType::QString:
+                    candidates = {QStringLiteral("Ctrl+Alt+Shift+F12")};
+                    break;
+                default:
+                    failures.append(name + QStringLiteral(": no candidate value for its type, extend this test"));
+                    continue;
+                }
+
+                IsolatedConfigGuard guard;
+                Settings daemon;
+                {
+                    auto backend = PlasmaZones::createDefaultConfigBackend();
+                    PhosphorConfig::Store writer(backend.get(), schema);
+                    bool wrote = false;
+                    for (const QVariant& candidate : std::as_const(candidates)) {
+                        writer.write(it.key(), def.key, candidate);
+                        if (writer.readVariant(it.key(), def.key) != def.defaultValue) {
+                            wrote = true;
+                            break;
+                        }
+                    }
+                    if (!wrote || !backend->sync()) {
+                        failures.append(name + QStringLiteral(": could not write a non-default value"));
+                        continue;
+                    }
+                }
+
+                QSignalSpy editorAggregateSpy(&daemon, &Settings::editorSettingsChanged);
+                QSignalSpy aggregateSpy(&daemon, &Settings::settingsChanged);
+                daemon.load();
+                ++checked;
+                if (editorAggregateSpy.count() != 1) {
+                    failures.append(name
+                                    + QStringLiteral(": editorSettingsChanged fired %1 times, expected once")
+                                          .arg(editorAggregateSpy.count()));
+                }
+                if (aggregateSpy.count() != 0) {
+                    failures.append(name + QStringLiteral(": settingsChanged fired for an Editor.*-only reload"));
+                }
+            }
+        }
+        QVERIFY2(checked > 0, "no Editor.* keys found in the schema");
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
+    }
+
+    /**
+     * The canvas veil opacity is clamped to 0–1 by the schema, on the write
+     * and on the read. The setter writes first and compares after, so a
+     * repeated out-of-range write that clamps to the stored value is silent.
+     */
+    void testEditorBackgroundOpacity_clamped()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::editorBackgroundOpacityChanged);
+            settings.setEditorBackgroundOpacity(1.5);
+            QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMax());
+            QCOMPARE(spy.count(), 1);
+            settings.setEditorBackgroundOpacity(2.0);
+            QCOMPARE(spy.count(), 1);
+            settings.setEditorBackgroundOpacity(-0.5);
+            QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMin());
+            QCOMPARE(spy.count(), 2);
+        }
+
+        // Read side: a hand-edited out-of-range value reads back clamped.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            backend->group(ConfigDefaults::editorBackgroundGroup())->writeDouble(ConfigDefaults::opacityKey(), 3.0);
+            QVERIFY(backend->sync());
+        }
+        Settings reader;
+        QCOMPARE(reader.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacityMax());
+    }
+
+    /**
+     * The settings app's answer to an outside write while it has unsaved
+     * edits: adopt what disk holds for every key it has not touched, keep the
+     * edits, and leave them reading as unsaved. Before this, a later Save
+     * wrote the app's stale copy of the outside change back.
+     */
+    void testReloadPreservingLocalEdits_adoptsExternalKeepsEdits()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settingsApp;
+        settingsApp.setBorderWidth(7); // the unsaved local edit
+        QVERIFY(settingsApp.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+
+        {
+            Settings editorStandIn;
+            editorStandIn.setEditorBackgroundOpacity(0.3);
+            QVERIFY(editorStandIn.save());
+        }
+
+        QSignalSpy editorAggregateSpy(&settingsApp, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&settingsApp, &Settings::editorBackgroundOpacityChanged);
+        settingsApp.reloadPreservingLocalEdits();
+
+        QCOMPARE(settingsApp.editorBackgroundOpacity(), 0.3);
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QCOMPARE(settingsApp.borderWidth(), 7);
+        QVERIFY(settingsApp.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+        QVERIFY(!settingsApp.isKeyModified(ConfigDefaults::editorBackgroundGroup(), ConfigDefaults::opacityKey()));
+
+        // The Save that used to put the stale opacity back now keeps both.
+        QVERIFY(settingsApp.save());
+        Settings reread;
+        QCOMPARE(reread.editorBackgroundOpacity(), 0.3);
+        QCOMPARE(reread.borderWidth(), 7);
+    }
+
+    /**
+     * A config.json broken by hand while the app runs is not overwritten by
+     * its next Save, and once it is repaired the Save after that lands
+     * without a Discard or a restart, keeping the edit made meanwhile.
+     */
+    void testSave_refusesUnreadableConfigThenRecovers()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setBorderWidth(7);
+        QVERIFY(settings.save());
+
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        const QByteArray broken = good + QByteArray("{ a hand edit with a typo");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(broken);
+        f.close();
+
+        QSignalSpy unreadableSpy(&settings, &Settings::configUnreadableChanged);
+        settings.setBorderWidth(8);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.configUnreadable());
+        QCOMPARE(unreadableSpy.count(), 1);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), broken);
+        f.close();
+
+        // The user repairs the file. The next Save looks again and lands.
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        QVERIFY(settings.save());
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(unreadableSpy.count(), 2);
+        // A further save that changes nothing about readability is silent.
+        QVERIFY(settings.save());
+        QCOMPARE(unreadableSpy.count(), 2);
+        Settings reread;
+        QCOMPARE(reread.borderWidth(), 8);
+    }
+
+    /**
+     * A settings app started on a broken config.json holds empty per-screen
+     * and virtual-screen state, because there was nothing it could read. Its
+     * first Save after the file is repaired must not write that empty state
+     * over the per-screen configuration the repaired file holds.
+     */
+    void testSave_afterStartOnBrokenFile_keepsRepairedPerScreenConfig()
+    {
+        IsolatedConfigGuard guard;
+        const auto restoreHandling = qScopeGuard([]() {
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+        });
+        ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::LeaveInPlace);
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        const int position = static_cast<int>(ZoneSelectorPosition::BottomLeft);
+        {
+            Settings writer;
+            writer.setPerScreenZoneSelectorSetting(screen, positionKey, position);
+            QVERIFY(writer.save());
+        }
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ broken");
+        f.close();
+
+        Settings app;
+        QVERIFY(app.configUnreadable());
+        QVERIFY(!app.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        app.setBorderWidth(9);
+        QVERIFY(app.save());
+
+        Settings reread;
+        QCOMPARE(reread.getPerScreenZoneSelectorSettings(screen).value(positionKey).toInt(), position);
+        QCOMPARE(reread.borderWidth(), 9);
+    }
+
+    /**
+     * A factory reset against a config.json broken since it was read refuses
+     * without losing the unsaved edit, refuses again up front while the file
+     * stays broken, and goes through once it is repaired.
+     */
+    void testReset_refusesUnreadableConfigKeepingEdits()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setBorderWidth(7);
+        QVERIFY(settings.save());
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good + QByteArray("{ a hand edit with a typo"));
+        f.close();
+
+        settings.setBorderWidth(8);
+        // Broken since the last read: the refusal comes from the write.
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.borderWidth(), 8);
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()));
+        QVERIFY(settings.configUnreadable());
+        // Known to be broken now: refused before anything is touched.
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.borderWidth(), 8);
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        QVERIFY(settings.reset());
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(settings.borderWidth(), ConfigDefaults::borderWidth());
+    }
+
+    /**
+     * A per-screen override cleared in memory while config.json could not be
+     * read stays cleared once the file is repaired. The repaired file's
+     * entries come back, but not one the user removed meanwhile.
+     */
+    void testRepairedConfig_keepsPerScreenRemovalMadeWhileBroken()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        Settings settings;
+        settings.setPerScreenZoneSelectorSetting(screen, positionKey,
+                                                 static_cast<int>(ZoneSelectorPosition::BottomLeft));
+        QVERIFY(settings.save());
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray good = f.readAll();
+        f.close();
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ broken");
+        f.close();
+
+        // A full reload while broken: the members come from the last readable
+        // state, which still has the override.
+        settings.load();
+        QVERIFY(settings.configUnreadable());
+        QVERIFY(settings.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+        settings.clearPerScreenZoneSelectorPositionSettings(screen);
+
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(good);
+        f.close();
+        settings.setBorderWidth(9);
+        QVERIFY(settings.save());
+
+        Settings reread;
+        QVERIFY(!reread.getPerScreenZoneSelectorSettings(screen).contains(positionKey));
+        QCOMPARE(reread.borderWidth(), 9);
+    }
+
+    /**
+     * A break found only by a refused write, after which the file is moved
+     * aside (what the daemon's start does to an unreadable config.json): the
+     * next reload adopts the fresh file for the per-screen state too, keeping
+     * only what was changed in memory. Saving the old per-screen state over
+     * the fresh file would leave a mix of defaults and stale overrides.
+     */
+    void testRefusedWriteThenFreshFile_mergesPerScreenFromLastSave()
+    {
+        IsolatedConfigGuard guard;
+        const QString screenA = QStringLiteral("test-screen-a");
+        const QString screenB = QStringLiteral("test-screen-b");
+        const QString positionKey = QString::fromLatin1(ZoneSelectorConfigKey::Position);
+        const int position = static_cast<int>(ZoneSelectorPosition::BottomLeft);
+        Settings settings;
+        settings.setPerScreenZoneSelectorSetting(screenA, positionKey, position);
+        QVERIFY(settings.save());
+
+        const QString path = ConfigDefaults::configFilePath();
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("{ a hand edit with a typo, and long enough to change the size");
+        f.close();
+
+        // Changed in memory while broken, then refused at the write.
+        settings.setPerScreenZoneSelectorSetting(screenB, positionKey, position);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.configUnreadable());
+
+        // The file is moved aside; the next look finds none and starts fresh.
+        QVERIFY(QFile::remove(path));
+        QSignalSpy perScreenSpy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+        settings.reloadPreservingLocalEdits();
+        QVERIFY(!settings.configUnreadable());
+        QCOMPARE(perScreenSpy.count(), 1);
+        QVERIFY(!settings.getPerScreenZoneSelectorSettings(screenA).contains(positionKey));
+        QCOMPARE(settings.getPerScreenZoneSelectorSettings(screenB).value(positionKey).toInt(), position);
+
+        QVERIFY(settings.save());
+        Settings reread;
+        QVERIFY(!reread.getPerScreenZoneSelectorSettings(screenA).contains(positionKey));
+        QCOMPARE(reread.getPerScreenZoneSelectorSettings(screenB).value(positionKey).toInt(), position);
+    }
+
+    /**
+     * A per-screen width pair merged from two sides (the value changed in
+     * memory while the file was unreadable, the kind changed in the repaired
+     * file) is repaired the way a load repairs it, rather than saved as a
+     * proportion under a pixel kind.
+     */
+    void testRepairedConfig_repairsMergedPerScreenWidthPair()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("test-screen-1");
+        const QString kindKey = QString::fromLatin1(PerScreenScrollingKey::DefaultColumnWidthKind);
+        const QString valueKey = QString::fromLatin1(PerScreenScrollingKey::DefaultColumnWidthValue);
+        const QString path = ConfigDefaults::configFilePath();
+        const auto readFile = [&path]() {
+            QFile f(path);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const auto writeFile = [&path](const QByteArray& bytes) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(bytes) == bytes.size();
+        };
+
+        Settings settings;
+        settings.setPerScreenScrollingSetting(screen, kindKey, ConfigDefaults::scrollingWidthKindProportion());
+        settings.setPerScreenScrollingSetting(screen, valueKey, 0.5);
+        QVERIFY(settings.save());
+        const QByteArray proportion = readFile();
+        QByteArray fixed;
+        {
+            Settings other;
+            other.setPerScreenScrollingSetting(screen, kindKey, ConfigDefaults::scrollingWidthKindFixed());
+            other.setPerScreenScrollingSetting(screen, valueKey, 900.0);
+            QVERIFY(other.save());
+            fixed = readFile();
+        }
+        QVERIFY(writeFile(proportion));
+
+        QVERIFY(writeFile("{ broken"));
+        settings.load();
+        QVERIFY(settings.configUnreadable());
+        // A value-only write, which the setter deliberately does not repair.
+        settings.setPerScreenScrollingSetting(screen, valueKey, 0.6);
+
+        QVERIFY(writeFile(fixed));
+        settings.reloadPreservingLocalEdits();
+        QVERIFY(!settings.configUnreadable());
+        const QVariantMap merged = settings.getPerScreenScrollingSettings(screen);
+        QCOMPARE(merged.value(kindKey).toInt(), ConfigDefaults::scrollingWidthKindFixed());
+        // A pixel width, not the 0.6 proportion laid over the Fixed kind.
+        QVERIFY2(merged.value(valueKey).toDouble() > 1.0, qPrintable(merged.value(valueKey).toString()));
+    }
+
+    /**
+     * A factory reset announces the families load() alone cannot see once
+     * the groups are cleared: the Editor.* settings and the animation Profile
+     * blob, whose explicitness picks the global profile's registry layer.
+     */
+    void testReset_announcesEditorAndAnimationProfile()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setEditorBackgroundOpacity(0.3);
+        settings.setAnimationDuration(ConfigDefaults::animationDuration() + 100);
+        QVERIFY(settings.hasExplicitAnimationProfile());
+        QVERIFY(settings.save());
+
+        QSignalSpy editorAggregateSpy(&settings, &Settings::editorSettingsChanged);
+        QSignalSpy opacitySpy(&settings, &Settings::editorBackgroundOpacityChanged);
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        QVERIFY(settings.reset());
+
+        QCOMPARE(settings.editorBackgroundOpacity(), ConfigDefaults::editorBackgroundOpacity());
+        QCOMPARE(opacitySpy.count(), 1);
+        QCOMPARE(editorAggregateSpy.count(), 1);
+        QVERIFY(!settings.hasExplicitAnimationProfile());
+        QCOMPARE(profileSpy.count(), 1);
+    }
+
+    /**
+     * LabelFontWeight default must be 700 (CSS Bold), not 75 (Qt5 QFont::Bold).
+     * Regression guard for the CSS vs QFont weight confusion.
+     */
+    void testLabelFontWeight_default_is700_cssBold()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.labelFontWeight(), 700);
+    }
+
+    /**
+     * When config has no DragActivationTriggers JSON, load should use the
+     * default trigger list (Alt modifier, no mouse button).
+     */
+    void testLoadActivation_missingTriggersUsesDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        // Write v2 snapping behavior config without DragActivationTriggers
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto activation = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            activation->writeBool(ConfigDefaults::enabledKey(), true);
+            // Deliberately do NOT write DragActivationTriggers
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.dragActivationTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Missing DragActivationTriggers must fall back to defaults");
+        QVariantMap first = triggers.first().toMap();
+        // Default: Alt modifier (3), no mouse button (0)
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When DragActivationTriggers contains corrupt/malformed JSON, load should
+     * fall back to the default trigger list rather than crashing.
+     */
+    void testLoadActivation_corruptJsonUsesDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            behavior->writeString(ConfigDefaults::triggersKey(), QStringLiteral("{not valid json!}"));
+            behavior.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.dragActivationTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Corrupt JSON must fall back to defaults");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When ZoneSpanModifier is set but ZoneSpanTriggers JSON is absent,
+     * the fallback trigger should use the actual ZoneSpanModifier value,
+     * not the static default.
+     */
+    void testLoadActivation_zoneSpanTriggersUsesActualModifier()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
+            zoneSpan->writeInt(ConfigDefaults::modifierKey(), 3); // Alt
+            // Deliberately do NOT write Triggers
+            zoneSpan.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.zoneSpanTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Missing ZoneSpanTriggers must create trigger from ZoneSpanModifier value");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+    }
+    // =========================================================================
+    // Stale key purging
+    // =========================================================================
+
+    /**
+     * save() must remove stale keys that are not part of the current schema.
+     * Simulates a refactor where a key was renamed: the old key should be
+     * purged after save(), while all valid keys survive.
+     */
+    void testSave_purgesStaleKeys()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject stale keys into several v2 groups, and SEED the three
+        // declared keys whose sparse-absence is asserted below with their
+        // current defaults — an unseeded key was never present, so !hasKey
+        // on it cannot distinguish "pruned" from "never there".
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
+                g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
+                g->writeBool(ConfigDefaults::toggleActivationKey(), ConfigDefaults::toggleActivation());
+            }
+            {
+                auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
+                g->writeBool(QStringLiteral("OldDisplayToggle"), true);
+                g->writeBool(ConfigDefaults::showNumbersKey(), ConfigDefaults::showNumbers());
+            }
+            {
+                auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+                g->writeInt(QStringLiteral("DeprecatedThemeIndex"), 42);
+            }
+            {
+                auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
+                g->writeString(QStringLiteral("RemovedAutotileSetting"), QStringLiteral("gone"));
+            }
+            {
+                auto g = backend->group(ConfigDefaults::tilingGroup());
+                g->writeBool(ConfigDefaults::enabledKey(), ConfigDefaults::autotileEnabled());
+            }
+            backend->sync();
+        }
+
+        // Precondition: every stale key really is on disk, in the group it was
+        // written to. Without this the "it is gone after save()" assertions
+        // below cannot tell a working purge from a key that was never there —
+        // which is exactly how the Tiling.Algorithm case passed for so long
+        // while reading back from the wrong group.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(backend->group(ConfigDefaults::snappingBehaviorGroup())
+                        ->hasKey(QStringLiteral("ObsoleteActivationKey")));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(QStringLiteral("OldDisplayToggle")));
+            QVERIFY(backend->group(ConfigDefaults::snappingZonesColorsGroup())
+                        ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
+            QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
+                        ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+            // The three seeded default-valued keys are genuinely present too,
+            // so the absence assertions after save() prove the PRUNE ran.
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingBehaviorGroup())->hasKey(ConfigDefaults::toggleActivationKey()));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(ConfigDefaults::showNumbersKey()));
+            QVERIFY(backend->group(ConfigDefaults::tilingGroup())->hasKey(ConfigDefaults::enabledKey()));
+        }
+
+        // Load picks up the stale keys from disk (but ignores them in members)
+        Settings settings;
+
+        // Mutate one value to ensure save actually writes
+        settings.setAdjacentThreshold(99);
+        settings.save();
+
+        // Re-read the file and verify stale keys are gone
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
+                     "Stale key in Snapping.Behavior group must be purged by save()");
+            // Persistence is sparse: an untouched key still at its default is
+            // stored as ABSENCE, never as a stamped default — a stamped
+            // default would freeze the value against future default retunes.
+            QVERIFY2(!g->hasKey(ConfigDefaults::toggleActivationKey()),
+                     "Default-valued ToggleActivation must be stored as absence after save()");
+        }
+        {
+            // A modified (non-default) key survives save(). AdjacentThreshold
+            // is declared in Snapping.Gaps, not Snapping.Behavior.
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            QVERIFY2(g->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                     "Modified key AdjacentThreshold must survive save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("OldDisplayToggle")),
+                     "Stale key in Snapping.Effects group must be purged by save()");
+            QVERIFY2(!g->hasKey(ConfigDefaults::showNumbersKey()),
+                     "Default-valued ShowNumbers must be stored as absence after save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("DeprecatedThemeIndex")),
+                     "Stale key in Snapping.Zones.Colors group must be purged by save()");
+        }
+        {
+            // Read back from the group the key was WRITTEN to. Tiling.Algorithm
+            // and Tiling are distinct nested groups, so asking Tiling whether it
+            // holds a key only ever planted in Tiling.Algorithm is trivially
+            // true and left the purge unverified.
+            auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
+                     "Stale key in Tiling.Algorithm group must be purged by save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::tilingGroup());
+            QVERIFY2(!g->hasKey(ConfigDefaults::enabledKey()),
+                     "Default-valued Tiling Enabled must be stored as absence after save()");
+        }
+    }
+
+    /**
+     * save() prunes a FROZEN default: a stored value equal to the current
+     * schema default, stamped by an older version whose save materialised
+     * every declared key. Left in place it would shadow any future default
+     * retune (the retuned scrolling shortcut chords were invisible to every
+     * install with such a config). The observable value must not change.
+     */
+    void testSave_prunesFrozenDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        // The key is seeded into its DECLARED group (Snapping.Gaps), so its
+        // removal can only come from write()'s default-prune — a stale-key
+        // purge never touches a declared key in its own group.
+        const int defaultThreshold = ConfigDefaults::adjacentThreshold();
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            g->writeInt(ConfigDefaults::adjacentThresholdKey(), defaultThreshold);
+            backend->sync();
+        }
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()));
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY2(!backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                 "A stored value equal to the current default must be pruned by save()");
+        QCOMPARE(settings.adjacentThreshold(), defaultThreshold);
+    }
+
+    /**
+     * save() must delete per-screen override groups that it doesn't rewrite,
+     * which removes any stale keys they contain. Groups for screens the
+     * Settings object doesn't know about are deleted entirely.
+     */
+    void testSave_purgesStaleKeysInPerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject a per-screen group with a valid key and a stale key
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+                g->writeInt(ConfigDefaults::positionKey(), 2);
+                g->writeString(QStringLiteral("ObsoletePerScreenKey"), QStringLiteral("stale"));
+            }
+            backend->sync();
+        }
+
+        // Precondition, mirroring testSave_purgesStaleKeys: both keys really are
+        // on disk in that group before save() runs. Without it the absence
+        // assertion below cannot tell a working purge from a key that was never
+        // written.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY(g->hasKey(ConfigDefaults::positionKey()));
+            QVERIFY(g->hasKey(QStringLiteral("ObsoletePerScreenKey")));
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
+                     "Stale key in per-screen group must be purged by save()");
+            // Positive control for the mechanism: save() deletes every
+            // prefix-matching group and rewrites the ones it loaded, so the
+            // stale key vanishing only means "purged" if the group's valid key
+            // came back with it. Absence alone reads the same whether the key
+            // was dropped or the whole group was deleted, and the delete arm is
+            // the one that fires for a group Settings never loaded.
+            QVERIFY2(g->hasKey(ConfigDefaults::positionKey()),
+                     "Valid per-screen key must survive save() — the group was rewritten, not just deleted");
+            QCOMPARE(g->readInt(ConfigDefaults::positionKey(), -1), 2);
+        }
+    }
+
+    /**
+     * The legacy "Updates" group is retired: nothing writes or reads it since
+     * the dismissed-update-version moved to the settings app's QSettings, so
+     * save() sweeps any stale husk of it like every other unknown group
+     * (it used to be carved out of the purge as an "unmanaged" group).
+     */
+    void testSave_purgesRetiredUpdatesGroup()
+    {
+        IsolatedConfigGuard guard;
+
+        // Simulate a config written by an older build that still carried it
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("Updates"));
+                g->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("2.0.0"));
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")),
+                 "Retired group 'Updates' must be purged by save()");
+    }
+
+    /**
+     * save() must purge unknown root-level groups that are not part of the
+     * known schema (neither managed nor explicitly unmanaged).  This catches
+     * stale groups left behind by removed features, botched migrations, or
+     * hand-editing.
+     */
+    void testSave_purgesUnknownRootLevelGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject unknown root-level groups
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("ObsoleteFeature"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("OldGroupFromV0"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            // The retired TilingQuickLayoutSlots group is no longer known or
+            // preserved (quick slots moved to the daemon's quicklayouts.json),
+            // so save() must purge any leftover.
+            {
+                auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+                g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
+            }
+            // The retired Updates group is covered by
+            // testSave_purgesRetiredUpdatesGroup above; no root-level group
+            // outside the schema survives save() anymore (only the v4
+            // migration stash KEYS are carved out — see purgeStaleKeys).
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        // Unknown groups must be gone
+        bool hasObsolete = false;
+        bool hasOldGroup = false;
+        bool hasRetiredTilingSlots = false;
+        for (const QString& g : groups) {
+            if (g == QStringLiteral("ObsoleteFeature"))
+                hasObsolete = true;
+            if (g == QStringLiteral("OldGroupFromV0"))
+                hasOldGroup = true;
+            if (g == QStringLiteral("TilingQuickLayoutSlots"))
+                hasRetiredTilingSlots = true;
+        }
+        QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
+        QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
+        QVERIFY2(!hasRetiredTilingSlots, "Retired group 'TilingQuickLayoutSlots' must be purged by save()");
+    }
+
+    /**
+     * save() must purge unknown dot-path groups (e.g. "OldFeature.SubGroup")
+     * by deleting the entire top-level parent.
+     */
+    void testSave_purgesUnknownDotPathGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject an unknown nested group
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("leftover"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup.Deeper"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        for (const QString& g : groups) {
+            QVERIFY2(!g.startsWith(QStringLiteral("RemovedFeature")),
+                     qPrintable(QStringLiteral("Dot-path group '%1' must be purged by save()").arg(g)));
+        }
+    }
+
+    /**
+     * save() round-trip must preserve all valid settings values even after
+     * stale key purging (regression guard — purging must not corrupt data).
+     */
+    void testSave_purgeDoesNotCorruptValues()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setBorderWidth(7);
+        settings.setActiveOpacity(0.65);
+        settings.setShowZoneNumbers(false);
+        settings.setAutotileEnabled(true);
+        settings.setAnimationDuration(500);
+        settings.save();
+
+        // Reload from disk
+        Settings reloaded;
+        QCOMPARE(reloaded.borderWidth(), 7);
+        QCOMPARE(reloaded.activeOpacity(), 0.65);
+        QCOMPARE(reloaded.showZoneNumbers(), false);
+        QCOMPARE(reloaded.autotileEnabled(), true);
+        QCOMPARE(reloaded.animationDuration(), 500);
+    }
+
+    /// The profiles staging seam: applyConfigOverlayStaged writes the blob's
+    /// values into memory, fires the per-property NOTIFY + settingsChanged,
+    /// and does NOT move the baseline — the staged key must read as modified
+    /// so the Save footer lights.
+    void testApplyConfigOverlayStaged_stagesWithoutCommitting()
+    {
+        IsolatedConfigGuard guard;
+        // load() captures the modified-tracking baseline itself.
+        Settings settings;
+        settings.load();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        const int newWidth = windows.value(QStringLiteral("Width")).toInt() + 3;
+        windows.insert(QStringLiteral("Width"), newWidth);
+        blob.insert(QStringLiteral("Windows"), windows);
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), newWidth);
+        QCOMPARE(changedSpy.count(), 1);
+        // Staged, not committed: the key diverges from the baseline.
+        QVERIFY(settings.isKeyModified(QStringLiteral("Windows"), QStringLiteral("Width")));
+    }
+
+    /// A blob stamped with a foreign schema version is refused whole: nothing
+    /// staged, nothing signalled, and the caller learns about it.
+    void testApplyConfigOverlayStaged_refusesForeignVersion()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+        const int before = settings.windowBorderWidth();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        windows.insert(QStringLiteral("Width"), before + 3);
+        blob.insert(QStringLiteral("Windows"), windows);
+        blob.insert(QStringLiteral("_version"), 1); // ancient
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), before);
+        QCOMPARE(changedSpy.count(), 0);
+    }
+
+    /**
+     * The two commit-failure invariants that carry settings.cpp's strongest
+     * data-integrity comments, driven through a backend whose commit()
+     * always fails:
+     *   - save() must NOT advance the baseline (isKeyModified stays true, so
+     *     the unsaved edit remains discardable and the next save retries);
+     *   - reset() must return false and leave everything as it was, an
+     *     unsaved edit included: nothing was reset, so nothing observably
+     *     changes and nothing may fire.
+     */
+    void testCommitFailure_saveKeepsBaselineAndResetRollsBack()
+    {
+        class FailingCommitBackend : public PhosphorConfig::JsonBackend
+        {
+        public:
+            using PhosphorConfig::JsonBackend::JsonBackend;
+            bool failCommits = false;
+            bool commit() override
+            {
+                return failCommits ? false : PhosphorConfig::JsonBackend::commit();
+            }
+        };
+
+        IsolatedConfigGuard guard;
+        FailingCommitBackend backend(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        Settings settings(&backend, nullptr, nullptr, nullptr);
+
+        // A committed non-default value to reset back to later.
+        settings.setAdjacentThreshold(77);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+
+        // save() under a failing commit: false, and the baseline must not
+        // move — the staged edit still reads as modified.
+        backend.failCommits = true;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+        QCOMPARE(settings.adjacentThreshold(), 99);
+
+        // reset() under a failing commit with an UNSAVED edit staged (99 over
+        // the committed 77): false, and the edit survives, still reading as
+        // unsaved. Dropping it would cost the user work for a reset that did
+        // not happen.
+        QSignalSpy thresholdSpy(&settings, &Settings::adjacentThresholdChanged);
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.adjacentThreshold(), 99);
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+        // Nothing observably changed, so nothing may fire (a spurious
+        // settingsChanged is a daemon retile for nothing).
+        QCOMPARE(thresholdSpy.count(), 0);
+        QCOMPARE(changedSpy.count(), 0);
+
+        // And the retry works once commits succeed again.
+        backend.failCommits = false;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+    }
+
+    /// The profile round trip over the REAL schema, not a synthetic blob.
+    ///
+    /// Every slot in test_profilestore.cpp runs against a hand-built
+    /// defaultConfig and never constructs a Settings, so none of them can
+    /// notice a real schema key that fails to survive save and restore: the
+    /// key simply is not in their fixture. This one drives the two halves the
+    /// profile machinery actually calls (exportConfigToJson to capture,
+    /// applyConfigOverlayStaged to apply) against a live Settings, so a
+    /// structured key that exports but does not come back is a failure here.
+    ///
+    /// It uses the overlay shader tree because that is the newest structured
+    /// key, but the point is the ROUTE. A structured key added later gets this
+    /// coverage for free only if it is added to the loop below.
+    void testProfileRoundTrip_carriesStructuredKeysThroughTheRealSchema()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+
+        OverlayShaderTree tree;
+        tree.setBaseline({QStringLiteral("cosmic-flow"), {{QStringLiteral("speed"), 1.5}}});
+        tree.setOverride(QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}"), {QStringLiteral("neon-city"), {}});
+        settings.setOverlayShaderTree(tree);
+        settings.setAdjacentThreshold(42); // a scalar beside it, as a control
+
+        // Capture the way a profile save does.
+        const QJsonObject captured = settings.exportConfigToJson();
+        QVERIFY2(captured.contains(ConfigDefaults::overlaysGroup()),
+                 "the overlays group did not reach the profile capture at all");
+
+        // Move both values away, then apply the captured blob the way
+        // ProfileStore::apply does.
+        settings.setOverlayShaderTree(OverlayShaderTree{});
+        settings.setAdjacentThreshold(7);
+        QCOMPARE(settings.overlayShaderTree(), OverlayShaderTree{});
+
+        QVERIFY(settings.applyConfigOverlayStaged(captured));
+        QCOMPARE(settings.adjacentThreshold(), 42);
+        const OverlayShaderTree restored = settings.overlayShaderTree();
+        QCOMPARE(restored.baseline().shaderId, QStringLiteral("cosmic-flow"));
+        QCOMPARE(restored.baseline().parameters.value(QStringLiteral("speed")).toDouble(), 1.5);
+        QCOMPARE(restored.resolve(QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}")).shaderId,
+                 QStringLiteral("neon-city"));
+        QCOMPARE(restored, tree);
+    }
+
+    /// defaultConfigJson delegates to the store's defaults snapshot, so it is
+    /// field-for-field comparable with exportConfigToJson — the invariant the
+    /// profiles delta engine diffs across.
+    void testDefaultConfigJson_matchesExportShape()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+
+        const QJsonObject defaults = settings.defaultConfigJson();
+        const QJsonObject exported = settings.exportConfigToJson();
+        // Non-emptiness, not key-set equality: both serializers walk the SAME
+        // schema, so their key sets cannot structurally differ and comparing
+        // them has no failure mode. What CAN silently break is a schema that
+        // lost its groups, which the value loop below would then vacuously
+        // pass over.
+        QVERIFY(!exported.keys().isEmpty());
+        QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
+        // Every key must be value-identical: the zone colours now store the
+        // empty theme-fallback sentinel (their schema default) rather than
+        // palette-derived snapshots, so a fresh export has NO legitimate
+        // divergence from the defaults blob. Any difference is one serializer
+        // coercing what the other does not, the exact drift the delegation to
+        // Store::defaultsToJson prevents.
+        for (const QString& group : exported.keys()) {
+            if (group == QStringLiteral("_version")) {
+                continue;
+            }
+            const QJsonObject defaultGroup = defaults.value(group).toObject();
+            const QJsonObject exportedGroup = exported.value(group).toObject();
+            QVERIFY(!exportedGroup.keys().isEmpty());
+            for (const QString& key : exportedGroup.keys()) {
+                QVERIFY2(
+                    defaultGroup.value(key) == exportedGroup.value(key),
+                    qPrintable(QStringLiteral("%1/%2: default %3 != fresh export %4")
+                                   .arg(group, key,
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, defaultGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)),
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, exportedGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)))));
+            }
+        }
+    }
+
+    /**
+     * The shared inner/outer gap global default is config-backed: the getter reads
+     * the "Gaps" config group (compile default on a fresh config), the setter
+     * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
+     * once per real change, and the value survives a save/reload.
+     */
+    void testConfigBackedGap_roundTripsAndEmits()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        // Fresh config → the compile default.
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGap());
+
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        settings.setInnerGap(24);
+        QCOMPARE(settings.innerGap(), 24);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        // A no-op write of the same value does not re-emit.
+        settings.setInnerGap(24);
+        QCOMPARE(specificSpy.count(), 1);
+
+        // The value persists across a save/reload.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.innerGap(), 24);
+    }
+};
+
+QTEST_MAIN(TestSettingsCore)
+#include "test_settings_core.moc"

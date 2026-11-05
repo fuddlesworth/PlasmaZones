@@ -10,7 +10,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Code Audit
 
-**This skill is a LOOP. You analyze, fix ALL findings (every severity), re-read files from disk, re-analyze, and repeat until zero findings remain. Stopping after one pass is a failure to follow instructions.**
+**This skill is a LOOP in two phases (see "PHASE SPLIT" below). Phase A audits read-only, pass after pass, until a full pass adds no new findings. Phase B then fixes ALL findings (every severity) once, re-reads from disk, and runs confirmation rounds until one comes back clean. Stopping after one pass, or fixing code during Phase A, is a failure to follow instructions.**
 
 ---
 
@@ -49,7 +49,7 @@ The loop terminates in exactly one way: you reach step 11, its predicate says st
 - `/code-audit branch` — audit current branch vs main
 - `/code-audit staged` — audit staged changes only
 - `/code-audit PR` or `/code-audit PR #123` — audit a pull request
-- `/code-audit src/config/settings.cpp src/core/zone.h` — audit specific files
+- `/code-audit plasmazones/src/config/settings.cpp plasmazones/src/core/interfaces/isettings.h` — audit specific files
 
 If `<scope>` is provided, use it directly — do not ask the user to clarify. If omitted, default to uncommitted changes.
 
@@ -92,20 +92,24 @@ Total: N files, M lines.
 
 ### 1.6 Audit State File (BINDING)
 
-Write `.claude/audit-state.json` (relative to the repo root / cwd — this exact path, so the Stop hook can find it) immediately after the inventory, and **update it at the end of every pass, before step 9**:
+Write `.claude/audit-state.json` at the root of the checkout you are auditing (`git rev-parse --show-toplevel`; inside a `.claude/worktrees/<name>/` worktree that is the worktree, not the main checkout) immediately after the inventory, and **update it at the end of every pass, before step 9**. The Stop hook looks there first, then in `$CLAUDE_PROJECT_DIR`, then in the cwd:
 
 ```json
 {
   "scope": "PR #822",
+  "phase": "A",
+  "baseline": "c04de46c9",
   "partitions": 6,
   "pass": 1,
   "inventory_files": 57,
   "complete": false,
   "findings": [
-    {"id": "F1", "sev": "HIGH", "file": "src/foo.cpp:42", "status": "open", "raised_pass": 1}
+    {"id": "F1", "sev": "HIGH", "file": "plasmazones/src/foo.cpp:42", "status": "open", "raised_pass": 1}
   ]
 }
 ```
+
+**`phase`** (`"A"` or `"B"`, default `"A"`). Set it to `"B"` in the same action that closes Phase A (the step 11 decision to remediate). The Stop hook reads it and tells you which phase's work to resume: in Phase A that is the next read-only pass, never a fix.
 
 **`awaiting_agents`** (optional, default false). Set it `true` in the same action that dispatches a pass's partition reviewers, and back to `false` the moment their reports land. Dispatched subagents report by task-notification, which mechanically requires the turn to end — that is not a yield, and the Stop hook lets it through when this flag is set. It is NOT a general escape: with the flag absent or false, a turn ending mid-loop is still blocked. Setting it while no agents are actually in flight is the same falsification as setting `complete: true` early.
 
@@ -115,14 +119,14 @@ Write `.claude/audit-state.json` (relative to the repo root / cwd — this exact
 
 This exists because your memory of the loop decays as context fills, and the decay is silent. The file is the authority, not your recollection:
 
-- **"Am I done?" is a QUERY, not a judgement.** Any finding with `status: "open"` means the answer is no. Re-read the file at the start of every pass rather than recalling state.
+- **"Am I done?" is a QUERY, not a judgement.** Any finding with `status: "open"` means the answer is no. In Phase A open findings are expected (they are the ledger Phase B fixes), so "done with Phase A" is step 11's predicate, not an empty ledger. Re-read the file at the start of every pass rather than recalling state.
 - **It makes silent descoping impossible.** A finding you quietly stopped working on sits in the file as `open` and blocks the CLEAN verdict.
 - **It survives context loss.** If the conversation is summarised mid-loop, this file tells you exactly where you are.
 
 At the start of every pass ≥ 2, re-read it and echo one line before doing anything else:
 
 ```
-LOOP STATE: pass N of ≤8 · P partitions · X findings open · next: step 9 fresh read · DO NOT YIELD (Rule 0)
+LOOP STATE: Phase A|B · pass N of ≤8 · P partitions · X findings open · next: step 9 fresh read · DO NOT YIELD (Rule 0)
 ```
 
 This list is the coverage checklist for steps 9 and 12. Every file here MUST be read fully and analyzed. Skipping any file is a skill failure.
@@ -164,7 +168,7 @@ Compute scope size from the inventory:
 For partitioned scopes:
 
 1. Group files by coherent domain (e.g. `controller/`, `rendering/`, `qml/`, `tests/`, `config/`). 4-6 partitions is typical; aim for ≤15 files per partition.
-2. **Reviewer selection.** Check the available agent types for project-defined domain reviewers (by convention in `.claude/agents/review/`, e.g. `pz-*-reviewer` in PlasmaZones; each one's description names the directories/domains it covers). If any exist, partition boundaries SHOULD follow the specialists' domains, and each partition MUST be dispatched to the specialist whose description matches it — a specialist encodes stack expertise and past-bug patterns a generic reviewer lacks. Only for a partition no specialist covers (or when a project defines none) fall back to `subagent_type=code-analyzer`. Dispatch ONE `Agent` call per partition; all Agent calls go in a SINGLE message so they run in parallel.
+2. **Reviewer selection.** Check the available agent types for project-defined domain reviewers (by convention in `.claude/agents/review/`, e.g. `pz-*-reviewer` in PlasmaZones; each one's description names the directories/domains it covers). If any exist, partition boundaries SHOULD follow the specialists' domains, and each partition MUST be dispatched to the specialist whose description matches it — a specialist encodes stack expertise and past-bug patterns a generic reviewer lacks. Only for a partition no specialist covers (or when a project defines none) fall back to `subagent_type=general-purpose`. Dispatch ONE `Agent` call per partition; all Agent calls go in a SINGLE message so they run in parallel.
 3. Each agent prompt MUST include:
    - The exact file paths in its partition (explicit paths, not a directory glob).
    - Instructions to read every file FULLY (no partial reads, no diff-only).
@@ -201,6 +205,7 @@ Examine every changed line and surrounding context against all dimensions. Omit 
 - **Security**: Injection, auth/authz gaps, secrets in code, unsafe deserialization, SSRF, insufficient input validation
 - **Performance**: Hot-path allocations, O(n^2) when O(n) possible, N+1 queries, blocking on async, unbounded growth
 - **Project Rules**: Deviations from CLAUDE.md conventions — quote the specific rule violated
+- **Placement invariants (this repo)**: Each screen runs exactly one of snapping, tiling or scrolling per (screen, desktop, activity), and a verdict from one mode never gates another: each engine keeps its own float slot and state (the float-is-per-mode invariant, `phosphor-libs/libs/phosphor-engine/include/PhosphorEngine/WindowPlacement.h`). A cross-cutting change needs an arm in all three modes, or a stated reason why a mode is exempt. Zones are addressed by ID, never index, and persisted geometry is relative (0.0–1.0). Quote the invariant for each violation.
 - **User-facing prose (AI-isms)**: Text a user reads — UI strings, labels, tooltips, descriptions, error/notification messages, translatable strings (`tr()`, `i18n()`/`i18nc()`, gettext), CHANGELOG / release notes, and bundled data descriptions (JSON `description`/`name`, script metadata) — must read as plain, human-written prose. Flag and rewrite: em-dash (`—`, or its escaped form) used to splice clauses or tack on an appositive; semicolons joining two independent clauses; a spaced hyphen (` - `) standing in for a dash; dramatic "Label: payload" colons used for effect; rule-of-three triads and "not just X, but Y" flourishes. Rewrite as two sentences or a plain connector (and / with / where / so / because). Do NOT flag: code comments, log / `qCWarning` messages, semicolons inside backticked code or genuine comma-bearing lists, real field-label colons (incl. Keep-a-Changelog `**Term**:` lead-ins), or a literal typographic separator between two nouns (e.g. `%1 — %2`, `Settings → X` breadcrumbs). Severity LOW (NIT for a lone separator). If the project CLAUDE.md has a "user-facing text" / plain-prose rule, treat a violation as a Project Rules finding and quote it.
 - **Refactor completeness**: For any finding of the shape "X should now use Y" (an accessor was introduced, an API was renamed, a helper was extracted), grep the WHOLE repo (not just the partition) for every remaining use of the old pattern. List every site found and either fix it or mark it out-of-scope with a reason. A refactor finding that doesn't enumerate every old-pattern site is incomplete. Use `ast-grep` for code patterns (e.g. `ast-grep --pattern 'QStringLiteral("RenderingBackend")' --lang cpp`) and plain `grep` for substrings — the AST search avoids matching in unrelated tokens or comments.
 - **Comment-code synchronization**: For every comment that names a quantity ("the three adaptors", "WHY ONLY THESE FOUR"), a method/class (`see ::routerFor`), or a list ("the eight raw-Qt-parented..."), verify the claim against current code. Numeric counts: literally count the items the comment describes. Named methods/classes: `ast-grep --pattern 'class $_' --lang cpp` or `grep -rn "::routerFor"` to confirm the name exists. Stale counts and dangling method references are real LOW findings — they accumulate silently and mislead future readers.
@@ -260,7 +265,7 @@ When a finding offers two legitimate remedies (the finding itself says "either X
 Before an edit that calls a function, method, constant, enumerator, logging category, or CMake function you have not already opened here, Grep or Read its declaration first. One command:
 
 ```
-grep -rn 'bool contains'  libs/.../Registry.h        # does this method exist?
+grep -rn 'bool contains'  phosphor-libs/libs/phosphor-registry/include/PhosphorRegistry/Registry.h   # does this method exist?
 grep -nE '^\s+[A-Za-z_].* [a-z][A-Za-z]*\(' <header>  # what IS the API surface?
 ```
 
@@ -296,7 +301,9 @@ List each fix: `file:line` — what changed.
 
 ### 6. Build Verification
 
-Run the project build (per CLAUDE.md or standard tooling). If it fails, treat each error as CRITICAL, fix, rebuild. Do not proceed until the build is green.
+Build and run the tests the way the `pz-build` skill says: a build dir configured with `BUILD_TESTING=ON` (and `BUILD_PHOSPHOR_SHELL=ON` when the scope touches the shell tier), the warning grep rather than the exit code, and `ctest` with `--no-tests=error` so an unconfigured suite cannot pass by running nothing. Run `python3 scripts/check-conventions.py` over the changed files. If any of these fails, treat each error as CRITICAL, fix, rebuild. Do not proceed until all of them are green.
+
+A green suite is not evidence that a placement or effect fix works (`pz-verify-live`). When a fix touches the snap, tile or scroll engines, window tracking, the daemon's placement paths or the KWin effect, verify it in the nested-KWin session: check the invariant the finding was about in `dump-windows.sh` output before and after, and drive the repeat (second call, retry, next tick) when the finding was about one.
 
 ### 7. Diff Review Before Commit
 
@@ -353,7 +360,7 @@ The audit runs in two phases with a hard boundary:
 ### Phase B — REMEDIATE (fix once, verify once)
 
 5. Fix the ledger in severity order, applying VERIFY BEFORE WRITE and compile-gating in small batches.
-6. Build green, full test suite green.
+6. Build green, full test suite green, and the live check of step 6 for every placement or effect fix.
 7. A confirmation pass over the files you actually changed — not the whole inventory — to catch damage the remediation itself introduced. Fix what it finds, rebuild, retest.
 8. **Confirmation repeats until a round is clean.** If a confirmation round found anything at HIGH or above, the fixes for it are themselves unverified remediation and get their own round, scoped to that delta. Stop when a round returns nothing above LOW, or at 3 rounds. This is not the Phase A pass cap and does not consume it.
 9. Commit, verifying the message against the diff, and push.
@@ -462,11 +469,12 @@ This step is mandatory on every pass — dead code accumulates between passes wh
 
 Evaluate in order. This predicate is the ONLY thing that may end the loop — not your read of the yield, the effort spent, or how the last pass went.
 
-1. **Any finding in `audit-state.json` with `status: "open"`** → go to step 4. Not optional.
-2. **New findings exist** (not previously raised in earlier passes) → go to step 4, repeat through 11.
-3. **Only carry-over findings persist** (same finding re-flagged from a prior pass) → resolve them now: fix, or descope to a tracked artifact (issue link, PR description note, removal from scope) with the reason written into the state file. The skill is NOT allowed to re-flag the same finding for 3+ passes without action. File-size violations, missing test coverage, lossy collapses — these accumulate forever when "stay in scope" is used as a dodge. Once every carry-over is `fixed` or `descoped`, go to step 11.5.
+1. **Phase A, new findings exist** (not raised by an earlier pass) → record them in `audit-state.json` and run another full pass (step 8.5). Open findings are normal in Phase A. They are fixed in Phase B, never during an audit pass.
+2. **Phase A, a full pass added nothing new, or the 8-pass cap is reached** → Phase A is over. Confirm `git diff --quiet` against `baseline`, set `"phase": "B"`, then fix the ledger (step 5), build and verify (step 6), and run the confirmation rounds.
+2b. **Phase B, any finding in `audit-state.json` with `status: "open"`** → back to step 5. Not optional.
+3. **Only carry-over findings persist** (same finding re-flagged from a prior pass) → resolve them now: fix, or descope to a tracked artifact (issue link, PR description note, removal from scope) with the reason written into the state file. The skill is NOT allowed to re-flag the same finding for 3+ passes without action. Missing test coverage and lossy collapses accumulate forever when "stay in scope" is used as a dodge. Once every carry-over is `fixed` or `descoped`, go to step 11.5.
 4. **Zero findings** → go to step 11.5, then step 12.
-5. **8 passes done, findings persist** → go to step 11.5, then step 12, with the verdict recording what is stuck and why.
+5. **Phase B, 3 confirmation rounds done, findings above LOW persist** → go to step 11.5, then step 12, with the verdict recording what is stuck and why.
 
 **Every branch ends at step 12.** There is no path out of this loop that skips the Final Report. If you are about to end your turn and have not emitted step 12, you are in violation of Rule 0 — go back and finish.
 

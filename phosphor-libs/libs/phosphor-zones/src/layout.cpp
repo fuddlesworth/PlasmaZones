@@ -1,0 +1,657 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorZones/Layout.h>
+#include "zoneslogging.h"
+#include <QStandardPaths>
+#include <algorithm>
+#include <limits>
+#include <mutex>
+#include <utility>
+
+namespace PhosphorZones {
+
+namespace {
+// Screen-id resolver state. This is process-wide static state with no thread
+// affinity of its own: it is installed by the daemon / editor / settings at
+// startup and read by Layout::fromJson, which is a plain static any caller on
+// any thread may reach. A bare static std::function is subject to torn reads
+// when set() races an in-flight get(), so guard it with a mutex and return
+// copies, which also keeps a reader from outliving the stored callable.
+std::mutex& resolverMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
+Layout::ScreenIdResolver& mutableScreenIdResolver()
+{
+    static Layout::ScreenIdResolver s_resolver;
+    return s_resolver;
+}
+} // namespace
+
+void Layout::setScreenIdResolver(ScreenIdResolver resolver)
+{
+    std::lock_guard<std::mutex> lock(resolverMutex());
+    mutableScreenIdResolver() = std::move(resolver);
+}
+
+Layout::ScreenIdResolver Layout::screenIdResolver()
+{
+    std::lock_guard<std::mutex> lock(resolverMutex());
+    return mutableScreenIdResolver();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Macros for setter patterns
+// Reduces boilerplate for layout property setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Simple setter: if changed, update member, emit specific signal and layoutModified
+#define LAYOUT_SETTER(Type, name, member, signal)                                                                      \
+    void Layout::set##name(Type value)                                                                                 \
+    {                                                                                                                  \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+            emitModifiedIfNotBatched();                                                                                \
+        }                                                                                                              \
+    }
+
+// Setter that allows -1 (use global setting) or any non-negative value
+#define LAYOUT_SETTER_MIN_NEGATIVE_ONE(name, member, signal)                                                           \
+    void Layout::set##name(int value)                                                                                  \
+    {                                                                                                                  \
+        if (value < -1) {                                                                                              \
+            value = -1;                                                                                                \
+        }                                                                                                              \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+            emitModifiedIfNotBatched();                                                                                \
+        }                                                                                                              \
+    }
+
+Layout::Layout(QObject* parent)
+    : QObject(parent)
+    , m_id(QUuid::createUuid())
+{
+}
+
+Layout::Layout(const QString& name, QObject* parent)
+    : QObject(parent)
+    , m_id(QUuid::createUuid())
+    , m_name(name)
+{
+}
+
+// Zones are QObject children (addZone parents them), so ~QObject would reap
+// them anyway. Deleting them here first is a deliberate exception to the
+// parent-ownership rule, and harmless: each Zone de-registers itself from this
+// object's child list as it is destroyed, so the base destructor finds nothing
+// left to do. The explicit sweep tears the zones down while this Layout is
+// still a whole object, rather than during base-class destruction when its
+// members are already gone, which matters for any slot that a zone's
+// destroyed() reaches and that reads the layout back. The list is detached
+// first so such a slot sees an empty zones() instead of the pointers being
+// deleted under it.
+Layout::~Layout()
+{
+    const QVector<Zone*> zones = std::exchange(m_zones, {});
+    qDeleteAll(zones);
+}
+
+Layout* Layout::clone(QObject* parent) const
+{
+    // Clone semantics: the clone represents a distinct user-owned layout. It
+    // gets a fresh id, and it deliberately carries over neither m_sourcePath
+    // nor m_systemSourcePath — a clone of a system layout becomes a plain user
+    // layout with no system-origin tracking, so the "restore system original"
+    // path doesn't think the clone is a user-override of the same entry.
+    // Starting from the plain constructor keeps every field the clone does NOT
+    // carry (the source paths and the m_isSystemLayout cache derived from them,
+    // the dirty flag, the geometry cache) at its constructed default instead of
+    // needing a per-field reset.
+    auto* copy = new Layout(parent);
+    copy->m_name = m_name;
+    copy->m_description = m_description;
+    copy->m_zonePadding = m_zonePadding;
+    copy->m_outerGap = m_outerGap;
+    copy->m_usePerSideOuterGap = m_usePerSideOuterGap;
+    copy->m_outerGapTop = m_outerGapTop;
+    copy->m_outerGapBottom = m_outerGapBottom;
+    copy->m_outerGapLeft = m_outerGapLeft;
+    copy->m_outerGapRight = m_outerGapRight;
+    copy->m_showZoneNumbers = m_showZoneNumbers;
+    copy->m_overlayDisplayMode = m_overlayDisplayMode;
+    copy->m_defaultOrder = m_defaultOrder;
+    copy->m_autoAssign = m_autoAssign;
+    copy->m_useFullScreenGeometry = m_useFullScreenGeometry;
+    copy->m_fixedGeometryInDevicePixels = m_fixedGeometryInDevicePixels;
+    copy->m_aspectRatioClass = m_aspectRatioClass;
+    copy->m_minAspectRatio = m_minAspectRatio;
+    copy->m_maxAspectRatio = m_maxAspectRatio;
+    copy->m_hiddenFromSelector = m_hiddenFromSelector;
+    copy->m_allowedScreens = m_allowedScreens;
+    copy->m_allowedDesktops = m_allowedDesktops;
+    copy->m_allowedActivities = m_allowedActivities;
+
+    // Deep copy zones using Zone::clone(), parented to the new layout.
+    for (const Zone* zone : m_zones) {
+        copy->m_zones.append(zone->clone(copy));
+    }
+    return copy;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout Property Setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Simple property setters
+LAYOUT_SETTER(const QString&, Name, m_name, nameChanged)
+LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
+LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OverlayDisplayMode, m_overlayDisplayMode, overlayDisplayModeChanged)
+LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
+LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
+LAYOUT_SETTER(bool, UseFullScreenGeometry, m_useFullScreenGeometry, useFullScreenGeometryChanged)
+
+void Layout::setFixedGeometryInDevicePixels(bool enabled)
+{
+    if (m_fixedGeometryInDevicePixels == enabled) {
+        return;
+    }
+    m_fixedGeometryInDevicePixels = enabled;
+    // The unit moved under every fixed zone, so the absolute geometries the
+    // last pass computed are stale at an unchanged screen rect, exactly as
+    // after a zone-set edit. Without the bit the next recalculation against
+    // the same screen would early-out and keep the old resolution.
+    markZoneGeometryDirty();
+    Q_EMIT fixedGeometryInDevicePixelsChanged();
+    emitModifiedIfNotBatched();
+}
+
+void Layout::setAllowedScreens(const QStringList& screens)
+{
+    if (m_allowedScreens != screens) {
+        m_allowedScreens = screens;
+        Q_EMIT allowedScreensChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::setAllowedDesktops(const QList<int>& desktops)
+{
+    if (m_allowedDesktops != desktops) {
+        m_allowedDesktops = desktops;
+        Q_EMIT allowedDesktopsChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::setAllowedActivities(const QStringList& activities)
+{
+    if (m_allowedActivities != activities) {
+        m_allowedActivities = activities;
+        Q_EMIT allowedActivitiesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+// Gap setters (allow -1 for "use global" or non-negative values)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(ZonePadding, m_zonePadding, zonePaddingChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGap, m_outerGap, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapTop, m_outerGapTop, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapBottom, m_outerGapBottom, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapLeft, m_outerGapLeft, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapRight, m_outerGapRight, outerGapChanged)
+
+void Layout::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        m_usePerSideOuterGap = enabled;
+        Q_EMIT outerGapChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+bool Layout::hasFixedGeometryZones() const
+{
+    for (Zone* zone : m_zones) {
+        if (zone && zone->isFixedGeometry())
+            return true;
+    }
+    return false;
+}
+
+QRectF Layout::fixedZoneBoundingBox() const
+{
+    qreal maxX = 0;
+    qreal maxY = 0;
+    bool hasAny = false;
+    for (Zone* zone : m_zones) {
+        if (!zone || !zone->isFixedGeometry())
+            continue;
+        const QRectF& fg = zone->fixedGeometry();
+        maxX = std::max(maxX, fg.x() + fg.width());
+        maxY = std::max(maxY, fg.y() + fg.height());
+        hasAny = true;
+    }
+    // Anchored at the screen origin, tracking extents only: a fixed zone's
+    // pixels are offsets from the screen origin, and normalizedGeometry divides
+    // by the reference SIZE without subtracting its origin (that contract is
+    // load-bearing — windowtrackingadaptor/persistence.cpp hands it a screen
+    // rect that carries a non-zero origin on a secondary monitor and adds the
+    // origin back itself). So the reference has to be an extent from that same
+    // origin, which is what this returns. A negative fixed offset therefore
+    // falls OUTSIDE this box; keeping the emitted relativeGeometry inside 0–1
+    // is Zone::toJson's clamp, not this box's job.
+    //
+    // In the LOGICAL units of the last recalculation, so it compares with
+    // m_lastRecalcGeometry: a device-pixel layout's raw extents are the
+    // output's own pixels, which on a scaled output overflow the logical
+    // screen they exactly fill.
+    if (!hasAny) {
+        return QRectF();
+    }
+    return Zone::fixedGeometryToLogical(QRectF(0, 0, maxX, maxY), fixedGeometryDivisor(m_lastRecalcScale));
+}
+
+QRectF Layout::fixedZoneReferenceGeometry() const
+{
+    const QRectF bbox = fixedZoneBoundingBox();
+    if (bbox.isEmpty())
+        return QRectF();
+    // The recalc rect is the screen the layout was last laid out against, and
+    // that is the frame the relative coords are defined over, so prefer it
+    // whenever it can hold the fixed zones. Both extents are checked, since an
+    // overflow on either axis puts zones outside that frame.
+    //
+    // "Hold" allows less than one logical pixel of slack. A device-pixel box
+    // that exactly fills the output is divided by a fractional scale, and the
+    // quotient lands a rounding error past the integer logical rect (2208 /
+    // 1.15 is 1920.0000000002), or up to half a pixel past it where the
+    // compositor rounded the logical size. A strict compare would read that as
+    // overflow and fall back to the box. Integer logical geometry never
+    // overflows by less than a whole pixel, so the slack changes nothing there.
+    constexpr qreal SubPixelSlack = 1.0;
+    if (m_lastRecalcGeometry.width() > 0 && m_lastRecalcGeometry.height() > 0
+        && bbox.width() - m_lastRecalcGeometry.width() < SubPixelSlack
+        && bbox.height() - m_lastRecalcGeometry.height() < SubPixelSlack) {
+        return m_lastRecalcGeometry;
+    }
+    // Either the zones genuinely overflow the screen (a 3840x2160 layout on a
+    // 3840x2126 panel-reduced screen), where the bbox keeps a preview and the
+    // saved relative copy from squashing them, or no screen is known yet. The
+    // editor canvas does not use this: it always draws against the live
+    // screen and lets overflowing zones run past its edge (issue #1167).
+    return bbox;
+}
+
+// Aspect ratio classification setters
+void Layout::setAspectRatioClass(::PhosphorLayout::AspectRatioClass cls)
+{
+    if (m_aspectRatioClass != cls) {
+        m_aspectRatioClass = cls;
+        Q_EMIT aspectRatioClassChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::setAspectRatioClassInt(int cls)
+{
+    if (cls < 0 || cls > static_cast<int>(::PhosphorLayout::AspectRatioClass::Portrait)) {
+        cls = static_cast<int>(::PhosphorLayout::AspectRatioClass::Any);
+    }
+    setAspectRatioClass(static_cast<::PhosphorLayout::AspectRatioClass>(cls));
+}
+
+void Layout::setMinAspectRatio(qreal ratio)
+{
+    // Use 1.0+ shift to avoid qFuzzyCompare issues near zero
+    if (!qFuzzyCompare(1.0 + m_minAspectRatio, 1.0 + ratio)) {
+        m_minAspectRatio = ratio;
+        Q_EMIT aspectRatioClassChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::setMaxAspectRatio(qreal ratio)
+{
+    // Use 1.0+ shift to avoid qFuzzyCompare issues near zero
+    if (!qFuzzyCompare(1.0 + m_maxAspectRatio, 1.0 + ratio)) {
+        m_maxAspectRatio = ratio;
+        Q_EMIT aspectRatioClassChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+bool Layout::matchesAspectRatio(qreal screenAspectRatio) const
+{
+    // Explicit min/max bounds take precedence over class matching
+    if (m_minAspectRatio > 0.0 || m_maxAspectRatio > 0.0) {
+        if (m_minAspectRatio > 0.0 && screenAspectRatio < m_minAspectRatio) {
+            return false;
+        }
+        if (m_maxAspectRatio > 0.0 && screenAspectRatio > m_maxAspectRatio) {
+            return false;
+        }
+        return true;
+    }
+
+    // Fall back to class matching
+    auto screenClass = ::PhosphorLayout::ScreenClassification::classify(screenAspectRatio);
+    return ::PhosphorLayout::ScreenClassification::matches(m_aspectRatioClass, screenClass);
+}
+
+// Source path setter — no layoutModified (internal tracking property), but
+// recomputes the cached isSystemLayout classification before emitting so QML
+// bindings on the isSystemLayout property see a consistent value when they
+// react to sourcePathChanged.
+void Layout::setSourcePath(const QString& path)
+{
+    if (m_sourcePath != path) {
+        m_sourcePath = path;
+        if (m_sourcePath.isEmpty()) {
+            m_isSystemLayout = false;
+        } else {
+            // Anchored at a path separator: a bare prefix compare would file a
+            // sibling directory that merely shares the prefix (".../share-old")
+            // under the user's data directory.
+            const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+            const QString userDataDir =
+                userDataPath.endsWith(QLatin1Char('/')) ? userDataPath : userDataPath + QLatin1Char('/');
+            m_isSystemLayout = !m_sourcePath.startsWith(userDataDir);
+        }
+        Q_EMIT sourcePathChanged();
+    }
+}
+
+void Layout::clearZonePaddingOverride()
+{
+    setZonePadding(-1);
+}
+
+void Layout::clearOverlayDisplayModeOverride()
+{
+    setOverlayDisplayMode(-1);
+}
+
+void Layout::clearOuterGapOverride()
+{
+    setOuterGap(-1);
+    setUsePerSideOuterGap(false);
+    setOuterGapTop(-1);
+    setOuterGapBottom(-1);
+    setOuterGapLeft(-1);
+    setOuterGapRight(-1);
+}
+
+bool Layout::isSystemLayout() const
+{
+    return m_isSystemLayout;
+}
+
+Zone* Layout::zone(int index) const
+{
+    if (index >= 0 && index < m_zones.size()) {
+        return m_zones.at(index);
+    }
+    return nullptr;
+}
+
+Zone* Layout::zoneById(const QUuid& id) const
+{
+    auto it = std::find_if(m_zones.begin(), m_zones.end(), [&id](const Zone* z) {
+        return z->id() == id;
+    });
+    return it != m_zones.end() ? *it : nullptr;
+}
+
+Zone* Layout::zoneByNumber(int number) const
+{
+    auto it = std::find_if(m_zones.begin(), m_zones.end(), [number](const Zone* z) {
+        return z->zoneNumber() == number;
+    });
+    return it != m_zones.end() ? *it : nullptr;
+}
+
+Zone* Layout::zoneByName(const QString& name) const
+{
+    const QString wanted = name.trimmed();
+    if (wanted.isEmpty()) {
+        return nullptr;
+    }
+    // m_zones is insertion-ordered, not number-ordered, so pick the lowest
+    // zone number among the matches rather than the first container hit.
+    Zone* best = nullptr;
+    for (Zone* z : m_zones) {
+        if (z->name().trimmed().compare(wanted, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (!best || z->zoneNumber() < best->zoneNumber()) {
+            best = z;
+        }
+    }
+    return best;
+}
+
+void Layout::addZone(Zone* zone)
+{
+    if (zone && !m_zones.contains(zone)) {
+        zone->setParent(this);
+        // Append first so slots reacting to zoneNumberChanged see a
+        // consistent zones() container that already includes `zone`.
+        m_zones.append(zone);
+        // Respect a pre-set zone number (e.g. from deserialization) — only
+        // assign the default 1-based position when the zone has no valid
+        // number yet. Callers that add freshly-constructed zones (number 0)
+        // still get the "next available slot" behaviour.
+        if (zone->zoneNumber() <= 0) {
+            zone->setZoneNumber(m_zones.size());
+        }
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
+        Q_EMIT zoneAdded(zone);
+        Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::removeZone(Zone* zone)
+{
+    if (zone && m_zones.removeOne(zone)) {
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
+        // Renumber BEFORE emitting zoneRemoved so observers see a coherent
+        // post-state: the removed zone is detached and the remaining zones
+        // already carry their final 1..N numbers.
+        renumberZones();
+        Q_EMIT zoneRemoved(zone);
+        zone->deleteLater();
+        Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::removeZoneAt(int index)
+{
+    if (index >= 0 && index < m_zones.size()) {
+        auto zone = m_zones.takeAt(index);
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
+        renumberZones();
+        Q_EMIT zoneRemoved(zone);
+        zone->deleteLater();
+        Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::clearZones()
+{
+    if (!m_zones.isEmpty()) {
+        // Detach BEFORE emitting zoneRemoved, matching removeZone/removeZoneAt:
+        // an observer reading zones() from the handler must see the coherent
+        // post-state (here, the empty list), not the zone still attached.
+        const QVector<Zone*> removed = m_zones;
+        m_zones.clear();
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
+        for (auto* zone : removed) {
+            Q_EMIT zoneRemoved(zone);
+            zone->deleteLater();
+        }
+        Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::moveZone(int fromIndex, int toIndex)
+{
+    if (fromIndex >= 0 && fromIndex < m_zones.size() && toIndex >= 0 && toIndex < m_zones.size()
+        && fromIndex != toIndex) {
+        m_zones.move(fromIndex, toIndex);
+        renumberZones();
+        Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::emitModifiedIfNotBatched()
+{
+    m_dirty = true;
+    if (m_batchModifyDepth == 0) {
+        Q_EMIT layoutModified();
+    } else {
+        m_batchModified = true;
+    }
+}
+
+void Layout::beginBatchModify()
+{
+    if (m_batchModifyDepth == 0) {
+        m_batchModified = false;
+    }
+    ++m_batchModifyDepth;
+}
+
+void Layout::endBatchModify()
+{
+    if (m_batchModifyDepth > 0) {
+        --m_batchModifyDepth;
+    }
+    // Only an edit made inside this batch is news. m_dirty alone would also
+    // be set by an earlier edit that was never saved, and a batch that touched
+    // nothing (the async geometry apply) would re-announce it every time.
+    if (m_batchModifyDepth == 0 && m_batchModified) {
+        m_batchModified = false;
+        Q_EMIT layoutModified();
+    }
+}
+
+Zone* Layout::zoneAtPoint(const QPointF& point) const
+{
+    // When zones overlap, pick the smallest zone containing the point.
+    // "Area covered" heuristic: the cursor covers
+    // a larger proportion of a smaller zone, so it wins the overlap.
+    Zone* best = nullptr;
+    qreal bestArea = std::numeric_limits<qreal>::max();
+
+    for (auto* zone : m_zones) {
+        if (zone->containsPoint(point)) {
+            qreal area = zone->geometry().width() * zone->geometry().height();
+            if (area < bestArea) {
+                bestArea = area;
+                best = zone;
+            }
+        }
+    }
+    return best;
+}
+
+Zone* Layout::nearestZone(const QPointF& point, qreal maxDistance) const
+{
+    Zone* nearest = nullptr;
+    qreal minDistance = std::numeric_limits<qreal>::max();
+
+    for (auto* zone : m_zones) {
+        qreal distance = zone->distanceToPoint(point);
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearest = zone;
+        }
+    }
+
+    if (maxDistance >= 0 && minDistance > maxDistance) {
+        return nullptr;
+    }
+
+    return nearest;
+}
+
+QVector<Zone*> Layout::zonesInRect(const QRectF& rect) const
+{
+    QVector<Zone*> result;
+    for (auto* zone : m_zones) {
+        if (zone->geometry().intersects(rect)) {
+            result.append(zone);
+        }
+    }
+    return result;
+}
+
+QVector<Zone*> Layout::adjacentZones(const QPointF& point, qreal threshold) const
+{
+    QVector<Zone*> result;
+    for (auto* zone : m_zones) {
+        if (zone->distanceToPoint(point) <= threshold) {
+            result.append(zone);
+        }
+    }
+    return result;
+}
+
+void Layout::recalculateZoneGeometries(const QRectF& screenGeometry, qreal screenScale)
+{
+    // Skip if no input changed (prevents redundant recalculations). The
+    // zone-set check is what the cleared cache used to stand in for: a layout
+    // whose zones were swapped since the last pass still carries the same
+    // screen rect, so comparing the rect alone would early-out and leave the
+    // new zones with no absolute geometry at all. The scale is the third
+    // input, for a device-pixel layout with fixed zones only (see needsRecalc).
+    //
+    // Every call records its caller's frame, the no-op ones included: an
+    // async result asked for before this call must not land over it (see
+    // syncRecalcEpoch). The scale is stamped before the early-out for the
+    // same reason. A layout the scale cannot move still answers the current
+    // one through lastRecalcScale(), so flipping it to device pixels later
+    // does not leave its readers dividing by a scale from an older pass.
+    // Stamping only after needsRecalc has read the old one keeps the check
+    // honest, and for a layout that does depend on the scale the early-out
+    // means the two are already equal.
+    ++m_syncRecalcEpoch;
+    const bool needed = needsRecalc(screenGeometry, screenScale);
+    if (screenScale > 0.0) {
+        m_lastRecalcScale = screenScale;
+    }
+    if (!needed) {
+        return;
+    }
+    markRecalculated(screenGeometry, screenScale);
+
+    qCDebug(PhosphorZones::lcLayoutLib) << "recalculateZoneGeometries layout=" << m_name
+                                        << "screenGeometry=" << screenGeometry << "scale=" << m_lastRecalcScale;
+    // One divisor for the whole pass, resolved here rather than per zone.
+    const qreal divisor = fixedGeometryDivisor(m_lastRecalcScale);
+    for (auto* zone : m_zones) {
+        zone->setGeometry(Zone::computeAbsoluteGeometry(zone->geometryMode(), zone->relativeGeometry(),
+                                                        zone->fixedGeometry(), screenGeometry, divisor));
+    }
+}
+
+void Layout::renumberZones()
+{
+    for (int i = 0; i < m_zones.size(); ++i) {
+        m_zones[i]->setZoneNumber(i + 1);
+    }
+}
+
+} // namespace PhosphorZones

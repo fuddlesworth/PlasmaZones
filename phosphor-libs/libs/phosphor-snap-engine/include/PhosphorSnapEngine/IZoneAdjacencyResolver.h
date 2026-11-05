@@ -1,0 +1,84 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <phosphorsnapengine_export.h>
+
+#include <QString>
+#include <QStringList>
+
+namespace PhosphorSnapEngine {
+
+/**
+ * @brief Narrow interface for zone-adjacency queries used by snap navigation.
+ *
+ * Snap navigation (SnapNavigationTargetResolver and the engine's cross-monitor
+ * crossing) needs directional zone lookups that live on the daemon's
+ * ZoneDetectionAdaptor:
+ *   - getAdjacentZone   (find the zone next to a given zone in a direction)
+ *   - getAdjacentZoneOutside (the same for a span, never one of its zones)
+ *   - getFirstZoneInDirection (find the edge zone when no current zone exists)
+ *   - getFirstZoneInDirectionOnDesktop (the same on a given desktop's layout)
+ *
+ * Rather than holding an opaque QObject* and dispatching through
+ * QMetaObject::invokeMethod, the resolver now depends on this typed
+ * interface. The daemon's ZoneDetectionAdaptor must implement (or wrap)
+ * IZoneAdjacencyResolver so that the engine receives a typed pointer.
+ *
+ * Not a QObject — pure data queries with no lifecycle signals.
+ */
+class PHOSPHORSNAPENGINE_EXPORT IZoneAdjacencyResolver
+{
+public:
+    IZoneAdjacencyResolver() = default;
+    virtual ~IZoneAdjacencyResolver();
+
+    /**
+     * @brief Find the zone adjacent to @p currentZoneId in @p direction.
+     *
+     * @param currentZoneId  Zone the window is currently snapped to
+     * @param direction      "left", "right", "up", or "down"
+     * @param screenId       Screen context for multi-monitor layouts
+     * @return Zone ID of the adjacent zone, or empty string if none exists
+     */
+    virtual QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                    const QString& screenId) const = 0;
+
+    /**
+     * @brief Find the edge zone in @p direction when no current zone exists.
+     *
+     * Used when a window is not yet snapped and the user presses a
+     * navigation key. Returns the zone at the layout edge in the given
+     * direction (e.g. leftmost zone for "left").
+     *
+     * @param direction  "left", "right", "up", or "down"
+     * @param screenId   Screen context for multi-monitor layouts
+     * @return Zone ID of the edge zone, or empty string if none exists
+     */
+    virtual QString getFirstZoneInDirection(const QString& direction, const QString& screenId) const = 0;
+
+    /**
+     * @brief The zone next to the span @p zoneIds (their union) in @p direction,
+     *        never one of them.
+     *
+     * Appended. The default answers getAdjacentZone(zoneIds.first(), ...), the
+     * pre-span behaviour.
+     */
+    virtual QString getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                           const QString& screenId) const;
+
+    /**
+     * @brief getFirstZoneInDirection on @p desktop's layout (<= 0: the desktop
+     *        the screen shows).
+     *
+     * Appended. The default ignores @p desktop.
+     */
+    virtual QString getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                     int desktop) const;
+
+    IZoneAdjacencyResolver(const IZoneAdjacencyResolver&) = delete;
+    IZoneAdjacencyResolver& operator=(const IZoneAdjacencyResolver&) = delete;
+};
+
+} // namespace PhosphorSnapEngine

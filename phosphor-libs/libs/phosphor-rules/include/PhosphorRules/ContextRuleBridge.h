@@ -1,0 +1,945 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QJsonObject>
+#include <QList>
+#include <QLoggingCategory>
+#include <QSet>
+#include <QString>
+#include <QUuid>
+
+#include <algorithm>
+#include <functional>
+#include <iterator>
+#include <optional>
+
+#include "IdentityKey.h"
+#include "MatchExpression.h"
+#include "MatchTypes.h"
+#include "RuleAction.h"
+#include "Rule.h"
+#include "RuleLogging.h"
+#include "phosphorrules_export.h"
+
+/**
+ * @file ContextRuleBridge.h
+ * @brief Header-only bridge: zone Assignments / per-mode disable entries →
+ *        context-only `Rule`s.
+ *
+ * Zone Assignments and per-mode disable lists carry **no window-property
+ * fields** — they answer "what does this screen/desktop/activity context
+ * use?". They become context-only `Rule`s whose match expression
+ * references only `ScreenId` / `VirtualDesktop` / `Activity`.
+ *
+ * Precedence is plain `priority`: the highest-priority matching rule wins per
+ * action slot, ties broken by list order. There is no specificity formula and
+ * no provider-default rule. The caller supplies each rule's `priority`
+ * explicitly — context rules seed in the @ref kContextBandBase band and the
+ * Settings list-order renormalizer / runtime upsert derive the rest.
+ *
+ * Header-only: a consumer that includes this bridge takes only an
+ * include-time dependency; there is no link edge and no dependency cycle.
+ */
+
+namespace PhosphorRules {
+
+namespace ContextRuleBridge {
+
+/// Default precedence band base for context rules (zone assignments and
+/// per-mode disables). With specificity removed, `priority` is the only
+/// precedence value: callers seed new context rules in this band and the
+/// Settings list-order renormalizer / runtime upsert derive concrete values
+/// from it. Kept numerically in sync with `RuleTemplates::kContextBandBase`
+/// (src/settings/rules/ruletemplates.h), which the settings tree defines separately.
+inline constexpr int kContextBandBase = 300;
+
+/**
+ * @brief The cascade axis a context tuple resolves to.
+ *
+ * The four shapes the context bridge produces — `Combined` is the
+ * `screen + desktop + activity` exact pin, `Activity` is `screen + activity`,
+ * `Desktop` is `screen + desktop`, `Monitor` is `screen-only`. A catch-all or
+ * a tuple with an empty `screenId` returns @c CatchAll and is not a pinned
+ * axis. Callers that need to compare rule families (per-mode disable lists,
+ * the per-screen / per-desktop / per-activity batch setters) discriminate on
+ * this enum so the formula lives in one place.
+ */
+enum class ContextAxis {
+    CatchAll, ///< empty `screenId` (the catch-all), OR a
+              ///< context match that pins a non-dimension field beyond
+              ///< screen/desktop/activity (e.g. TiledWindowCount) and so is not
+              ///< an exact-context assignment (see contextAxisFor).
+    Monitor, ///< screen only.
+    Desktop, ///< screen + desktop.
+    Activity, ///< screen + activity.
+    Combined, ///< screen + desktop + activity (the exact-pin shape).
+};
+
+/**
+ * @brief Classify a (screen, desktop, activity) tuple into its cascade axis.
+ *
+ * The classifier keys only on which of the three dimensions are present — it
+ * does NOT distinguish empty-vs-missing in the dimensional sense. The axes
+ * remain the batch reader/writer families; they no longer drive any priority.
+ */
+inline ContextAxis contextAxisOf(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    if (screenId.isEmpty()) {
+        return ContextAxis::CatchAll;
+    }
+    const bool hasDesktop = virtualDesktop > 0;
+    const bool hasActivity = !activity.isEmpty();
+    if (hasDesktop && hasActivity) {
+        return ContextAxis::Combined;
+    }
+    if (hasActivity) {
+        return ContextAxis::Activity;
+    }
+    if (hasDesktop) {
+        return ContextAxis::Desktop;
+    }
+    return ContextAxis::Monitor;
+}
+
+/**
+ * @brief Human-readable label for a context rule's tuple.
+ *
+ * The single canonical formula for the " · Desktop N" / " · Activity" suffix
+ * — every caller that needs to log or display a context-rule identity routes
+ * through here so the string shape stays consistent across the daemon,
+ * settings UI, and migration code.
+ */
+inline QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    return screenId + (virtualDesktop > 0 ? QStringLiteral(" · Desktop ") + QString::number(virtualDesktop) : QString())
+        + (activity.isEmpty() ? QString() : QStringLiteral(" · Activity"));
+}
+
+namespace detail {
+
+/// Fixed v5-UUID namespace for context-rule identities. Deriving each rule's
+/// id deterministically from its source identity makes the migration
+/// idempotent: converting the same context input twice yields rule sets that
+/// compare equal, so `RuleStore::setAllRules` keeps its no-op fast path.
+inline const QUuid& namespaceUuid()
+{
+    static const QUuid ns(QStringLiteral("{c4e3d2b1-8a5f-6071-9cad-1e2f3a4b5c6d}"));
+    return ns;
+}
+
+/// Length-prefix a segment so concatenated identity keys are unambiguous: a
+/// `screenId` / `activity` may itself contain a `|`, so a plain `|`-joined key
+/// could collide for two distinct tuples. `"<len>:<segment>"` makes every
+/// tuple's encoding unique. Re-exported from the shared @ref IdentityKey.h so
+/// the three bridges share one implementation.
+using PhosphorRules::Detail::encodeSegment;
+
+/// Stable per-rule key for the v5-UUID derivation. @p family distinguishes the
+/// rule kinds that share a (screen, desktop, activity) tuple — an assignment
+/// rule and a disable rule for the same context must not collide on id.
+/// Segments are length-prefixed so no two distinct tuples can collide.
+inline QString contextIdentityKey(QLatin1StringView family, const QString& screenId, int virtualDesktop,
+                                  const QString& activity)
+{
+    return encodeSegment(QString(family)) + encodeSegment(screenId) + encodeSegment(QString::number(virtualDesktop))
+        + encodeSegment(activity);
+}
+
+} // namespace detail
+
+/**
+ * @brief The deterministic v5 rule id @ref makeAssignmentRule would assign
+ *        for a given (screen, desktop, activity) tuple.
+ *
+ * Exposing the id derivation as a public helper lets callers look up a stored
+ * assignment rule by deterministic id derivation rather than evaluating each
+ * rule's match shape — `RuleSet::ruleById` itself is still a linear
+ * scan, but the per-rule comparison collapses to a single QUuid equality
+ * instead of a tuple-shape predicate. Two callers deriving the same tuple
+ * necessarily land on the same id, so the lookup stays correct across
+ * processes and across persistence round-trips.
+ */
+inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    return QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView("assignment"), screenId, virtualDesktop, activity));
+}
+
+/**
+ * @brief The deterministic v5 rule id @ref makeDisableRule would assign for a
+ *        given `(screen, desktop, activity, modeToken)` tuple.
+ *
+ * The disable rule's id includes the engine the rule disables — different
+ * engines' disables for the same context are distinct rules, so the id helper
+ * mirrors that distinction. @p modeToken is the wire string for the engine
+ * (e.g. @c "snapping" / @c "autotile" / @c "scrolling") — supplying it as a
+ * token (not a `bool`) means a future engine extends the identity key namespace
+ * without rewriting existing UUIDs (the @c "disable-snapping" and
+ * @c "disable-autotile" identity keys are preserved verbatim, so every rule
+ * already on disk keeps its id).
+ */
+inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity,
+                              const QString& modeToken)
+{
+    // contextIdentityKey() takes a QLatin1StringView, but the source bytes
+    // are produced via `toUtf8()` so non-Latin1 tokens (a future
+    // non-ASCII mode wire string) injectively distinguish their UUIDs —
+    // `toLatin1()` replaces every non-Latin1 codepoint with '?', collapsing
+    // distinct tokens onto identical UUIDs. For the current ASCII-only
+    // vocabulary ("snapping" / "autotile" / "scrolling") UTF-8 and
+    // Latin1 produce identical bytes, so existing rule UUIDs are preserved
+    // verbatim; only future non-ASCII tokens diverge. The view's source
+    // bytes must live for the full call — naming the QByteArray local
+    // keeps it from expiring before createUuidV5 reads through the view.
+    const QByteArray tag = QByteArray("disable-") + modeToken.toUtf8();
+    return QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView(tag.constData(), static_cast<qsizetype>(tag.size())), screenId,
+                                   virtualDesktop, activity));
+}
+
+/**
+ * @brief Build the context-only `MatchExpression` for a (screen, desktop,
+ *        activity) tuple.
+ *
+ * Pins only the non-default dimensions: a non-empty @p screenId, a
+ * @p virtualDesktop > 0, a non-empty @p activity. A tuple that pins nothing
+ * yields the empty-`All{}` catch-all match.
+ */
+inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    QList<MatchExpression> children;
+    if (!screenId.isEmpty()) {
+        children.append(MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screenId));
+    }
+    if (virtualDesktop > 0) {
+        children.append(MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, virtualDesktop));
+    }
+    if (!activity.isEmpty()) {
+        children.append(MatchExpression::makeLeaf(Field::Activity, Operator::Equals, activity));
+    }
+    if (children.isEmpty()) {
+        return MatchExpression(); // empty All{} — the catch-all
+    }
+    if (children.size() == 1) {
+        return children.first();
+    }
+    return MatchExpression::makeAll(children);
+}
+
+/**
+ * @brief Build the lossless action list for a migrated zone Assignment.
+ *
+ * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores
+ * `snappingLayout`, `tilingAlgorithm` and `scrollingTemplateLayout` so
+ * flipping mode never drops the other fields. The migrated rule therefore
+ * carries up to **four** actions:
+ *
+ *   - `SetEngineMode` — always (the mode token, e.g. "snapping" / "autotile"
+ *     / "scrolling").
+ *   - `SetSnappingLayout` — only when @p snappingLayout is non-empty (the
+ *     action descriptor rejects an empty `layoutId`).
+ *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
+ *     descriptor rejects an empty `algorithm`).
+ *   - `SetScrollingTemplate` — only when @p scrollingTemplate is non-empty
+ *     (same `layoutId` wire KEY as `SetSnappingLayout`, but a native
+ *     scrolling-template uuid — the two id namespaces are disjoint).
+ *
+ * A mode-only entry (all three payload fields empty — the KCM "autotile,
+ * default algorithm" shape) yields a single `SetEngineMode` action; the mode
+ * token alone preserves the user's intent.
+ *
+ * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
+ * checks only that `modeToken` is non-empty — vocabulary validation lives
+ * at consumers via `PhosphorZones::modeFromWireString`, NOT at load time.
+ * Settings routes `PhosphorZones::Mode → QString` via `modeToWireString`
+ * (the authoritative mapping), so a production caller never produces an
+ * unrecognised token. An empty token writes a malformed rule that load
+ * does reject (the validator's non-empty check fires there). An unknown
+ * token like `"bogus"` survives load and is silently inert at consumption:
+ * the assignment-side consumer `PhosphorZones::RuleHelpers::
+ * entryFromRuleMatchActions` decodes via `modeFromWireString`, which
+ * returns `nullopt` for unknown tokens and leaves the entry on its
+ * Snapping default. Every token the validator accepts — today
+ * `snapping`/`autotile`/`scrolling`, see `engineModeOptions()` in
+ * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
+ */
+inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
+                                               const QString& tilingAlgorithm, const QString& scrollingTemplate)
+{
+    QList<RuleAction> actions;
+
+    RuleAction modeAction;
+    modeAction.type = QString(ActionType::SetEngineMode);
+    modeAction.params.insert(ActionParam::Mode, modeToken);
+    actions.append(modeAction);
+
+    if (!snappingLayout.isEmpty()) {
+        RuleAction layoutAction;
+        layoutAction.type = QString(ActionType::SetSnappingLayout);
+        layoutAction.params.insert(ActionParam::LayoutId, snappingLayout);
+        actions.append(layoutAction);
+    }
+    if (!tilingAlgorithm.isEmpty()) {
+        RuleAction tilingAction;
+        tilingAction.type = QString(ActionType::SetTilingAlgorithm);
+        tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
+        actions.append(tilingAction);
+    }
+    if (!scrollingTemplate.isEmpty()) {
+        RuleAction templateAction;
+        templateAction.type = QString(ActionType::SetScrollingTemplate);
+        templateAction.params.insert(ActionParam::LayoutId, scrollingTemplate);
+        actions.append(templateAction);
+    }
+    return actions;
+}
+
+/**
+ * @brief Build a complete migrated zone-Assignment `Rule`.
+ *
+ * The match is context-only; the actions are the lossless assignment set
+ * from @ref makeAssignmentActions.
+ * @p name is a human-readable label for the settings UI. @p modeToken is the
+ * wire string for the assignment's mode (see `makeAssignmentActions` for
+ * vocabulary contract). @p priority is the rule's precedence verbatim — the
+ * caller owns it (highest priority wins per slot, ties by list order).
+ * @p scrollingTemplate defers entirely to @ref makeAssignmentActions, which
+ * emits the `SetScrollingTemplate` action only for a non-empty id. It sits
+ * after @p priority rather than beside the other two payload fields so the
+ * pre-scrolling parameter order stays put and every call site only appends an
+ * argument.
+ */
+inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
+                               const QString& activity, const QString& modeToken, const QString& snappingLayout,
+                               const QString& tilingAlgorithm, int priority, const QString& scrollingTemplate)
+{
+    Rule rule;
+    // Deterministic id derived from the source context identity — identical
+    // assignments yield identical rules, keeping the migration idempotent.
+    rule.id = assignmentRuleIdFor(screenId, virtualDesktop, activity);
+    rule.name = name;
+    rule.enabled = true;
+    rule.priority = priority;
+    rule.match = makeContextMatch(screenId, virtualDesktop, activity);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
+    return rule;
+}
+
+/**
+ * @brief Build a `DisableEngine` context rule for a per-mode disable entry.
+ *
+ * Per-mode disable lists ("snapping is off on monitor X") become context
+ * rules carrying a single `DisableEngine` action. @p modeToken records which
+ * engine the rule disables (the wire string, e.g. @c "snapping" /
+ * @c "autotile" / @c "scrolling") so the evaluator can scope the gate.
+ * @p priority is the rule's precedence verbatim (highest priority wins).
+ *
+ * Validation: this helper trusts the caller to pass a token recognised by the
+ * `DisableEngine` descriptor's validator. The Settings layer routes Mode →
+ * token through `PhosphorZones::modeToWireString`, so an unrecognised token
+ * here is a programmer error and the resulting rule would be rejected at
+ * load by `RuleAction::fromJson`. Passing an empty token writes a malformed
+ * rule with action params `{mode: ""}` — also caught at load.
+ */
+inline Rule makeDisableRule(const QString& name, const QString& screenId, int virtualDesktop, const QString& activity,
+                            const QString& modeToken, int priority)
+{
+    Rule rule;
+    // Deterministic id — a disable rule's identity is its context tuple plus
+    // which engine it disables (per-mode disables for the same context are
+    // distinct rules and must not collide).
+    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, modeToken);
+    rule.name = name;
+    rule.enabled = true;
+    rule.priority = priority;
+    rule.match = makeContextMatch(screenId, virtualDesktop, activity);
+
+    RuleAction action;
+    action.type = QString(ActionType::DisableEngine);
+    action.params.insert(ActionParam::Mode, modeToken);
+    rule.actions.append(action);
+    return rule;
+}
+
+// ── Readback: context rule → (screen, desktop, activity) ───────────────────
+//
+// The inverse of @ref makeContextMatch — decompose a context rule's match
+// expression back into the (screenId, virtualDesktop, activity) tuple it
+// pins. Used by consumers that need to enumerate stored context rules
+// (the per-mode disable lists in Settings, the assignment introspection
+// helpers in LayoutRegistry).
+
+/// True if @p expr is an exact `Field == value` equality leaf for @p field.
+inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
+{
+    return expr.isLeaf() && expr.predicate().field == field && expr.predicate().op == Operator::Equals;
+}
+
+/**
+ * @brief Decompose a context rule's match into its pinned dimensions.
+ *
+ * @p screenId / @p virtualDesktop / @p activity are reset, then filled from
+ * whichever `ScreenId` / `VirtualDesktop` / `Activity` equality leaves the
+ * match carries. An empty catch-all leaves all three at their defaults
+ * and returns true. Window-property leaves (AppId etc.) are ignored — only
+ * context fields are read, so a mixed *flat* rule still yields its context
+ * projection. When no context-equality leaf was found (e.g. an `All{}` of
+ * only window-property leaves), the function returns false; the empty
+ * catch-all remains the only success case with all-default outputs.
+ *
+ * **Contract** — this is strictly the inverse of @ref makeContextMatch, so it
+ * only understands the shapes that helper produces: an empty catch-all, a
+ * single context-equality leaf, or a flat `All{}` whose children are
+ * context-equality leaves. It walks **one level** of children; a nested
+ * composite (`All{ Any{...} }`) is not a context rule this bridge authored
+ * and decomposing it would be silently lossy. Such an input is left as
+ * all-defaults — callers that build their own deeper match expressions must
+ * not route them through this readback.
+ *
+ * A duplicate context-dimension leaf under the same flat `All{}` (e.g. two
+ * `ScreenId Equals` leaves) is **refused** rather than silently coerced via
+ * last-write-wins: @ref makeContextMatch can never produce duplicates, so a
+ * duplicate is undefined input. The dims are reset to defaults and the
+ * function returns @c false; a successful decomposition returns @c true.
+ * Most callers ignore the return — falling back to all-defaults is the safe
+ * "not a context rule we authored" treatment.
+ */
+inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& virtualDesktop, QString& activity)
+{
+    screenId.clear();
+    virtualDesktop = 0;
+    activity.clear();
+    if (match.isCatchAll()) {
+        return true;
+    }
+    // Only a leaf or a flat All{} is a context rule this bridge produced. A
+    // composite of any other kind (Any / None) — or an All{} carrying a
+    // nested composite child — is outside the contract; leave the defaults.
+    if (!match.isLeaf() && match.kind() != MatchExpression::Kind::All) {
+        return false;
+    }
+    const QList<MatchExpression> leaves = match.isLeaf() ? QList<MatchExpression>{match} : match.children();
+    bool sawScreen = false;
+    bool sawDesktop = false;
+    bool sawActivity = false;
+    for (const MatchExpression& leaf : leaves) {
+        if (isContextEqualsLeaf(leaf, Field::ScreenId)) {
+            if (sawScreen) {
+                qCWarning(lcRule) << "ContextRuleBridge::contextDimsOf: duplicate ScreenId leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawScreen = true;
+            screenId = leaf.predicate().value.toString();
+        } else if (isContextEqualsLeaf(leaf, Field::VirtualDesktop)) {
+            if (sawDesktop) {
+                qCWarning(lcRule)
+                    << "ContextRuleBridge::contextDimsOf: duplicate VirtualDesktop leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawDesktop = true;
+            // Refuse a malformed VirtualDesktop value — `QVariant::toInt()`
+            // silently returns 0 for "abc" or a non-positive int, which the
+            // bridge contract reads as "no desktop pinned" and would
+            // misclassify the rule as a monitor-axis match. `makeContextMatch`
+            // only stores a strictly-positive int here, so any other source
+            // is a hand-edit or migration error — bail to the same
+            // refuse-to-coerce shape the duplicate-leaf guards use.
+            bool ok = false;
+            const int desktopValue = leaf.predicate().value.toInt(&ok);
+            if (!ok || desktopValue <= 0) {
+                qCWarning(lcRule)
+                    << "ContextRuleBridge::contextDimsOf: malformed VirtualDesktop value — refusing to coerce."
+                    << leaf.predicate().value;
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            virtualDesktop = desktopValue;
+        } else if (isContextEqualsLeaf(leaf, Field::Activity)) {
+            if (sawActivity) {
+                qCWarning(lcRule) << "ContextRuleBridge::contextDimsOf: duplicate Activity leaf — refusing to coerce.";
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            sawActivity = true;
+            activity = leaf.predicate().value.toString();
+        }
+        // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
+        // leaf is ignored here — a flat mixed rule still yields its context
+        // projection, per the contract above. This includes every other
+        // context leaf (Mode, TiledWindowCount, the screen-shape fields,
+        // ActiveLayout, ColorScheme): each IS a context field, but none is one
+        // of the three decomposed dimensions, so they are deliberately
+        // projected out of contextDimsOf. Callers that must not lose them gate on
+        // pinsNonDimensionContextField first — contextAxisFor already does.
+    }
+    // If no context-equality leaf was matched, the input was either a
+    // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
+    // a structurally-malformed All{}. Either way, no decomposition succeeded
+    // — return false so downstream classifiers don't read this as a
+    // successful catch-all decode. The catch-all case is handled at the
+    // top of the function (`isCatchAll() → return true`); reaching here
+    // with all three flags false means the leaves were all non-equality
+    // or non-context.
+    if (!sawScreen && !sawDesktop && !sawActivity) {
+        return false;
+    }
+    return true;
+}
+
+/// The three cascade dimensions @ref makeContextMatch can emit — the only
+/// context fields @ref contextDimsOf decodes back out of a match.
+inline constexpr Field kContextDimensionFields[] = {Field::ScreenId, Field::VirtualDesktop, Field::Activity};
+
+/// True if @p match pins a context field that is NOT one of the three cascade
+/// dimensions — any context field outside @ref kContextDimensionFields (Mode,
+/// TiledWindowCount, the screen orientation, width, height and aspect ratio,
+/// ActiveLayout, ColorScheme). Such a match is more specific than the
+/// (screen, desktop, activity) shape @c makeContextMatch emits, so it must not
+/// be treated as an exact-context assignment: the batch reader/writers and
+/// exact-rule upsert rebuild the context base from the decoded dims alone, which
+/// would silently drop the extra leaf (the same hazard
+/// @c matchIsExactContextActivityStrict guards against for Combined rules).
+///
+/// The set is derived from @ref kFieldTable — every @c FieldSource::Context row
+/// that is not one of @ref kContextDimensionFields — so a context field added to
+/// the table is guarded here without a second edit. It is built once into a
+/// function-local static, so the per-rule batch classifiers do not reconstruct it
+/// on every call.
+inline bool pinsNonDimensionContextField(const MatchExpression& match)
+{
+    static const QSet<Field> kNonDimensionContextFields = [] {
+        QSet<Field> fields;
+        for (const FieldDescriptor& descriptor : kFieldTable) {
+            if (descriptor.source != FieldSource::Context) {
+                continue;
+            }
+            if (std::find(std::begin(kContextDimensionFields), std::end(kContextDimensionFields), descriptor.field)
+                != std::end(kContextDimensionFields)) {
+                continue;
+            }
+            fields.insert(descriptor.field);
+        }
+        return fields;
+    }();
+    return match.referencesAnyField(kNonDimensionContextFields);
+}
+
+/**
+ * @brief Classify @p match's pinned-dimension shape as a @ref ContextAxis.
+ *
+ * A non-context-only match (one carrying a window-property leaf) returns
+ * @c CatchAll, and so does a context-only match that pins a non-dimension
+ * context field (e.g. TiledWindowCount) — callers that need to distinguish a
+ * window-property rule from a true catch-all must combine this with
+ * `match.isContextOnly()`.
+ */
+inline ContextAxis contextAxisFor(const MatchExpression& match)
+{
+    if (!match.isContextOnly()) {
+        return ContextAxis::CatchAll;
+    }
+    // A match that ALSO pins a non-dimension context field (any context field
+    // outside kContextDimensionFields) is not the
+    // (screen, desktop, activity) shape makeContextMatch emits, so it is not an
+    // exact-context assignment; treat it as CatchAll-axis so the batch
+    // projections skip it. It still resolves normally through the evaluator,
+    // which sees those fields via the WindowQuery.
+    if (pinsNonDimensionContextField(match)) {
+        return ContextAxis::CatchAll;
+    }
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+    // The decode result is honoured, matching matchIsExactContext below. A
+    // failed decode already fails safe (the outputs stay at ("", 0, "") and
+    // contextAxisOf maps an empty screenId to CatchAll), so this is currently
+    // equivalent — but relying on that couples this classifier to another
+    // function's zero-initialisation, which the next refactor need not keep.
+    if (!contextDimsOf(match, screenId, virtualDesktop, activity)) {
+        return ContextAxis::CatchAll;
+    }
+    return contextAxisOf(screenId, virtualDesktop, activity);
+}
+
+/// True if @p match is a context-only "screen-only" pin — screen present,
+/// no desktop, no activity. The per-screen-base family classifier.
+inline bool matchIsExactContextBase(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Monitor;
+}
+
+/// True if @p match is a context-only "screen + desktop" pin (no activity).
+/// The per-desktop family classifier — a screen+desktop+activity tuple is
+/// the Combined axis and does NOT match this family.
+inline bool matchIsExactContextDesktop(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Desktop;
+}
+
+/// BROAD per-activity family classifier — true if @p match is a context-only
+/// rule pinning an activity (with screen), whether or not it ALSO pins a
+/// desktop. Used by the cascade-family union @ref isContextAssignmentRule
+/// (in layoutregistry_rulehelpers.cpp) to admit Combined rules into the
+/// cascade-family union.
+///
+/// DO NOT use as a per-activity batch reader/writer family classifier — the
+/// Activity batch API ((screen, activity) → layout) cannot represent a
+/// desktop-pinned Combined rule, so a round-trip through this predicate
+/// silently drops the desktop pin. Use @ref matchIsExactContextActivityStrict
+/// for the strict per-Activity classifier.
+inline bool matchIsExactContextActivity(const MatchExpression& match)
+{
+    const ContextAxis axis = contextAxisFor(match);
+    return axis == ContextAxis::Activity || axis == ContextAxis::Combined;
+}
+
+/// STRICT per-activity classifier — screen+activity ONLY, no desktop pin.
+/// Used by the Activity batch reader/writer (activityAssignments() /
+/// setAllActivityAssignments) so a Combined rule is NOT projected through
+/// the (screen, activity) key (would otherwise overwrite a pure-Activity
+/// entry or get its desktop pin dropped on round-trip). Combined rules
+/// live outside the Activity API's projection and only round-trip through
+/// the dedicated Combined batch.
+inline bool matchIsExactContextActivityStrict(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Activity;
+}
+
+/// STRICT Combined classifier — screen + desktop + activity all pinned.
+/// Used by the Combined batch API's family classifier so the round-trip
+/// touches ONLY Combined rules and leaves the other axes (Monitor,
+/// Desktop, Activity) untouched.
+inline bool matchIsExactContextCombined(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Combined;
+}
+
+/// True if @p match is the exact-shape context for @p screenId / @p
+/// virtualDesktop / @p activity — i.e. the match @ref makeContextMatch would
+/// emit for that tuple. A match pinning different dimensions or carrying any
+/// window-property leaf is rejected. Equivalent to `matchIsExactContext*`
+/// plus an explicit value check.
+inline bool matchIsExactContext(const MatchExpression& match, const QString& screenId, int virtualDesktop,
+                                const QString& activity)
+{
+    if (!match.isContextOnly()) {
+        return false;
+    }
+    // A pinned non-dimension context leaf (any context field outside
+    // kContextDimensionFields) means the match is more specific than the
+    // bare (screen, desktop, activity) shape, so it is NOT exact — see
+    // contextAxisFor for why dropping it here would lose the leaf on rebuild.
+    if (pinsNonDimensionContextField(match)) {
+        return false;
+    }
+    QString s;
+    int d = 0;
+    QString a;
+    // Honour the decode verdict. On failure contextDimsOf resets the outputs to
+    // ("", 0, ""), which is exactly the global catch-all tuple — so discarding
+    // the bool would report a malformed match as the exact catch-all context and
+    // let a caller rebuild it as one, dropping whatever it really pinned.
+    if (!contextDimsOf(match, s, d, a)) {
+        return false;
+    }
+    return s == screenId && d == virtualDesktop && a == activity;
+}
+
+/**
+ * @brief If @p rule is a per-mode disable rule, return its mode wire token
+ *        verbatim; otherwise nullopt.
+ *
+ * A rule qualifies iff **exactly one** of its actions is a `DisableEngine`
+ * action *and* that action's `mode` param is a non-empty wire token. The
+ * exactly-one rule is enforced: a second `DisableEngine` action makes the
+ * rule ambiguous — it is not a bridge-authored disable rule — so the
+ * function bails to nullopt. An empty token is treated as a malformed
+ * payload and also returns nullopt.
+ *
+ * Open-vocabulary within the bridge itself. At persistence boundaries the
+ * DisableEngine action descriptor's load-time validator already enforces
+ * the closed `engineModeOptions()` set (see ruleaction_builtins_p.h), so a rule
+ * that survived load has a vocabulary-valid token. The bridge keeps the
+ * verbatim contract so an in-memory caller building a rule programmatically
+ * — or a test pinning the bridge's unrecognised-token behaviour — can
+ * carry any non-empty token without coupling PhosphorRules to
+ * PhosphorZones, and so a future mode addition round-trips through the
+ * bridge without a coordinated edit.
+ */
+inline std::optional<QString> disableRuleMode(const Rule& rule)
+{
+    const RuleAction* disableAction = nullptr;
+    for (const RuleAction& action : rule.actions) {
+        if (action.type != QString(ActionType::DisableEngine)) {
+            continue;
+        }
+        if (disableAction != nullptr) {
+            // A second DisableEngine action — the rule is ambiguous and was
+            // not produced by makeDisableRule. Not a per-mode disable rule.
+            return std::nullopt;
+        }
+        disableAction = &action;
+    }
+    if (disableAction == nullptr) {
+        return std::nullopt;
+    }
+    const QString mode = disableAction->params.value(ActionParam::Mode).toString();
+    if (mode.isEmpty()) {
+        // An empty token is a malformed payload, not a recognised mode.
+        return std::nullopt;
+    }
+    // The wire vocabulary is the open set the DisableEngine descriptor's
+    // validator recognises — Settings does the wire → Mode mapping via
+    // `PhosphorZones::modeFromWireString`, which is the authoritative
+    // recognised-tokens list. This helper stays string-typed so the
+    // PhosphorRules lib does not need to depend on PhosphorZones.
+    return mode;
+}
+
+// ── Renumbering: a desktop or an activity edit ─────────────────────────────
+
+/// How the desktops and activities a rule set names have moved. An empty
+/// function is the identity. desktop(old) answers the new 1-based number, or
+/// 0 when that desktop is gone; activityAlive(id) is false for a removed
+/// activity. applies(rule), when set, picks the rules the remap reaches: one
+/// it answers false for is HELD, kept exactly as written and never dropped, and
+/// it outranks a moved rule that lands on its id. The daemon's late start-up
+/// renumber holds every rule added or changed after start-up took its snapshot
+/// of them (F1045): such a rule was written in the live numbering.
+struct ContextRemap
+{
+    std::function<int(int)> desktop{};
+    std::function<bool(const QString&)> activityAlive{};
+    std::function<bool(const Rule&)> applies{};
+};
+
+namespace detail {
+
+/// @p match with every `VirtualDesktop Equals` leaf, at any depth, moved
+/// through @p desktop. A leaf naming a desktop that is gone keeps its value
+/// and sets @p namedGone. A GreaterThan / LessThan bound is left as written:
+/// after a reorder there is no single bound that names the same desktops.
+inline MatchExpression remapDesktopLeaves(const MatchExpression& match, const std::function<int(int)>& desktop,
+                                          bool& namedGone)
+{
+    if (match.isLeaf()) {
+        if (!isContextEqualsLeaf(match, Field::VirtualDesktop)) {
+            return match;
+        }
+        bool ok = false;
+        const int old = match.predicate().value.toInt(&ok);
+        if (!ok || old <= 0) {
+            return match;
+        }
+        const int moved = desktop(old);
+        if (moved <= 0) {
+            namedGone = true;
+            return match;
+        }
+        return moved == old ? match : MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, moved);
+    }
+    QList<MatchExpression> children;
+    children.reserve(match.children().size());
+    bool changed = false;
+    for (const MatchExpression& child : match.children()) {
+        children.append(remapDesktopLeaves(child, desktop, namedGone));
+        changed = changed || children.constLast() != child;
+    }
+    if (!changed) {
+        return match;
+    }
+    switch (match.kind()) {
+    case MatchExpression::Kind::Any:
+        return MatchExpression::makeAny(children);
+    case MatchExpression::Kind::None:
+        return MatchExpression::makeNone(children);
+    default:
+        return MatchExpression::makeAll(children);
+    }
+}
+
+/// A rule that is not one context's own setting follows its desktops: its
+/// `VirtualDesktop Equals` leaves and its RouteToDesktop target move through
+/// @p desktop, and when one of them named a desktop that is gone the rule is
+/// switched off, not deleted, so it stays in the rule editor to be fixed.
+/// True when @p rule changed.
+inline bool remapRuleDesktops(Rule& rule, const std::function<int(int)>& desktop)
+{
+    bool namedGone = false;
+    MatchExpression match = remapDesktopLeaves(rule.match, desktop, namedGone);
+    bool changed = match != rule.match;
+    rule.match = std::move(match);
+    for (RuleAction& action : rule.actions) {
+        if (action.type != QString(ActionType::RouteToDesktop)) {
+            continue;
+        }
+        const QJsonValue target = action.params.value(ActionParam::TargetDesktop);
+        if (!target.isDouble() || target.toInt() <= 0) {
+            continue;
+        }
+        const int moved = desktop(target.toInt());
+        if (moved <= 0) {
+            namedGone = true;
+        } else if (moved != target.toInt()) {
+            action.params.insert(ActionParam::TargetDesktop, moved);
+            changed = true;
+        }
+    }
+    if (namedGone && rule.enabled) {
+        rule.enabled = false;
+        changed = true;
+    }
+    return changed;
+}
+
+/// Whether @p rule, whose match is the exact context shape decoded into the
+/// tuple, is that context's own setting: this bridge minted it for the tuple,
+/// or every action it carries is a context-domain one. A window rule with a
+/// context-shaped match ("Desktop is 3" with Float) is not (F1092).
+inline bool isContextSetting(const Rule& rule, const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    if (rule.id == assignmentRuleIdFor(screenId, virtualDesktop, activity)) {
+        return true;
+    }
+    if (const auto mode = disableRuleMode(rule);
+        mode && rule.id == disableRuleIdFor(screenId, virtualDesktop, activity, *mode)) {
+        return true;
+    }
+    return std::all_of(rule.actions.cbegin(), rule.actions.cend(), [](const RuleAction& action) {
+        return ActionRegistry::instance().domainFor(action) == ActionDomain::Context;
+    });
+}
+
+} // namespace detail
+
+/**
+ * @brief @p rules with the desktops and activities they name moved by @p remap.
+ *
+ * A CONTEXT rule (the exact (screen, desktop, activity) shape: context-only,
+ * no pinned non-dimension field, decoded by @ref contextDimsOf) that this
+ * bridge minted or that carries only context-domain actions
+ * (detail::isContextSetting) is that context's own setting, whoever wrote it:
+ * the layout registry claims such a rule as the context's assignment by its
+ * shape. Pinned to a desktop or an
+ * activity that is gone it is dropped. Pinned to a desktop that moved it is
+ * re-pinned there, and when this bridge minted it its deterministic id and
+ * its generated name follow the new tuple; a hand-built one keeps both.
+ *
+ * Every other rule (a window rule, a context match of another shape, or the
+ * exact shape carrying a window action) keeps its id and name and follows its
+ * desktops through detail::remapRuleDesktops, which switches it off when it
+ * named a removed desktop; the activities it names are not touched.
+ *
+ * The walk builds a fresh list, so a reorder cannot collide two re-minted
+ * ids. A rule left in place that ends on a moved rule's id (a stale rule past
+ * the old desktop list) is dropped and the moved one kept, unless
+ * ContextRemap::applies held it: then the moved one is dropped.
+ *
+ * @return the remapped list, or std::nullopt when nothing changed.
+ */
+inline std::optional<QList<Rule>> remapContextRules(const QList<Rule>& rules, const ContextRemap& remap)
+{
+    if (!remap.desktop && !remap.activityAlive) {
+        return std::nullopt;
+    }
+    QList<Rule> remapped;
+    remapped.reserve(rules.size());
+    QList<bool> moved;
+    moved.reserve(rules.size());
+    QSet<QUuid> movedIds;
+    QSet<QUuid> heldIds;
+    bool changed = false;
+    for (const Rule& rule : rules) {
+        if (remap.applies && !remap.applies(rule)) {
+            heldIds.insert(rule.id);
+            remapped.append(rule);
+            moved.append(false);
+            continue;
+        }
+        QString screenId;
+        int desktop = 0;
+        QString activity;
+        const bool contextRule = rule.match.isContextOnly() && !pinsNonDimensionContextField(rule.match)
+            && contextDimsOf(rule.match, screenId, desktop, activity)
+            && detail::isContextSetting(rule, screenId, desktop, activity);
+        if (!contextRule) {
+            Rule copy = rule;
+            const bool ruleMoved = remap.desktop && detail::remapRuleDesktops(copy, remap.desktop);
+            changed = changed || ruleMoved;
+            remapped.append(ruleMoved ? copy : rule);
+            moved.append(ruleMoved);
+            continue;
+        }
+        const int newDesktop = desktop > 0 && remap.desktop ? remap.desktop(desktop) : desktop;
+        const bool activityGone = !activity.isEmpty() && remap.activityAlive && !remap.activityAlive(activity);
+        if ((desktop > 0 && newDesktop <= 0) || activityGone) {
+            changed = true;
+            continue;
+        }
+        if (newDesktop == desktop) {
+            remapped.append(rule);
+            moved.append(false);
+            continue;
+        }
+        Rule copy = rule;
+        bool namedGone = false;
+        copy.match = detail::remapDesktopLeaves(rule.match, remap.desktop, namedGone);
+        const auto mode = disableRuleMode(rule);
+        const bool mintedDisable = mode && rule.id == disableRuleIdFor(screenId, desktop, activity, *mode);
+        if (rule.id == assignmentRuleIdFor(screenId, desktop, activity)) {
+            copy.id = assignmentRuleIdFor(screenId, newDesktop, activity);
+        } else if (mintedDisable) {
+            copy.id = disableRuleIdFor(screenId, newDesktop, activity, *mode);
+        }
+        // The generated name is the context label, or for a minted disable
+        // rule a mode prefix ending in " · " before it ("Autotile off · DP-1 ·
+        // Desktop 3"). The prefix is kept and the label re-minted; any other
+        // name is the user's own and stays.
+        const QString oldLabel = contextRuleName(screenId, desktop, activity);
+        if (rule.name == oldLabel) {
+            copy.name = contextRuleName(screenId, newDesktop, activity);
+        } else if (mintedDisable && rule.name.endsWith(QStringLiteral(" · ") + oldLabel)) {
+            copy.name = rule.name.chopped(oldLabel.size()) + contextRuleName(screenId, newDesktop, activity);
+        }
+        movedIds.insert(copy.id);
+        remapped.append(copy);
+        moved.append(true);
+        changed = true;
+    }
+    if (!changed) {
+        return std::nullopt;
+    }
+    if (!movedIds.isEmpty()) {
+        QList<Rule> deduped;
+        deduped.reserve(remapped.size());
+        for (qsizetype i = 0; i < remapped.size(); ++i) {
+            const QUuid& id = remapped.at(i).id;
+            // A held rule is newer truth than a moved one, so the moved one
+            // gives way to it. Otherwise the moved one outranks the stale rule.
+            const bool keep = moved.at(i) ? !heldIds.contains(id) : (heldIds.contains(id) || !movedIds.contains(id));
+            if (keep) {
+                deduped.append(remapped.at(i));
+            }
+        }
+        return deduped;
+    }
+    return remapped;
+}
+
+} // namespace ContextRuleBridge
+
+} // namespace PhosphorRules

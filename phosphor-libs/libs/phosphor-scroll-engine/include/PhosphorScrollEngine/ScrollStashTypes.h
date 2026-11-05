@@ -1,0 +1,567 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorScrollEngine/ScrollTypes.h>
+
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+
+#include <PhosphorProtocol/ScrollAxisEnum.h>
+
+#include <QElapsedTimer>
+#include <QString>
+#include <QVariant>
+#include <QVector>
+
+namespace PhosphorScrollEngine {
+
+/// The mode-round-trip strip stash value types (ScrollEngine::m_stripStash).
+/// Namespace-level rather than nested in ScrollEngine; semantics and lifetime
+/// are documented on the engine's m_stripStash member, and
+/// StashedTile::stagedFromPersistence below carries the cross-session lease
+/// contract.
+struct StashedTile
+{
+    QString windowId;
+    WindowHeight height;
+    /// Carried for serialization fidelity only — the restore paths do
+    /// not re-apply it (the effect re-reports live minimize state).
+    ///
+    /// It reads false for every tile a production daemon ever stashes:
+    /// its source is Tile::minimized, and the only writer of that flag
+    /// is ScrollStrip::setWindowMinimized, which is a TEST SEAM (the
+    /// daemon models minimize as a float, so a minimized window is not
+    /// a strip tile at all). The field exists so the strip model's
+    /// minimized domain stays round-trippable if the daemon ever drives
+    /// it directly; see the seam note on setWindowMinimized.
+    bool minimized = false;
+    /// Windowed fullscreen, carried through stash/serialize and RE-APPLIED
+    /// on exact-id claims only (unlike minimized above; the fuzzy appId
+    /// claim deliberately does not — see restoreFromStripStash): the flag
+    /// is strip-owned state the compositor mirrors, so a restart must hand
+    /// it back or the client stays fullscreen-configured with nothing on
+    /// record saying so.
+    bool windowedFullscreen = false;
+    /// True while THIS tile was staged from the persisted blob and has
+    /// not been claimed. Per tile, not per entry: a key co-tenanted by a
+    /// returning app and a dead one must age the dead tile out while the
+    /// returning one keeps claiming, and a claim on one tile must not
+    /// expose an unclaimed co-tenant to the aliveness sweep.
+    ///
+    /// A staged tile names LAST session's window id, which by design
+    /// appears in no live alive-set: the cross-session claim in
+    /// restoreFromStripStash matches on the appId prefix precisely
+    /// because the per-instance half of the id is regenerated every
+    /// launch. pruneStaleWindows' sweep must therefore not read "absent
+    /// from the alive set" as "closed" while this holds, or the very
+    /// first prune after login (the effect fires one at bring-up, right
+    /// after the daemon stages the snapshot) would erase it and undo the
+    /// structure/focus/anchor restore. Cleared on claim, at which point
+    /// the tile is anchored in THIS session's id space and the sweep is
+    /// meaningful. A tile whose app never relaunches is aged out by the
+    /// unclaimedSessions lease below instead.
+    bool stagedFromPersistence = false;
+    /// Consecutive logins THIS tile was staged without ever being
+    /// claimed. Incremented at serialize while stagedFromPersistence
+    /// holds; a claim zeroes it; restoreStripState drops a tile that has
+    /// gone kMaxUnclaimedSessions logins unclaimed. The aging exists
+    /// because pruneStaleWindows fires exactly ONCE per session (at
+    /// bring-up, while the TILE is still sweep-exempt), so no sweep can
+    /// ever reach a persisted tile whose app never relaunches — without
+    /// the lease it would be re-staged forever and eventually hand an
+    /// unrelated same-app window a long-dead slot.
+    int unclaimedSessions = 0;
+};
+
+struct StashedColumn
+{
+    QVector<StashedTile> tiles;
+    ColumnWidth width;
+    ColumnDisplay display = ColumnDisplay::Normal;
+    /// The column's ACTIVE tile, by window id — for a Tabbed column
+    /// that is the shown tab. Carried because every insert makes the
+    /// arriving tile its column's active one, so a restore without it
+    /// shows whichever sibling happened to announce last.
+    QString activeWindowId;
+    /// Which tab owns a TABBED column's cross extent, by window id. Carried
+    /// for the same reason it is persisted to disk: the tabs that do not own
+    /// it keep their own heights, so a restore without it falls back to the
+    /// first non-Auto tab and can hand the column to a different one than
+    /// held it. Distinct from activeWindowId on purpose — the shown tab and
+    /// the sizing owner are allowed to differ, which is what keeps a tab
+    /// switch from resizing the column.
+    QString heightOwnerId;
+    /// The column's maximize-to-edges state (Column::maximizedToEdges).
+    /// Column presentation like width and display, so it rides the stash and
+    /// is re-applied when the column is rebuilt on claim.
+    bool maximizedToEdges = false;
+    /// Latched once activeWindowId above has actually been put in force on the
+    /// live column, and once heightOwnerId has. Per COLUMN, unlike the strip-
+    /// wide focus guard the restore derives from the consumed set: the two
+    /// questions are answered at different arrivals (the shown tab may be a
+    /// different tile from the extent owner, and either may still be absent
+    /// when the first sibling lands), and a strip-wide latch would stop the
+    /// re-assertion for every other column in the same burst.
+    ///
+    /// While a latch is clear the restore keeps re-asserting the stashed value
+    /// on each arrival, because every insert makes the arriving tile its
+    /// column's active one and a non-Auto height claims the extent. Once it is
+    /// set the restore hands back what the column held immediately BEFORE the
+    /// insert instead: within a burst that is the value just restored, and for
+    /// an arrival that lands long afterwards (a same-app window claiming a slot
+    /// hours later) it is the tab the user has since switched to, which the
+    /// stashed value must not rewind.
+    ///
+    /// In-memory only. Deliberately not serialized: a stash staged from the
+    /// persisted blob has restored nothing yet, so false is the right value on
+    /// the far side of a restart.
+    bool shownTabRestored = false;
+    bool heightOwnerRestored = false;
+};
+
+/// One stashed strip: the structural columns plus the focus/view pair
+/// whose loss made every mode round trip re-anchor on an arbitrary
+/// window (first arrival won the focus).
+struct StashedStrip
+{
+    QVector<StashedColumn> columns;
+    /// Monotonic grace window for the cross-session appId FUZZY claim in
+    /// restoreFromStripStash. Started when the entry is staged from
+    /// persistence and re-started whenever the entry's screen (re-)enters
+    /// the scrolling set — the two moments an arrival wave of re-announced
+    /// windows legitimately follows. While invalid or expired, only
+    /// exact-id claims match, so a genuinely NEW same-app window the user
+    /// opens minutes later is inserted through the ordinary open path
+    /// (focused, on view) instead of silently adopting a dead sibling's
+    /// stashed slot off-screen. Exact-id claims are exempt: an id match IS
+    /// the evidence the fuzzy path lacks.
+    QElapsedTimer fuzzyClaimWindow;
+    QString focusedWindowId;
+    int viewAnchor = 0;
+    /// Whether that anchor was an explicit pan rather than a policy-derived
+    /// view (ScrollStrip's View detachment section). Travels with the anchor
+    /// because restoring one without the other is worse than restoring
+    /// neither: the position lands, the policy immediately reclaims it, and
+    /// the view jumps on the first layout pass after the restore.
+    bool viewDetached = false;
+    /// The axis this stash was captured under.
+    ///
+    /// The stash is a THIRD carrier of axis-dependent state, alongside the
+    /// live strip and the persisted blob, and the easiest of the three to
+    /// forget: a scrolling -> snap -> scrolling round trip that spans a flip
+    /// replays whatever was captured. The anchor is the piece that matters —
+    /// it is main-axis pixels, so replaying one captured on the other axis
+    /// scrolls the restored strip to a nonsense position.
+    PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
+    /// The strip's template blueprint cursor, carried across the round trip.
+    ///
+    /// Restoring the columns re-inserts them through paths that consume no
+    /// blueprint entry, so the far side would otherwise recover spent-ness
+    /// only as far as the qMax(cursor, columnCount) floor reaches — which is
+    /// the LIVE column count. A strip that had opened four columns and closed
+    /// two came back believing it had spent two, and handed entries 2 and 3
+    /// out for a second time. Travelling with the structure is what makes the
+    /// round trip lossless, exactly as focusedWindowId and viewAnchor do for
+    /// focus and view.
+    ///
+    /// Carried even by an entry with NO columns. A strip whose windows were
+    /// all floated or minimized away resolves to nothing structural while
+    /// still standing for the entries it spent, so the cursor is the whole
+    /// payload of such an entry — see stashStripStructure, which stores one
+    /// for that case alone.
+    int blueprintCursor = 0;
+    /// The blueprint the cursor above was counting against, so the far side
+    /// can tell a resumed template from a swapped one.
+    ///
+    /// Rides beside the cursor because the two are only meaningful together:
+    /// a cursor restored without the blueprint that produced it leaves the
+    /// consumption site unable to distinguish "same template, resume" from
+    /// "new template, restart", and it guessed restart — discarding the
+    /// cursor this entry just carried.
+    ///
+    /// NULL means "this entry hands no identity over", and the restore skips
+    /// the stamp rather than establishing a null one. Two entries hold null: a
+    /// context that genuinely has no template, and one staged from the
+    /// persisted blob (see below). Both want the same treatment — let the
+    /// consumption site stamp whatever blueprint is in force and keep the
+    /// cursor — which is why the restore tests isValid() instead of leaning on
+    /// ScrollState's established flag alone.
+    ///
+    /// NOT serialized, deliberately, unlike the cursor. A restored blob's
+    /// state has no established identity either, so the consumption site
+    /// stamps whatever blueprint is in force and keeps the cursor — the same
+    /// answer persisting the value would produce, without a second staleness
+    /// class in the blob.
+    QVariant blueprintIdentity;
+    /// Monotonic stamp of when this entry was staged (mode exit or
+    /// persistence load), from m_stashSequence. serializeStripState
+    /// resolves a window listed by two DIFFERENT stash keys in favour of
+    /// the higher stamp, because the reader's alphabetical first-wins
+    /// would otherwise let a window's older screen displace its newer
+    /// one. This orders the stash entries against each other only. A
+    /// stash and a LIVE strip CAN share a key (an entry still waiting on
+    /// a window that has not re-announced, beside the strip the others
+    /// rebuilt), which serializeStripState resolves by merging rather
+    /// than by stamp.
+    quint64 sequence = 0;
+
+    /// STRUCTURALLY empty: no columns to rebuild. Deliberately says nothing
+    /// about blueprintCursor, because both callers ask this to decide whether
+    /// there is structure worth restoring or writing out — a cursor-only entry
+    /// answers true here and is kept alive by the explicit cursor tests at
+    /// those sites instead.
+    bool isEmpty() const
+    {
+        return columns.isEmpty();
+    }
+    int tileCount() const
+    {
+        int total = 0;
+        for (const StashedColumn& c : columns) {
+            total += c.tiles.size();
+        }
+        return total;
+    }
+};
+
+/// What a floated/minimized window's column held, so unfloat restores the
+/// slot AND the user's width/display intent (a Proportion/Preset column must
+/// not come back as the default width). Namespace-level like the stash types
+/// above; lifetime and ownership are documented on the engine's
+/// m_floatRestore member. It deliberately carries no committed floor, along
+/// the strip or across it: both live per window in
+/// ScrollEngine::m_committedExtents, which a float round trip leaves standing
+/// (see CommittedExtent below). A drag that drops the float back in as an
+/// arrival sized by its client is the exception, and forgets them.
+struct FloatRestore
+{
+    int column = -1;
+    ColumnWidth width;
+    ColumnDisplay display = ColumnDisplay::Normal;
+    /// Taken by the compositor for the window's OWN fullscreen
+    /// (ScrollEngine::setWindowFullscreenFloat), not by the user; only that
+    /// verb may undo it, and any other unfloat consumes the slot with it. Set
+    /// only on an entry floatWindowInternal captured, so it is never true
+    /// beside windowedFullscreen (which the float capture leaves false). A
+    /// held window is floating, so it is absent from the mode-round-trip
+    /// stash and the persisted strip blob: the slot is lost across a mode
+    /// round trip or a login, and the window re-enters as a fresh open.
+    bool fullscreenHold = false;
+    /// Whether this window was the tab that decided its TABBED column's cross
+    /// extent when it left. Carried because leaving hands the ownership to the
+    /// tab that came on show, so coming back has to take it again or the
+    /// column keeps the substitute's height — a float round trip (which the
+    /// effect's minimize machinery drives) or a cancelled drag would otherwise
+    /// resize the column and leave it resized.
+    bool ownedTabbedHeight = false;
+    /// The source column's maximize-to-edges state when the window left as
+    /// the column's ONLY tile. Carried for the same reason the width is: a
+    /// minimize/unminimize round trip of a maximized column's lone window
+    /// must rebuild a maximized column, and the flag is declared state that
+    /// nothing re-derives. Left false for a tile leaving a SHARED column,
+    /// where the surviving column keeps the flag itself.
+    bool maximizedToEdges = false;
+    /// The tile slot inside a SHARED column (-1 when the window had its
+    /// own column). A stacked tile's float round-trip re-enters its
+    /// surviving stack instead of spawning a new column at the index.
+    int tileIndex = -1;
+    /// A surviving SIBLING of the shared column, used to re-locate the
+    /// stack at restore time — the bare column index goes stale when
+    /// columns close while the window floats, and a stale index would
+    /// splice the window into a stranger's stack.
+    QString stackAnchor;
+    /// Minimum frame size (Tile::minWidth) at float time — the tile that held
+    /// it dies with takeWindow, and dropping it would strip the
+    /// relayout clamps until the compositor happens to re-report.
+    /// Kept CURRENT while the window floats: windowMinSizeUpdated has no
+    /// tile to write to then, and without the write-through the unfloat
+    /// re-applies whatever the client reported at float time.
+    int minWidth = 0;
+    int minHeight = 0;
+    /// The tile's height INTENT at float time. Same reasoning as the
+    /// width/display above: without it a float round trip (which the
+    /// effect's minimize machinery also drives) silently reset a
+    /// user-set window height to Auto, while a mode round trip — which
+    /// stashes the intent — preserved it.
+    ///
+    /// Captured in the space of the column it came from, and re-stated in the
+    /// space of the column it goes back to. Those differ by the tab
+    /// indicator's cross reservation: an owning tab's height sizes its TABBED
+    /// column (column space, the reservation included), while a stacked
+    /// tile's height is the tile's own. A height carried from a tabbed column
+    /// into a Normal one, or back, is therefore off by that reservation. The
+    /// restore paths put a window back where it came from, where the spaces
+    /// match. The drag drop does not (it can land a tab in a stack), and
+    /// keeps the intent verbatim rather than guess which space the user
+    /// meant.
+    WindowHeight height;
+    /// Windowed fullscreen, captured by the DRAG paths only
+    /// (captureDragSlot): an Escape cancel is an exact restore, and the
+    /// commit re-seats the tile, so both hand the flag back. The float
+    /// capture (floatWindowInternal) deliberately leaves this false —
+    /// float and windowed fullscreen are exclusive by design, and a float
+    /// round trip is supposed to drop the flag.
+    bool windowedFullscreen = false;
+    /// The tab that inherited the extent ownership when this window left a
+    /// TABBED column it owned (ownedTabbedHeight), and that tab's height
+    /// intent at the moment it inherited, captured by floatWindowInternal.
+    /// Every re-entry that carries this slot (the unfloat, the drag restore,
+    /// a drag joining the window back into its own column) hands the
+    /// ownership back only while the column is still sized the way the leave
+    /// left it: the heir still owns it with the same intent, or the heir has
+    /// left the column, whose hand-off on leaving is not a resize
+    /// (ScrollEngine::restoreTabbedHeightOwner). A resize of the column while
+    /// this window was away (an interactive drag, a height verb, another tab
+    /// claiming it) is the user's newer word on the column's extent, and
+    /// reclaiming would revert it, so a resize made while the heir is still
+    /// in the column blocks the reclaim. One made after the heir left does
+    /// not: the test keys on the heir alone, so once the heir is gone a
+    /// resize or claim by any other tab is reverted on this window's return.
+    /// That is the accepted cost of not recording every ownership move made
+    /// while this window was away. Empty when no tab inherited (the column
+    /// closed with the window) or for an entry the drag paths captured, whose
+    /// hold leaves no room for such a resize and which hand the ownership
+    /// back unconditionally.
+    QString tabbedHeightHeirId;
+    WindowHeight tabbedHeightHeirIntent;
+};
+
+/// Live drag-insert preview state (drag_preview.cpp). See the engine's
+/// m_dragInsertPreview member for the signal-silence and both-endings
+/// announcement contract; hoisted here with FloatRestore, which it embeds.
+struct DragInsertPreview
+{
+    QString windowId;
+    QString targetScreenId;
+    /// The context the preview inserted into, captured at begin so the
+    /// prune paths can tell whether a dying context strands it.
+    PhosphorEngine::PlacementStateKey targetKey;
+    /// The most recent hit-tested drop target, stored verbatim —
+    /// nothing structural happens until commit applies it.
+    PhosphorEngine::IPlacementEngine::DragInsertTarget lastTarget;
+    /// The window's OWN begin-time width/display/height/min-size
+    /// intents. Never refreshed mid-drag: reading them from a transient
+    /// host column stamped foreign widths across columns in the abandoned
+    /// live-restructure design.
+    ///
+    /// How much of it commit applies depends on the drop. A NEW-COLUMN
+    /// drop applies all of it, with one exception: a window that ARRIVES
+    /// (ScrollEngine::dragDropClientSize) on a screen where "the client
+    /// decides" opens at the client's own size, so the width, the height
+    /// and the maximize-to-edges flag give way to what that verdict mints
+    /// (ScrollEngine::dragDropIntents). A JOIN discards width and display,
+    /// because the window becomes a tile of a host column that already owns
+    /// both, and only the height, min-size and windowed-fullscreen intents
+    /// survive (the height re-stated without taking a tabbed host's extent).
+    /// That is a property of what a join means rather than an oversight, but
+    /// the word "applied at commit" read as though the whole struct always
+    /// made it through.
+    FloatRestore carried;
+    // ── edge auto-scroll ──
+    /// Which edge band the cursor is in: -1 towards the strip's start
+    /// (left on a horizontal strip, top on a vertical one), +1 towards its
+    /// end (right / bottom), 0 neither. Also the "armed" flag — 0 means the
+    /// whole mechanism is idle.
+    int autoScrollDirection = 0;
+    /// Elapsed timer since the cursor entered the band, used for the
+    /// configured start delay. Only meaningful while autoScrollDirection
+    /// is non-zero.
+    QElapsedTimer autoScrollArmed;
+    /// One-shot latch for the tick's context-moved diagnostic. The daemon's
+    /// heartbeat keeps ticking a live preview, and the mismatch persists for
+    /// the rest of the drag once a context-change handler misses a cancel —
+    /// without the latch the warning repeats per 16 ms tick and drowns the
+    /// journal. Dies with the preview, which is the right lifetime.
+    bool contextMoveWarned = false;
+    /// Sub-pixel remainder carried between ticks. The view anchor is
+    /// integer pixels, so without this a speed under one pixel per tick
+    /// would round to zero forever and the strip would never move.
+    qreal autoScrollResidue = 0.0;
+    /// True once the delay has elapsed and the scroll owns the drop
+    /// target. Distinct from autoScrollDirection, which is set the moment
+    /// the cursor enters the band.
+    bool autoScrollOwnsTarget = false;
+    // ── cancel restoration ──
+    /// Set when begin's defensive block took the window out of the
+    /// TARGET strip despite it having no reverse-map entry (a stale
+    /// forward state). That take is a real structural edit made with
+    /// hadPriorState false, so cancel's "fresh adoption never touched
+    /// anything" early return would abandon the window: out of the strip
+    /// AND untracked, gone from the engine entirely. The slot it held is
+    /// in defensiveSlot.
+    bool defensivelyDetached = false;
+    FloatRestore defensiveSlot;
+    /// The TARGET strip's view (anchor + detach latch) as it stood BEFORE
+    /// begin's detach take and settle clamp. An Escape promises an exact
+    /// restore, and the slot alone does not deliver it: dragPreviewRestoreSlot
+    /// routes through the structural reanchor, whose policy verdict can leave
+    /// the view somewhere the user never scrolled it. Restored raw on every
+    /// cancel arm that hands the window back to the target strip.
+    int targetViewAnchorAtBegin = 0;
+    bool targetViewDetachedAtBegin = false;
+    /// True once the edge auto-scroll actually moved the view during this
+    /// hold. Gates the cancel-time view restore OFF: the scroll was the
+    /// user's own deliberate motion, and the shipped contract ("stays where
+    /// a drag scrolled it") says an Escape keeps it — restoring the captured
+    /// pair is for the holds where nothing but begin's settle and the
+    /// restore's policy reanchor moved the view.
+    bool viewScrolledDuringHold = false;
+    /// The PRIOR strip's view for a cross-key drag, captured for the same
+    /// reason: begin's take shortens that strip too, and the cancel that
+    /// returns the window home must return its view with it. Only meaningful
+    /// when hadPriorState && !priorSameKey && the prior state existed.
+    int priorViewAnchorAtBegin = 0;
+    bool priorViewDetachedAtBegin = false;
+    bool hadPriorState = false;
+    PhosphorEngine::PlacementStateKey priorKey;
+    /// Whole-key comparison (screen AND desktop AND activity): a
+    /// same-screen/different-desktop prior context reads false.
+    bool priorSameKey = false;
+    bool priorFloating = false;
+    /// The tiled slot at begin time (valid when !priorFloating).
+    FloatRestore priorSlot;
+    /// The m_floatRestore entry begin consumed when it silently
+    /// unfloated the window; re-inserted verbatim on cancel.
+    bool hadFloatRestoreEntry = false;
+    FloatRestore floatRestoreEntry;
+    bool wasScrollFloated = false;
+    /// Whether the floating window held the state's float-focus memory pair
+    /// (lastFloatingFocus + floatingHasFocus) at begin time. Captured BEFORE
+    /// begin's removeFloating, which clears both halves when this window
+    /// holds them; the cancel float-restore arms re-seed the pair from it,
+    /// mirroring unfloatWindowInternal's insert-refused arm. Without the
+    /// capture, cancelling a floating preview permanently deadens the
+    /// float/tiling focus-switch verbs — the window keeps compositor focus
+    /// across begin/cancel, so no focus report ever re-learns the pair.
+    bool priorFloatHadFocus = false;
+    /// The size the daemon reported for the dragged window
+    /// (setDragInsertClientSize), or empty when it reported none. The daemon
+    /// reports one only for a window that was FREE at begin, whose frame is
+    /// the client's own choice rather than a tile, a zone or the output, so
+    /// any drop that ARRIVES (ScrollEngine::dragDropClientSize) reads it,
+    /// whichever engine the window comes from. A reorder of a strip tile never
+    /// does.
+    QSize clientSize;
+    /// The window each strip involved called active when the hold began, the
+    /// target strip's and, for a cross-key drag, the prior strip's. A captured
+    /// view anchor is relative to the active column, and begin's take hands
+    /// the focus to a neighbour when the dragged window held it, so a cancel
+    /// makes this window active again before it restores the anchor.
+    QString targetActiveAtBegin;
+    QString priorActiveAtBegin;
+};
+
+/// What a client's own commits have taught the engine about one window's
+/// extent ALONG a strip that runs one way (ScrollEngine::reportCommittedSize).
+/// Runtime state only: nothing here is serialized or persisted, no strip stash
+/// carries it, and none of it is a width intent. The one copy kept outside
+/// ScrollEngine::m_committedExtents is the evacuee park's
+/// (ScrollEvacueePark::committed), which carries it across a KWin sleep or
+/// unplug round trip like the declared minimum.
+struct CommittedMainExtent
+{
+    /// The extent along the strip the client committed past the tile it was
+    /// offered, which the column is then held to exactly like a declared
+    /// minimum (0: none). The strip reads it through
+    /// ScrollLayoutParams::committedFloor.
+    int floorPx = 0;
+    /// The last extent along the strip the client committed to its WHOLE tile
+    /// when that was not the offer (0: none). Read only by the screen-edge
+    /// peek floor, which must keep protecting a column the client answers at
+    /// full width after the floor itself has been satisfied and dropped. A
+    /// wider answer sets it with the floor, and a narrower one replaces it.
+    /// With no floor held it ends, and the whole extent with it, once the
+    /// column offers the tile less than this on a pass that offers the tile
+    /// its whole rect (ScrollEngine::endStalePeeks), since a client that took
+    /// the narrower on-screen offer reports nothing and nothing else would
+    /// revise it. It also ends when the client answers a whole offer narrower
+    /// than this with that very offer (a park included), which the compositor
+    /// reports for a parked tile (ScrollEngine::reportCommittedSize). Either
+    /// end waits while another column the window holds still offers it this
+    /// much.
+    int peekPx = 0;
+    /// A narrower answer has given part or all of floorPx back since it was
+    /// learned. It outlives a floor given back entirely, so that a re-teach
+    /// pins, and ends with the floor's other drops or with the peek memory.
+    bool gaveBack = false;
+    /// A wider answer re-taught the floor after a give-back. The client is not
+    /// answering the same offer the same way twice, and following it down
+    /// again would offer it the size that taught the floor and start the cycle
+    /// over, so a narrower answer no longer gives the floor back. The drops
+    /// that end a floor outright end this with it.
+    bool pinned = false;
+
+    bool isEmpty() const
+    {
+        return floorPx == 0 && peekPx == 0 && !gaveBack;
+    }
+};
+
+/// What a client's own commits have taught the engine about one window's
+/// extent ACROSS a strip that runs one way (ScrollEngine::reportCommittedSize):
+/// a tile the client answers longer than its share of its column across the
+/// strip, inside the work area. That share is a stacked tile's slice of the
+/// split, a lone tile's height, or a tabbed column's content rect, which every
+/// tab is committed at. Runtime state with CommittedMainExtent's lifetime,
+/// since it lives in the same CommittedExtent value.
+struct CommittedCrossExtent
+{
+    /// The least share of its column across the strip the tile is laid out
+    /// with, exactly like a declared minimum across the strip (0: none). The
+    /// strip reads it through ScrollLayoutParams::committedCrossFloor, so the
+    /// stack's split gives the tile at least this and shrinks its siblings
+    /// (and a tabbed column takes the largest such floor among its tabs).
+    int floorPx = 0;
+    /// The tile's offer ALONG the strip when the floor was learned: the
+    /// floor's premise. A client that answers its cross extent from its main
+    /// one (a whole-number scale picked from the column's width) answers a
+    /// different width differently, so a column whose offer along the strip
+    /// has moved past this drops the floor rather than holding the tile to a
+    /// stale one. Re-stamped when the client's own answer leaves a changed,
+    /// nonzero floor along the strip (a wider answer teaching one, or a
+    /// narrower one giving part of one back), since the cross answer in the
+    /// same commit was given at that very width. An answer that gives the
+    /// floor along the strip back entirely is not re-stamped, and the premise
+    /// check reads the offer it moved like any other.
+    int mainPx = 0;
+    /// A shorter answer has given part or all of floorPx back since it was
+    /// learned, CommittedMainExtent::gaveBack's rule across the strip: it
+    /// outlives a floor given back entirely, so a re-teach pins.
+    bool gaveBack = false;
+    /// A longer answer re-taught the floor after a give-back, so a shorter
+    /// answer no longer gives it back (CommittedMainExtent::pinned's reason).
+    bool pinned = false;
+
+    bool isEmpty() const
+    {
+        return floorPx == 0 && !gaveBack;
+    }
+};
+
+/// One window's CommittedMainExtent per strip orientation, the value type of
+/// ScrollEngine::m_committedExtents. Kept per orientation because a window on
+/// several desktops can sit in a horizontal strip on one and a vertical strip
+/// on another, and what its client said about its width says nothing about
+/// its height.
+struct CommittedExtent
+{
+    CommittedMainExtent horizontal;
+    CommittedMainExtent vertical;
+    /// The cross-axis floors, per strip orientation like the two above and
+    /// kept apart from them: horizontalCross is the floor a HORIZONTAL strip
+    /// reads across itself (a height), so a height learned across a
+    /// horizontal strip never reads as a vertical strip's floor along it.
+    /// Every leave and carry path moves or forgets the whole value, these
+    /// with it.
+    CommittedCrossExtent horizontalCross = {};
+    CommittedCrossExtent verticalCross = {};
+
+    bool isEmpty() const
+    {
+        return horizontal.isEmpty() && vertical.isEmpty() && horizontalCross.isEmpty() && verticalCross.isEmpty();
+    }
+};
+
+} // namespace PhosphorScrollEngine

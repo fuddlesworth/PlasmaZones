@@ -1,0 +1,174 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "TemplateService.h"
+#include "TemplateStrategy.h"
+#include "core/types/constants.h"
+
+#include <QUuid>
+#include <QLatin1String>
+#include "core/platform/logging.h"
+#include "phosphor_i18n.h"
+
+using namespace PlasmaZones;
+
+// Helper function for zone creation (shared by all strategies)
+namespace {
+[[maybe_unused]]
+QVariantMap createZoneForTemplate(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
+{
+    QVariantMap zone;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
+    zone[Id] = QUuid::createUuid().toString();
+    zone[Name] = name;
+    zone[ZoneNumber] = number;
+    zone[X] = x;
+    zone[Y] = y;
+    zone[Width] = width;
+    zone[Height] = height;
+    zone[HighlightColor] = QString::fromLatin1(EditorConstants::DefaultHighlightColor);
+    zone[InactiveColor] = QString::fromLatin1(EditorConstants::DefaultInactiveColor);
+    zone[BorderColor] = QString::fromLatin1(EditorConstants::DefaultBorderColor);
+    return zone;
+}
+}
+
+// Template strategy implementations
+
+QVariantList GridTemplateStrategy::createZones(int columns, int rows)
+{
+    QVariantList zones;
+    if (columns < 1)
+        columns = 2;
+    if (rows < 1)
+        rows = 2;
+
+    qreal cellWidth = 1.0 / columns;
+    qreal cellHeight = 1.0 / rows;
+    int zoneNumber = 1;
+
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < columns; ++c) {
+            int currentNum = zoneNumber++;
+            zones.append(createZoneForTemplate(PhosphorI18n::tr("Zone %1").arg(currentNum), currentNum, c * cellWidth,
+                                               r * cellHeight, cellWidth, cellHeight));
+        }
+    }
+    return zones;
+}
+
+QVariantList ColumnsTemplateStrategy::createZones(int columns, int rows)
+{
+    Q_UNUSED(rows);
+    QVariantList zones;
+    if (columns < 1)
+        columns = 2;
+
+    qreal colWidth = 1.0 / columns;
+
+    for (int i = 0; i < columns; ++i) {
+        zones.append(createZoneForTemplate(
+            PhosphorI18n::tr("Column %1", "@item zone name, numbered column of a layout").arg(i + 1), i + 1,
+            i * colWidth, 0.0, colWidth, 1.0));
+    }
+    return zones;
+}
+
+QVariantList RowsTemplateStrategy::createZones(int columns, int rows)
+{
+    Q_UNUSED(columns);
+    QVariantList zones;
+    if (rows < 1)
+        rows = 2;
+
+    qreal rowHeight = 1.0 / rows;
+
+    for (int i = 0; i < rows; ++i) {
+        zones.append(
+            createZoneForTemplate(PhosphorI18n::tr("Row %1", "@item zone name, numbered row of a layout").arg(i + 1),
+                                  i + 1, 0.0, i * rowHeight, 1.0, rowHeight));
+    }
+    return zones;
+}
+
+QVariantList PriorityTemplateStrategy::createZones(int columns, int rows)
+{
+    Q_UNUSED(columns);
+    Q_UNUSED(rows);
+    QVariantList zones;
+    using namespace PlasmaZones::Defaults;
+
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Main", "@item zone name, the large zone of a layout"), 1, 0.0,
+                                       0.0, ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 1.0));
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Secondary Top", "@item zone name"), 2,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Secondary Bottom", "@item zone name"), 3,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.5,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
+
+    return zones;
+}
+
+QVariantList FocusTemplateStrategy::createZones(int columns, int rows)
+{
+    Q_UNUSED(columns);
+    Q_UNUSED(rows);
+    QVariantList zones;
+    using namespace PlasmaZones::Defaults;
+
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Left Panel", "@item zone name"), 1, 0.0, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Center", "@item zone name, the middle zone of a layout"), 2,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::FocusMainRatio, 1.0));
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Right Panel", "@item zone name"), 3,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio
+                                           + ::PhosphorZones::ZoneDefaults::FocusMainRatio,
+                                       0.0, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
+
+    return zones;
+}
+
+TemplateService::TemplateService(QObject* parent)
+    : QObject(parent)
+{
+    // Register all template strategies
+    m_strategies[QStringLiteral("grid")] = new GridTemplateStrategy(this);
+    m_strategies[QStringLiteral("columns")] = new ColumnsTemplateStrategy(this);
+    m_strategies[QStringLiteral("rows")] = new RowsTemplateStrategy(this);
+    m_strategies[QStringLiteral("priority")] = new PriorityTemplateStrategy(this);
+    m_strategies[QStringLiteral("focus")] = new FocusTemplateStrategy(this);
+}
+
+TemplateService::~TemplateService()
+{
+    // Strategies are QObjects with this as parent, so they'll be deleted automatically
+}
+
+QVariantList TemplateService::applyTemplate(const QString& templateType, int columns, int rows)
+{
+    if (templateType.isEmpty()) {
+        qCWarning(lcEditor) << "Empty template type";
+        return QVariantList();
+    }
+
+    TemplateStrategy* strategy = m_strategies.value(templateType, nullptr);
+    if (!strategy) {
+        qCWarning(lcEditor) << "Unknown template type:" << templateType;
+        return QVariantList();
+    }
+
+    // Input validation
+    if (columns < 1)
+        columns = 2;
+    if (rows < 1)
+        rows = 2;
+
+    return strategy->createZones(columns, rows);
+}
+
+QStringList TemplateService::availableTemplates() const
+{
+    return m_strategies.keys();
+}

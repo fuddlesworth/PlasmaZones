@@ -1,0 +1,124 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+/**
+ * @file internal.h
+ * @brief Shared constants and helper declarations for ShaderNodeRhi TUs
+ *
+ * Provides RhiConstants (quad vertices, component indices). The multipass
+ * compile-time limits live on ShaderNodeRhi.h, not here.
+ */
+
+#include <PhosphorRendering/ShaderNodeRhi.h>
+
+#include <QByteArray>
+#include <QLoggingCategory>
+#include <QUrl>
+
+namespace PhosphorRendering {
+
+Q_DECLARE_LOGGING_CATEGORY(lcShaderNode)
+
+/// True for URLs the shader loader can read: file://, qrc:, scheme-less
+/// local paths, and the empty/invalid URL (an intentional "no shader").
+/// Shared by the setter guards (shadereffect_setters.cpp) and kept beside
+/// its path-resolving sibling below so the two can never drift. A third,
+/// STRICTER variant that neither of these knows about is the protected
+/// ShaderEffect::localShaderPath, which composes them and additionally
+/// refuses a relative resolved path; both subclass load paths use it.
+inline bool isLocalShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return true;
+    }
+    const QString scheme = url.scheme();
+    return url.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file") || scheme == QLatin1String("qrc");
+}
+
+/// Resolve a shader URL (already vetted by isLocalShaderUrl) to the local
+/// path QFile can open — ":"-prefixed for qrc:, toLocalFile() for file://,
+/// the raw path otherwise. Used by the load path (shadereffect.cpp).
+inline QString localPathFromShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return QString();
+    }
+    if (url.scheme() == QLatin1String("qrc")) {
+        return QLatin1Char(':') + url.path();
+    }
+    const QString local = url.toLocalFile();
+    if (!local.isEmpty()) {
+        return local;
+    }
+    return url.path();
+}
+
+/// Clear the filename+mtime cache that lives in shadernoderhicore.cpp.
+/// Called from ShaderCompiler::clearCache() so a single public clearCache()
+/// call flushes BOTH caches — otherwise a hot-reload would wipe the
+/// source-hash cache while the filename cache kept serving stale bakes.
+void clearFilenameShaderCache();
+
+/// Fingerprint a list of canonical include paths (path + mtime per file,
+/// sorted, deduplicated). Defined in shadernoderhicore.cpp beside the cache
+/// key it feeds. Call it AT EXPANSION TIME — immediately after the load that
+/// produced @p paths — never later: statting the mtimes at bake time opens a
+/// TOCTOU window where an include edited between expansion and fingerprinting
+/// caches old-content SPIR-V under the new-mtime key.
+QByteArray includeFingerprint(QStringList paths);
+
+/// Apply the T1.4 entry-point scaffold to a raw fragment source. Returns
+/// @p raw unchanged when @p candidates is empty or @p raw already defines
+/// `main()`; otherwise prepends @p prologue and appends the first matching
+/// candidate's generated `main()` (via `composeEntryPoint`). Shared verbatim by
+/// the live load (`loadFragmentShader`) and the warm bake so both produce the
+/// identical pre-expansion source for a given shader.
+inline QString applyEntryAssembly(const QString& raw, const QString& prologue,
+                                  const QList<PhosphorShaders::EntryCandidate>& candidates)
+{
+    return PhosphorShaders::assembleEntryPoint(raw, prologue, candidates);
+}
+
+/// Fingerprint the entry scaffold for the bake-cache key. Empty when no
+/// scaffold is installed (the animation / traditional path), so the key is
+/// unchanged there. Folded in by both the live load and the warm bake so a
+/// scaffold change invalidates, and the two paths never collide on a key while
+/// disagreeing on the assembled source.
+inline QByteArray entryScaffoldFingerprint(const QString& prologue,
+                                           const QList<PhosphorShaders::EntryCandidate>& candidates)
+{
+    if (candidates.isEmpty() && prologue.isEmpty()) {
+        return QByteArray();
+    }
+    QByteArray fp = prologue.toUtf8();
+    for (const PhosphorShaders::EntryCandidate& c : candidates) {
+        fp.append('\x1f');
+        fp.append(c.functionName.toUtf8());
+        fp.append('\x1f');
+        fp.append(c.generatedMain.toUtf8());
+        // alsoRequires gates which candidate composeEntryPoint selects, so two
+        // scaffolds differing only there assemble differently — fold it in too.
+        for (const QString& req : c.alsoRequires) {
+            fp.append('\x1e');
+            fp.append(req.toUtf8());
+        }
+    }
+    return fp;
+}
+
+namespace RhiConstants {
+
+inline constexpr float QuadVertices[] = {
+    -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+};
+
+static constexpr int ComponentX = 0;
+static constexpr int ComponentY = 1;
+static constexpr int ComponentZ = 2;
+static constexpr int ComponentW = 3;
+
+} // namespace RhiConstants
+
+} // namespace PhosphorRendering

@@ -1,0 +1,3010 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Tiling request handling for TilingHandler: the tile batch pipeline. Part of
+// TilingHandler — split from tilinghandler.cpp for SRP. The frame-commit
+// centring lives in framecentering.cpp, the engine's focus request in signals.cpp.
+
+#include "tilinghandler.h"
+#include "stackdecisions.h"
+#include "scrolldecisions.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
+#include "compositor/stripviewanimator.h"
+#include "compositor/windowanimator.h"
+#include "transitions/striptransitionmanager.h"
+#include "compositor/effectlogging.h"
+
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+#include <window.h>
+#include <workspace.h>
+
+#include <QLoggingCategory>
+#include <QScopeGuard>
+
+#include <algorithm>
+#include <utility>
+
+namespace PlasmaZones {
+
+namespace {
+// Human-readable KWin maximize mode for the tile-request log. The autotile
+// "ballooning" feedback loop (discussion #461) hinges on a window still
+// carrying a maximize flag when it is tiled, so the tile-request log records
+// this to keep a future report diagnosable without a reproduction.
+const char* maximizeModeName(KWin::MaximizeMode mode)
+{
+    switch (mode) {
+    case KWin::MaximizeRestore:
+        return "restore";
+    case KWin::MaximizeVertical:
+        return "vertical";
+    case KWin::MaximizeHorizontal:
+        return "horizontal";
+    case KWin::MaximizeFull:
+        return "full";
+    }
+    return "unknown";
+}
+} // namespace
+
+void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests)
+{
+    if (tileRequests.isEmpty()) {
+        return;
+    }
+
+    // Validate every request up-front. A single malformed entry is logged and
+    // dropped from the batch; the remaining requests still apply. This avoids
+    // one corrupt payload (e.g. zero-size tiled request from a protocol glitch)
+    // from either resizing a window to 0×0 or poisoning the whole retile pass.
+    PhosphorProtocol::TileRequestList validatedRequests;
+    validatedRequests.reserve(tileRequests.size());
+    for (const auto& req : tileRequests) {
+        if (const QString err = req.validationError(); !err.isEmpty()) {
+            qCWarning(lcEffect) << "slotWindowsTileRequested: dropping invalid entry:" << err;
+            continue;
+        }
+        validatedRequests.append(req);
+    }
+    if (validatedRequests.isEmpty()) {
+        qCWarning(lcEffect) << "slotWindowsTileRequested: all" << tileRequests.size() << "entries invalid — aborting";
+        return;
+    }
+
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The
+    // ARRIVAL of a batch is itself the evidence: the engine emits on change,
+    // plus one forced emit per strip-context switch (m_forceEmitScreens, the
+    // candidate-A fix), so if this line does NOT appear after a desktop switch
+    // that changed the strip's context, that forced emit has regressed. Read
+    // against the desktopChanged line from the same category.
+    if (lcStripDiag().isDebugEnabled()) {
+        QSet<QString> screens;
+        int parkedEntries = 0;
+        for (const auto& req : validatedRequests) {
+            screens.insert(req.screenId);
+            if (req.hasVisualPos) {
+                ++parkedEntries;
+            }
+        }
+        qCDebug(lcStripDiag) << "batch arrived:" << validatedRequests.size() << "entries," << parkedEntries
+                             << "with visualPos, screens=" << screens;
+    }
+
+    // A geometry batch on a scrolling screen slides columns under the
+    // stationary pointer; pause FFM until the cursor moves deliberately
+    // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
+    // steal focus onto whatever landed under it.
+    // Any request at all, float entries included: a float restores
+    // pre-autotile geometry, which slides a window under a stationary pointer
+    // exactly like a tile does.
+    bool anyRequestOnScrollingScreen = false;
+    for (const auto& req : validatedRequests) {
+        if (isScrollingScreen(req.screenId)) {
+            anyRequestOnScrollingScreen = true;
+            break;
+        }
+    }
+    if (anyRequestOnScrollingScreen) {
+        suppressFfmUntilCursorMoves();
+    }
+
+    // A tile / reflow / overflow-float changes each window's placement mode
+    // (tiling ↔ floating) and tiled state, which are rule MATCH fields (Mode,
+    // IsTiled). The effect's per-window rule match cache is keyed on
+    // (windowId, ruleSet revision) and does not move on a placement change, and
+    // unlike the snap path the autotile engine emits no per-window
+    // windowStateChanged for the effect to key off. Invalidate here so a
+    // `Mode == "tiling"` / `IsTiled` border / title-bar / opacity rule
+    // re-resolves for every window this batch touches. Each call coalesces into
+    // a single end-of-turn flush, so this is cheap and is a no-op when no
+    // appearance/animation rules are loaded.
+    // Screens whose batch is a heartbeat view tick: every entry there is the
+    // same tiled window at a translated position — Mode and IsTiled cannot
+    // have changed (the engine's owned scroll runs no structural mutator),
+    // so invalidating would wipe the global rule-match cache and re-resolve
+    // every strip window's decoration ~60 times a second for the length of
+    // an edge hold. A structural change mid-hold gives ownership back first,
+    // so its batch arrives without the flag and invalidates as before.
+    // Nothing is lost for the POSITIONAL rule fields (positionX/Y, width,
+    // height), which do move on a view tick: the frame-geometry flush evicts
+    // those verdicts per window whenever a geometry-scoped rule exists, so
+    // they keep up at the flush rate without this wholesale invalidation.
+    QSet<QString> immediateTickScreens;
+    for (const auto& req : validatedRequests) {
+        if (req.viewImmediate) {
+            immediateTickScreens.insert(req.screenId);
+        }
+    }
+    for (const auto& req : validatedRequests) {
+        if (req.viewImmediate || immediateTickScreens.contains(req.screenId)) {
+            continue;
+        }
+        // Re-key to the window's LIVE id: the rule-match cache keys on
+        // getWindowId, and after a cross-session restore the daemon can still
+        // send the pre-restore UUID (slotWindowStateChanged spells out why).
+        // Unresolved falls back to the daemon id, correct for the ordinary
+        // same-session case where the two are identical. findWindowById's
+        // fuzzy appId fallback is fine HERE, unlike the tab-swap install's
+        // exact wire-to-live map below: a wrong-instance hit invalidates a
+        // sibling's cache entry (a spurious re-resolve), not a wrong paint.
+        QString liveWindowId = req.windowId;
+        if (KWin::EffectWindow* const w = m_effect->findWindowById(req.windowId)) {
+            liveWindowId = m_effect->getWindowId(w);
+        }
+        m_effect->invalidateRuleCacheForStateChange(liveWindowId);
+    }
+
+    // Stagger generations are bumped PER SCREEN below, once this batch's target
+    // screens are known (see m_tileStaggerGenByScreen). A blanket global
+    // bump here would let a cross-output move's destination batch cancel the
+    // source reflow's still-staggered windows. The global generation is reserved
+    // for desktop/screen switches (slotScreensChanged).
+    // NOTE: m_tileTargetZones and m_centeredWaylandZones are intentionally
+    // NOT cleared globally here. Each retile fires for a single screen at a
+    // time (per-VS retile after a swap/rotate), so a global clear would wipe
+    // sibling-VS entries mid-animation and strand their windows without a
+    // centering target. Each entry in this batch replaces its own: the geometry
+    // apply drops the window's target and stamp (dropCenteringTarget), and the
+    // batch records a fresh target after it when an ack is coming. Entries for
+    // windows in no request are consumed by the centring pass on their next frame change.
+    // Closed windows are pruned via cleanupClosedWindowState.
+
+    struct Entry
+    {
+        QString windowId;
+        QRect geometry;
+        KWin::EffectWindow* window = nullptr;
+        QVector<KWin::EffectWindow*> candidates;
+        bool isMonocle = false;
+        bool isWindowedFullscreen =
+            false; ///< scrolling windowed fullscreen: hold KWin fullscreen state at the column rect
+        bool isMaximizedToEdges = false; ///< scrolling: this window's column is maximized (mirror KWin's maximize bit)
+        QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
+        QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
+        /// scrolling strip: screen edge to animate from. Four-valued since
+        /// wire v5 — "left"/"right" on a horizontal strip, "top"/"bottom" on
+        /// a vertical one. Empty for a non-scrolling entry.
+        QString scrollEdge;
+        int viewDelta = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
+        bool viewImmediate = false; ///< scrolling strip: user-driven continuous view motion — apply the delta outright
+        /// scrolling strip: where a PARKED column really sits. Stored at apply
+        /// time as a ScrollVisualPlacement (this position plus the column
+        /// size); the paint path derives its own translation from that per
+        /// read, centring the committed frame inside the column rather than
+        /// substituting for it — which would erase the X11 constrain-and-centre
+        /// offset. See scrollVisualTranslationFor.
+        QPoint visualPos;
+        bool hasVisualPos = false;
+        QString tabFrom; ///< scrolling strip: the tab this entry replaces in a tabbed column, else empty
+    };
+    QVector<Entry> entries;
+
+    for (const auto& req : validatedRequests) {
+        const QString& windowId = req.windowId;
+
+        // Float entries: overflow windows that should be restored to pre-autotile geometry.
+        // Process inline — same cleanup as slotWindowFloatingChanged(windowId, true, ...).
+        // Geometry is restored from the effect's local pre-autotile cache, avoiding
+        // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
+        if (req.floating) {
+            const QString& screenId = req.screenId;
+            // Re-key to the window's LIVE id, the same way the rule-cache
+            // invalidation above and the tile path below both do. After a
+            // cross-session restore the daemon can still send the pre-restore
+            // UUID, and every operation in applyFloatCleanup is id-keyed
+            // (floating flag, tiled-state clear, target-zone and centering
+            // maps, decoration reconcile, monocle unmaximize) — with a stale id
+            // all of them miss the live entries and the exact resolve below
+            // returns null, so the pre-autotile geometry restore is skipped
+            // with nothing logged on that arm. Falls back to the daemon id when
+            // unresolved, which is correct for the ordinary same-session case.
+            // By INSTANCE, never the app-id fallback: a float entry for an
+            // overflow window that has since closed would otherwise float and
+            // move the one live same-app sibling the daemon still tiles.
+            QString floatWindowId = windowId;
+            if (KWin::EffectWindow* const live = m_effect->findWindowByInstanceId(windowId)) {
+                floatWindowId = m_effect->getWindowId(live);
+            }
+            qCInfo(lcEffect) << "Autotile batch float:" << floatWindowId << "screen:" << screenId;
+            applyFloatCleanup(floatWindowId);
+
+            // Restore pre-autotile geometry from the effect's local cache.
+            // preTileRestoreRectFor keeps the all-bucket reader policy — a VS
+            // config change can re-key the window's screen without moving its
+            // geometry bucket, and that rect is still applicable — while
+            // degrading a rect from ANOTHER output to size-only, which would
+            // otherwise move the window to that monitor. Exact resolve of the
+            // re-keyed id, matching the tile lambda's deliberate policy: a
+            // fuzzy hit would teleport a same-app SIBLING onto this window's
+            // restored rect.
+            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
+            if (!floatWin) {
+                // Both misses below are LOGGED. applyFloatCleanup above has
+                // already run unconditionally, so the window is genuinely
+                // floated and untiled either way — it just stays at its tile
+                // rect. That state is coherent and looks exactly like a restore
+                // that worked, so without a line here the journal cannot tell
+                // the two apart. The tile arm logs every one of its drops for
+                // the same reason.
+                qCWarning(lcEffect) << "Autotile batch float: no live window for" << floatWindowId << "on" << screenId
+                                    << "— floated without restoring its pre-tile geometry";
+            }
+            if (floatWin) {
+                const QRectF savedGeo = preTileRestoreRectFor(floatWindowId, screenId, floatWin->frameGeometry());
+                if (!savedGeo.isValid()) {
+                    qCWarning(lcEffect) << "Autotile batch float: no applicable pre-tile rect for" << floatWindowId
+                                        << "on" << screenId << "— floated, but left at its tile rect";
+                }
+                if (savedGeo.isValid()) {
+                    // Its spot is on its physical monitor, whichever virtual
+                    // screen that is, and it is counted where it lands: on
+                    // another one, the engine there takes it floating, before
+                    // the apply (l18_overflow_float_physical, F310).
+                    const QPoint restoredCentre = savedGeo.toRect().center();
+                    const QString restoredScreen =
+                        m_effect->resolveEffectiveScreenId(restoredCentre, KWin::effects->screenAt(restoredCentre));
+                    if (!restoredScreen.isEmpty() && restoredScreen != screenId) {
+                        floatOntoScreen(floatWin, floatWindowId, savedGeo, screenId, restoredScreen);
+                    }
+                    // The restored rect may lie in another virtual screen, and
+                    // batch floats fire in the swap/rotate window the tile
+                    // apply's crossing guard covers: unguarded, the synchronous
+                    // frame change resolves against stale m_virtualScreenDefs
+                    // and re-announces the window. Save/restore (nesting-safe).
+                    const auto floatGuard = m_effect->geometryApplyScope();
+                    // Snap-out: leaving tile-managed sizing.
+                    m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+                    // Re-seed the tracked screen from the restored rect: the
+                    // bracket held the detectors' write and the apply has not
+                    // landed, so the frame still reads the tile (F152). The
+                    // notified screen too, which the per-frame virtual-screen
+                    // detector diffs against: a stale one hands the floated
+                    // window to the other virtual screen's engine as a tile.
+                    m_effect->m_trackedScreenPerWindow[floatWin] = restoredScreen;
+                    if (m_notifiedWindows.contains(floatWindowId)) {
+                        m_notifiedWindowScreens[floatWindowId] = restoredScreen;
+                    }
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << floatWindowId
+                                     << savedGeo.toRect();
+                }
+            }
+            continue;
+        }
+
+        QRect geo = req.toRect();
+        QRect normalizedGeometry = geo.normalized();
+
+        if (normalizedGeometry.width() <= 0 || normalizedGeometry.height() <= 0) {
+            qCWarning(lcEffect) << "Autotile tile request: invalid geometry for" << windowId << normalizedGeometry;
+            continue;
+        }
+
+        // The window the entry names, by instance: the engines address it by
+        // the daemon's first-seen composite, which drifts from the effect's
+        // own after a class mutation, so the exact id alone can miss it.
+        // Only an entry naming no live window becomes a FUZZY entry, whose
+        // candidates are the same-app windows it could stand for (a stale
+        // UUID after a KWin restart). Fuzzy entries are resolved below, after
+        // every instance entry has claimed its window, and that holds even
+        // for a single candidate: treating it as exact let a stale entry
+        // reserve the live window another entry names.
+        KWin::EffectWindow* w = m_effect->findWindowByInstanceId(windowId);
+        QVector<KWin::EffectWindow*> candidates;
+        if (!w) {
+            candidates = fuzzyTileCandidates(windowId, req.screenId);
+            if (candidates.isEmpty()) {
+                qCDebug(lcEffect) << "Autotile: window not found:" << windowId;
+                continue;
+            }
+        }
+        Entry entry;
+        entry.windowId = windowId;
+        entry.geometry = normalizedGeometry;
+        entry.window = w;
+        entry.isMonocle = req.monocle;
+        entry.isWindowedFullscreen = req.windowedFullscreen;
+        entry.isMaximizedToEdges = req.maximizedToEdges;
+        entry.screenId = req.screenId;
+        entry.stacking = req.stacking;
+        entry.scrollEdge = req.scrollEdge;
+        // Clamped here, at the wire boundary, because the batch has TWO
+        // consumers: the view spring and the per-window origin below. The wire
+        // deliberately does not validate this field, and clamping inside the
+        // animator alone left the origin built from the raw value — so a
+        // garbled delta would start every carried column's leg arbitrarily far
+        // off-screen, which is the same flung strip the clamp exists to
+        // prevent, just moved onto the per-window springs. One bounded value
+        // for both consumers makes the animator's own clamp idempotent.
+        entry.viewDelta =
+            qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDelta, StripViewAnimator::kMaxViewDeltaPx);
+        entry.viewImmediate = req.viewImmediate;
+        entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
+        entry.hasVisualPos = req.hasVisualPos;
+        entry.tabFrom = req.tabFrom;
+        entry.candidates = candidates;
+        entries.append(entry);
+    }
+
+    // Disambiguate the fuzzy entries (same appId, no live instance). An
+    // entry that resolved by INSTANCE (above) must RESERVE its window against
+    // the fuzzy entries: instance entries are not in the index below, and
+    // without the claimed-set a same-appId fuzzy entry (the stale UUID case
+    // this file guards in several other places) could resolve to the SAME
+    // window — every per-window map then written twice for one id, the
+    // second apply overwriting the first, and the window the fuzzy entry was
+    // meant for silently never tiled.
+    QSet<KWin::EffectWindow*> claimedByExact;
+    for (const Entry& e : std::as_const(entries)) {
+        if (e.window && e.candidates.isEmpty()) {
+            claimedByExact.insert(e.window);
+        }
+    }
+    // Bucketed by app AND target output: fuzzyTileCandidates scopes each
+    // entry's candidates to its target output, so only entries sharing both
+    // share one candidate list, which the zip below relies on.
+    QHash<QString, QVector<int>> appIdToEntryIndices;
+    for (int i = 0; i < entries.size(); ++i) {
+        if (!entries[i].candidates.isEmpty()) {
+            const QString bucket = ::PhosphorIdentity::WindowId::extractAppId(entries[i].windowId) + QLatin1Char('\n')
+                + ::PhosphorIdentity::VirtualScreenId::extractPhysicalId(entries[i].screenId);
+            appIdToEntryIndices[bucket].append(i);
+        }
+    }
+    for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
+        // == 1, not <= 1: the map is append-only, so a bucket that exists has
+        // at least one index and the two tests are the same test. It was
+        // written as a <= 1 outer with an == 1 inner, which read as if an empty
+        // bucket were reachable.
+        if (indices.size() == 1) {
+            // Own-fullscreen windows were already dropped from the candidates
+            // (fuzzyTileCandidates), so a held game is never picked for its
+            // launcher's stale entry.
+            Entry& e = entries[indices[0]];
+            QPoint targetCenter = e.geometry.center();
+            KWin::EffectWindow* best = nullptr;
+            qreal bestDist = 1e9;
+            for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
+                if (claimedByExact.contains(c)) {
+                    continue;
+                }
+                QPointF cf = c->frameGeometry().center();
+                qreal d = QPointF(targetCenter - cf).manhattanLength();
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = c;
+                }
+            }
+            if (best) {
+                e.window = best;
+            } else {
+                // Every candidate was claimed by an exact entry: the drop
+                // is correct (the alternative is a double-apply) but must
+                // not be silent — this is the "window never tiled" outcome
+                // the claimed-set diagnostics exist to surface.
+                qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
+                                    << "claimed by exact entries — dropping";
+            }
+            continue;
+        }
+        QVector<KWin::EffectWindow*> candidates = entries[indices[0]].candidates;
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                        [&claimedByExact](KWin::EffectWindow* c) {
+                                            return claimedByExact.contains(c);
+                                        }),
+                         candidates.end());
+        if (candidates.size() != indices.size()) {
+            qCDebug(lcEffect) << "Autotile: stableId has" << indices.size() << "entries and" << candidates.size()
+                              << "candidates; assigning by position";
+        }
+        // Both keys are the top-left compared LEXICOGRAPHICALLY, not x alone.
+        // The two sorts are zipped index-to-candidate below, so they must
+        // impose the same total order on the same layout — and an x-only key
+        // does not: on a vertical strip every column spans the full work-area
+        // width, so every pair ties, both sorts are unstable, and the zip pairs
+        // a window with another window's committed rect (every per-window map
+        // the apply lambda writes then follows the wrong window). The tie is
+        // not vertical-only — two same-app windows sharing one tabbed column
+        // tie on a horizontal strip too — so the key is axis-neutral rather
+        // than axis-switched.
+        const auto beforeByTopLeft = [](const QPoint& a, const QPoint& b) {
+            return a.x() != b.x() ? a.x() < b.x() : a.y() < b.y();
+        };
+        QVector<int> sortedIndices = indices;
+        std::sort(sortedIndices.begin(), sortedIndices.end(), [&entries, &beforeByTopLeft](int a, int b) {
+            return beforeByTopLeft(entries[a].geometry.topLeft(), entries[b].geometry.topLeft());
+        });
+        std::sort(
+            candidates.begin(), candidates.end(), [&beforeByTopLeft](KWin::EffectWindow* a, KWin::EffectWindow* b) {
+                return beforeByTopLeft(a->frameGeometry().toRect().topLeft(), b->frameGeometry().toRect().topLeft());
+            });
+        const int n = qMin(sortedIndices.size(), candidates.size());
+        if (n < sortedIndices.size()) {
+            qCWarning(lcEffect) << "Autotile: only" << n << "unclaimed candidates for" << sortedIndices.size()
+                                << "entries — trailing entries dropped";
+        }
+        for (int i = 0; i < n; ++i) {
+            entries[sortedIndices[i]].window = candidates[i];
+        }
+    }
+
+    // wire id → live id for every resolved entry of THIS batch, built in the
+    // loop below. Consumed by the tab-swap install to re-key tabFrom (see the
+    // comment at the insert). Captured BY VALUE into the apply lambda: the
+    // staggered applies outlive this function.
+    QHash<QString, QString> wireToLive;
+    // Build snapshot with QPointer for safe deferred access
+    struct TileSnap
+    {
+        QPointer<KWin::EffectWindow> window;
+        QRect geometry;
+        QString windowId;
+        QString screenId;
+        bool isMonocle = false;
+        bool isWindowedFullscreen = false;
+        bool isMaximizedToEdges = false;
+        QString stacking;
+        QString scrollEdge;
+        int viewDelta = 0;
+        bool viewImmediate = false;
+        /// Carried verbatim from Entry::visualPos — see its doc for how the
+        /// paint path consumes it (stored as a placement, resolved per read).
+        QPoint visualPos;
+        bool hasVisualPos = false;
+        QString tabFrom;
+        quint64 commandStamp = 0; ///< see WindowCommandStamps
+    };
+    QVector<TileSnap> toApply;
+    QSet<KWin::EffectWindow*> applied;
+    for (Entry& e : entries) {
+        if (!e.window) {
+            continue;
+        }
+        // Belt behind the claimed-set above: a double-resolve that slips
+        // through must not apply twice — and a WARNED drop shrinks
+        // toApply below tileRequestCount, so the "sent N tile requests,
+        // resolved M" log below (after the cascade sort) fires and the
+        // case is diagnosable instead of silent.
+        if (applied.contains(e.window)) {
+            qCWarning(lcEffect) << "Autotile: two batch entries resolved to one window — dropping the second for"
+                                << e.windowId;
+            continue;
+        }
+        applied.insert(e.window);
+        // Re-key to the RESOLVED window's live id. The disambiguation above
+        // can match a candidate whose uuid differs from the daemon-supplied
+        // entry id (stale across a KWin restart), and every write this batch
+        // performs — tiled tracking, the Wayland centering cache, the
+        // pre-autotile capture — must key on the live id the readers use, or
+        // the tiling goes untracked and the stale-keyed entries are never
+        // reclaimed.
+        //
+        // The wire→live pairs are remembered so tabFrom — a daemon-supplied
+        // id NAMING ANOTHER WINDOW — can be re-keyed through the same
+        // resolution its target's own entry already went through. The
+        // outgoing tab of a swap is by construction a sibling entry of this
+        // very batch, so the map is the exact, fuzzy-free translation the
+        // tabFrom lookup needs; a tabFrom whose window has no entry falls
+        // back to the wire spelling unchanged.
+        const QString wireId = e.windowId;
+        e.windowId = m_effect->getWindowId(e.window);
+        wireToLive.insert(wireId, e.windowId);
+        // Key on the daemon's TARGET screen (from the tile request), NOT the
+        // window's current physical screen. On a cross-output move the moved
+        // window has not physically relocated when this batch is built, so
+        // getWindowScreenId() still returns the SOURCE screen — which made the
+        // destination batch bump the SOURCE screen's stagger generation and
+        // cancel the source monitor's own reflow (its remaining windows never
+        // re-tiled). req.screenId is the screen the daemon tiled the window on,
+        // and TileRequestEntry::validationError() rejects an empty screenId
+        // before it ever reaches `entries`, so it is always present here.
+        toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
+                        e.isWindowedFullscreen, e.isMaximizedToEdges, e.stacking, e.scrollEdge, e.viewDelta,
+                        e.viewImmediate, e.visualPos, e.hasVisualPos, e.tabFrom,
+                        m_effect->m_daemonGate.commandStamps.bump(e.window)});
+    }
+
+    // Start this batch's view legs, ONCE per output. The delta is a property
+    // of the batch that every carried entry repeats, so folding it in per
+    // window would spring the strip N times as far. First non-zero wins per
+    // screen; a well-formed batch agrees across its entries, and disagreement
+    // would mean the engine resolved one screen twice in one pass, where the
+    // first answer is as good as any.
+    //
+    // This is what makes the strip rigid: one spring per strip, read back by
+    // the paint path for every column, instead of N per-window springs that
+    // each start a moment apart and integrate themselves apart.
+    //
+    // Filled with the screenIds whose spring actually STARTED (or
+    // retargeted) a leg this batch. Consumed three times below: the residual-
+    // origin branch of the apply lambda treats an entry's viewDelta as
+    // real only for these screens (with no leg the paint offset is zero,
+    // so an origin placed a delta behind the target would pop backwards
+    // and slide double), the cascade decision skips the direction sort,
+    // and the dispatch forces the one-pass apply described next.
+    // Membership comes from applyBatchDelta's return value, NOT from the
+    // wire delta: animations-off and clockless outputs fold the delta into
+    // the accumulator without a leg.
+    //
+    // When any leg started, the applies must land in ONE pass: the paint
+    // path adds the view offset to every scroll-managed window on the
+    // output with no test for whether that window's own commit has arrived,
+    // so a column still waiting on its stagger timer draws at (old rect +
+    // offset), a full delta from where it belongs. Column i waits i times the
+    // stagger interval while the leg runs (the global animation duration
+    // unless scrolling.view overrides it) and then teleports, so with a long
+    // enough strip some columns sit still for the whole leg.
+    QSet<QString> startedViewScreens;
+    // Screens whose view travel this batch is USER-DRIVEN continuous motion
+    // (the drag edge auto-scroll heartbeat, ~60 Hz). Their delta is folded
+    // into the accumulator with NO leg and NO strip shader pass — a leg
+    // retargeted every 16 ms never progresses on a stateless curve, so the
+    // painted strip would stall behind the committed geometry and then glide
+    // once when the ticks stop, with the drop indicator and tab strips
+    // (computed from committed rects) running ahead of it. The per-tick
+    // commits are the motion. Entries on these screens take degenerate legs
+    // (applied outright) below.
+    QSet<QString> immediateViewScreens;
+    {
+        // Both resolves are LAZY: an ordinary autotile batch with no view
+        // travel never pays the two tree walks. Once needed they resolve
+        // once per batch, not per screen — the view's motion node is not
+        // screen-dependent, and this is the same cascade every other
+        // event's animation goes through (global animator profile → the
+        // scrolling.view motion-tree override). A windowless query skips
+        // the per-window rule tier, which is right — the view belongs to
+        // the strip, not to any window on it. The SHADER leg resolves
+        // through resolveShaderWithDefault exactly like the desktop legs
+        // (user override → ancestor override → built-in default, empty for
+        // scrolling), gated on the animations master toggle and folded
+        // into an empty id rather than a skip so notifyLeg's erase
+        // contract still runs — clearing the pack (or disabling
+        // animations) mid-flight disarms the pass on the very next wheel
+        // tick.
+        bool resolved = false;
+        PhosphorAnimation::Profile viewProfile;
+        QString stripEffectId;
+        QVariantMap stripEffectParams;
+        QSet<QString> seededScreens;
+        QSet<QString> seededStrips;
+        // Strips whose FIRST spelling took the immediate (no-leg) path.
+        // The duplicate-spelling arm classifies from this, never from its
+        // own entry's flags: a mixed-flag batch (one spelling immediate, the
+        // other not) would otherwise put a spring-live strip into
+        // immediateViewScreens — whose apply arm takes the outright
+        // placement origin against a non-zero paint offset — or drop the
+        // second spelling's entries from both sets.
+        QSet<QString> immediateStrips;
+        for (const TileSnap& s : toApply) {
+            if (s.viewDelta == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
+                continue;
+            }
+            // Marked seeded only once the output RESOLVES. Marking before the
+            // lookup treated an unresolvable screen as done, so a later entry
+            // for the same screen — which is the ordinary case, since every
+            // carried column repeats the delta — could not retry it.
+            if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
+                seededScreens.insert(s.screenId);
+                // Dedup on the STRIP, not the id (applyBatchDelta is additive):
+                // two spellings of one unsplit monitor share one spring, and
+                // each virtual screen has its own.
+                const QString strip = stripKeyFor(s.screenId);
+                if (seededStrips.contains(strip)) {
+                    if (immediateStrips.contains(strip)) {
+                        immediateViewScreens.insert(s.screenId);
+                    } else if (m_effect->m_stripViewAnimator->isAnimatingOn(strip)) {
+                        startedViewScreens.insert(s.screenId);
+                    }
+                    continue;
+                }
+                seededStrips.insert(strip);
+                qCDebug(lcStripDiag) << "view delta" << s.viewDelta << "on strip" << strip;
+                if (s.viewImmediate) {
+                    // Heartbeat-driven view motion: disarm any strip shader
+                    // pass (there is no leg for it to decorate) and fold the
+                    // delta straight into the accumulator. No profile resolve
+                    // — nothing animates.
+                    const PhosphorProtocol::ScrollAxis immediateAxis = scrollAxisForScreen(s.screenId);
+                    m_effect->m_stripTransition.notifyLeg(out, strip, QString(), QVariantMap(), 0, immediateAxis);
+                    m_effect->m_stripViewAnimator->applyImmediateDelta(strip, out, s.viewDelta, immediateAxis);
+                    immediateViewScreens.insert(s.screenId);
+                    immediateStrips.insert(strip);
+                    continue;
+                }
+                if (!resolved) {
+                    resolved = true;
+                    viewProfile = m_effect->resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::ScrollingView,
+                                                                      PhosphorRules::WindowQuery{}, QString());
+                    if (m_effect->m_windowAnimator->isEnabled()) {
+                        const auto raw = PhosphorAnimationShaders::resolveShaderWithDefault(
+                            m_effect->m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::ScrollingView);
+                        const auto stripShaderProfile = PhosphorAnimationShaders::withPresetsResolved(
+                            raw, m_effect->m_shaderManager.presetRegistry());
+                        stripEffectId = stripShaderProfile.effectiveEffectId();
+                        stripEffectParams = stripShaderProfile.effectiveParameters();
+                    }
+                }
+                // Arm (or refresh, or — empty id — disarm) the strip shader
+                // pass BEFORE the spring moves: notifyLeg distinguishes a
+                // fresh leg from a retarget by whether the spring is
+                // already live AND by comparing this batch's axis against
+                // the one the spring still holds, so this ordering is
+                // load-bearing on both counts (see its header contract).
+                const PhosphorProtocol::ScrollAxis batchAxis = scrollAxisForScreen(s.screenId);
+                // The pass decorates a whole output, so a virtual-screen strip scrolls without one.
+                const bool wholeOutput = !PhosphorIdentity::VirtualScreenId::isVirtual(s.screenId);
+                m_effect->m_stripTransition.notifyLeg(out, strip, wholeOutput ? stripEffectId : QString(),
+                                                      stripEffectParams, s.viewDelta, batchAxis);
+                if (m_effect->m_stripViewAnimator->applyBatchDelta(strip, out, s.viewDelta, batchAxis, viewProfile)) {
+                    startedViewScreens.insert(s.screenId);
+                } else {
+                    // The spring declined (animations off, no clock): there
+                    // is no leg for the pass to decorate and no offset for
+                    // a residual origin to lean on — disarm the pass and
+                    // let this screen's entries take the ordinary paths.
+                    m_effect->m_stripTransition.notifyLeg(out, strip, QString(), QVariantMap(), 0, batchAxis);
+                }
+            }
+        }
+    }
+    const bool startedViewLegs = !startedViewScreens.isEmpty();
+    // A batch carrying a tab swap must apply in ONE pass. The default Cascade
+    // stagger runs paint frames BETWEEN entries, and the swap's two entries
+    // are order-unspecified: park-first re-folds the outgoing tab's composite
+    // at the park before the seed reads it (losing exactly the pre-park fold
+    // the seed exists to capture), while arrival-first leaves both tabs
+    // committed at one rect for a stagger interval — a visible double
+    // exposure. forceImmediate is the documented "this batch cannot be split
+    // without tearing" channel, the same one the view legs already use.
+    const bool anyTabSwap = std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+        return !s.tabFrom.isEmpty();
+    });
+
+    // Cascade order follows the direction of travel for a scrolling strip.
+    //
+    // applyStaggeredOrImmediate below delays entry i by i * interval, so the
+    // ORDER of toApply is the order the user watches windows move in. The
+    // batch arrives in strip order (first column to last) whichever way the
+    // strip scrolled, so the cascade ran in that one order both ways and the
+    // two directions did not mirror each other — scrolling one way looked like
+    // it led with the near edge, the other like it led with the far one.
+    //
+    // Everything below measures along the strip's OWN axis, resolved per
+    // entry: a vertical strip travels in y, and one batch can carry entries
+    // for screens running opposite axes.
+    //
+    // Sort on where each window is SEEN, not on its committed rect: an
+    // arriving column's target is its on-screen rect, but a leaving column's
+    // target is the park, which is far off-screen on whichever side was safe
+    // and would sort it to an extreme unrelated to the motion the user
+    // watches. A leaving column is keyed on where it currently sits instead,
+    // which is the start of its exit slide.
+    // Skipped when this batch started view legs: those apply in one pass, so
+    // there is no cascade left to order. A scroll batch that moved no columns
+    // in or out of view (a park with no view travel) still cascades and still
+    // wants the direction sort, which is why the two predicates differ.
+    // Immediate-view batches and tab-swap batches skip it too — all three
+    // force one-pass application below (the forceImmediate disjunction at
+    // the dispatch), so sorting them would be pure cost, on a ~60 Hz path
+    // for the immediate case. The predicates are batch-wide: a batch mixing
+    // one-pass screens with cascade screens conservatively loses the sort
+    // for all of them, which today's per-screen emitters never produce.
+    const bool isScrollBatch = !startedViewLegs && !anyTabSwap && immediateViewScreens.isEmpty()
+        && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+               return !s.scrollEdge.isEmpty();
+           });
+    if (isScrollBatch) {
+        QHash<QString, QRect> screenRectCache;
+        // BY VALUE, not by const reference into the hash: the same lambda
+        // inserts into screenRectCache, and a reference handed out before a
+        // later insert rehashes the table is a use-after-rehash the moment a
+        // caller holds one across a second call. A QRect copy is four ints.
+        const auto screenRectFor = [&](const TileSnap& s) -> QRect {
+            auto it = screenRectCache.find(s.screenId);
+            if (it == screenRectCache.end()) {
+                it = screenRectCache.insert(s.screenId, stripScreenRect(s.screenId));
+            }
+            return it.value();
+        };
+        // The rect applyWindowGeometry will actually COMMIT for each entry,
+        // memoised per window for the duration of this sort. The animation
+        // branch below builds its origins and its degenerate-leg tests from
+        // exactly this rect (see constrainTileGeometry's own doc), and the
+        // cascade has to classify and measure against the same thing. For a
+        // size-constrained X11 column the constrained frame is inset from the
+        // column by the centring offset, so the raw column rect made
+        // `isArriving` answer differently than the apply does for a column
+        // straddling its output by less than that offset, and gave every such
+        // staying column's netAlong term a spurious -centringOffset — enough to
+        // flip the batch's net sign and run the whole cascade mirrored.
+        // Falls back to the raw rect for a null window pointer, which is what
+        // constrainTileGeometry returns for a windowless entry anyway.
+        QHash<QString, QRect> constrainedCache;
+        const auto committedRectFor = [&](const TileSnap& s) -> QRect {
+            auto it = constrainedCache.find(s.windowId);
+            if (it == constrainedCache.end()) {
+                const QRect raw = s.geometry.normalized();
+                it = constrainedCache.insert(s.windowId,
+                                             s.window ? m_effect->constrainTileGeometry(s.window, raw) : raw);
+            }
+            return it.value();
+        };
+        // An UNRESOLVED output does not read as arriving: the committed rect
+        // of a leaving column is the park, and sorting on it would feed the
+        // cascade a coordinate unrelated to what the user watches. The
+        // current frame is the visible truth either way.
+        const auto isArriving = [&](const TileSnap& s) {
+            const QRect rect = screenRectFor(s);
+            return rect.isValid() && rect.intersects(committedRectFor(s));
+        };
+        // Axis per ENTRY, never hoisted for the batch: one batch can carry
+        // entries for several screens, and a portrait monitor beside a
+        // landscape one runs its strip the other way. Resolved through the
+        // same scrollAxisForScreen the view leg and the origin math use, so
+        // all three read one source.
+        const auto isVertical = [this](const TileSnap& s) {
+            return scrollAxisForScreen(s.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
+        };
+        // Position along the strip's own axis. On a vertical strip every
+        // column shares an x, so an x-only key made every comparison tie and
+        // the stable_sort degenerated into "leave the batch order alone" —
+        // which is the left-to-right-both-ways bug this sort exists to fix,
+        // reappearing on the other axis.
+        const auto visibleAlong = [&](const TileSnap& s) {
+            const bool vertical = isVertical(s);
+            if (!s.window || isArriving(s)) {
+                const QRect committed = committedRectFor(s);
+                return vertical ? committed.y() : committed.x();
+            }
+            const KWin::RectF frame = s.window->frameGeometry();
+            return qRound(vertical ? frame.y() : frame.x());
+        };
+        // Net travel across the batch decides which end leads, measured on
+        // STAYING columns only — target on-screen AND current frame
+        // on-screen — and along each entry's own axis. An arriving column's
+        // current position is the park, which carries no direction (the park
+        // is direction-agnostic by design), and a leaving column's target is
+        // the park, so both are excluded: each would swamp the staying
+        // columns' true delta with an arbitrary sign. (The earlier form
+        // filtered on !isArriving alone, which kept only LEAVING columns —
+        // whose visible position is their own frame, making every term
+        // identically zero and the branch below dead; the scrollEdge fallback
+        // decided every batch.)
+        qint64 netAlong = 0;
+        for (const TileSnap& s : toApply) {
+            if (!s.window || !isArriving(s)) {
+                continue;
+            }
+            const QRect rect = screenRectFor(s);
+            const QRect currentFrame = s.window->frameGeometry().toRect();
+            if (rect.isValid() && rect.intersects(currentFrame)) {
+                // Committed rect, matching isArriving above and the apply
+                // below — the raw column origin differs from it by the
+                // centring offset for a size-constrained X11 column, and that
+                // offset is not travel.
+                const QRect committed = committedRectFor(s);
+                netAlong +=
+                    isVertical(s) ? qint64(committed.y()) - currentFrame.y() : qint64(committed.x()) - currentFrame.x();
+            }
+        }
+        // "Forward" is toward increasing coordinate along the entry's axis:
+        // rightward on a horizontal strip, downward on a vertical one.
+        bool movingForward = netAlong > 0;
+        if (netAlong == 0) {
+            // No staying column moved (all-leaving or all-arriving batch,
+            // or the stays' deltas cancelled exactly).
+            // The scrollEdge is authoritative there: a column LEAVES by the
+            // edge the content moves toward, and ARRIVES from the edge it
+            // once left by (content moving away from it).
+            for (const TileSnap& s : toApply) {
+                if (s.scrollEdge.isEmpty()) {
+                    continue;
+                }
+                // Four-value since wire v5: a vertical strip names "top" and
+                // "bottom". Testing `!= "left"` folded both of those into
+                // "right", so a vertical batch that fell through to this
+                // fallback ran its cascade in whichever direction the fold
+                // happened to pick. Named against the two BACKWARD edges so an
+                // unrecognised value still reads forward, as it did before.
+                const bool edgeIsForward =
+                    s.scrollEdge != QLatin1String("left") && s.scrollEdge != QLatin1String("top");
+                movingForward = isArriving(s) ? !edgeIsForward : edgeIsForward;
+                break;
+            }
+        }
+        std::stable_sort(toApply.begin(), toApply.end(), [&](const TileSnap& a, const TileSnap& b) {
+            return movingForward ? visibleAlong(a) > visibleAlong(b) : visibleAlong(a) < visibleAlong(b);
+        });
+    }
+
+    // A TILE window the daemon asked us to tile that we could not resolve to a live EffectWindow is
+    // dropped from this batch. Surface it: a silent drop here is exactly how a source-monitor reflow
+    // loses windows (only the resolvable ones move, the rest are stranded). Compare against the count
+    // of TILE requests only — float entries (req.floating) are validated but handled inline above and
+    // never enter `toApply`, so counting them would make every batch containing a float falsely report
+    // stranded windows. A heartbeat batch logs at debug, or one unresolvable strip entry would log at
+    // INFO on every edge-hold tick; the next real batch reports it at INFO.
+    const qsizetype tileRequestCount =
+        std::count_if(validatedRequests.cbegin(), validatedRequests.cend(), [](const auto& r) {
+            return !r.floating;
+        });
+    if (toApply.size() != tileRequestCount) {
+        QStringList resolved;
+        for (const TileSnap& s : toApply) {
+            resolved << s.windowId;
+        }
+        if (immediateViewScreens.isEmpty()) {
+            qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
+                             << toApply.size() << "windows — applying:" << resolved;
+        } else {
+            qCDebug(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
+                              << toApply.size() << "windows — applying:" << resolved;
+        }
+    }
+
+    // Global epoch (desktop/screen switch) captured for the apply guards below.
+    const uint64_t gen = m_tileStaggerGeneration;
+
+    // Build per-screen "new request" sets so the onComplete cleanup can
+    // compare each screen's previous bucket against its new bucket in
+    // isolation — no cross-screen contamination.
+    QHash<QString, QSet<QString>> newTiledByScreen;
+    for (const TileSnap& s : toApply) {
+        newTiledByScreen[s.screenId].insert(s.windowId);
+    }
+
+    // Deterministic z-order for overlap layouts. The daemon stamps each entry
+    // of an overlap-algorithm batch with its stacking policy; the batch is in
+    // tiling order, so per screen this yields the bottom-to-top raise order:
+    // tiling order for "lastOnTop" (cascade/stair/paper — last window ends up
+    // topmost), reversed for "firstOnTop" (reverse-nested layouts — index 0
+    // topmost; no bundled algorithm declares it, custom scripts may).
+    // Non-overlap batches leave this empty and keep the pre-tile stacking.
+    QHash<QString, QVector<QPointer<KWin::EffectWindow>>> overlapStackByScreen;
+    {
+        QHash<QString, QString> stackPolicyByScreen;
+        for (const TileSnap& s : toApply) {
+            if (!s.stacking.isEmpty()) {
+                overlapStackByScreen[s.screenId].append(s.window);
+                stackPolicyByScreen[s.screenId] = s.stacking;
+            }
+        }
+        for (auto it = overlapStackByScreen.begin(); it != overlapStackByScreen.end(); ++it) {
+            if (stackPolicyByScreen.value(it.key()) == QLatin1String("firstOnTop")) {
+                std::reverse(it.value().begin(), it.value().end());
+            }
+        }
+    }
+
+    // Bump the per-screen generation for every screen this batch retiles, and
+    // capture the bumped values. The staggered apply / onComplete below treat a
+    // window as superseded only when ITS screen's generation has advanced past
+    // the captured value — so a later batch for another screen can no longer
+    // cancel this batch's windows.
+    QHash<QString, uint64_t> genByScreen;
+    // Screens whose output switched context before the daemon announced it:
+    // this batch was built for the context they left (F793).
+    QSet<QString> owedScreens;
+    for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+        genByScreen.insert(it.key(), ++m_tileStaggerGenByScreen[it.key()]);
+        if (m_switchAnnounce.isOwed(::PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()))) {
+            owedScreens.insert(it.key());
+        }
+    }
+    // The STRIP this batch was built for, captured beside the generations and
+    // checked the same way. The generations alone cannot see a strip retire:
+    // retireStripScopedState drops the per-window relocations but bumps
+    // nothing, so a staggered apply still in flight from the OUTGOING strip's
+    // batch would land afterwards and re-insert the very entry the retire just
+    // dropped, putting a parked column back at the previous strip's position.
+    //
+    // The batch carries no epoch of its own. The value is READ OUT of
+    // m_stripEpochByScreen here, while this batch is being processed, and what
+    // makes that read mean "the strip this batch is for" is signal ordering:
+    // the daemon announces BEFORE it schedules the forced retile, and both
+    // travel one D-Bus connection, so a batch whose processing precedes the
+    // announcement necessarily predates the switch and belongs to the OUTGOING
+    // strip. slotStripContextChanged then records the new epoch before it
+    // retires, so those pending applies fail this compare and are dropped,
+    // while a batch processed after it captures the new value and runs.
+    //
+    // The genuinely raced-ahead case — a batch that established strip state
+    // before the effect had ever heard an epoch for the screen — is not
+    // handled here at all. slotStripContextChanged's first-epoch branch
+    // declines to retire, so the state such a batch already established
+    // survives. Its entries still pending in the stagger captured an empty
+    // epoch and are dropped once the first epoch is recorded, like any batch
+    // built before an announcement. A screen that never hears an epoch reads
+    // empty on both sides and is unaffected.
+    QHash<QString, QString> stripEpochByScreen;
+    for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+        stripEpochByScreen.insert(it.key(), m_stripEpochByScreen.value(it.key()));
+    }
+
+    const bool hasApplies = !toApply.isEmpty();
+    // A batch that only touches scrolling screens never needs the stacking
+    // block: a strip batch carries no overlap groups, and moveResize does not
+    // restack.
+    bool scrollOnlyBatch = hasApplies;
+    for (const TileSnap& s : toApply) {
+        if (!isScrollingScreen(s.screenId)) {
+            scrollOnlyBatch = false;
+            break;
+        }
+    }
+    auto onComplete = [this, newTiledByScreen, overlapStackByScreen, gen, genByScreen, owedScreens, hasApplies,
+                       scrollOnlyBatch, immediateViewScreens]() {
+        if (m_tileStaggerGeneration != gen) {
+            return;
+        }
+        // The saved stacking order is keyed by screen only, but it was saved for
+        // the desktop and activity in view at the toggle (the save's filter),
+        // so it is the batch of THAT context that spends it. A batch for the
+        // screen from another context (a desktop switched to since) finds
+        // none of the saved windows in view, and spending the order there lost
+        // the restore for the round trip back (F444). A sticky or
+        // multi-desktop window reads in view from every context it lives in,
+        // so it does not identify the saved one on its own
+        // (StackDecisions::savedOrderReplay decides). Raises the in-view
+        // windows in order when @p raiseOn is given (the replay; the
+        // scroll-only arm only consumes) and the batch is the saved context's,
+        // and answers whether the order is spent.
+        const auto replaySavedOrder = [this](const QString& screenId, KWin::Workspace* raiseOn) {
+            const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
+            QList<StackDecisions::SavedOrderWindow> read;
+            QList<KWin::EffectWindow*> inView;
+            for (const QString& windowId : savedOrder) {
+                // Exact: a fuzzy same-app hit would raise a SIBLING into
+                // this window's saved z-position.
+                KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
+                if (!w || w->isDeleted()) {
+                    // Handed on as closed rather than dropped, so the helper
+                    // sees the whole saved order and decides an all-closed one.
+                    read.append({/*alive=*/false, /*inView=*/false, /*spansContexts=*/false});
+                    continue;
+                }
+                const bool here = m_effect->getWindowScreenId(w) == screenId && isOnOwnOutputCurrentDesktop(w)
+                    && w->isOnCurrentActivity();
+                read.append({/*alive=*/true, here, spansContexts(w)});
+                if (here) {
+                    inView.append(w);
+                }
+            }
+            const StackDecisions::SavedOrderReplay replay = StackDecisions::savedOrderReplay(read);
+            if (replay.raise && raiseOn) {
+                for (KWin::EffectWindow* w : std::as_const(inView)) {
+                    if (KWin::Window* kw = w->window()) {
+                        raiseOn->raiseWindow(kw);
+                    }
+                }
+            }
+            return replay.spent;
+        };
+        // Per-screen untile cleanup. For each screen that participated in
+        // this retile, the set of windows previously tracked as tiled on
+        // that screen minus the set in the new request is exactly the
+        // windows that left that screen's tiling state. Title bars are
+        // restored by the DecorationManager only when no owner remains —
+        // a sibling VS's claim or a snap takeover keeps the window hidden.
+        for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+            const QString& screenId = screenIt.key();
+            // A newer retile of this screen has superseded us — it owns this
+            // screen's untile cleanup now. (Other screens in this batch may still
+            // be current, so skip per-screen rather than aborting the whole
+            // onComplete.)
+            if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                continue;
+            }
+            // A heartbeat view tick cannot change tiled membership: the strip is frozen for the hold, and a
+            // close or float hands the auto-scroll's ownership back first, so ITS batch runs this diff.
+            if (immediateViewScreens.contains(screenId)) {
+                continue;
+            }
+            // A batch for the context its output has since left would untile the tiles the output shows now.
+            if (owedScreens.contains(screenId)) {
+                qCDebug(lcEffect) << "Autotile untile diff skipped for" << screenId
+                                  << ": batch predates the announced switch";
+                continue;
+            }
+            untileWindowsLeftOnScreen(screenId, screenIt.value());
+        }
+        // A batch with NO tile applies (every request resolved away, or a floats-only batch) runs no
+        // untile diff: newTiledByScreen is built from toApply, so it is empty, and the batch-float arm
+        // cleaned each float up inline (applyFloatCleanup). Nor may it churn the stacking order or
+        // spend the one-shot saved-order/pending-focus state: nothing moved, so no z-order to repair.
+        auto* ws = KWin::Workspace::self();
+        if (ws && hasApplies && !scrollOnlyBatch) {
+            // Overlap groups take their declared order at the slot of their
+            // lowest member, against the stacking order as it is now: the batch
+            // raised nothing else (KWin's moveResize does not raise), so every
+            // other window, including one the user raised during the cascade,
+            // keeps its place (F329, F497). A screen whose per-screen stagger
+            // generation has advanced past this batch's is superseded (same
+            // guard as the untile cleanup above): the newer batch's onComplete
+            // places its group, and this one places nothing there.
+            QList<QList<KWin::EffectWindow*>> groups;
+            QSet<const KWin::EffectWindow*> groupMembers;
+            for (auto it = overlapStackByScreen.constBegin(); it != overlapStackByScreen.constEnd(); ++it) {
+                if (m_tileStaggerGenByScreen.value(it.key()) != genByScreen.value(it.key())) {
+                    continue;
+                }
+                QList<KWin::EffectWindow*> group;
+                for (const auto& gPtr : it.value()) {
+                    if (gPtr && !gPtr->isDeleted()) {
+                        group.append(gPtr.data());
+                        groupMembers.insert(gPtr.data());
+                    }
+                }
+                if (!group.isEmpty()) {
+                    groups.append(group);
+                }
+            }
+            if (!groups.isEmpty()) {
+                const QList<KWin::EffectWindow*> sequence =
+                    StackDecisions::overlapRaiseSequence(KWin::effects->stackingOrder(), groups);
+                for (KWin::EffectWindow* w : sequence) {
+                    if (w && !w->isDeleted()) {
+                        if (KWin::Window* kw = w->window()) {
+                            ws->raiseWindow(kw);
+                        }
+                    }
+                }
+            }
+
+            // Restore the autotile stacking order saved at the last mode toggle, ON TOP of the overlap
+            // restack, for a window still on that screen's desktop and activity in view (the save's filter, F722).
+            //
+            // Superseded screens are skipped on the same terms as the loops
+            // above: a newer batch's onComplete owns that screen's
+            // stacking, and this batch must neither re-impose a stale order on
+            // top of it nor CONSUME the saved entry the newer batch still
+            // needs — the remove() below is a one-shot, spent only by the
+            // context the order was saved in (replaySavedOrder).
+            for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+                const QString& screenId = it.key();
+                if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)
+                    || !m_savedAutotileStackingOrder.contains(screenId)) {
+                    continue;
+                }
+                if (replaySavedOrder(screenId, ws)) {
+                    m_savedAutotileStackingOrder.remove(screenId);
+                }
+            }
+
+            if (!m_pendingAutotileFocusWindowId.isEmpty()) {
+                // Exact for the same sibling-raise reason as the saved-order loop
+                // above. Raised only while still active (F247).
+                KWin::EffectWindow* focusWin = m_effect->findWindowByIdExact(m_pendingAutotileFocusWindowId);
+                m_pendingAutotileFocusWindowId.clear();
+                if (focusWin && focusWin == KWin::effects->activeWindow()) {
+                    KWin::Window* kw = focusWin->window();
+                    if (kw) {
+                        ws->raiseWindow(kw);
+                    }
+                }
+            }
+
+            // The deterministic overlap restack can bury the active window
+            // mid-stack (e.g. focus sits on a middle cascade window). Lift it
+            // back above its group — the same raise KWin performs on
+            // activation — so the window the user is typing into stays
+            // visible. Non-members were never moved.
+            if (KWin::EffectWindow* active = KWin::effects->activeWindow(); active && groupMembers.contains(active)) {
+                if (KWin::Window* kw = active->window()) {
+                    ws->raiseWindow(kw);
+                }
+            }
+        } else if (hasApplies) {
+            // No `ws &&` term: this arm only CONSUMES state, it never touches
+            // the Workspace, so gating it on a pointer it does not use meant a
+            // null Workspace::self() leaked exactly the two one-shots the
+            // comment below says must not survive the batch.
+            //
+            // Scroll-only batch: the restack block above is skipped, but two of its CONSUMES must still happen.
+            // The pending-focus id is written on EVERY scrolling focus verb (slotFocusWindowRequested) and, left
+            // unconsumed, would be spent by the first later non-scroll batch raising a stale window (the raise is
+            // redundant here: KWin raises on activation). The saved stacking order is a one-shot the replay
+            // normally consumes, dropped here without replaying so a much-older z-order is not re-imposed the
+            // first time the screen leaves scrolling, and like the replay only by a batch of the context it
+            // was saved in (replaySavedOrder). Supersession guard matches the replay loop's.
+            m_pendingAutotileFocusWindowId.clear();
+            for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+                if (m_tileStaggerGenByScreen.value(it.key()) == genByScreen.value(it.key())
+                    && m_savedAutotileStackingOrder.contains(it.key())
+                    && replaySavedOrder(it.key(), /*raiseOn=*/nullptr)) {
+                    m_savedAutotileStackingOrder.remove(it.key());
+                }
+            }
+        }
+
+        // After daemon restart, the raise loop above buries the non-tiled window
+        // that had focus (e.g. System Settings KCM); re-activate it, consumed by
+        // this batch either way, and only while it is still active: hours later
+        // it is a stale focus steal (F230). Skipped during show-desktop/peek,
+        // which activateWindow() would cancel; the restore is only cosmetic.
+        if (const QPointer<KWin::EffectWindow> reactivate = std::exchange(m_pendingReactivateWindow, nullptr);
+            reactivate && !reactivate->isDeleted() && reactivate == KWin::effects->activeWindow()
+            && !PlasmaZonesEffect::isShowingDesktop()) {
+            KWin::effects->activateWindow(reactivate);
+        }
+
+        // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
+        // as soon as the client commits its constrained size — no deferred timer needed.
+
+        // Refresh the active border for the focused window (tiledWindows may
+        // have changed). Skipped on a pure heartbeat batch: the walk resyncs
+        // and re-decorates the ENTIRE stacking order, and a view tick
+        // changes no decoration input (membership frozen, focus unchanged) —
+        // running it synchronously ~60 times a second for the length of an
+        // edge hold was the epilogue's dominant cost.
+        if (immediateViewScreens.isEmpty()) {
+            m_effect->updateAllDecorations();
+        }
+
+        // The compositor-drawn tab pills need a strip member to anchor on,
+        // and this batch is what makes the screen's windows scroll-managed
+        // again after a daemon handover (the per-session drain cleared the
+        // membership; the strips were re-fetched before any column was
+        // re-tiled, so their rebuild damaged a band nothing could yet paint).
+        // Damage the pill bounds now that an anchor exists; a no-op on the
+        // ordinary relayout path, where the strips' own push damaged them.
+        for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+            // Heartbeat ticks skip this: their per-tick strip payload
+            // push already damages the band, so this handover repaint
+            // would be a redundant boundsFor + addRepaint per tick.
+            if (immediateViewScreens.contains(screenIt.key())) {
+                continue;
+            }
+            const QString strip = stripKeyFor(screenIt.key());
+            damageScrollTabBand(strip, m_effect->m_scrollTabPainter->boundsFor(strip));
+        }
+    };
+
+    m_effect->applyStaggeredOrImmediate(
+        toApply.size(),
+        [this, toApply, gen, genByScreen, stripEpochByScreen, startedViewScreens, immediateViewScreens,
+         wireToLive](int i) {
+            const TileSnap& snap = toApply[i];
+            // Drop this apply if superseded by a desktop/screen switch (global
+            // epoch), by a newer retile of THIS window's screen (per-screen),
+            // by the screen's STRIP being replaced under it, or by any newer
+            // command for this window (its command stamp: a float, a drag end,
+            // a snap batch, the untrack funnel). Checked before markWindowTiled,
+            // the pre-seeds and the centring-target record below. A batch for a
+            // DIFFERENT screen does not cancel us (the cross-output "hole on the
+            // source monitor" bug).
+            if (m_tileStaggerGeneration != gen
+                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)
+                || m_stripEpochByScreen.value(snap.screenId) != stripEpochByScreen.value(snap.screenId)
+                || (snap.window && !m_effect->m_daemonGate.commandStamps.isCurrent(snap.window, snap.commandStamp))) {
+                // Every epoch is logged because any one can be the one that
+                // tripped (a destination batch keyed to a moved window's STALE
+                // screen once bumped the source screen's gen this way).
+                qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
+                                  << "| globalGen now" << m_tileStaggerGeneration << "captured" << gen
+                                  << "| screenGen now" << m_tileStaggerGenByScreen.value(snap.screenId) << "captured"
+                                  << genByScreen.value(snap.screenId) << "| stripEpoch now"
+                                  << m_stripEpochByScreen.value(snap.screenId) << "captured"
+                                  << stripEpochByScreen.value(snap.screenId) << "| command stamp captured"
+                                  << snap.commandStamp;
+                return;
+            }
+            // The window closed after this batch was built. An EffectWindow lives
+            // until its window closes and window ids are never reused, so there is
+            // nothing to re-resolve.
+            if (!snap.window || snap.window->isDeleted()) {
+                qCInfo(lcEffect) << "Autotile apply: window closed before its apply, skipping" << snap.windowId;
+                return;
+            }
+            // No crossing detection during this apply: its moveResize emits frameGeometryChanged
+            // synchronously, and after a VS swap/rotate the per-frame detector would read a false
+            // crossing off stale m_virtualScreenDefs and hand the window to the neighbour's engine.
+            // A heartbeat view tick's applies log at debug (F100). Save/restore (nesting-safe).
+            const auto applyScope = m_effect->geometryApplyScope();
+            const bool prevQuiet =
+                std::exchange(m_effect->m_daemonGate.quietApplyLog, immediateViewScreens.contains(snap.screenId));
+            const auto quietGuard = qScopeGuard([this, prevQuiet] {
+                m_effect->m_daemonGate.quietApplyLog = prevQuiet;
+            });
+            endFullscreenOfArrivingTile(snap.windowId, snap.window, snap.screenId, snap.geometry); // F526
+            // Pre-seed the effect's tracked screen (mirrors daemon_apply's
+            // pre-seed): the outputChanged handler early-returns while
+            // inGeometryApply is set, so a cross-output tile apply left the
+            // map naming the OLD screen. The notified-screen map moves too, for
+            // the detectors that diff against it (the per-frame virtual-screen
+            // detector, handleWindowOutputChanged's old screen), which would read
+            // a handed-off tile's next frame change as a crossing back out.
+            // getWindowScreenId does not need it for a strip tile: it answers
+            // from the tiled bucket first, and markWindowTiled below moves that.
+            // The pre-seed hides a move to another screen from both crossing arms,
+            // so the rule verdicts are owed there until a frame lands on it, as
+            // for the daemon applies' pre-seeds (m_ruleScreenOwed, F379).
+            if (m_effect->getWindowScreenId(snap.window) != snap.screenId) {
+                m_effect->m_ruleScreenOwed.insert(snap.window, snap.screenId);
+            } else {
+                m_effect->m_ruleScreenOwed.remove(snap.window);
+            }
+            m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
+            // A tile move of the daemon's focused window between virtual
+            // screens fires no outputChanged, so report it here, with the
+            // daemon's own answer, like the daemon applies do.
+            m_effect->reportActiveWindowScreen(snap.window, snap.screenId);
+            // A daemon-driven arrival whose marker came first (a later cascade
+            // entry): track it here and spend the marker (F718, F736).
+            if (const auto mk = m_expectedOutputMove.constFind(snap.windowId);
+                !m_notifiedWindows.contains(snap.windowId) && mk != m_expectedOutputMove.constEnd()
+                && mk->targetScreenId == snap.screenId && adoptsDaemonArrival(snap.window, snap.screenId)) {
+                m_expectedOutputMove.remove(snap.windowId);
+            }
+            // Gated on tracked membership: a batch can still carry a window
+            // whose open rolled back or was demoted by the desktop-switch
+            // pass — writing its screen here would desynchronise the pair
+            // (m_notifiedWindows says untracked, the screen map answers)
+            // and feed notifyWindowAdded a self-referential seed.
+            if (m_notifiedWindows.contains(snap.windowId)) {
+                m_notifiedWindowScreens[snap.windowId] = snap.screenId;
+            }
+            // Requested OR committed, wider than the bail term below (committed AND requested):
+            // the visual-delta, offered-column, commanded-rect and apply writes still run in that
+            // gap and are dropped by the enter branch. No capture in own fullscreen (column rect).
+            const bool inOwnFullscreen = isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen);
+            // Read before the mark below: whether this entry enters the screen's tiling.
+            const auto tiledHere = m_border.tiledWindowsByScreen.constFind(snap.screenId);
+            const bool entersTiling = !inOwnFullscreen
+                && (tiledHere == m_border.tiledWindowsByScreen.constEnd() || !tiledHere->contains(snap.windowId));
+            // Not on a heartbeat view tick for a window already tiled here: the
+            // tick re-commits every column at pointer rate, and the capture
+            // has nothing to take from a window that entered tiling at an
+            // earlier batch, whose first capture already stands (F417).
+            if (!inOwnFullscreen && (entersTiling || !immediateViewScreens.contains(snap.screenId))) {
+                saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
+            }
+            // Not on a heartbeat view tick, which re-commits every column at pointer rate.
+            if (!immediateViewScreens.contains(snap.screenId)) {
+                KWin::Window* kwForLog = snap.window->window();
+                qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
+                                 << "monocle=" << snap.isMonocle << "maximizeMode="
+                                 << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
+            }
+            // Scroll-batch decision inputs, at debug. The animation arm a
+            // strip entry takes is chosen from these four plus the predicted
+            // commit, and none of them were observable — which is a problem
+            // for any window whose real frame diverges from the column rect
+            // (a Wayland client with an aspect or minimum-size constraint
+            // commits centred inside its column, and constrainTileGeometry
+            // predicts nothing for it: it returns early for non-X11).
+            if (!snap.scrollEdge.isEmpty() || snap.hasVisualPos || snap.viewDelta != 0) {
+                qCDebug(lcEffect) << "  scroll entry:" << snap.windowId << "edge=" << snap.scrollEdge
+                                  << "viewDelta=" << snap.viewDelta << "viewImmediate=" << snap.viewImmediate
+                                  << "hasVisualPos=" << snap.hasVisualPos << "visualPos=" << snap.visualPos
+                                  << "| live=" << snap.window->frameGeometry()
+                                  << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
+                                  << "x11=" << snap.window->isX11Client();
+            }
+            if (!inOwnFullscreen) {
+                markWindowTiled(snap.screenId, snap.windowId);
+            }
+            // NOTE: the parked-column visual-delta write happens BELOW, after
+            // the windowed-fullscreen block, so its fullscreen-bail term reads
+            // the membership this batch just adopted or cleared.
+            // Re-report the declared minimum size. KWin exposes minSize with no
+            // change signal, and the report at announce is too early for a client
+            // that sets its hints after mapping (a Wine game pins its resolution
+            // once up), after which KWin clamps every commit to it and the engine
+            // would model a column the frame never matches. Change-gated, except
+            // when the window enters this screen's tiling (an unfloat, an
+            // unminimize, a handoff, a move): the engines drop their copy on a
+            // float, an unminimize and a handoff, while the cache still holds the
+            // size, so the gate alone stayed silent (F911). Rolled back on failure
+            // inside reportMinSizeIfChanged, the writer shared with the centring pass.
+            const QSize declaredMin = declaredMinSize(snap.window);
+            reportMinSizeIfChanged(snap.windowId, declaredMin,
+                                   /*force=*/entersTiling && (declaredMin.width() > 0 || declaredMin.height() > 0));
+
+            // Windowed fullscreen: flip KWin fullscreen state to match the
+            // batch flag, under the suppression counter so our own
+            // slotWindowFullScreenChanged does not shed the tiling state the
+            // flag exists to keep. Flipped BEFORE the geometry apply below so
+            // the column rect overrides KWin's internal FullScreenArea
+            // moveResize in the same call stack, before any client
+            // round-trip. Set membership plus requested-fullscreen state is
+            // what steers the fullscreen bail inside applyWindowGeometry:
+            // setFullScreen flips the REQUESTED state synchronously (the
+            // committed isFullScreen() lags a client round-trip), so on
+            // un-flag the bail already sees requested=false and the batch
+            // rect lands over KWin's restore-rect moveResize. An entry whose
+            // window went KWin-fullscreen on its own (F11) and is NOT
+            // flagged stays untouched: it was never in the set.
+            if (KWin::Window* kwFs = snap.window->window()) {
+                const bool inSet = m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+                // The 5-way decision is pure and unit-tested
+                // (scrolldecisions.h, test_scroll_decisions); this block
+                // only performs the chosen arm's KWin/D-Bus side effects.
+                const ScrollDecisions::WfsDecision wfs = ScrollDecisions::resolveWindowedFullscreenAction(
+                    snap.isWindowedFullscreen, inSet, kwFs->isRequestedFullScreen(),
+                    m_windowedFsClearInFlight.contains(snap.windowId));
+                // Consume the marker when the decision says so: a flag-off
+                // entry (the echo of our clear) or the one stale flag=true
+                // adopt the marker refused.
+                if (wfs.consumeClearMarker) {
+                    m_windowedFsClearInFlight.remove(snap.windowId);
+                }
+                // Every arm but the steady-state Refresh is a STATE CHANGE the
+                // user can see, and the whole block was silent: entering,
+                // adopting after an effect restart, reconciling a client's own
+                // exit and releasing all looked identical from a log. Refresh
+                // is excluded because it runs on every batch of every member
+                // and would drown the category.
+                if (wfs.action != ScrollDecisions::WfsAction::None
+                    && wfs.action != ScrollDecisions::WfsAction::Refresh) {
+                    qCInfo(lcEffect) << "Windowed fullscreen:" << ScrollDecisions::wfsActionName(wfs.action) << "for"
+                                     << snap.windowId << "at" << snap.geometry
+                                     << "(wire flag=" << snap.isWindowedFullscreen << "member=" << inSet
+                                     << "kwinRequestedFs=" << kwFs->isRequestedFullScreen() << ")";
+                }
+                if (wfs.action == ScrollDecisions::WfsAction::Adopt) {
+                    // Adopt-on-batch: also the effect-restart path, where the
+                    // daemon still holds the flag for a window this effect
+                    // instance has never seen. The stored rect is what the
+                    // committed-ack re-assert in slotWindowFullScreenChanged
+                    // applies.
+                    m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
+                    if (kwFs->isFullScreen()) {
+                        // Already committed fullscreen (effect restart): no
+                        // fullscreen edge will re-run the cover walk, so tell
+                        // it the member no longer covers its output.
+                        m_effect->refreshFullscreenSuppression();
+                    } else {
+                        // Seed KWin's fullscreen restore rect with the COLUMN
+                        // rect before the state flips: setFullScreen captures
+                        // fullscreenGeometryRestore from moveResizeGeometry()
+                        // at request time, and for a window this very batch
+                        // scrolled in from a park that is still the PARK rect,
+                        // so the eventual exit would restore the window
+                        // off-screen (seen live with ghostty). The in-stack
+                        // moveResize is never presented: setFullScreen's own
+                        // FullScreenArea moveResize and the geometry apply
+                        // below both land in the same stack. It runs inside the
+                        // apply lambda's own inGeometryApply bracket, so the
+                        // synchronous X11 frame change it emits does not reach
+                        // the VS-crossing detector.
+                        // Ordering note vs the scroll animation-origin chain below: this
+                        // in-stack moveResize lands the frame at the column
+                        // BEFORE atScrollPark reads it, so an arriving tab
+                        // taking THIS arm loses its park-origin override and
+                        // derives a difference origin instead. Accepted: the
+                        // arm needs Adopt (effect restart, window never seen)
+                        // AND an uncommitted fullscreen state at once — a
+                        // same-session arriving tab takes Refresh, which does
+                        // not move the frame.
+                        kwFs->moveResize(QRectF(snap.geometry));
+                        applyFullScreenSuppressed(kwFs, true);
+                    }
+                    applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
+                } else if (wfs.action == ScrollDecisions::WfsAction::DeferredReconcile) {
+                    // Flagged, member, yet fullscreen is not even REQUESTED:
+                    // the client exited on its own while the daemon gate was
+                    // closed, and the exit slot deferred its reconcile to
+                    // exactly this moment. Deliver it now — membership
+                    // drops, the daemon clears its flag and re-applies —
+                    // rather than re-asserting fullscreen against the
+                    // user's exit.
+                    m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
+                    if (m_effect->m_daemonGate.serviceRegistered) {
+                        // Marker armed + reply-gated inside the helper: the
+                        // entry that refuses a stale adopt or echoes the flag
+                        // off consumes it, and a failed clear drops it.
+                        dispatchWindowedFullscreenClear(snap.windowId);
+                    }
+                } else if (wfs.action == ScrollDecisions::WfsAction::Refresh) {
+                    // Keep the stored rect current — the strip may have
+                    // resized or scrolled the column since the flag went on.
+                    m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
+                    // Re-assert the layer demotion too (change-gated in KWin,
+                    // free in the steady state): a manual keep-flag toggle
+                    // under the hold is re-asserted away on the next batch,
+                    // the same ownership KWin rules claim while they match.
+                    applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
+                } else if (wfs.action == ScrollDecisions::WfsAction::Release) {
+                    // isRequestedFullScreen: an un-flag landing inside our own
+                    // enter round-trip (flag on, then off, before the client
+                    // acks) must still un-set — the sibling self-heal arm
+                    // above uses the same term for the same committed lag.
+                    // Skipping it drops membership with the request standing,
+                    // and the pending ack then commits fullscreen ownerless.
+                    if (kwFs->isFullScreen() || kwFs->isRequestedFullScreen()) {
+                        // Through the helper for its stated RAII reason — this
+                        // was the other hand-rolled copy of the bracket. A leak
+                        // here is silent and permanent, and it disables the
+                        // very slot that notices a client leaving windowed
+                        // fullscreen by itself.
+                        applyFullScreenSuppressed(kwFs, false);
+                    }
+                    m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
+                }
+            }
+
+            // Remember (or forget) where a parked column should be PAINTED.
+            //
+            // Every applied entry updates this, monocle or not and whether or
+            // not the geometry itself is re-committed. It used to sit beside
+            // the scroll animation decision further down, inside the
+            // skip-if-already-at-target branch — so a column re-parked at the
+            // rect it already held took the skip and kept the PREVIOUS batch's
+            // strip position, which the paint path then drew it at for as long
+            // as it stayed parked. The commit being unchanged says nothing
+            // about where the column now sits on the strip.
+            // Change-gated, and a REAL change pairs with damage: the entry
+            // moves where the paint path draws the window (the sibling
+            // removers document the same rule), and the apply that follows
+            // frequently commits nothing for a parked column (its committed
+            // rect is the park, stable between batches, so the no-op skip
+            // fires) — with no view leg live, nothing else damages, and the
+            // last presented frame keeps drawing the column at the old
+            // strip position. The gate keeps the steady state (same visual
+            // pos every batch) at zero repaint cost.
+            //
+            // The fullscreen-bail term (the apply's own predicate,
+            // fullscreenBailsApply) makes the write take the REMOVE arm for
+            // a self-fullscreened non-member: the apply below commits nothing
+            // for it, so an inserted relocation would be removed again by the
+            // next batch (insert-repaint-remove-repaint churn the change gate
+            // can never latch); the remove arm converges on a stable ABSENT
+            // entry. Evaluated AFTER the windowed-fullscreen block above so
+            // membership reflects this batch's own adopt/clear (before it, the
+            // effect-restart adopt read "non-member" and dropped a legitimate
+            // relocation). Also read by the commanded-rect disarm, the restore
+            // seat below and the centring-target record.
+            KWin::Window* kwcForBail = snap.window->window();
+            const bool fullscreenBailSkippedCommit = m_effect->fullscreenBailsApply(snap.window);
+            // Seat the tile this hold's exit must land on. KWin captured the
+            // restore rect when fullscreen began and the bailed apply moves
+            // nothing, so the exit returned the window to its PRE-hold tile
+            // while the engine held this one (a neighbour opened or closed
+            // during the hold). Autotile only: the strip's exit re-emits.
+            if (fullscreenBailSkippedCommit && kwcForBail && !isScrollingScreen(snap.screenId)) {
+                kwcForBail->setFullscreenGeometryRestore(KWin::RectF(snap.geometry));
+            }
+            // The rect this entry actually OFFERED the client, recorded as the
+            // commanded rect at the tail of this lambda so the counter-assert
+            // compares the client's commit against what was really asked for.
+            //
+            // Set for every Wayland strip entry after the size-continuity pass,
+            // so a carried size is recorded centred, as it was sent. The record
+            // keeps it only for a column maximized to the edges or placed
+            // outside its output, the two the counter-assert guards on Wayland.
+            // Null when this entry took no committing path.
+            QRect scrollDeliveredRect;
+            {
+                // Stored as the column's strip POSITION and SIZE, not as a
+                // precomputed translation from the batch's park rect. The paint
+                // path derives the translation per read, centring the window's
+                // committed frame inside the stored column, which preserves the
+                // offset applyWindowGeometry's X11 constrain-and-centre pass
+                // puts between the park rect and the committed frame. An
+                // earlier form subtracted the committed frame from the strip
+                // position up front and erased that offset, drawing a
+                // fixed-size game at its column's top-left for the length of
+                // every park. Deriving at read time also survives a park that
+                // did not land where it was requested, which a precomputed
+                // translation cannot — see ScrollVisualPlacement. For an
+                // unconstrained window the committed rect IS the park rect and
+                // every form agrees.
+                bool visualDeltaChanged = false;
+                if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
+                    // Bounded on the way in, for the same reason viewDelta is
+                    // and with the same constant: the wire deliberately does
+                    // not validate visualX/visualY, on the stated grounds that
+                    // the effect clamps the delta before it reaches the paint
+                    // path. It has to actually do that — the delta is added to
+                    // the committed rect at draw time AND folds into the
+                    // backdrop capture, so a garbled pair would draw the column
+                    // and its sample arbitrarily far off until the next batch.
+                    // The clamp runs per axis on the int the wire carries. Nothing adds to
+                    // it before the qBound, so there is no overflow to guard; the qint64
+                    // form only matches the constant's type.
+                    //
+                    // The bound is StripViewAnimator's per-leg DELTA budget,
+                    // reused here as a sanity bound on an absolute strip
+                    // coordinate. The two are not the same quantity: a strip is
+                    // endless by design, so a far enough column's position can
+                    // legitimately exceed a budget meant for one leg's travel,
+                    // and it would be clamped rather than rejected. Reused
+                    // deliberately, because the value is a wire-garbling guard
+                    // rather than a layout limit and the animator re-clamps
+                    // against the same constant downstream — but do NOT widen
+                    // the constant to "fix" this without following that
+                    // downstream use and the test that pins its value.
+                    constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
+                    ScrollVisualPlacement placement;
+                    placement.stripPos =
+                        QPoint(static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.x()), kMaxDelta)),
+                               static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.y()), kMaxDelta)));
+                    // The column rect this tile was handed. The resolver reads
+                    // only its size, to centre a differently-sized commit
+                    // within it.
+                    placement.columnSize = snap.geometry.size();
+                    // Mirrors the commit path, which is the only thing this may
+                    // be derived from. The three declared-rect states are
+                    // exactly the set the size-continuity guard below excludes
+                    // and the set whose m_scrollOfferedColumn entry is dropped,
+                    // so for a Wayland client nothing centres a smaller commit
+                    // and the window sits at the column origin. A declared rect
+                    // is the raw work area besides, so a client that accepts it
+                    // resolves zero offsets either way.
+                    //
+                    // The Wayland term is NOT redundant. applyWindowGeometry
+                    // pre-centres every X11 tile through constrainTileGeometry
+                    // with no declared-rect exemption, so an X11 client with
+                    // size hints IS committed centred inside a maximized column
+                    // and the draw has to follow it there. Dropping that term
+                    // trades this bug for its mirror image on X11.
+                    placement.centreInColumn = !(snap.isMaximizedToEdges || snap.isMonocle || snap.isWindowedFullscreen)
+                        || !snap.window->isWaylandClient();
+                    const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
+                    visualDeltaChanged =
+                        (vit == m_effect->m_scrollVisualDelta.constEnd() || !(vit.value() == placement));
+                    m_effect->m_scrollVisualDelta.insert(snap.windowId, placement);
+                } else {
+                    visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
+                }
+                // Unlike the sibling m_scrollVisualDelta removers across the
+                // handler (rare events: window close, screen change), this
+                // site is driven per batch and the edge
+                // auto-scroll heartbeat re-derives every parked column's
+                // relocation from the moving strip each tick, so this fires
+                // at ~60 Hz for the length of a drag hold — full-canvas
+                // damage there recomposites every unrelated monitor. Scoped
+                // to the window's own output; the relocation cannot paint
+                // beyond it (the paint path clips parked columns to their
+                // output), and Full stays as the unresolvable fallback.
+                if (visualDeltaChanged) {
+                    if (KWin::LogicalOutput* vout = m_effect->outputForScreenId(snap.screenId)) {
+                        KWin::effects->addRepaint(KWin::Rect(vout->geometry()));
+                    } else {
+                        KWin::effects->addRepaintFull();
+                    }
+                }
+            }
+
+            // Column maximize: mirror the engine's state onto KWin's maximize
+            // bit, so the titlebar button agrees with the strip whether the
+            // maximize came through the interception or the Meta+Alt+M
+            // shortcut. A width verb (Meta+Alt+F) never sets the wire flag.
+            //
+            // Runs BEFORE the geometry apply below for the monocle arm's
+            // reason: the bit has to be set first so the column rect is what
+            // overrides KWin's own maximize-area moveResize, in the same call
+            // stack and inside the same inGeometryApply guard, rather than
+            // racing it a frame later.
+            //
+            // The 3-way decision is pure and unit-tested (scrolldecisions.h);
+            // this block only performs the chosen arm's side effects.
+            // Screen-gated like every sibling arm in this lambda (the
+            // size-continuity block, the commanded-rect writes, the centring
+            // shed). The wire flag can only be true for a scroll entry today,
+            // so this is defensive rather than a live gap — but the per-window
+            // applies are STAGGERED and outlive this function, and
+            // setScrollingScreens voids pending applies (a per-screen stagger
+            // bump) only for the screens its re-announce flips, so an apply from
+            // a batch built while the screen was scrolling can still land after a
+            // flip that voided nothing here, taking membership back with nothing to hand it to.
+            // Set ONLY where this iteration actually wrote KWin's maximize
+            // bit, because the geometry apply further down needs to know
+            // whether THIS batch is the one that changed the maximize state.
+            //
+            // A membership-vs-wire delta looks like the obvious signal and is
+            // not a transition detector: releaseMaximizedToEdges RETAINS
+            // membership on its fullscreen and mid-gesture arms, so membership
+            // stays true while the wire flag stays false and the delta then
+            // reads true on EVERY following batch, with no
+            // windowMaximizedStateAboutToChange having fired to refresh the
+            // captured departure rect. The Apply arm's own fullscreen/gesture
+            // skip has the same shape in the other direction: it takes
+            // membership without calling maximize().
+            bool maximizeBitWrittenThisBatch = false;
+            // DIRECTION of that write, for the placement node the geometry
+            // apply below rides. Written only on the Release arm, so it is
+            // false for the Apply arm and for every batch that touched no
+            // maximize bit at all.
+            bool maximizeBitReleasedThisBatch = false;
+            QRectF claimedDeparture; // takeClaimedPress
+            if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
+                // requestedMaximizeMode, not the committed maximizeMode: the
+                // committed bit trails a client round-trip on Wayland, the
+                // same lag the windowed-fullscreen arm above reads
+                // isRequestedFullScreen for and documents. On the committed
+                // value every batch landing inside that round-trip window
+                // re-resolves to Apply and re-issues maximize(MaximizeFull),
+                // each one carrying a moveResize to the maximize area that
+                // the geometry apply below immediately overwrites — and on a
+                // scrolling strip batches arrive at wheel-tick rate, so that
+                // window is crossed routinely rather than rarely.
+                // PEEKED, not consumed. The marker's lifetime is the round
+                // trip, not one batch: batches arrive at wheel-tick rate on a
+                // scrolling strip, so more than one pre-toggle batch can be in
+                // flight and consuming here would leave the second unguarded.
+                // It is also read per entry rather than once per batch,
+                // because the per-window applies are staggered and a later
+                // entry runs after the earlier ones have returned.
+                const bool kwinAlreadyFull = kwMax->requestedMaximizeMode() == KWin::MaximizeFull;
+                const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveMaximizeToEdgesAction(
+                    snap.isMaximizedToEdges, m_maximizedToEdgesWindows.contains(snap.windowId), kwinAlreadyFull,
+                    maximizeToggleInFlight(snap.windowId));
+                if (maxAction == ScrollDecisions::MaximizeAction::Apply) {
+                    // The fullscreen guard the sibling ledgers take: a
+                    // windowed-fullscreen tile in a maximized column is a
+                    // legitimate pairing, and KWin refuses MaximizeFull while
+                    // fullscreen is requested, so this skip only saves a call
+                    // that would do nothing. Membership still stands — the
+                    // flag is a mirror, and the Apply arm re-runs on the next
+                    // batch once the client leaves fullscreen.
+                    //
+                    // The drag terms are the ones the tab-swap install, the
+                    // commanded-rect record and the strip offer carry. The
+                    // windowed-fullscreen block above has none, because KWin
+                    // refuses an interactive move or resize of a window that
+                    // has requested fullscreen; its one gesture-exposed arm is
+                    // an Adopt of a tile that is not fullscreen yet.
+                    // maximize() moveResizes to the maximize area, and the
+                    // geometry apply that would override it defers mid-gesture
+                    // (applyWindowGeometry, allowDuringDrag=false), so a batch
+                    // arriving while the user drags would snap the window to
+                    // full size under the pointer with nothing committed
+                    // behind it until the gesture ends. Membership is still
+                    // taken, so the decision resolves to Apply again (inSet,
+                    // not kwinMaximized) and re-applies for real.
+                    //
+                    // The gesture end pays the skipped call:
+                    // reconcileMaximizeAfterGesture, run when KWin ends the move
+                    // or resize, re-applies MaximizeFull to a member still on
+                    // the strip, or releases the claim when the drag floated the
+                    // window. A drag that changes no column still converges.
+                    const bool callNow = !kwMax->isFullScreen() && !kwMax->isRequestedFullScreen()
+                        && !snap.window->isUserMove() && !snap.window->isUserResize();
+                    // Membership BEFORE the compositor call, so a synchronous
+                    // re-entry through maximize() (X11 emits
+                    // frameGeometryChanged inside it) already sees the handler
+                    // owning the bit rather than reading it as a stray user
+                    // maximize. Not for a window KWin will refuse (F680): a
+                    // claim over a bit it never holds kept the counter-assert
+                    // exempt for good (inMaximizeTransition) and resolved Apply
+                    // on every batch anyway.
+                    if (!callNow || ScrollDecisions::takesMaximizeMembership(kwMax->isMaximizable(), kwinAlreadyFull)) {
+                        m_maximizedToEdgesWindows.insert(snap.windowId);
+                    }
+                    if (callNow) {
+                        applyMaximizeSuppressed(kwMax, KWin::MaximizeFull);
+                        // NOT unconditionally true. Apply also covers the
+                        // ADOPT case (!inSet with the bit already held, an
+                        // effect restart against a daemon that kept the
+                        // state), where maximize() is called on a window
+                        // already at MaximizeFull and emits nothing — so no
+                        // windowMaximizedStateAboutToChange fires and the
+                        // captured departure rect belongs to an arbitrarily
+                        // older episode. Nor when KWin refuses the write (a
+                        // window that cannot be maximized): the bit is read
+                        // back after the call. The monocle arm below takes
+                        // the identical precaution.
+                        maximizeBitWrittenThisBatch =
+                            !kwinAlreadyFull && kwMax->requestedMaximizeMode() == KWin::MaximizeFull;
+                    }
+                } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
+                    maximizeBitWrittenThisBatch = releaseMaximizedToEdges(snap.windowId, snap.window);
+                    maximizeBitReleasedThisBatch = maximizeBitWrittenThisBatch;
+                }
+                // The answer to a press the interception claimed wrote no bit (KWin already held the mode), so it
+                // departs from the frame the press left, and a restore rides placeOut (F989).
+                if (takeClaimedPress(snap.windowId, maxAction, kwinAlreadyFull, claimedDeparture)) {
+                    maximizeBitReleasedThisBatch = maxAction == ScrollDecisions::MaximizeAction::Release;
+                }
+            }
+
+            if (snap.isMonocle) {
+                if (KWin::Window* kw = snap.window->window()) {
+                    // REQUESTED, not committed, for the column arm's reason: on Wayland the committed bit trails a
+                    // client round trip, so a batch inside it would read a user-imposed maximize as absent, take
+                    // membership for a bit the effect never set, and later hand back a maximize it never owned.
+                    const bool wasAlreadyMaximized = (kw->requestedMaximizeMode() == KWin::MaximizeFull);
+                    // SUPPRESSION HELD ACROSS THE WHOLE ARM, not merely across the write inside applyMaximizeSuppressed
+                    // below: it spans the membership insert, the departure-rect read and the terminal geometry apply,
+                    // so nothing that apply emits reaches the maximize lambda unsuppressed to be answered there as a
+                    // user's request (a dispatched interception toggle, a second shader install over the leg this arm
+                    // is placing). The counter nests, so the helper's own bracket inside this one is harmless.
+                    ++m_suppressMaximizeChanged;
+                    const auto maxSuppressGuard = qScopeGuard([this] {
+                        --m_suppressMaximizeChanged;
+                    });
+                    // The column arm's guards MINUS its committed isFullScreen() term, on purpose: a monocle maximize
+                    // skipped for fullscreen is not re-driven when the fullscreen ends, so this arm must still run in
+                    // the exit gap where only the committed bit is set. KWin refuses MaximizeFull while fullscreen is
+                    // requested, so that skip only saves a call that would do nothing. Mid-gesture the call would snap
+                    // the window to full size under the pointer, because the geometry apply below defers during a drag
+                    // while this call does not; reconcileMaximizeAfterGesture pays that skip at the gesture end.
+                    //
+                    // The membership insert stays OUTSIDE the gate, matching the column arm: a claim legitimately
+                    // stands while the bit is not yet held, so a later batch can pay it, and unmaximizeMonocleWindow
+                    // cannot hand back a bit it never took. Only a window KWin refused when asked is left out (F680).
+                    //
+                    // Through applyMaximizeSuppressed, which owns the suppression bracket (a leaked increment would
+                    // leave isSuppressingMaximizeChanged() true for the session) and the requested-mode early return,
+                    // so every authored write in the tree goes through one door.
+                    bool monocleBitWritten = false;
+                    const bool callNow =
+                        !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize();
+                    if (callNow) {
+                        applyMaximizeSuppressed(kw, KWin::MaximizeFull);
+                        // Read back: KWin refuses a window that cannot be maximized (F680).
+                        monocleBitWritten = !wasAlreadyMaximized && kw->requestedMaximizeMode() == KWin::MaximizeFull;
+                    }
+                    if (monocleBitWritten && snap.window->isWaylandClient()) { // absorb KWin's echo (m_monocleEchoOwed)
+                        m_effect->m_shaderManager.armMonocleEcho(snap.window, true);
+                    }
+                    // A maximized column handed to this stack keeps its KWin maximize: the claim changes ledger,
+                    // it is not released and re-taken (F745). An evacuee whose maximize was ours takes its claim
+                    // back on the output it left (F685, F1120, evacuee_keeps_kwin_state). Neither is
+                    // short-circuited, so both entries are consumed.
+                    const bool columnClaimHandedOver =
+                        !isScrollingScreen(snap.screenId) && m_maximizedToEdgesWindows.remove(snap.windowId);
+                    const bool evacueeClaimReturned = takeEvacueeMonocleClaim(snap.windowId, snap.screenId);
+                    if ((!wasAlreadyMaximized
+                         && (!callNow || ScrollDecisions::takesMaximizeMembership(kw->isMaximizable(), false)))
+                        || columnClaimHandedOver || evacueeClaimReturned) {
+                        m_monocleMaximizedWindows.insert(snap.windowId);
+                    }
+                    // A claim whose restore rect KWin recorded on another monitor (a column handed over from a
+                    // strip there, a maximize taken before the move landed) is re-seated at this tile, as a snap
+                    // seats its zone, so un-maximizing it here does not send it back there (F1011).
+                    const KWin::LogicalOutput* const tileOutput = KWin::effects->screenAt(snap.geometry.center());
+                    if (tileOutput && m_monocleMaximizedWindows.contains(snap.windowId)
+                        && !ScrollDecisions::restoreRectOnOutput(QRectF(kw->geometryRestore()),
+                                                                 QRectF(QRect(tileOutput->geometry())))) {
+                        kw->setGeometryRestore(KWin::RectF(snap.geometry));
+                    }
+                    // A batch that re-asserts monocle for this window owes it a MAXIMIZE again, whatever a mid-drag
+                    // release recorded earlier: the engine has changed its mind inside the gesture, and the gesture
+                    // end must re-drive, not restore.
+                    m_monocleRestoreOwed.remove(snap.windowId);
+                    // The column arm's departure-rect fix: maximize() already moved the window, so a leg from the
+                    // live frame animates nothing; the windowMaximizedStateAboutToChange capture still holds the
+                    // pre-monocle rect. Only when this arm's maximize() ran AND changed state (else it emits nothing
+                    // and the capture is stale).
+                    QRectF monocleOrigin;
+                    if (monocleBitWritten) {
+                        const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                        if (preMaximize.isValid() && !preMaximize.isEmpty()) {
+                            monocleOrigin = preMaximize;
+                        }
+                    }
+                    // A PLACEMENT, on the placement node, like every other geometry this batch commits. Setting
+                    // KWin's maximize bit is how monocle gets the work-area rect, borderless handling and a sane
+                    // restore rect; it is a mechanism, not a statement that the user maximized anything, and the
+                    // node a user assigns "Maximized" to must not play for a retile. What the bit write DOES change
+                    // is the departure rect, anchored above at the captured pre-maximize frame when this arm wrote
+                    // it, because maximize() has already moved the window and a leg from the live frame would
+                    // animate nothing.
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceIn, monocleOrigin);
+                } else {
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
+                }
+            } else {
+                // True only when THIS call handed KWin's maximize bit back for a window PlasmaZones itself
+                // maximized for monocle. It anchors the geometry apply below at the captured pre-restore rect,
+                // the same departure the column Release arm gets through maximizeBitWrittenThisBatch.
+                const bool monocleBitReleased = unmaximizeMonocleWindow(snap.windowId);
+                if (monocleBitReleased && snap.window->isWaylandClient()) { // absorb KWin's echo (m_monocleEchoOwed)
+                    m_effect->m_shaderManager.armMonocleEcho(snap.window, false);
+                }
+                // The release re-seeds the tracked screen from the restored frame, which for a monocle member
+                // arriving from another screen is the screen it is leaving (F889). This apply moves it here.
+                m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
+                // Clear any KWin maximize state before tiling. A user-
+                // maximized window keeps its MaximizeFull flag through
+                // moveResize; KWin then re-asserts the maximize-area
+                // geometry and the reactive centering in
+                // slotWindowFrameGeometryChanged re-applies — the two
+                // authorities never converge and compound into the
+                // "ballooning" growth (discussion #461). unmaximizeMonocleWindow
+                // above only restores windows PlasmaZones itself maximized
+                // for monocle; a user-maximized window is never in that set.
+                //
+                // The MaximizeRestore call resizes the window to its pre-
+                // maximize restore geometry before applyWindowGeometry below
+                // overwrites it; that intermediate frameGeometryChanged is
+                // intentionally absorbed by the m_daemonGate.inGeometryApply guard
+                // set at the top of this lambda — a refactor that moves or
+                // narrows that guard reintroduces the ballooning re-entry.
+                // The fullscreen terms match unmaximizeMonocleWindow's guard for
+                // the same reason: on X11 a MaximizeRestore on a still-fullscreen
+                // window moveResizes it to geometryRestore and shrinks the
+                // presentation (Wayland ignores it). A window that went fullscreen
+                // while monocle now keeps its membership, so it can reach this
+                // arm still fullscreen once the batch demotes it to a plain tile.
+                //
+                // A MAXIMIZED COLUMN is exempt. Its bit is not a user
+                // maximize the tiler has to clear, it is this handler's own
+                // mirror of engine state, and clearing it here would strip it
+                // on every batch — the flag would never survive to be seen.
+                // The exemption is on the WIRE flag rather than on
+                // membership, so the very first batch that maximizes a column
+                // does not clear the bit the column arm above has just set.
+                //
+                // The steady state is precedented rather than novel: the
+                // monocle arm above holds a window at MaximizeFull
+                // against a gapped, non-maximize-area rect and re-asserts it
+                // every batch, and has shipped that way. What protects both is
+                // that KWin's maximize-area re-assert is event-driven rather
+                // than continuous, and that the geometry apply lands last in
+                // this call stack inside the same inGeometryApply guard.
+                //
+                // Between batches the counter-assert in slotWindowFrameGeometryChanged
+                // is part of that cover for a column: a member at MaximizeFull reads
+                // as externally movable on Wayland as well as X11, this batch arms
+                // its column rect in m_scrollCommandedRects, and an out-of-bracket
+                // frame change is put back, three times per burst at most, with
+                // every batch re-arming the budget. A monocle member is never
+                // counter-asserted (its commanded rect is dropped), so for monocle
+                // only the event-driven re-assert and the last-landing apply hold.
+                //
+                // The sharpest case is the WORK-AREA CHANGE, and it has been
+                // measured rather than argued: KWin re-maximizes every
+                // MaximizeFull window when the work area moves, and a
+                // MULTI-TILE column differs from the maximize area by its
+                // whole cross extent rather than by a monocle window's few gap
+                // pixels, so a re-assert there would put every tile full
+                // screen over its siblings.
+                //
+                // Driven in a nested compositor on a two-tile maximized column
+                // (both tiles at the full main extent, each holding half the
+                // cross extent, both carrying MaximizeFull) across a real
+                // logical-geometry change of 1600x900 to 1280x720: both tiles
+                // held their stacked column rects and neither took KWin's
+                // maximize area. The engine's apply lands last and wins (for a
+                // column, the counter-assert also answers a re-assert between batches).
+                //
+                // The gesture pair, which this arm was the one member of its
+                // family to omit. Its three twins all carry it and all name the
+                // same failure (pretilegeometry, and both screenschanged
+                // copies): maximize() moveResizes, and the geometry apply below
+                // defers during a drag, so a batch landing mid-gesture snapped
+                // the window to its restore rect under the pointer with nothing
+                // committed behind it until the gesture ended.
+                //
+                // Skipping is a trade, not free, because this arm is not
+                // ledger-backed and nothing re-drives it at the gesture end.
+                // The condition is recomputed per entry from the COMMITTED
+                // maximize mode (unlike the three twins, which read the
+                // requested one): interceptMaximizeRequest fires on the
+                // committed edge, so a batch landing inside a scrolling-screen
+                // user press's round trip must not cancel the request before
+                // the interception has seen it. The NEXT batch pays it; a drag
+                // that changes no layout schedules no batch, and the window
+                // keeps a stray maximize bit against its tile rect until one
+                // arrives. The non-ledger demote in applyFreeGeometryRestore
+                // accepts the same trade in writing; the ledger-backed arms
+                // are paid at the gesture end instead.
+                //
+                // A column-ledger member landing as an autotile tile goes back through its ledger first (fullscreen and
+                // gesture retains included), not by the bare clear below, which would leave membership over a bit the
+                // window no longer holds that no later autotile batch can release (F745). Its commanded rect is dead
+                // state off a strip and goes too. After the release a member is at Restore: the bare clear is inert.
+                bool columnClaimReleased = false;
+                if (!isScrollingScreen(snap.screenId) && m_maximizedToEdgesWindows.contains(snap.windowId)) {
+                    columnClaimReleased = releaseMaximizedToEdges(snap.windowId, snap.window);
+                    m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                }
+                if (KWin::Window* kw = snap.window->window(); kw && !snap.isMaximizedToEdges
+                    && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
+                    && !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
+                }
+                // KWin's tile on a window the strip is placing, the batch's half of
+                // the quick-tile corrector (F123). A window that carried a tile
+                // before it became a strip tile (a quick-tiled floater unfloated
+                // back, a tile requested while it was fullscreen, a rule that tiles
+                // it as it maps) raises no requestedTileChanged the corrector would
+                // hear, and left standing the tile keeps its frame from ever
+                // reading as its answer while KWin puts it back on the tile at
+                // every re-check. Dropped ahead of the apply below, which lands
+                // last and places the column, so KWin's own restore rect goes out
+                // in no configure. Not under a gesture, whose end runs the
+                // corrector, nor for a window going fullscreen, whose apply bails.
+                // A column maximized to the edges has none by now: KWin's maximize
+                // exits quick tile mode.
+                //
+                // KWin's untile moves the window to its restore rect at once where
+                // that needs no configure (an X11 window, or a Wayland restore
+                // rect at the client's own size), a rect never painted. The
+                // frame the tile held is where the window was last seen, so the
+                // leg below departs from it (tileDropOrigin) instead.
+                KWinTileDrop kwinTileDrop;
+                QRectF tileDropOrigin;
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !fullscreenBailSkippedCommit
+                    && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    const QRectF frameAtTile = snap.window->frameGeometry();
+                    kwinTileDrop = dropKWinTile(snap.window);
+                    if (kwinTileDrop.dropped && QRectF(snap.window->frameGeometry()) != frameAtTile) {
+                        tileDropOrigin = frameAtTile;
+                    }
+                }
+                QRect geo = snap.geometry;
+
+                // Size continuity for a strip client that will not take its
+                // column.
+                //
+                // Every placement offering the COLUMN size is a resize, and a
+                // client that enforces its own geometry re-derives a size from
+                // it each time. Its answer is not bit-stable — the same
+                // 1908x2052 column came back as 1908x1073 and then 1911x1074 —
+                // so the window resizes by a few pixels on every scroll step,
+                // and no placement can ever take the pure-move path that
+                // avoids KWin's configure re-anchor (see applyWindowGeometry).
+                //
+                // So stop re-asking. Once a client has answered for a given
+                // column SIZE, offer the size it actually holds, centred in the
+                // column. That is a pure move, which it cannot renegotiate, so
+                // the size stops drifting. The offer only changes when the
+                // COLUMN changes.
+                //
+                // Keyed on the column size, never on position: a gate on the
+                // target being off-screen made a column scrolling in and out
+                // alternate between two sizes across the strip.
+                //
+                // Inert for a window that accepts its column: the sizes match,
+                // so the offer is the column rect unchanged and every branch
+                // below sees exactly what it saw before.
+                //
+                // A MAXIMIZED-TO-EDGES column is exempt, alongside monocle and
+                // windowed fullscreen and for the same reason: in all three the
+                // rect is DECLARED state, and honouring the client's own
+                // smaller answer instead defeats the state outright. The
+                // mechanism above exists to stop a size renegotiation that is
+                // only a few pixels wide; here the gap is the whole difference
+                // between the raw work area and whatever the client prefers, so
+                // "offer the size it actually holds, centred" commits a
+                // maximized window at its pre-maximize size in the middle of
+                // the screen.
+                //
+                // Self-sustaining once entered ("maximize sometimes does
+                // nothing"): a client answering the full area smaller makes every
+                // later batch re-issue the shrunken rect, and the entry stays.
+                // Null unless this batch is a plain strip entry that reaches
+                // the record below; see the capture site for why the two are
+                // separated.
+                //
+                // X11 windows are offered a column too, and their answer is
+                // read the same way, so a client that resizes itself past the
+                // column widens it rather than sitting under the next one
+                // (#1157). The carry below serves them as well: an X11 client
+                // that insists on a size short of its column (across the strip,
+                // or along it on a preset width) was otherwise offered the
+                // column on every batch, put back once and learned again, three
+                // resizes per scroll step (F208). It carries only a size the
+                // counter-assert's command decided, the one it commanded or the
+                // one it learned (ScrollDecisions::x11SizeAnswersColumn), never
+                // a KWin resize it could not put back.
+                QRect stripOfferedColumn;
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !snap.isMaximizedToEdges) {
+                    const QSize columnSize = geo.size();
+                    const QSize committedSize = snap.window->frameGeometry().toRect().size();
+                    const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
+                    // SIZE only. The column's position changes on every scroll
+                    // step while its size does not, and it is the size that
+                    // decides whether the client has answered for this column.
+                    const bool columnUnchanged =
+                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->rect.size() == columnSize;
+                    // The whole rect is captured: the commit-time correction
+                    // below needs the column's position to centre within it.
+                    //
+                    // CAPTURED here, RECORDED after the commit decision further
+                    // down. The entry means "this client has been offered this
+                    // column", and the batch has not offered anything yet — the
+                    // apply below can still be skipped as redundant, deferred
+                    // to windowFinishUserMovedResized mid-gesture, or bailed on
+                    // the non-member fullscreen path. Recording it here made the
+                    // NEXT batch read columnUnchanged against a column the
+                    // client was never sent, skip offering it, and hand back
+                    // whatever size the window happens to be holding — which
+                    // never self-corrects, because the offer looks answered.
+                    // The commanded-rect sibling already guards the same three
+                    // cases; this is the missing half of that pairing.
+                    stripOfferedColumn = geo;
+                    // The whole carry-forward decision, truth-tabled in
+                    // scrolldecisions.h. declaredRect is false here by
+                    // construction — the enclosing guard already excluded all
+                    // three declared-rect states — but it is passed rather than
+                    // hardcoded so the predicate stays complete on its own
+                    // terms and the table documents why they are excluded.
+                    // Never while a resize configure is unacked: the committed
+                    // size is then the one the client is being moved OFF, and
+                    // offering it centred would let the pending size land
+                    // overhanging the neighbour column.
+                    KWin::Window* kwCarry = snap.window->window();
+                    const bool resizeInFlight =
+                        kwCarry && QRectF(kwCarry->moveResizeGeometry()).toRect().size() != committedSize;
+                    // An X11 frame is carried only at a size its last strip
+                    // command decided, read before this entry's apply replaces
+                    // that command. Its record's existence is the test, not its
+                    // stamp: building this batch already bumped the window's
+                    // stamp past it. The strip's own hand-offs drop the record
+                    // (dropScrollCompanions, the deferred and bailed disarm
+                    // below), but a snap or float command issued before the
+                    // strip's release lands leaves it standing, stale by stamp
+                    // (the counter-assert's gate in
+                    // slotWindowFrameGeometryChanged).
+                    // What carries is still only a size the STRIP decided: the
+                    // record names the strip's command and learned size, never
+                    // the other command's, so a frame that command sized
+                    // carries only where it matches one of them, within the
+                    // pixel of rounding x11SizeAnswersColumn allows.
+                    bool committedIsAnswer = snap.window->isWaylandClient();
+                    if (!committedIsAnswer) {
+                        const auto commandedIt = m_effect->m_scrollCommandedRects.constFind(snap.windowId);
+                        const bool guarded = commandedIt != m_effect->m_scrollCommandedRects.constEnd();
+                        committedIsAnswer = ScrollDecisions::x11SizeAnswersColumn(
+                            guarded, guarded ? commandedIt->rect.size() : QSize(),
+                            guarded ? commandedIt->learnedSize : QSize(), committedSize);
+                    }
+                    if (committedIsAnswer && !resizeInFlight
+                        && ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged,
+                                                                  committedSize, columnSize)) {
+                        // Centred the same way the paint resolver centres
+                        // (scrollVisualTranslationFor), so the drawn and
+                        // committed positions agree: same toRect() rounding on
+                        // the size, and the same clamp at zero. The clamp is inert
+                        // here, because mayCarryCommittedSize carries only a commit
+                        // that fits the column, and is kept for parity with
+                        // scrollVisualTranslationFor.
+                        //
+                        // isEmpty rather than isValid: QSize::isValid() admits
+                        // 0x0, and a degenerate mid-unmap commit would then
+                        // centre the window by the whole column.
+                        geo = QRect(geo.x() + qMax(0, columnSize.width() - committedSize.width()) / 2,
+                                    geo.y() + qMax(0, columnSize.height() - committedSize.height()) / 2,
+                                    committedSize.width(), committedSize.height());
+                        qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
+                                          << "holding=" << committedSize << "offer=" << geo;
+                    }
+                }
+                // DROP THE OFFERED-COLUMN ENTRY for every declared-rect state,
+                // which is the same set the size-continuity guard above
+                // excludes. Taking that exemption means nothing refreshes the
+                // entry for the length of the episode, and the entry is not
+                // read only by the guard above: the reactive centring pass in
+                // window_connections.cpp reads it on every frame-geometry
+                // change with no declared-rect exclusion of its own, so a
+                // stale entry there centres the window inside a column it no
+                // longer occupies. Windowed fullscreen removes the entry on
+                // enter for exactly this reason, but nothing removed it for a
+                // column that is merely maximized to edges. A monocle entry
+                // never reaches this arm: the monocle drop is the tail arm of
+                // this lambda, and it is the only one, so it must stay.
+                if (isScrollingScreen(snap.screenId) && (snap.isMaximizedToEdges || snap.isWindowedFullscreen)) {
+                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
+                }
+                // The rect this entry delivers, for the commanded-rect arm at the
+                // bottom of this lambda, which refuses to record while this is
+                // null and keeps it for the two Wayland populations the
+                // counter-assert guards: a column maximized to the edges (KWin's
+                // own maximize-area re-assert is its external mover) and one
+                // placed outside its output (KWin 6.8's keep-visible clamp is).
+                // Without this the counter would be disarmed for exactly those.
+                //
+                // The rect is `geo` after the size-continuity pass: the column
+                // rect for a maximized column, which the pass excludes, and the
+                // carried size centred in its column where the pass carried one.
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && snap.window->isWaylandClient()) {
+                    scrollDeliveredRect = geo;
+                }
+
+                // For Wayland windows being retiled to the same zone, skip the
+                // moveResize if the window was previously centered in this zone.
+                // This prevents the flicker of a jump back to the zone origin and
+                // a re-centre by slotWindowFrameGeometryChanged, and avoids
+                // flooding the client with configures (freezes Ghostty).
+                //
+                // The skip is deliberately CONTAINMENT, not fill: an entry only
+                // exists for a window the centring pass placed undersized in
+                // exactly this zone, so "still inside the zone" means "still
+                // sitting where we centred it" for the population the skip was
+                // built for. What makes that reading safe is that the entry can
+                // no longer be stamped from a stale frame: the reactive pass
+                // refuses to run inside the apply bracket and while a resize
+                // configure is in flight, its target is armed only while an ack
+                // is coming, and a fullscreen exit lands on the restore rect the
+                // hold seated. So a live entry records a genuine refusal; without
+                // those guards a raced centring stamped it and this skip latched.
+                bool skipMoveResize = false;
+                // Never on a strip: the strip shed below runs after this read, so
+                // an autotile stamp surviving a mode flip could skip a column.
+                if (snap.window->isWaylandClient() && !isScrollingScreen(snap.screenId)) {
+                    auto prevIt = m_centeredWaylandZones.find(snap.windowId);
+                    const auto frameIt = m_centeredWaylandFrames.constFind(snap.windowId);
+                    if (prevIt != m_centeredWaylandZones.end() && prevIt.value() == geo
+                        && frameIt != m_centeredWaylandFrames.constEnd()) {
+                        // Still EXACTLY where the pass centred it (a 1px
+                        // tolerance covers fractional-scale snap). Containment
+                        // alone let any in-zone change nothing re-centres (a
+                        // client self-resize, a KWin or script move) latch.
+                        const QRectF actual = snap.window->frameGeometry();
+                        const QRectF& was = *frameIt;
+                        if (qAbs(actual.x() - was.x()) <= 1.0 && qAbs(actual.y() - was.y()) <= 1.0
+                            && qAbs(actual.width() - was.width()) <= 1.0
+                            && qAbs(actual.height() - was.height()) <= 1.0) {
+                            skipMoveResize = true;
+                            qCDebug(lcEffect) << "Skipping redundant moveResize for centered Wayland window"
+                                              << snap.windowId << "zone=" << geo;
+                        }
+                    }
+                }
+
+                // Record the strip offer now that the commit decision is known.
+                // Three ways this batch can fail to deliver the column it
+                // computed: the redundant-apply skip just above, a deferred
+                // commit mid-gesture (applyWindowGeometry hands those to
+                // windowFinishUserMovedResized), and the non-member fullscreen
+                // bail, which commits nothing at all. In each case the client
+                // has not been offered THIS column yet, so nothing is written
+                // now — a recorded offer that never went out would be read as
+                // answered. The deferred commit records it when it goes out.
+                //
+                // Not written, and equally NOT removed. Any entry already there
+                // describes a column an earlier batch genuinely delivered and
+                // the client genuinely answered, and this batch failing to
+                // deliver says nothing about that. Removing it would re-offer
+                // the full column on the next batch and restart the size
+                // renegotiation this whole mechanism exists to end — every
+                // batch arriving during a drag or resize takes this path, so
+                // that would fire for the length of any gesture. Staleness is
+                // decided by the size comparison above, which a genuine column
+                // change fails on its own; membership loss is handled by the
+                // teardown removers.
+                //
+                // A batch that sends the client a SIZE is a new offer, whose
+                // answer the frame hook and the commit watch then read
+                // (recordStripOffer). The test is the size-preserving split
+                // both arms of applyWindowGeometry take below, against the
+                // same commanded rect, read before the apply: a size equal to
+                // the commanded one goes out as a pure move, or not at all,
+                // and asks the client nothing. Where KWin's tile was dropped
+                // above, the size the client was last asked for is the tile's,
+                // read before KWin's untile replaced it with its restore rect.
+                //
+                // Mid-gesture the apply below defers to the gesture's end, and
+                // the column rides along with it: the replay records it once it
+                // has sent the rect (stripOfferOnDeferredReplay).
+                std::optional<QRect> deferredStripOffer;
+                const bool deliversStripOffer =
+                    !stripOfferedColumn.isNull() && !skipMoveResize && !fullscreenBailSkippedCommit;
+                if (deliversStripOffer && (snap.window->isUserMove() || snap.window->isUserResize())) {
+                    deferredStripOffer = stripOfferedColumn;
+                } else if (deliversStripOffer) {
+                    // Against the size the apply asks for, which for an X11
+                    // window is its size hints' answer to the column
+                    // (constrainTileGeometry): a terminal with size increments
+                    // is asked the same narrowed size on every batch, which
+                    // asks it nothing new, and a pixel of XWayland rounding is
+                    // no new size either (F336). Unchanged for Wayland.
+                    const KWin::Window* const kwOffer = snap.window->window();
+                    const bool sendsSize =
+                        kwOffer
+                        && ScrollDecisions::stripEntrySendsSize(
+                            kwinTileDrop.dropped ? kwinTileDrop.requested
+                                                 : QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
+                            m_effect->constrainTileGeometry(snap.window, geo).size(), !snap.window->isWaylandClient());
+                    m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
+                }
+
+                if (!skipMoveResize) {
+                    m_centeredWaylandZones.remove(snap.windowId);
+                    // Scrolling strip: scrollEdge names the screen edge this
+                    // column's motion belongs to — one of FOUR since wire v5
+                    // ("left"/"right" on a horizontal strip, "top"/"bottom" on
+                    // a vertical one), so nothing here may treat "not left" as
+                    // "right". It is NOT recoverable from the geometry — the
+                    // park position is direction-agnostic (below the union of
+                    // all outputs), so the rect cannot say which way the user
+                    // scrolled.
+                    //
+                    // Two cases, and they need opposite treatment:
+                    //  - ARRIVING (target is on the window's own screen): the
+                    //    window was parked somewhere unrelated, so animate it
+                    //    in from just outside the named edge. This is the
+                    //    origin parking used to supply implicitly, back when
+                    //    position and direction were the same number.
+                    //  - LEAVING (target is a park, off the screen): the window
+                    //    must be seen sliding OUT past the named edge, but its
+                    //    committed rect is the park, which is below every
+                    //    output. Animating to the park directly would sweep
+                    //    it downwards across the whole screen instead of out
+                    //    by the edge. So the animation ends just past the named
+                    //    edge while the commit still goes to the park. Both
+                    //    are off-screen, so the step between them when the
+                    //    animation finishes is never visible. Accepted cost:
+                    //    the animation's swept bounds touch the neighbouring
+                    //    output's coordinate range, so that output takes
+                    //    full transformed repaints for the slide's duration
+                    //    even though the cull draws nothing there (the
+                    //    committed geometry never enters its render list).
+                    //
+                    // The edge math measures against the strip's own screen:
+                    // a virtual screen's region on a split monitor, else the output.
+                    QRectF originOverride;
+                    QRectF visualTargetOverride;
+                    bool skipScrollAnimation = false;
+                    // Where the window was last seen: the frame KWin's tile held
+                    // where the drop above moved it, else the live frame.
+                    const QRectF seenFrame =
+                        tileDropOrigin.isValid() ? tileDropOrigin : QRectF(snap.window->frameGeometry());
+                    // The rect applyWindowGeometry will actually COMMIT for
+                    // this request. For an X11 client with size hints that is
+                    // the constrained frame centred in the column, NOT the
+                    // column rect — and every origin/target below that means
+                    // "the committed rect" must be built from it, or a
+                    // fixed-size game gets a real animation leg from the
+                    // full-column rect to its centred frame on every batch
+                    // (drawn anchored at the column's top-left, the top of
+                    // the screen) instead of the degenerate leg these
+                    // branches intend. Identical to `geo` for everything
+                    // else, Wayland included.
+                    //
+                    // Deliberate consequence, not an accident: the constrained
+                    // rect is inset from the column by the centring offset, so
+                    // for a size-constrained X11 column that straddles its
+                    // output by LESS than that offset the intersects() tests
+                    // below can now answer differently than they did against
+                    // the raw column rect — `arriving` can read false where it
+                    // read true, and the vertical-park test can skip an
+                    // animation it used to run. That is the point: those
+                    // predicates are asking where the window will actually be,
+                    // and the answer is the constrained frame.
+                    // Normalized for symmetry with applyWindowGeometry, which
+                    // normalizes the same rect before it constrains it, so the two
+                    // cannot disagree about the predicted commit. The wire cannot
+                    // deliver an inverted rect here: validationError refused negative
+                    // and empty tiled extents at the head of slotWindowsTileRequested,
+                    // and the entry stored the normalized rect.
+                    const QRect committedGeo = m_effect->constrainTileGeometry(snap.window, geo.normalized());
+                    // Shared four-edge anchor for both LEAVING treatments
+                    // below: move the rect just past the named departure edge
+                    // of the screen. Four departure edges since v5:
+                    // "left"/"right" on a horizontal strip, "top"/"bottom" on
+                    // a vertical one. Folding the two vertical tokens into an
+                    // else would anchor them past the RIGHT screen edge and
+                    // slide every vertical park sideways across the
+                    // neighbouring output.
+                    //
+                    // QRect::right()/bottom() are x+width-1 and y+height-1,
+                    // so +1 sits one past the edge. screenRect must stay a
+                    // QRect (KWin::Rect's right()/bottom() are x+width and
+                    // y+height and would shift the slide by a pixel).
+                    const auto anchorPastEdge = [](QRect rect, const QRect& screenRect, const QString& edge) {
+                        if (edge == QLatin1String("left")) {
+                            rect.moveLeft(screenRect.left() - rect.width());
+                        } else if (edge == QLatin1String("top")) {
+                            rect.moveTop(screenRect.top() - rect.height());
+                        } else if (edge == QLatin1String("bottom")) {
+                            rect.moveTop(screenRect.bottom() + 1);
+                        } else {
+                            rect.moveLeft(screenRect.right() + 1);
+                        }
+                        return rect;
+                    };
+                    if (snap.hasVisualPos) {
+                        // Parked, but drawn at its real strip position and
+                        // carried by the view like every other column. There is
+                        // no per-window motion left to describe, so the leg is
+                        // deliberately degenerate — the edge-anchored slide-out
+                        // below would fight the view offset for the same pixels.
+                        originOverride = QRectF(committedGeo);
+                    } else if (snap.viewDelta != 0 && immediateViewScreens.contains(snap.screenId)) {
+                        // Heartbeat-driven view motion (drag edge
+                        // auto-scroll): no view leg ran, the paint offset is
+                        // zero, and the ~60 Hz commits are the motion — so
+                        // every carried window is placed outright. This
+                        // covers arriving-from-park entries too: they simply
+                        // appear at the edge and the next ticks carry them
+                        // in, which is the niri behaviour.
+                        originOverride = QRectF(committedGeo);
+                    } else if (snap.viewDelta != 0 && startedViewScreens.contains(snap.screenId)) {
+                        // Carried by the view: the strip's own spring moves
+                        // this window, so the per-window animation must cover
+                        // only what the view does NOT explain — the residual.
+                        //
+                        // Gated on the spring having actually STARTED for
+                        // this screen, not on the wire delta alone: when
+                        // applyBatchDelta declined (no clock, animations
+                        // off), the paint offset is zero and an origin
+                        // placed a delta behind the target pops the column
+                        // backwards and slides it double. Declined screens
+                        // fall through to the scrollEdge / plain branches,
+                        // which already handle the no-view case.
+                        //
+                        // The paint position is `animatedRect + viewOffset`,
+                        // and the offset starts at exactly viewDelta. So for
+                        // the first frame to land where the window is now, the
+                        // animation has to start a delta BEHIND its current
+                        // rect. Everything that then differs from the target is
+                        // the residual, and it animates on its own.
+                        //
+                        // The pure-scroll case falls out rather than being
+                        // special-cased: when the window's whole movement is
+                        // the view's, this origin IS the target, startAnimation
+                        // reports the leg degenerate, and no second spring
+                        // exists to desync from the first. An edge column whose
+                        // width changed in the same batch keeps a real leg, so
+                        // its width interpolates while its position rides the
+                        // strip — which is why the clamp needs no special
+                        // handling of its own.
+                        //
+                        // Outranks the scrollEdge branch below on purpose: an
+                        // ARRIVING column carries both, and its true pre-scroll
+                        // strip position beats a point synthesized just outside
+                        // the screen edge, because that is where it actually
+                        // was.
+                        // Direction of THIS entry, asked of the committed
+                        // target: a target off the union of every output is a
+                        // park, and a park-bound (LEAVING) entry needs the
+                        // opposite treatment from an arriving one in both arms
+                        // below. The engine sends no viewDelta for a park
+                        // (engine_apply.cpp: a parked tile is not carried by the
+                        // view), so the two park-bound branches below are a
+                        // defensive backstop for an effect and engine that
+                        // disagree about which rects are parks, such as an
+                        // output-disconnect race. They keep such an entry out of
+                        // the arrival arms, which would pop it to the park
+                        // (edged) or sweep it down to the park row (edge-less),
+                        // the closing-a-mid-strip-window bug they were written for.
+                        const bool viewLeavingToPark = rectAtScrollPark(committedGeo);
+                        if (!snap.scrollEdge.isEmpty() && viewLeavingToPark) {
+                            // LEAVING to a park with a named edge, carried by
+                            // the same batch's view travel. Give it the
+                            // scrollEdge branch's leaving treatment: the
+                            // commit still goes to the park, but the VISIBLE
+                            // motion is redirected to just past the named
+                            // edge so the window slides out as itself instead
+                            // of popping straight to the (off-screen) park.
+                            // Same edge math as the scrollEdge branch below;
+                            // same teleport fallback when no output resolves.
+                            const QRect screenRect = stripScreenRect(snap.screenId);
+                            if (!screenRect.isValid()) {
+                                qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                                  << snap.windowId << "to its target";
+                                skipScrollAnimation = true;
+                            } else if (atScrollPark(snap.window)) {
+                                // Already sitting at a park: both ends of the
+                                // slide-out would be off the union, so the
+                                // animated leg (and its shader arm) buys
+                                // nothing visible. Commit plain, matching the
+                                // at-park-now treatment of the sibling arms.
+                                skipScrollAnimation = true;
+                            } else {
+                                const QRectF& cur = seenFrame;
+                                const QRect liveRect =
+                                    QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
+                                visualTargetOverride = QRectF(anchorPastEdge(liveRect, screenRect, snap.scrollEdge));
+                            }
+                        } else if (!snap.scrollEdge.isEmpty()) {
+                            // ARRIVING from a park. Its live frameGeometry is
+                            // the park itself — below the union of all outputs
+                            // — which is not a visual position at all, so
+                            // differencing against it would start the leg from
+                            // somewhere off the bottom of the desktop.
+                            //
+                            // A column arriving has no per-window motion to
+                            // describe: the view alone brought it back. Making
+                            // the origin the target is what says that, because
+                            // the paint position is origin + offset, and the
+                            // offset already starts a delta out — which is
+                            // exactly where this column was before the scroll.
+                            originOverride = QRectF(committedGeo);
+                        } else {
+                            // Rounded to integers, exactly as the sibling
+                            // leaving-column branch below does, and for a
+                            // reason that is not cosmetic. The animation
+                            // target is an integer QRect, while frameGeometry
+                            // is qreal — and AnimatedValue::start decides a
+                            // leg is degenerate with qFuzzyIsNull on a 4-D
+                            // distance, an ABSOLUTE 1e-12 with no pixel
+                            // epsilon. On a fractional-scale output the
+                            // sub-pixel residue therefore reads as a real leg:
+                            // a spring starts on every wheel tick, arms a
+                            // shader transition, and the resulting
+                            // hasAnimation defeats the next batch's
+                            // already-at-target no-op skip, forcing a
+                            // redundant moveResize per tick. Rounding makes
+                            // the pure-scroll case genuinely degenerate again.
+                            //
+                            // EXCEPT a window sitting AT A PARK right now: an
+                            // arriving tab whose batch also carries view
+                            // travel lands here (its edge is empty — a hidden
+                            // tab of an on-screen column parks without one —
+                            // while viewDelta is set because it is not
+                            // parked NOW). Differencing against the park
+                            // builds an origin below the union of every
+                            // output and the tab flies up the full screen:
+                            // the exact bug the arrival branch below exists
+                            // to prevent, resurfacing through this branch's
+                            // priority. The park says nothing about motion,
+                            // so the answer is the same degenerate leg,
+                            // mirroring the sibling at the ARRIVING-from-park
+                            // arm above.
+                            if (atScrollPark(snap.window)) {
+                                originOverride = QRectF(committedGeo);
+                            } else if (viewLeavingToPark) {
+                                // Edge-less LEAVING park (a hidden tab of an
+                                // on-screen column, or a cross-axis stack
+                                // overflow) riding a batch that also carries
+                                // view travel. The difference-origin arm
+                                // below would build a REAL leg from the live
+                                // on-screen frame down to the park — the
+                                // visible downward sweep. There is no edge to
+                                // slide out by, so the answer is the same as
+                                // the edge-less branch further down: commit
+                                // without an animation.
+                                skipScrollAnimation = true;
+                            } else {
+                                // viewDelta is a signed scalar ALONG this
+                                // screen's strip axis, so the origin has to
+                                // back out along that same axis. Subtracting
+                                // it from x unconditionally would, on a
+                                // vertical strip, displace the origin across
+                                // the axis the paint offset moves along, and
+                                // the leg would stop being degenerate: frame
+                                // zero would land a full delta away in BOTH
+                                // components instead of on the window.
+                                // The answer to a claimed press departs from the frame the press left,
+                                // not the live one, which KWin's flip may already have moved (an X11
+                                // maximize commits at once), and is backed out like any carried window
+                                // (F989). Done here, not by the claimed anchor after this chain, so the
+                                // departure is shifted once.
+                                const bool vertical =
+                                    scrollAxisForScreen(snap.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
+                                originOverride = QRectF(ScrollDecisions::viewCarriedOrigin(
+                                    claimedDeparture.isValid() ? claimedDeparture : seenFrame, snap.viewDelta,
+                                    vertical));
+                            }
+                        }
+                    } else if (!snap.scrollEdge.isEmpty()) {
+                        const QRect screenRect = stripScreenRect(snap.screenId);
+                        if (screenRect.isValid()) {
+                            const bool arriving = screenRect.intersects(committedGeo);
+                            // Arriving: start from the target's own row and
+                            // size — the COMMITTED row and size, so a
+                            // size-constrained window slides in as the frame
+                            // it will actually be, at the height it will
+                            // actually sit. Leaving: keep the rect the window
+                            // occupies right now, so it slides out as itself
+                            // rather than jumping to the park's row first.
+                            QRect atEdge = committedGeo;
+                            if (!arriving) {
+                                const QRectF& cur = seenFrame;
+                                atEdge =
+                                    QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
+                            }
+                            // Edge semantics documented at anchorPastEdge.
+                            atEdge = anchorPastEdge(atEdge, screenRect, snap.scrollEdge);
+                            if (arriving) {
+                                originOverride = QRectF(atEdge);
+                            } else {
+                                visualTargetOverride = QRectF(atEdge);
+                            }
+                        } else {
+                            // No resolvable output (disconnect race): with no
+                            // edge rect to anchor to, an animated apply would
+                            // be the exact backwards park-sweep the overrides
+                            // exist to prevent. Teleport instead.
+                            qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                              << snap.windowId << "to its target";
+                            skipScrollAnimation = true;
+                        }
+                    } else if (!scrollTrackedScreenFor(snap.windowId).isEmpty()) {
+                        // Edge-less commit of a scroll-tracked window. The
+                        // engine clears the departure edge for exactly two
+                        // parks, and this branch owns both directions of them.
+                        // (Autotile batches never take it — their windows are
+                        // not scroll-tracked and their targets are on-screen
+                        // anyway.)
+                        //
+                        // LEAVING (target entirely off its own screen): a
+                        // cross-axis stack-overflow park, or a tab going hidden.
+                        // There is no side to slide out by, and animating to a
+                        // target below the union would sweep the window down
+                        // the whole screen. Commit without an animation.
+                        //
+                        // ARRIVING (target on its screen, window sitting at a
+                        // park right now): the tab of an on-screen tabbed
+                        // column being ACTIVATED, or a tile the layout pushed
+                        // past the stack's cross-axis end coming back. The park is below
+                        // the union of every output and is chosen for safety,
+                        // so it says nothing about where the window should
+                        // appear to come from — animating from it flies the
+                        // window up the full height of the screen. A tab switch
+                        // has no motion to describe at all: the arriving tab
+                        // occupies the rect the outgoing one just vacated, so
+                        // it must appear IN PLACE. Degenerate leg, the same
+                        // answer (and for the same reason) as the hasVisualPos
+                        // branch above. It is also what makes the pair
+                        // symmetric: the outgoing tab teleports away, so a
+                        // travelling arrival had nothing to travel from.
+                        const QRect screenRect = stripScreenRect(snap.screenId);
+                        if (!screenRect.isValid()) {
+                            // No resolvable output (disconnect race): both
+                            // arms below need the rect, and falling through
+                            // silently gave a scroll-tracked window a full
+                            // animated leg from its live frame — the park,
+                            // below the union — which is the exact sweep the
+                            // arms exist to prevent. Teleport, mirroring the
+                            // scrollEdge branch's identical case above.
+                            qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                              << snap.windowId << "to its target";
+                            skipScrollAnimation = true;
+                        } else if (!screenRect.intersects(committedGeo)) {
+                            skipScrollAnimation = true;
+                        } else if (atScrollPark(snap.window)) {
+                            originOverride = QRectF(committedGeo);
+                        }
+                    }
+                    // COLUMN-MAXIMIZE TOGGLE: depart from the rect the window held before the maximize, not from its
+                    // live frame. By the time this runs the window has ALREADY been resized to KWin's maximize area:
+                    // the shortcut's own batch sets the bit in the maximize arm above, and for a titlebar button or
+                    // any other request the interception claims, KWin flips it before the effect sees the event. So
+                    // the live frame is 3840x2068 on the way in and the target column rect on the way out, and a leg
+                    // departing from it animates a 16px correction growing and NOTHING AT ALL shrinking — the whole
+                    // visible motion is KWin's unanimated jump, with the leg twitching afterwards. Traced live: one
+                    // leg per press, installing at (8,54 3840x2068) maximizing and at (8,54 1908x2052) restoring.
+                    //
+                    // m_preMaximizeFrame is the rect KWin captured at windowMaximizedStateAboutToChange, before any
+                    // geometry change, which is the only place the departure rect still exists. Gated on THIS
+                    // iteration having actually written KWin's maximize bit, which is what keeps a stale entry (the
+                    // map is latest-wins and only swept on windowDeleted) from re-anchoring an unrelated later commit.
+                    // A membership-vs-wire delta will not do: both release retain arms and the Apply arm's own
+                    // fullscreen/gesture skip leave that delta true with no capture having been refreshed, so it
+                    // latches on every following batch and anchors the leg at an arbitrarily old rect. The answer to
+                    // a claimed press writes no bit, because KWin already holds the mode, and departs from the capture
+                    // the interception took at the press instead (claimedDeparture, F989).
+                    //
+                    // No screen term is needed: maximizeBitWrittenThisBatch is written only by the maximize-to-edges
+                    // Apply and Release arms, which run only on a scrolling screen. An autotile tile releasing a
+                    // column claim it carried in has its own flag (columnClaimReleased) and the same evidence. The
+                    // monocle RELEASE takes the same arm on the same evidence: unmaximizeMonocleWindow's restore just
+                    // moved the window off the maximize area, and the capture is the only place the maximized rect
+                    // still exists. It is not screen-gated, because monocle is not a scrolling-only claim.
+                    //
+                    // Placed after the chain above so the park and view-travel arms keep priority — those describe
+                    // where a window should appear to come from across the strip, which outranks the maximize's own
+                    // departure rect. A claimed press carried by the view already departs from claimedDeparture
+                    // there, backed out by the view delta, so this arm never shifts it a second time.
+                    const bool departsFromPreMaximizeRect =
+                        maximizeBitWrittenThisBatch || monocleBitReleased || columnClaimReleased;
+                    QRectF preMaximize = claimedDeparture;
+                    if (!preMaximize.isValid() && departsFromPreMaximizeRect) {
+                        preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                    }
+                    if (!originOverride.isValid() && preMaximize.isValid() && !preMaximize.isEmpty()) {
+                        originOverride = preMaximize;
+                    }
+                    // A leg no arm above anchored departs from the live frame,
+                    // which the tile drop moved to a rect never painted.
+                    if (!originOverride.isValid() && tileDropOrigin.isValid()) {
+                        originOverride = tileDropOrigin;
+                    }
+                    // Terminal backstop for every arm above, and for arms that
+                    // do not exist yet: a commit whose target lies off the
+                    // union of every output (a park) must NEVER take an
+                    // animated leg unless a visualTargetOverride has
+                    // redirected the visible motion on-screen. The chain
+                    // above handles every KNOWN park shape, but its arms are
+                    // gated on wire fields and tracking state
+                    // (scrollTrackedScreenFor answers empty across a
+                    // mode-flip or output-disconnect race, and
+                    // setScrollingScreens voids pending applies only for
+                    // the screens it re-announces), and an entry that falls through every gate
+                    // used to reach applyWindowGeometry bare — a full
+                    // animated leg from the live on-screen frame down to the
+                    // park row. An ORIGIN override does not redeem the leg
+                    // (its destination is still the park), so it is cleared
+                    // rather than honoured.
+                    if (!skipScrollAnimation && !visualTargetOverride.isValid() && rectAtScrollPark(committedGeo)) {
+                        skipScrollAnimation = true;
+                        originOverride = QRectF();
+                    }
+                    // ALWAYS a placement node, never a maximize node of its own:
+                    // a window this batch maximized or restored on the way is
+                    // still a window this batch PLACED, and the retired
+                    // "Maximized" node does not come back for it. The
+                    // KWin-native path (beginMaximizeShaderMorph) is what
+                    // answers a maximize the engine had no part in.
+                    //
+                    // WHICH of the two placement legs is the direction of the
+                    // maximize bit this iteration wrote. A window growing to
+                    // the maximize area is arriving somewhere and rides
+                    // placeIn; handing the bit back is a window let go and
+                    // rides placeOut — the same pairing beginMaximizeShaderMorph
+                    // makes for the KWin-native maximize, and the reason a user
+                    // who assigns a pack to "Released" sees it play when they
+                    // un-maximize a scroll-managed tile. Both the column
+                    // release arm and the monocle release reach here; every
+                    // other placement (a plain retile, a maximize apply) is an
+                    // arrival and keeps placeIn. Same evidence the departure
+                    // rect is anchored on above, so the two cannot disagree.
+                    //
+                    // The THIRD bit-clearing site in this iteration — the
+                    // user-maximize demote near the top of this else arm, which
+                    // calls MaximizeRestore on a window carrying a maximize
+                    // this handler never claimed — deliberately does NOT count
+                    // as a release. Nothing there asked for an un-maximize: the
+                    // batch is placing the window into a tile and clearing a
+                    // stray bit that would otherwise fight the tile rect
+                    // (discussion #461), so the leg it owes is the arrival it
+                    // is. A user who un-maximizes such a window does it through
+                    // KWin, which answers on the native path with its own
+                    // placeOut.
+                    const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
+                    // KWin's flip usually commanded this rect already, and the apply's no-op skip would drop the
+                    // claimed press's only leg (F989). So does an untile that moved the window at once to a restore
+                    // rect that is the column itself, which would drop the leg from the tile (departureOwesLeg). An
+                    // apply that skips its animation owes no leg, and the no-op skip stands for it.
+                    const bool prevLegOwed =
+                        std::exchange(m_effect->m_daemonGate.departureLegOwed,
+                                      !skipScrollAnimation && (claimedDeparture.isValid() || tileDropOrigin.isValid()));
+                    m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
+                                                  releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
+                                                                    : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
+                                                  originOverride, visualTargetOverride, std::nullopt,
+                                                  deferredStripOffer);
+                    m_effect->m_daemonGate.departureLegOwed = prevLegOwed;
+                    // The offer recorded above was recorded before this apply
+                    // took its command stamp (its size test reads KWin's state
+                    // before the apply), so it names the apply's stamp now, as
+                    // the cancels and the deferred replay record theirs after
+                    // their applies. A scroll handoff's echo reads it to tell
+                    // the destination's own offer from the source's
+                    // (handleWindowOutputChanged).
+                    if (deliversStripOffer && !deferredStripOffer) {
+                        if (const auto offer = m_effect->m_scrollOfferedColumn.find(snap.windowId);
+                            offer != m_effect->m_scrollOfferedColumn.end()) {
+                            offer->commandStamp = m_effect->m_daemonGate.commandStamps.current(snap.window);
+                        }
+                    }
+                }
+                // The tile dropped above may have a configure the client can
+                // still ack at the tile's size, now the column is placed.
+                answerDroppedTileAck(snap.window, kwinTileDrop);
+            }
+
+            // Tab swap: cross-fade the outgoing tab into this one.
+            //
+            // At the monocle/else JOIN, decoupled on purpose from the two arms
+            // it used to sit inside: the Wayland already-centred short-circuit
+            // (skipMoveResize) says the GEOMETRY needs no commit, which says
+            // nothing about whether the CONTENTS just swapped, and burying the
+            // install there silently suppressed the cross-fade for a swap
+            // inside an already-parked column. The monocle case is refused
+            // explicitly below rather than structurally, so it is diagnosable.
+            //
+            // A SEPARATE leg from the geometry apply above, not a shader hung
+            // off it: the apply's leg is deliberately degenerate (the tab
+            // appears in place) and a degenerate leg starts no animation, so
+            // applyWindowGeometry installs no shader at all. The cross-fade is
+            // not describing motion anyway — it is a discrete, time-driven
+            // content change over a rect that does not move, which is exactly
+            // what tryBeginShaderForEvent drives. Installed on the ARRIVING
+            // tab; the outgoing one is parked off-canvas by the end of this
+            // batch and painted by nothing.
+            if (!snap.tabFrom.isEmpty()) {
+                if (snap.isMonocle) {
+                    // No producer emits the pair today (monocle comes from
+                    // autotile, tabFrom from the scroll engine), but this
+                    // file's own mode-flip reasoning declines to call the two
+                    // provably disjoint — so the drop is logged rather than
+                    // structural-and-silent.
+                    qCDebug(lcEffect) << "tabSwap install: dropping monocle+tabFrom pair for" << snap.windowId;
+                } else if (snap.window->isUserMove() || snap.window->isUserResize()) {
+                    // Mid-drag, the geometry apply above DEFERRED its commit
+                    // to windowFinishUserMovedResized — installing the swap
+                    // now would play the cross-fade under the pointer against
+                    // a window still at its drag rect, and the seed's
+                    // identity map would miss (the frame is not at the
+                    // column). The deferred replay deliberately does not
+                    // re-install: by drag end the outgoing tab is parked and
+                    // re-folded, so the honest outcome is no cross-fade —
+                    // the same predicate the commanded-rect arm below uses.
+                    qCDebug(lcEffect) << "tabSwap install: skipped mid-drag for" << snap.windowId;
+                } else {
+                    // tabFrom is a WIRE id; every entry of this batch had its
+                    // own id re-keyed to the live one, and the outgoing tab
+                    // is by construction a sibling entry — so translate
+                    // through the batch's own wire→live map first. Exact
+                    // lookup after that, never the fuzzy appId fallback: this
+                    // is a paint hint, and a fuzzy match on a stale id would
+                    // cross-fade a same-app window that has nothing to do
+                    // with the swap. Unresolvable (closed between the emit
+                    // and here) simply means no cross-fade. Not defended
+                    // against: a tabFrom naming some OTHER window of this
+                    // batch that is arriving on screen rather than parking.
+                    // The engine cannot emit that shape (the pair is derived
+                    // from one column's hidden-flag flip), and a garbled hint
+                    // costs one wrong-source cross-fade, not a wrong
+                    // placement.
+                    const QString outgoingId = wireToLive.value(snap.tabFrom, snap.tabFrom);
+                    KWin::EffectWindow* const outgoing = m_effect->findWindowByIdExact(outgoingId);
+                    // Chain trace, DEBUG level (enable plasmazones.effect):
+                    // every link here fails SILENTLY on screen — the pack
+                    // still runs, it just cross-fades the arriving tab
+                    // against itself — so the trace is the only way to tell
+                    // which link broke.
+                    qCDebug(lcEffect) << "tabSwap install:" << snap.windowId << "replacing" << outgoingId << "resolved"
+                                      << (outgoing ? "yes" : "NO");
+                    if (outgoing && outgoing != snap.window && !outgoing->isDeleted()) {
+                        bool ownsLeg = false;
+                        m_effect->tryBeginShaderForEvent(
+                            snap.window, PhosphorAnimation::ProfilePaths::ScrollingTabSwitch,
+                            m_effect->animationDurationMs(), /*reverse=*/false, /*holdCloseGrab=*/false,
+                            /*holdAddedGrab=*/false, /*animateMinimized=*/false, &ownsLeg);
+                        // ownsLeg, not liveness: the resolve installs nothing
+                        // when the user picked "None", and findTransition
+                        // would then hand back whatever unrelated leg is live
+                        // and re-point ITS snapshot at a foreign window. For
+                        // THIS path ownsLeg also means FRESH: the tab install
+                        // defeats the same-effect short-circuit inside
+                        // tryBeginShaderForEvent (each swap supersedes a
+                        // same-pack leg — repeat switches and a focus leg
+                        // running the same pack both got stale snapshots and
+                        // a mid-progress clock before that).
+                        if (ownsLeg) {
+                            auto* st = m_effect->m_shaderManager.findTransition(snap.window);
+                            const bool hasCached = st && st->cached;
+                            if (st) {
+                                // Marks the leg as the swap so the activation
+                                // this very switch causes does not install a
+                                // focus leg over it — see
+                                // ShaderTransition::tabSwap. Set BEFORE the
+                                // snapshot request and outside its uOldWindow
+                                // gate: a pack that ignores the outgoing tab
+                                // still owns the swap's slot.
+                                st->tabSwap = true;
+                                // The capture is gated on the compiled pack
+                                // LINKING uOldWindow, like the drag-snap and
+                                // held-move requests. Seeded NOW,
+                                // synchronously: by the leg's first paint
+                                // frame the outgoing tab has been re-folded
+                                // at its park with the park's unwritten
+                                // backdrop baked into any frost pane (the
+                                // "goes opaque, then animates" artifact seen
+                                // live); inside this batch slot the composite
+                                // still holds the pre-switch column fold. See
+                                // seedTabSwapSnapshot.
+                                qCDebug(lcEffect) << "tabSwap leg installed, cached" << (hasCached ? "yes" : "NO")
+                                                  << "uOldWindow linked" << (hasCached ? st->cached->iOldWindowLoc : -1)
+                                                  << "existing snapshot" << (st->oldSnapshot ? "yes" : "no");
+                                if (hasCached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                                    m_effect->seedTabSwapSnapshot(*st, outgoing, snap.window);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The relocation hint for a self-fullscreened non-member is dropped
+            // in the visual-delta block above (fullscreenBailSkippedCommit
+            // selects its remove arm): the fullscreen bail commits nothing, and
+            // a park-to-strip translation on top of a full-output frame would
+            // drag the surface off the viewport. The float-out normally takes
+            // such a window out of the batch first; this covers the residue (a
+            // closed daemon gate, a batch racing the float). NOT extended to
+            // the user-move defer arm: the relocation is off for the whole
+            // drag and the deferred replay commits the park rect afterwards.
+
+            // A strip entry never takes the reactive centring pass, whatever KIND of entry it is. The split below
+            // only reaches its removal arm for a non-monocle Wayland entry, so a MONOCLE batch on a scrolling screen
+            // (routine during a mode flip, while m_scrollingScreens arrives on its own D-Bus signal) matches neither
+            // arm and keeps whatever its earlier autotile placement armed. Shedding both maps here, before the split,
+            // covers every kind: m_centeredWaylandZones goes with m_tileTargetZones because the same placement arms
+            // both, and it is the map the skipMoveResize short-circuit in the apply above reads, so a survivor there
+            // silently downgrades a strip resize to a move. Disjoint from the write arm below (that one runs only
+            // for a NON-scrolling screen), so this cannot delete an entry the autotile arm is about to install.
+            if (isScrollingScreen(snap.screenId)) {
+                dropCenteringTarget(snap.windowId);
+                // The rect the strip's commanded and offered rects are measured in (F815).
+                m_stripScreenRectAtBatch[snap.screenId] = stripScreenRect(snap.screenId);
+            }
+
+            if (!snap.isMonocle && snap.window->isWaylandClient()) {
+                // windowedFullscreen is excluded like monocle: KWin owns the
+                // committed frame during the fullscreen round-trip, and a
+                // stale centering target consumed against the ack's frame
+                // change would raw-moveResize the window to the column origin
+                // at full-output size, bypassing the fullscreen bail and
+                // reaping the animation. (The ack branch in
+                // slotWindowFullScreenChanged re-commits the column rect.)
+                //
+                // ORDER NOTE: the centring-target write below must stay AFTER
+                // the apply above. applyWindowGeometry drops the window's
+                // target and centred stamp before it commits (the
+                // dropCenteringTarget call), so a target written first would be
+                // erased by its own apply. The synchronous frame change the
+                // apply emits returns at the centring pass's inGeometryApply
+                // gate, so nothing reads the map mid-apply either.
+                if (isScrollingScreen(snap.screenId)) {
+                    // Two Wayland populations arm the counter-assert, which is
+                    // otherwise X11-only. The exclusion is about the X11
+                    // SELF-mover, a client repositioning itself through
+                    // ConfigureRequests, which no Wayland client can do; for
+                    // these two KWin itself is the mover. It re-runs its
+                    // maximize-area placement over a MaximizeFull column and
+                    // overwrites the column rect with the ungapped work area
+                    // (seen live on a cross-output move: the window sat at the
+                    // full output while its column stayed gapped). And on 6.8 it
+                    // pulls a column the strip placed outside its output (a
+                    // park, or a straddler cropped at the edge) back in until
+                    // its title bar shows, on a commit that acks or reshapes.
+                    //
+                    // The COMMANDED rect is recorded here rather than the
+                    // committed frame the X11 leg uses, because a Wayland
+                    // commit lands a round trip later and recording the frame
+                    // now would capture the pre-commit rect. That substitution
+                    // is safe because the rect recorded is the one this entry
+                    // actually DELIVERED, captured after the size-continuity
+                    // pass: the column rect for a maximized column, which the
+                    // pass excludes, and a carried size centred as it was sent.
+                    // Not armed mid-gesture, matching the X11 leg's deferred-commit predicate: countering a live
+                    // drag or resize would fight the user's hand. fullscreenBailSkippedCommit is the third term
+                    // for the reason the X11 leg and the sibling offered-column write carry it: the non-member
+                    // fullscreen bail commits NOTHING for this entry, so a rect recorded as commanded was never
+                    // offered, and the counter-assert would yank a self-fullscreened client back into its column
+                    // (3 per rolling second between batches, and every fresh batch command re-arms the pair).
+                    // The rect carries this apply's command stamp: the counter-assert acts only while it is
+                    // current (F71). Out of view is measured in the strip rect this batch recorded (F815).
+                    const QRect stripRect = m_stripScreenRectAtBatch.value(snap.screenId);
+                    const bool outOfView = stripRect.isValid() && !stripRect.contains(scrollDeliveredRect);
+                    if ((snap.isMaximizedToEdges || outOfView) && !snap.window->isUserMove()
+                        && !snap.window->isUserResize() && !fullscreenBailSkippedCommit
+                        && !scrollDeliveredRect.isNull()) {
+                        m_effect->m_scrollCommandedRects.insert(
+                            snap.windowId,
+                            {scrollDeliveredRect, 0, 0, m_effect->m_daemonGate.commandStamps.current(snap.window),
+                             outOfView, rectAtScrollPark(scrollDeliveredRect)});
+                    } else {
+                        // DISARM, the way the X11 and monocle arms both do.
+                        // This was the only one of the three that armed
+                        // without ever removing, and the entry it left is not
+                        // inert: externallyMovable reads ledger membership for
+                        // a Wayland window, and membership legitimately
+                        // outlives the maximize on the retain-on-fullscreen
+                        // arm — so a window that left fullscreen without
+                        // floating kept a stale full-column rect armed and got
+                        // yanked back to it on any frame change outside an
+                        // apply. Dropping the entry disarms the counter until
+                        // the next batch commands something.
+                        m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                    }
+                    // A STRIP entry never takes the reactive centring pass. That
+                    // autotile repair re-centres an undersized client and CLAMPS
+                    // it inside the output, while a strip column is routinely
+                    // parked off the viewport or straddling an edge to be cropped
+                    // (clamping it is the "slides around the edge" symptom), and
+                    // its moveResize would fight the strip's animation leg. The
+                    // entry was removed before this split, which also covers the
+                    // monocle and X11 entries that never get here.
+                } else if (!snap.isWindowedFullscreen) {
+                    // Armed only while an ack the pass is waiting for is coming.
+                    // A tile in the window's own fullscreen hold keeps it: the
+                    // restore rect seated above lands the exit on this tile, and
+                    // the entry centres it there if the client refuses it.
+                    // Otherwise only an apply that left a resize configure pending
+                    // arms it. A mid-gesture commit (its drag-end replay drops the
+                    // entry anyway), the redundant-apply skip and a same-size move
+                    // have no ack coming, and an entry left armed at rest would
+                    // centre whatever a later KWin-imposed resize or move produced
+                    // into this tile and latch it there.
+                    KWin::Window* kwRecord = snap.window->window();
+                    const QRectF framed = snap.window->frameGeometry();
+                    const bool ackPending = kwRecord && !snap.window->isUserMove() && !snap.window->isUserResize()
+                        && (qAbs(kwRecord->moveResizeGeometry().width() - framed.width()) > 1.0
+                            || qAbs(kwRecord->moveResizeGeometry().height() - framed.height()) > 1.0);
+                    if (fullscreenBailSkippedCommit || ackPending) {
+                        m_tileTargetZones[snap.windowId] = snap.geometry;
+                    } else {
+                        m_tileTargetZones.remove(snap.windowId);
+                    }
+                }
+            } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
+                // X11 leg of the reactive repair, deliberately NOT the
+                // Wayland centering machinery (which fights X11's synchronous
+                // configures — the ballooning hazard above): remember the
+                // rect the apply actually COMMITTED (not the requested batch
+                // rect) so slotWindowFrameGeometryChanged can counter an
+                // EXTERNAL move. The committed frame differs for
+                // size-increment clients (terminals), where applyWindowGeometry
+                // constrains and re-centres — storing the request would make
+                // the counter-assert misread every later frame event as an
+                // external move and burn its burst budget on no-ops forever.
+                //
+                // ONLY on the paths where the apply above committed
+                // synchronously: a mid-user-move apply DEFERS its commit to
+                // windowFinishUserMovedResized, and the non-member fullscreen
+                // bail commits nothing — capturing frameGeometry there would
+                // record the drag-time or pre-apply frame as "commanded" and
+                // have the counter yank the window back to it. Dropping the
+                // entry instead disarms the counter until the next batch.
+                // A fresh command resets the counter-assert burst budget and
+                // records this apply's command stamp (F71).
+                //
+                // The offered column is NOT dropped with it, by the rule the
+                // offer record above states: this batch wrote none (it delivers
+                // no offer when the commit is deferred or bailed), and the
+                // entry already there describes a column an earlier batch
+                // genuinely delivered. A deferred commit records its own when
+                // the replay sends it. Nothing reads an X11 answer while the
+                // counter is disarmed: with no commanded rect no size is one
+                // the strip decided (ScrollDecisions::x11SizeAnswersColumn).
+                const bool commitDeferredOrBailed =
+                    snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
+                if (commitDeferredOrBailed) {
+                    m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                } else {
+                    const QRect committed = snap.window->frameGeometry().toRect();
+                    const QRect stripRect = m_stripScreenRectAtBatch.value(snap.screenId);
+                    m_effect->m_scrollCommandedRects.insert(
+                        snap.windowId,
+                        {committed, 0, 0, m_effect->m_daemonGate.commandStamps.current(snap.window),
+                         stripRect.isValid() && !stripRect.contains(committed), rectAtScrollPark(committed)});
+                }
+            } else if (snap.isMonocle) {
+                // A monocle window is never counter-asserted — neither arm
+                // above records a commanded rect for it — so a surviving
+                // entry from an earlier scrolling batch would keep the
+                // counter armed against a rect the strip no longer owns,
+                // yanking the maximized window back (3 per rolling second
+                // between batches, and re-armed by each fresh command, so not
+                // bounded at 3/s across a batch storm). Mirrors the
+                // commitDeferredOrBailed remove above: dropping the entry is
+                // how this pipeline disarms the counter.
+                //
+                // Reachable despite monocle and scrolling looking disjoint:
+                // m_scrollingScreens arrives on its own D-Bus signal,
+                // independent of the batch, so during a mode flip a screen
+                // reads scrolling for a few ticks while monocle batches are
+                // still in flight.
+                m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                m_effect->m_scrollOfferedColumn.remove(snap.windowId);
+            }
+        },
+        onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());
+}
+
+} // namespace PlasmaZones

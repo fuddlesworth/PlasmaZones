@@ -1,0 +1,153 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+# phosphor-compositor
+
+> Compositor-plugin SDK for the Phosphor **placement** surface. Provides the
+> bridge interface, the typed D-Bus client for the tiling-side daemon
+> interfaces, and the state helpers a plugin needs so its users get
+> zone-based window management.
+
+## Responsibility
+
+Phosphor splits into a **daemon** (owns placement logic, zones, layouts,
+settings) and a **compositor plugin** (observes windows, applies geometry,
+renders overlays). This library is the plugin side of that split, for
+placement only.
+
+Scope is what a plugin needs to place windows: `DaemonClient` speaks the
+`WindowTracking`, `WindowDrag`, `Tiling`, `LayoutRegistry`, `Screen`,
+`Settings`, and `CompositorBridge` interfaces, and the helpers cover
+title-bar ownership, float and zone caches, trigger parsing, and
+scaling-safe rounding. Everything visual a plugin draws is its own: the
+overlay, decoration, and animation rendering in `kwin-effect/` is built on
+`phosphor-rendering` / `phosphor-shaders` / `phosphor-animation`, and none
+of it is wrapped here.
+
+A compositor plugin links `PhosphorCompositor`, implements
+`ICompositorBridge` (the interface mapping native window handles to the
+daemon's vocabulary), wires handler interfaces for callbacks, and lets
+`DaemonClient` carry the calls it wraps: bridge registration, the window
+opened, closed and activated notices and the focused window changing
+screen, the drag round trips, the cursor and primary screen notices, the
+floating, snapped, pending-restore and virtual-screen queries, the stale
+window prune, and the geometry, raise, activate, float and snap-assist
+signals it dispatches to the handlers. It is not a complete client: the
+daemon's other calls (window metadata, frame geometry, the `Snap`,
+`Scrolling` and `Control` interfaces among them) are the plugin's own
+D-Bus code. The KWin effect in this repository makes all of its D-Bus
+calls itself and does not use `DaemonClient`. The plugin never touches
+placement logic directly. The daemon decides *where*, and the plugin
+applies *how*.
+
+## Key types
+
+| Type | Purpose |
+|------|---------|
+| `ICompositorBridge` | Abstract interface a plugin implements for window lookup, identity, properties, filtering, actions |
+| `DaemonClient` | Typed D-Bus client handling registration, service watching, reconnection, method calls, signal dispatch |
+| `IDragHandler` | Callback interface for drag start/move/end/policy-change |
+| `IGeometryHandler` | Callback interface for geometry apply, batch operations, raise/activate |
+| `ILifecycleHandler` | Callback interface for window open/close/activate/float-change |
+| `BorderState` + `TilingStateHelpers` | Per-screen border-state value type plus pure helper functions |
+| `FloatingCache` | Compositor-side mirror of daemon float state |
+| `ZoneCache` | Compositor-side mirror of window-to-zone assignments |
+| `DecorationManager` | Single owner of server-side title-bar state (acquire/release, prior-state restore) |
+| `SnapAssistFilter` | Snap-assist candidate building via bridge |
+| `TriggerParser` | Modifier/button activation matching from config |
+| `DebouncedScreenAction` | Debounce utility for screen-change coalescing |
+| `GeometryHelpers` | Fractional-scaling-safe rounding |
+
+## Typical use
+
+```cpp
+#include <PhosphorCompositor/DaemonClient.h>
+#include <PhosphorCompositor/ICompositorBridge.h>
+#include <PhosphorCompositor/IGeometryHandler.h>
+
+class MyBridge : public PhosphorCompositor::ICompositorBridge { /* ... */ };
+
+class MyPlugin : public PhosphorCompositor::IGeometryHandler,
+                 public PhosphorCompositor::IDragHandler,
+                 public PhosphorCompositor::ILifecycleHandler
+{
+    PhosphorCompositor::DaemonClient m_client;
+    MyBridge m_bridge;
+
+    void init() {
+        m_client.setGeometryHandler(this);
+        m_client.setDragHandler(this);
+        m_client.setLifecycleHandler(this);
+
+        connect(&m_client, &PhosphorCompositor::DaemonClient::daemonReady,
+                this, [this]() {
+            m_client.registerBridge(QStringLiteral("river"), PhosphorProtocol::Service::ApiVersion,
+                                    {QStringLiteral("borderless"), QStringLiteral("animation")});
+        });
+        // Report nothing before this. The daemon admits window, drag and
+        // screen reports only from the registered bridge.
+        connect(&m_client, &PhosphorCompositor::DaemonClient::bridgeRegistered,
+                this, [this]() {
+            announceExistingWindows();
+        });
+    }
+
+    // IGeometryHandler
+    void onApplyGeometry(const PhosphorCompositor::GeometryRequest& req) override {
+        auto* window = m_bridge.findWindowById(req.windowId);
+        if (window) m_bridge.moveResize(window, req.geometry);
+    }
+    // ... other handlers
+};
+```
+
+## Existing adapters
+
+| Compositor | Adapter | Location |
+|------------|---------|----------|
+| KWin 6 | `KWinCompositorBridge` | `plasmazones/kwin-effect/compositor/compositorbridge.{h,cpp}` |
+| river | planned | — |
+
+## Architecture
+
+```
+Daemon (org.plasmazones D-Bus service)
+    ↕ D-Bus IPC
+DaemonClient (this library)
+    ↓ dispatches to
+IDragHandler / IGeometryHandler / ILifecycleHandler
+    ↓ implemented by
+Compositor Plugin
+    ↓ calls
+ICompositorBridge (plugin implements, wraps native window APIs)
+```
+
+The daemon always runs. The plugin is stateless with respect to placement.
+It applies what the daemon tells it and reports window events back.
+
+### Registration comes first
+
+The daemon admits the compositor's reports (window opens, closes and
+activations, the drag calls, the cursor and primary screen notices, the
+stale window prune) only from the bus name that registered the bridge, and
+answers every other caller with `AccessDenied`. A plugin must therefore wait
+for `bridgeRegistered` before it reports anything. `DaemonClient` refuses a
+report sent earlier and logs one warning, because a fire-and-forget call
+would never see the daemon's refusal. The queries are not gated.
+
+Only the compositor's own process may register. The daemon accepts a
+registration only from a bus connection owned by the process on the far end of
+its Wayland connection (or a direct child of it when that process is
+`kwin_wayland_wrapper`), and answers any other process with a `REJECTED`
+session, which `DaemonClient` reports as `bridgeRejected`. A bridge therefore
+has to run inside the compositor, not as a separate helper process.
+
+Only one bridge is registered at a time. While the registered bridge is still
+on the bus, a registration from another bus name gets a `REJECTED` session,
+which `DaemonClient` reports as `bridgeRejected`. The same name registering
+again, or any name once the old one has left the bus, is accepted.
+
+## Dependencies
+
+- `Qt6::Core`, `Qt6::Gui`, `Qt6::DBus`
+- [`phosphor-protocol`](../phosphor-protocol/README.md), [`phosphor-identity`](../phosphor-identity/README.md)

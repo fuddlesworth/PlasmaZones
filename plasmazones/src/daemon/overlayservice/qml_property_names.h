@@ -1,0 +1,119 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <QLatin1String>
+
+/**
+ * @file qml_property_names.h
+ * @brief Centralised QML dynamic-property name constants for the daemon
+ *        <-> overlay QML wiring.
+ *
+ * The daemon writes per-overlay state to QML windows via
+ * `writeQmlProperty(window, "<name>", value)` and the QML side mirrors
+ * those names in property bindings. C++ readers (settings hot-reload,
+ * shader filtering, idle handling, etc.) ALSO look these up by string
+ * via `window->property("<name>")`. A typo on either side silently
+ * fails — the QML side gets a dynamic null property, the C++ side reads
+ * the default-constructed QVariant — with no compile-time check.
+ *
+ * Hosting them here gives both sides a single source of truth: a typo
+ * in either the writer or a reader trips the build (or at least a
+ * failing test) instead of producing a runtime no-op.
+ *
+ * SCOPE, and this set is AD HOC rather than principled. THREE earlier versions
+ * of this paragraph each stated a membership rule and each was false, so it no
+ * longer states one. What can be said: it is NOT every property the daemon
+ * pushes, and it is NOT every property the daemon reads back — roughly a dozen
+ * more, `useShader` and `stripVerticalAxis` among them, are read back in C++ and
+ * still spelled inline at every site. Adding a name here is an improvement; the
+ * absence of one is a gap rather than a decision. The DecorationReloadGeneration
+ * and BackdropTexture notes below record why those two are here.
+ */
+namespace PlasmaZones {
+namespace OverlayQmlPropertyNames {
+
+/// True when the overlay should be hidden during a drag-pause
+/// (autotile drag-from-floating sequence). The QML root toggles
+/// opacity / visibility off this property.
+inline constexpr QLatin1String Idled{"_idled"};
+
+/// Per-overlay audio spectrum bins (QVariantList of floats in [0,1]).
+/// Pushed every 16 ms while audio-reactive shaders are active; QML
+/// shader bindings forward to the `iAudioSpectrum` UBO field.
+inline constexpr QLatin1String AudioSpectrum{"audioSpectrum"};
+
+/// Daemon-internal marker (leading underscore): true when a decoration
+/// slot's current chain carries an audio-reactive surface pack. Set by
+/// applyDecoration via setProperty and read by visibleAudioDecorationSlots
+/// + syncCavaState to gate CAVA and the audio-spectrum push. Not a QML
+/// binding — purely a C++-side flag on the slot QObject.
+inline constexpr QLatin1String WantsAudioDecoration{"_wantsAudioDecoration"};
+
+/// Per-overlay zone-rectangle list as QVariantList of QVariantMap
+/// snapshots (see ZoneSnapshotKeys in zoneshaderitem.cpp for the
+/// per-zone payload format).
+inline constexpr QLatin1String Zones{"zones"};
+
+/// Total zone count for the current layout. Mirrors the size of the
+/// Zones list so the QML side can avoid recomputing.
+inline constexpr QLatin1String ZoneCount{"zoneCount"};
+
+/// Number of highlighted zones in the current snapshot. Drives a
+/// "any zone selected" gate in QML for global glow / sound cues.
+inline constexpr QLatin1String HighlightedCount{"highlightedCount"};
+
+/// QUuid string of the single hovered zone, or empty when no zone
+/// is hovered. Read by per-zone hover-only update path (single-zone
+/// optimisation when only the hover state changed).
+inline constexpr QLatin1String HighlightedZoneId{"highlightedZoneId"};
+
+/// QVariantList of zone-id strings for batch highlight scenarios
+/// (e.g. zone-selector multi-select preview).
+inline constexpr QLatin1String HighlightedZoneIds{"highlightedZoneIds"};
+
+/// Sparse ZoneLabelTexture (glyph-tile) payload for the rendered zone labels.
+/// Bound to the shader's `iLabelsTexture` sampler. Redundant-rebuild dedupe is
+/// done C++-side via PerScreenOverlayState::labelsTextureHash, not on the QML side.
+inline constexpr QLatin1String LabelsTexture{"labelsTexture"};
+
+/// Corner radius (logical px) the surface decoration should round the card to.
+/// Published per-slot by the popup shell (a Kirigami-derived design radius) and
+/// read by applyDecoration, which injects it into every decoration pack that
+/// declares a cornerRadius so border and shadow corners coincide.
+inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
+
+/// Monotonic tick the daemon bumps on every committed shader-registry rescan.
+/// Each decorated slot forwards it to its SurfaceDecoration, whose stages call
+/// reloadShader() when it moves. That re-bakes the main stage and every buffer
+/// pass, and is the only thing that does so after an
+/// IN-PLACE edit of a pack's shader source, because the recomposed chain is then
+/// byte-identical and the stage rebinds the same URL.
+///
+/// It first shipped written straight to the slot as a literal, which is exactly the
+/// failure this file exists to prevent: no slot declared the name, writeQmlProperty
+/// fell through to setProperty, and the dynamic property it created had no NOTIFY,
+/// so nothing ever observed it.
+inline constexpr QLatin1String DecorationReloadGeneration{"decorationReloadGeneration"};
+
+/// The composed surface-decoration stage list (QVariantList of stage maps, one per
+/// resolved pack). Writing it is the LOAD TRIGGER on the QML side, so everything a
+/// stage reads on its first bake has to be in place before it.
+inline constexpr QLatin1String DecorationChain{"decorationChain"};
+
+/// Outer margin in logical px that the chain's largest paddingParam asks for. The
+/// QML host inflates the capture and shader items by it so an outer effect has real
+/// transparent room; 0 keeps the classic 1:1 geometry.
+inline constexpr QLatin1String DecorationOuterPadding{"decorationOuterPadding"};
+
+/// Desktop wallpaper stand-in for a needsBackdrop pack, which has no scene to sample
+/// on the daemon. Cleared on hide so a stale image cannot outlive the slot.
+///
+/// This is the name that PROVED this file's point: it was written with setProperty
+/// while no slot declared it, so it became a dead dynamic property and every
+/// needsBackdrop pack silently took its uHasBackdrop = 0 fallback.
+inline constexpr QLatin1String BackdropTexture{"backdropTexture"};
+
+} // namespace OverlayQmlPropertyNames
+} // namespace PlasmaZones

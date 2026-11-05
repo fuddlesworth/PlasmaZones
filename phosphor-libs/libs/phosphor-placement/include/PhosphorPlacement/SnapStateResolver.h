@@ -1,0 +1,98 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include "phosphorplacement_export.h"
+
+#include <PhosphorEngine/EngineTypes.h>
+
+#include <QList>
+#include <QString>
+
+#include <functional>
+#include <optional>
+
+namespace PhosphorSnapEngine {
+class SnapEngine;
+class SnapState;
+}
+
+namespace PhosphorPlacement {
+
+/// Seam onto the snap engine's per-(screen,desktop,activity) SnapState stores.
+/// The service no longer holds a single SnapState; instead the daemon injects
+/// resolvers so each windowId-keyed call reaches the state that owns the window
+/// (via the engine's reverse map) and each screen-carrying write reaches — and
+/// registers — the state for that screen. `globals` is the single holder of the
+/// still-global last-used-zone / user-snapped scalars, and `allStates`
+/// enumerates every store (including the global holder) for whole-store views.
+/// When unset (unit tests / early init) every resolver is empty and the facade
+/// degrades to the historical "no SnapState wired" no-op behaviour.
+struct SnapStateResolver
+{
+    /// Owning state for a window (reverse-map lookup). Non-null by
+    /// construction in every wiring, by one of two mechanisms: the
+    /// forwarding resolvers because SnapEngine::stateForWindow falls back
+    /// to the global holder rather than returning null, and setSnapState's
+    /// convenience resolver because it rejects a null state outright and
+    /// captures a non-null one. Two genuine null cases remain, and callers
+    /// must still guard: an UNSET resolver (see snapForWindow), and the
+    /// production resolver's QPointer arm once the engine is destroyed
+    /// while this service still holds the resolver (a real teardown order).
+    std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
+    /// Owning state for a window placed/acting on a screen: resolves the state
+    /// (creating it on first placement) AND records the reverse-map entry. A
+    /// pinned @p desktop (>= 1) names that desktop's store outright, re-homing a
+    /// window tracked on another screen (SnapEngine::stateForWindowOnScreen); 0
+    /// resolves the primary.
+    std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId, int desktop)>
+        forWindowOnScreen;
+    /// Owning state for a SCREEN's current (screen, desktop, activity) context,
+    /// independent of any window — resolves (creating on first use) the per-key
+    /// store a screen-scoped write (last-used-zone) targets. An empty screenId
+    /// resolves to the global holder.
+    std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
+    /// The global-scalar holder. Non-null by construction in every wiring
+    /// (SnapEngine::globalState() returns the ctor-constructed holder); the
+    /// same two null cases as @ref forWindow apply — an unset resolver, and
+    /// the production resolver's QPointer arm after engine destruction.
+    std::function<PhosphorSnapEngine::SnapState*()> globals;
+    /// Every store, including the global holder, for aggregate iteration.
+    /// CONTRACT: the returned list never contains a null element. An unset
+    /// resolver yields an empty list rather than a list of nulls, and both
+    /// wirings filter (SnapEngine::allSnapStates() skips nulls; the
+    /// single-store convenience wiring rejects a null state outright). Every
+    /// caller dereferences the elements unguarded, so a resolver that
+    /// breaks this crashes them all.
+    std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
+    /// Drop a window's memberships and its data in every member store (window
+    /// closed / fully removed).
+    std::function<void(const QString& windowId)> forgetWindow;
+    /// Whether @p state holds a MEMBERSHIP for the window, as opposed to a
+    /// leftover. A window present on several desktops is a member of one
+    /// store per desktop; the aggregate walks use this to visit each of those
+    /// and skip the rest. Unset reads as "only the primary store is a member",
+    /// the single-membership answer.
+    std::function<bool(const QString& windowId, const PhosphorSnapEngine::SnapState* state)> holdsWindow;
+    /// The (screen, desktop, activity) key @p state is filed under; nullopt for
+    /// the global holder, an unknown store or an unwired resolver.
+    std::function<std::optional<PhosphorEngine::PlacementStateKey>(const PhosphorSnapEngine::SnapState* state)> keyFor;
+    /// Re-file every membership on a monitor under the key for the screen its
+    /// store records (SnapEngine::rekeyMembershipsToRecordedScreens). The
+    /// virtual-screen migrations call it after rewriting the screen values and
+    /// before their prune. Unset (the single-store convenience) is a no-op: one
+    /// store has no key to move.
+    std::function<void(const QString& physicalScreenId)> rekeyToRecordedScreens;
+    /// Re-file every membership filed on the monitor @p oldPhysicalId (its virtual
+    /// screens included) under @p newPhysicalId, after the screen manager flipped an
+    /// EDID twin's identifier (WindowTrackingService::renameScreen, F189). Unset is
+    /// a no-op, leaving the stores under the old id. Appended last (abi_policy).
+    std::function<void(const QString& oldPhysicalId, const QString& newPhysicalId)> renameScreen;
+};
+
+/// The full resolver over @p engine's stores, every member wired. Each one
+/// holds the engine by QPointer and answers the unwired value once it is gone.
+PHOSPHORPLACEMENT_EXPORT SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine);
+
+} // namespace PhosphorPlacement

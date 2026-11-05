@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt — every entry here needs
+# to be resolvable by find_package consumers so the exported targets
+# file can wire transitively.
+find_dependency(Qt6 @PHOSPHORENGINE_QT_MIN@ COMPONENTS Core Gui)
+find_dependency(PhosphorGeometry)
+find_dependency(PhosphorLayoutApi)
+find_dependency(PhosphorProtocol)
+# PUBLIC for the reason CMakeLists.txt states at the link line: WindowPlacement.h
+# resolves virtual screen ids through VirtualScreenId::samePhysical. Omitting it
+# made find_package(PhosphorEngine) FAIL outright on an installed system, since
+# the exported targets file references PhosphorIdentity::PhosphorIdentity.
+find_dependency(PhosphorIdentity)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorEngineTargets.cmake")
+
+check_required_components(PhosphorEngine)

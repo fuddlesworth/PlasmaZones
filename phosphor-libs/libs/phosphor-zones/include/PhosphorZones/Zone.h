@@ -1,0 +1,325 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorZones/ZoneDefaults.h>
+#include <phosphorzones_export.h>
+#include <QObject>
+#include <QRect>
+#include <QUuid>
+#include <QString>
+#include <QColor>
+#include <QJsonObject>
+
+namespace PhosphorZones {
+
+/**
+ * @brief Geometry mode for individual zones.
+ *
+ * Relative: 0.0–1.0 normalized coordinates (default, resolution-independent).
+ * Fixed:    Pixel coordinates relative to the reference screen origin, in the
+ *           unit the owning layout names: logical pixels by default, or the
+ *           output's device pixels when Layout::fixedGeometryInDevicePixels()
+ *           is on (divided by the output's scale when resolved).
+ *
+ * Owned by phosphor-zones because it's a per-zone shape; the former
+ * Phosphor-side using-alias in src/core/ was removed when the decoupling
+ * sweep landed — all callers now reference @c PhosphorZones::ZoneGeometryMode
+ * directly.
+ */
+enum class ZoneGeometryMode {
+    Relative = 0,
+    Fixed = 1
+};
+
+/**
+ * @brief Represents a single zone within a layout
+ *
+ * A zone is a rectangular area on the screen where windows can be snapped.
+ * Zones support custom colors, names, and keyboard shortcuts for ricer-friendly
+ * customization.
+ *
+ * Note: Zone inherits from QObject and follows Qt's object model.
+ * QObjects should NOT be copied - use clone() to create duplicates.
+ */
+class PHOSPHORZONES_EXPORT Zone : public QObject
+{
+    Q_OBJECT
+
+    Q_PROPERTY(QUuid id READ id CONSTANT)
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QRectF geometry READ geometry WRITE setGeometry NOTIFY geometryChanged)
+    Q_PROPERTY(QRectF relativeGeometry READ relativeGeometry WRITE setRelativeGeometry NOTIFY relativeGeometryChanged)
+    Q_PROPERTY(int zoneNumber READ zoneNumber WRITE setZoneNumber NOTIFY zoneNumberChanged)
+    Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
+    Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
+    Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
+    Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
+    Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
+    Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
+    Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
+    Q_PROPERTY(bool isHighlighted READ isHighlighted WRITE setHighlighted NOTIFY highlightedChanged)
+    Q_PROPERTY(bool useCustomColors READ useCustomColors WRITE setUseCustomColors NOTIFY useCustomColorsChanged)
+    Q_PROPERTY(
+        int overlayDisplayMode READ overlayDisplayMode WRITE setOverlayDisplayMode NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(int geometryMode READ geometryModeInt WRITE setGeometryModeInt NOTIFY geometryModeChanged)
+    Q_PROPERTY(QRectF fixedGeometry READ fixedGeometry WRITE setFixedGeometry NOTIFY fixedGeometryChanged)
+
+public:
+    explicit Zone(QObject* parent = nullptr);
+    explicit Zone(const QRectF& geometry, QObject* parent = nullptr);
+    ~Zone() override = default;
+
+    // QObjects should not be copied - use clone() instead
+    Zone(const Zone&) = delete;
+    Zone& operator=(const Zone&) = delete;
+
+    /**
+     * @brief Creates a copy of this zone with a new unique ID
+     * @param parent Parent object for the new zone
+     * @return New Zone instance with copied properties but new ID
+     */
+    Q_INVOKABLE Zone* clone(QObject* parent = nullptr) const;
+
+    /**
+     * @brief Copies properties from another zone (excluding ID)
+     * @param other Source zone to copy from
+     */
+    void copyPropertiesFrom(const Zone& other);
+
+    // Identification
+    QUuid id() const
+    {
+        return m_id;
+    }
+    QString name() const
+    {
+        return m_name;
+    }
+    void setName(const QString& name);
+
+    // Geometry (absolute pixel coordinates)
+    QRectF geometry() const
+    {
+        return m_geometry;
+    }
+    void setGeometry(const QRectF& geometry);
+
+    // Relative geometry (0.0-1.0 normalized coordinates for resolution independence)
+    QRectF relativeGeometry() const
+    {
+        return m_relativeGeometry;
+    }
+    void setRelativeGeometry(const QRectF& relativeGeometry);
+
+    // Zone numbering for keyboard navigation
+    int zoneNumber() const
+    {
+        return m_zoneNumber;
+    }
+    void setZoneNumber(int number);
+
+    // Ricer-friendly appearance customization
+    QColor highlightColor() const
+    {
+        return m_highlightColor;
+    }
+    void setHighlightColor(const QColor& color);
+
+    QColor inactiveColor() const
+    {
+        return m_inactiveColor;
+    }
+    void setInactiveColor(const QColor& color);
+
+    QColor borderColor() const
+    {
+        return m_borderColor;
+    }
+    void setBorderColor(const QColor& color);
+
+    qreal activeOpacity() const
+    {
+        return m_activeOpacity;
+    }
+    void setActiveOpacity(qreal opacity);
+
+    qreal inactiveOpacity() const
+    {
+        return m_inactiveOpacity;
+    }
+    void setInactiveOpacity(qreal opacity);
+
+    int borderWidth() const
+    {
+        return m_borderWidth;
+    }
+    void setBorderWidth(int width);
+
+    int borderRadius() const
+    {
+        return m_borderRadius;
+    }
+    void setBorderRadius(int radius);
+
+    bool isHighlighted() const
+    {
+        return m_isHighlighted;
+    }
+    void setHighlighted(bool highlighted);
+
+    bool useCustomColors() const
+    {
+        return m_useCustomColors;
+    }
+    void setUseCustomColors(bool useCustom);
+
+    int overlayDisplayMode() const
+    {
+        return m_overlayDisplayMode;
+    }
+    void setOverlayDisplayMode(int mode);
+
+    // Per-zone geometry mode
+    ZoneGeometryMode geometryMode() const
+    {
+        return m_geometryMode;
+    }
+    int geometryModeInt() const
+    {
+        return static_cast<int>(m_geometryMode);
+    }
+    bool isFixedGeometry() const
+    {
+        return m_geometryMode == ZoneGeometryMode::Fixed;
+    }
+    void setGeometryMode(ZoneGeometryMode mode);
+    void setGeometryModeInt(int mode);
+
+    QRectF fixedGeometry() const
+    {
+        return m_fixedGeometry;
+    }
+    void setFixedGeometry(const QRectF& geometry);
+
+    /**
+     * @brief Normalize a fixedGeometry payload arriving from an untrusted boundary.
+     *
+     * X/Y are pixel offsets from the screen origin and MAY be negative —
+     * computeAbsoluteGeometry adds them to the origin verbatim, so a negative
+     * offset legitimately places a zone off-screen. Width/height are extents
+     * and cannot be negative. A non-finite value has no meaningful clamp (it
+     * poisons every later comparison and serializes as JSON null) so it drops
+     * to 0, which lands the rect in the degenerate bucket below.
+     *
+     * The result is empty (QRectF::isEmpty) when the payload cannot describe a
+     * zone that renders. Callers must treat that as "no usable fixed payload"
+     * and fall back to Relative rather than storing it: a zero-extent fixed
+     * zone normalizes to a zero-extent relativeGeometry, which the layout
+     * schema rejects with exclusiveMinimum 0 — and it rejects the WHOLE layout,
+     * so storing one turns the next save into a file the loader drops.
+     *
+     * Called from Zone::fromJson only. Every ingress that accepts the key
+     * builds its zones through fromJson (the layout file loader, and
+     * LayoutAdaptor::updateLayout for D-Bus), so they cannot drift apart. A
+     * new ingress that builds zones another way must call this itself.
+     */
+    static QRectF sanitizeFixedGeometry(const QRectF& geometry);
+
+    /**
+     * @brief Returns normalized 0-1 coordinates regardless of geometry mode
+     * @param referenceGeometry The screen geometry to normalize against
+     * @return Normalized coordinates for spatial queries
+     *
+     * For Relative mode: returns relativeGeometry() directly.
+     * For Fixed mode: converts fixedGeometry pixel coords to 0-1 relative to referenceGeometry dimensions.
+     *
+     * @p screenScale is the logical scale of the output @p referenceGeometry
+     * belongs to. A zone whose layout counts fixed geometry in device pixels
+     * divides by it first (Layout::fixedGeometryDivisor). Zero, the default,
+     * takes the scale the layout was last recalculated at.
+     */
+    Q_INVOKABLE QRectF normalizedGeometry(const QRectF& referenceGeometry, qreal screenScale = 0.0) const;
+
+    // Geometry calculations
+    Q_INVOKABLE bool containsPoint(const QPointF& point) const;
+    Q_INVOKABLE qreal distanceToPoint(const QPointF& point) const;
+    /// @p screenScale as normalizedGeometry() takes it.
+    Q_INVOKABLE QRectF calculateAbsoluteGeometry(const QRectF& screenGeometry, qreal screenScale = 0.0) const;
+
+    /// What this zone's fixed geometry is divided by on an output of logical
+    /// scale @p screenScale: its layout's Layout::fixedGeometryDivisor, with a
+    /// zero scale read as the layout's last recalculation scale, and 1.0 for a
+    /// zone with no layout. Note the zero case differs from the Layout
+    /// function, which reads a zero scale as "no scale" and answers 1.0.
+    qreal fixedGeometryDivisor(qreal screenScale) const;
+
+    /// @p fixedGeometry in logical units: every component divided by
+    /// @p divisor, a non-positive one reading as 1.0. The one place the
+    /// division is written, shared by the absolute, normalized, bounding-box
+    /// and gap-edge readers and by the shell's placement-map parser
+    /// (PhosphorShell::PlacementMapParser::parseSnappingLayout) so none of
+    /// them can resolve the unit differently.
+    static QRectF fixedGeometryToLogical(const QRectF& fixedGeometry, qreal divisor);
+
+    /**
+     * @brief Pure helper shared between Zone::calculateAbsoluteGeometry and
+     *        LayoutWorker (which runs off-thread and cannot touch QObjects).
+     *
+     * Fixed mode: pixel coords relative to screen origin, divided by
+     * @p fixedDivisor (the output's scale for a layout that counts device
+     * pixels, else 1.0).
+     * Relative mode: 0..1 coords multiplied by screen dimensions.
+     */
+    static QRectF computeAbsoluteGeometry(ZoneGeometryMode mode, const QRectF& relativeGeometry,
+                                          const QRectF& fixedGeometry, const QRectF& screenGeometry,
+                                          qreal fixedDivisor = 1.0);
+
+    // Serialization
+    QJsonObject toJson(const QRectF& referenceGeometry = QRectF()) const;
+    static Zone* fromJson(const QJsonObject& json, QObject* parent = nullptr);
+
+Q_SIGNALS:
+    void nameChanged();
+    void geometryChanged();
+    void relativeGeometryChanged();
+    void zoneNumberChanged();
+    void highlightColorChanged();
+    void inactiveColorChanged();
+    void borderColorChanged();
+    void activeOpacityChanged();
+    void inactiveOpacityChanged();
+    void borderWidthChanged();
+    void borderRadiusChanged();
+    void highlightedChanged();
+    void useCustomColorsChanged();
+    void overlayDisplayModeChanged();
+    void geometryModeChanged();
+    void fixedGeometryChanged();
+
+private:
+    QUuid m_id;
+    QString m_name;
+    QRectF m_geometry;
+    QRectF m_relativeGeometry;
+    int m_zoneNumber = 0;
+
+    // Appearance (ricer-friendly) — defaults sourced from PhosphorZones::ZoneDefaults.
+    QColor m_highlightColor = ::PhosphorZones::ZoneDefaults::HighlightColor;
+    QColor m_inactiveColor = ::PhosphorZones::ZoneDefaults::InactiveColor;
+    QColor m_borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
+    qreal m_activeOpacity = ::PhosphorZones::ZoneDefaults::Opacity;
+    qreal m_inactiveOpacity = ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+    int m_borderWidth = ::PhosphorZones::ZoneDefaults::BorderWidth;
+    int m_borderRadius = ::PhosphorZones::ZoneDefaults::BorderRadius;
+    bool m_isHighlighted = false;
+    bool m_useCustomColors = false;
+    int m_overlayDisplayMode = -1; // -1 = use layout/global setting
+
+    // Per-zone geometry mode
+    ZoneGeometryMode m_geometryMode = ZoneGeometryMode::Relative;
+    QRectF m_fixedGeometry; // Pixel coords relative to screen origin, in the layout's fixed unit
+};
+
+} // namespace PhosphorZones

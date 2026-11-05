@@ -40,29 +40,51 @@ echo "Updating $PKGBUILD to version $VERSION-$PKGREL"
 sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
 
 # Update the package hash. Anchored on the sha256sums=(...) array rather
-# than on a bare hash-shaped line, and it collapses the array to the single
-# entry the source= array carries, so a stale second hash can't survive. Same
-# rewrite the release workflow's AUR publish steps use — keep the two in step.
-# The previous sed pair dropped the array's closing paren on the single-line
-# form, leaving a PKGBUILD that makepkg could not source at all.
+# than on a bare hash-shaped line, and it rewrites only the FIRST entry, which
+# is the release tarball's (source[0]). The source PKGBUILDs list the pinned
+# dependency archives after it, each with its literal hash that
+# check-conventions.py holds to cmake/PhosphorDependencies.cmake, so those
+# entries pass through untouched. Same rewrite the release workflow's AUR
+# publish steps use, so keep the two in step. The previous sed pair dropped the
+# array's closing paren on the single-line form, leaving a PKGBUILD that makepkg
+# could not source at all.
+#
+# Two separate commands, not `awk ... && mv ...`: under `set -e` a failure on
+# the left of && does not stop the script, so a PKGBUILD the rewrite could not
+# parse went on to the pkgrel bump and the .SRCINFO step with its old hash.
 awk -v sum="$SHA256" '
-  # Single-line form: sha256sums=(<hash>) — replace inline.
-  /^sha256sums=\(.*\)$/ {
+  # Single-line form with one entry: sha256sums=(<hash>), replaced inline.
+  !done && /^sha256sums=\(\047[^\047]*\047\)$/ {
     print "sha256sums=(\047" sum "\047)"
+    done = 1
     next
   }
-  # Multi-line form: opening `sha256sums=(` alone, entries, then `)` alone.
-  /^sha256sums=\(/ {
-    print "sha256sums=("
+  # Multi-line form: `sha256sums=(` alone, one entry per line, `)` alone.
+  # Only the first entry is rewritten.
+  !done && /^sha256sums=\($/ { in_block = 1; print; next }
+  in_block && /^\)/ { in_block = 0; print; next }
+  in_block && !done && /^[[:space:]]*\047[^\047]*\047[[:space:]]*(#.*)?$/ {
     print "    \047" sum "\047"
-    print ")"
-    in_block = 1
+    done = 1
     next
   }
-  in_block && /^\)/ { in_block = 0; next }
-  in_block { next }
   { print }
-' "$PKGBUILD" > "$PKGBUILD.new" && mv "$PKGBUILD.new" "$PKGBUILD"
+  END {
+    if (!done) {
+      print "sha256sums: no first entry found to rewrite" > "/dev/stderr"
+      exit 1
+    }
+  }
+' "$PKGBUILD" > "$PKGBUILD.new"
+mv "$PKGBUILD.new" "$PKGBUILD"
+
+# Every source needs its own hash, or makepkg refuses the PKGBUILD. Sourced in
+# a subshell: a PKGBUILD's top level is assignments only.
+# shellcheck disable=SC1090
+if ! (source "$PKGBUILD" && [[ ${#source[@]} -eq ${#sha256sums[@]} && "${sha256sums[0]}" == "$SHA256" ]]); then
+    echo "Error: $PKGBUILD has a sha256sums array that does not match its source array after the rewrite" >&2
+    exit 1
+fi
 
 sed -i "s/^pkgrel=.*/pkgrel=$PKGREL/" "$PKGBUILD"
 
@@ -83,7 +105,11 @@ grep -E "^(pkgver|pkgrel|_release|sha256sums)" "$PKGBUILD" | head -6
 # Generate .SRCINFO
 if command -v makepkg &> /dev/null; then
     echo "Generating .SRCINFO..."
-    makepkg --printsrcinfo > .SRCINFO
+    # -p, because every other step honours "$PKGBUILD" and a bare makepkg
+    # reads ./PKGBUILD. Called as documented with PKGBUILD.bin or
+    # PKGBUILD.git, this generated .SRCINFO from a different file, or
+    # errored under set -e with .SRCINFO already truncated by the >.
+    makepkg -p "$PKGBUILD" --printsrcinfo > .SRCINFO
     echo "Done!"
 else
     echo "Warning: makepkg not found, .SRCINFO not generated"

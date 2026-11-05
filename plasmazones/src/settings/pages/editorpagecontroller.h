@@ -1,0 +1,144 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <PhosphorControl/PageController.h>
+#include <QObject>
+#include <QString>
+
+namespace PlasmaZones {
+
+class ISettings;
+
+/// Q_PROPERTY surface for the "Editor" settings page.
+///
+/// Exposed to QML as a child of SettingsController via
+/// `Q_PROPERTY(EditorPageController* editorPage ... CONSTANT)`, so bindings
+/// read `settingsController.editorPage.duplicateShortcut` etc. All state
+/// lives on the shared Settings instance — this class is a thin Q_PROPERTY
+/// facade that delegates reads/writes and forwards NOTIFY signals.
+///
+/// Dirty tracking: each property emits a local NOTIFY (for QML) AND the
+/// generic `changed()` signal, which SettingsController connects to
+/// `onSettingsPropertyChanged()` so edits flip the needsSave flag on the
+/// owning page. The Settings class does not expose Q_PROPERTY for the
+/// Editor.* groups, so SettingsController's meta-object-loop dirty wiring
+/// skips it; this forwarder replaces the explicit connect() list that used
+/// to sit in SettingsController's constructor.
+class EditorPageController : public PhosphorControl::PageController
+{
+    Q_OBJECT
+
+    // Editor keyboard shortcuts
+    Q_PROPERTY(
+        QString duplicateShortcut READ duplicateShortcut WRITE setDuplicateShortcut NOTIFY duplicateShortcutChanged)
+    Q_PROPERTY(QString splitHorizontalShortcut READ splitHorizontalShortcut WRITE setSplitHorizontalShortcut NOTIFY
+                   splitHorizontalShortcutChanged)
+    Q_PROPERTY(QString splitVerticalShortcut READ splitVerticalShortcut WRITE setSplitVerticalShortcut NOTIFY
+                   splitVerticalShortcutChanged)
+    Q_PROPERTY(QString fillShortcut READ fillShortcut WRITE setFillShortcut NOTIFY fillShortcutChanged)
+
+    // Editor canvas snapping
+    Q_PROPERTY(bool gridSnappingEnabled READ gridSnappingEnabled WRITE setGridSnappingEnabled NOTIFY
+                   gridSnappingEnabledChanged)
+    Q_PROPERTY(bool edgeSnappingEnabled READ edgeSnappingEnabled WRITE setEdgeSnappingEnabled NOTIFY
+                   edgeSnappingEnabledChanged)
+    Q_PROPERTY(qreal snapIntervalX READ snapIntervalX WRITE setSnapIntervalX NOTIFY snapIntervalXChanged)
+    Q_PROPERTY(qreal snapIntervalY READ snapIntervalY WRITE setSnapIntervalY NOTIFY snapIntervalYChanged)
+    Q_PROPERTY(int snapOverrideModifier READ snapOverrideModifier WRITE setSnapOverrideModifier NOTIFY
+                   snapOverrideModifierChanged)
+
+    // Fill-on-drop (lives on the Editor page UI; stored in Editor.FillOnDrop)
+    Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
+    Q_PROPERTY(
+        int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
+
+    // Editor canvas veil
+    Q_PROPERTY(
+        qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
+
+    // Slider bounds, the same ConfigDefaults ranges the schema clamps the
+    // stored values to, so the page cannot drift from them.
+    Q_PROPERTY(qreal snapIntervalMin READ snapIntervalMin CONSTANT)
+    Q_PROPERTY(qreal snapIntervalMax READ snapIntervalMax CONSTANT)
+    Q_PROPERTY(qreal backgroundOpacityMin READ backgroundOpacityMin CONSTANT)
+    Q_PROPERTY(qreal backgroundOpacityMax READ backgroundOpacityMax CONSTANT)
+
+public:
+    /// Reference parameter, not pointer: the Settings instance is required
+    /// for every method on this controller and must not be null. Taking it
+    /// by reference makes the precondition a compile-time guarantee instead
+    /// of a Q_ASSERT that compiles away in release builds.
+    explicit EditorPageController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
+
+    QString duplicateShortcut() const;
+    QString splitHorizontalShortcut() const;
+    QString splitVerticalShortcut() const;
+    QString fillShortcut() const;
+    bool gridSnappingEnabled() const;
+    bool edgeSnappingEnabled() const;
+    qreal snapIntervalX() const;
+    qreal snapIntervalY() const;
+    int snapOverrideModifier() const;
+    bool fillOnDropEnabled() const;
+    int fillOnDropModifier() const;
+    qreal backgroundOpacity() const;
+    qreal snapIntervalMin() const;
+    qreal snapIntervalMax() const;
+    qreal backgroundOpacityMin() const;
+    qreal backgroundOpacityMax() const;
+
+    void setDuplicateShortcut(const QString& shortcut);
+    void setSplitHorizontalShortcut(const QString& shortcut);
+    void setSplitVerticalShortcut(const QString& shortcut);
+    void setFillShortcut(const QString& shortcut);
+    void setGridSnappingEnabled(bool enabled);
+    void setEdgeSnappingEnabled(bool enabled);
+    void setSnapIntervalX(qreal interval);
+    void setSnapIntervalY(qreal interval);
+    void setSnapOverrideModifier(int mod);
+    void setFillOnDropEnabled(bool enabled);
+    void setFillOnDropModifier(int mod);
+    void setBackgroundOpacity(qreal opacity);
+
+    /// Restore the four editor shortcuts to their ConfigDefaults values. The
+    /// page's other settings are left alone: this backs the Keyboard Shortcuts
+    /// card's own reset row, and the page-wide Reset goes through the page
+    /// manifest instead.
+    Q_INVOKABLE void resetShortcutDefaults();
+
+Q_SIGNALS:
+    void duplicateShortcutChanged();
+    void splitHorizontalShortcutChanged();
+    void splitVerticalShortcutChanged();
+    void fillShortcutChanged();
+    void gridSnappingEnabledChanged();
+    void edgeSnappingEnabledChanged();
+    void snapIntervalXChanged();
+    void snapIntervalYChanged();
+    void snapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
+    void backgroundOpacityChanged();
+
+    /// Generic "something changed" — SettingsController hooks this to its
+    /// dirty-tracking slot. Emitted alongside every per-property NOTIFY.
+    void changed();
+
+private:
+    ISettings* m_settings = nullptr;
+};
+
+} // namespace PlasmaZones

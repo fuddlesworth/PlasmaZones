@@ -1,0 +1,46 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorGeometry/GeometryUtils.h>
+#include <phosphorengine_export.h>
+
+#include <QRect>
+#include <QString>
+#include <QVector>
+
+namespace PhosphorEngine {
+namespace GeometryUtils {
+
+using PhosphorGeometry::availableAreaToOverlayCoordinates;
+using PhosphorGeometry::clampZonesToScreen;
+using PhosphorGeometry::enforceMinSizes;
+using PhosphorGeometry::rectToJson;
+using PhosphorGeometry::removeRectOverlaps;
+using PhosphorGeometry::snapToRect;
+
+PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
+
+/// Parse the wire format serializeZoneAssignments produces back into entries —
+/// the two functions are the single serializer/deserializer pair for the batch
+/// resnap payload, sharing the same JsonKeys constants so the sides cannot
+/// drift. Entries missing a windowId or targetZoneId are dropped, and so is one
+/// whose TargetZoneIds span holds an empty member or does not start with its
+/// targetZoneId; a missing
+/// VirtualDesktop key (or a negative wire value) yields 0, the current-desktop
+/// default. On malformed JSON returns an empty vector and, when @p errorString
+/// is non-null, stores a human-readable parse diagnostic there (empty on
+/// success — an empty RESULT with an empty errorString is a legitimate empty
+/// batch).
+PHOSPHORENGINE_EXPORT QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json,
+                                                                              QString* errorString = nullptr);
+
+/// @p rect carried from @p fromArea onto @p toArea: its position kept relative
+/// to the area, its size shrunk only where @p toArea is smaller, then clamped
+/// so the whole rect fits. An invalid @p fromArea starts at @p toArea's top-left.
+PHOSPHORENGINE_EXPORT QRect carryRectOntoArea(const QRect& rect, const QRect& fromArea, const QRect& toArea);
+
+} // namespace GeometryUtils
+} // namespace PhosphorEngine

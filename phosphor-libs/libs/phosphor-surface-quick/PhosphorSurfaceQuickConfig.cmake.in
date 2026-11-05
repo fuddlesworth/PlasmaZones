@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Pin Qt to the library's build minimum; the public header includes
+# <qqmlregistration.h> and derives from a Qt Quick item, so Qml and Quick are
+# PUBLIC link dependencies.
+find_dependency(Qt6 6.10 COMPONENTS Core Gui Qml Quick)
+
+# PUBLIC link dependencies: SurfaceShaderItem derives from
+# PhosphorRendering::ShaderEffect and names PhosphorRendering::ShaderNodeRhi
+# in its interface, and the node is created with a PhosphorSurface uniform
+# profile.
+find_dependency(PhosphorRendering 0.1.0)
+find_dependency(PhosphorSurface 0.1.0)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorSurfaceQuickTargets.cmake")
+
+# The org.phosphor.surface QML module is a STATIC target inside the source
+# tree and is not exported. An out-of-tree QML consumer needs the SHARED
+# variant installed (PHOSPHOR_SURFACE_QUICK_QML_INSTALL=ON) on its QML
+# import path instead.
+
+check_required_components(PhosphorSurfaceQuick)

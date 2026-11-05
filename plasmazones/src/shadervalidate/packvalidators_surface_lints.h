@@ -1,0 +1,61 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The surface arm's metadata-lint collector, split out of packvalidator_surface.cpp when
+// that file reached the 1150-line ceiling. Its own header rather than an entry in
+// packvalidators.h, because that header declares the four per-model ENTRY POINTS that
+// main.cpp dispatches to and this is an internal helper of one of them.
+
+#pragma once
+
+#include <QStringList>
+
+class QJsonObject;
+class QString;
+
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderEffect;
+}
+
+namespace PlasmaZones::ShaderValidate {
+
+/// Everything wrong with a surface pack's metadata.json that is decidable WITHOUT
+/// compiling a stage, as one human-readable line per problem.
+///
+/// Reads @p meta, @p eff, @p packDir AND THE FILESYSTEM. It writes to no stream, counts no
+/// errors and mutates none of its arguments, and that is what makes the split a seam rather
+/// than a cut — see the file comment. It is not otherwise pure, and two earlier versions of
+/// this line understated how far from pure: the first called it pure outright, the second
+/// listed only half the I/O. The full list is that it stats texture, preview, fragment,
+/// vertex, BUFFER-SHADER and undeclared-sibling-surface.vert paths; canonicalises the pack
+/// directory, the resolved builtin path, every shared root, and — through confinedPackPath —
+/// the deepest EXISTING ancestor of every declared relative path, with an isSymLink() probe per
+/// component of that chain; resolves builtin buffer tokens through the registry, which probes
+/// QStandardPaths; and probes QStandardPaths directly of its own accord through
+/// packSharedRoots. Its answer therefore depends on what is installed on the machine, which is
+/// exactly what one of its own lints reports. Do not memoise or reorder it on the strength of
+/// a purity claim.
+///
+/// @p eff must already have had its paths confined to the pack directory. The caller does
+/// that before calling, and refuses the pack outright on an escape, so a path reaching a
+/// lint here is one it is safe to have resolved.
+QStringList surfaceMetadataLints(const QJsonObject& meta, const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                 const QString& packDir);
+
+/// Everything wrong with a surface pack's MULTIPASS declaration, on the same terms: one
+/// human-readable line per problem, no stream, no error count, no mutation of its arguments.
+///
+/// Called by surfaceMetadataLints rather than by the orchestrator, so the two lists interleave
+/// in declaration order and a report reads as it did before the two were separate files. The
+/// seam is described in packvalidator_surface_buffer_lints.cpp; the short version is that this
+/// half owns the buffer-shader list, the per-pass wrap/filter/scale arrays, the builtin blur
+/// chain's positional contract, the backdrop flag, the radius slot, feedback, half-float
+/// buffers and the depth pairing, and shares no local with the other half.
+///
+/// Reads the filesystem for the same reasons its sibling does: it stats buffer-shader paths,
+/// resolves builtin tokens through the registry and probes QStandardPaths through
+/// packSharedRoots. The same "do not memoise or reorder on a purity claim" warning applies.
+QStringList surfaceBufferChainLints(const QJsonObject& meta, const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                    const QString& packDir);
+
+} // namespace PlasmaZones::ShaderValidate

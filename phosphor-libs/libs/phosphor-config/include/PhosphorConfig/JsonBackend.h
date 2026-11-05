@@ -1,0 +1,325 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <phosphorconfig_export.h>
+
+#include <PhosphorConfig/IBackend.h>
+
+#include <QJsonObject>
+#include <QString>
+
+#include <memory>
+
+QT_BEGIN_NAMESPACE
+class QTimer;
+QT_END_NAMESPACE
+
+namespace PhosphorConfig {
+
+class IGroupPathResolver;
+class JsonBackend;
+
+/// Scoped group view backed by a @c JsonBackend. See @c IGroup for the
+/// contract; this class only adds JSON-specific coercion rules documented
+/// on its reader methods.
+///
+/// Only one group view is permitted per backend at a time. Debug builds
+/// assert; release builds warn. The backend advances its dirty flag on any
+/// write-to-storage through this view.
+///
+/// Reads (every @c read*, @c readJson, @c hasKey, @c keyList) see the
+/// backend's overlay laid over the file (see @c JsonBackend::setOverlay)
+/// unless the view was opened as @c View::Persisted. Writes and @c deleteKey
+/// always act on the file's values alone, so an overlay value is never
+/// written back, and deleting a key the overlay supplies leaves it readable.
+class PHOSPHORCONFIG_EXPORT JsonGroup : public IGroup
+{
+public:
+    /// What the view's reads observe.
+    enum class View {
+        /// The overlay over the file: what @c JsonBackend::group() hands out.
+        Effective,
+        /// The file alone: what @c JsonBackend::persistedGroup() hands out.
+        Persisted,
+    };
+
+    JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend, View view = View::Effective);
+    ~JsonGroup() override;
+
+    QString readString(const QString& key, const QString& defaultValue = {}) const override;
+    int readInt(const QString& key, int defaultValue = 0) const override;
+    bool readBool(const QString& key, bool defaultValue = false) const override;
+    double readDouble(const QString& key, double defaultValue = 0.0) const override;
+    QColor readColor(const QString& key, const QColor& defaultValue = {}) const override;
+
+    void writeString(const QString& key, const QString& value) override;
+    void writeInt(const QString& key, int value) override;
+    void writeBool(const QString& key, bool value) override;
+    void writeDouble(const QString& key, double value) override;
+    void writeColor(const QString& key, const QColor& value) override;
+    void writeJson(const QString& key, const QJsonValue& value) override;
+    QJsonValue readJson(const QString& key, const QJsonValue& defaultValue = {}) const override;
+
+    bool hasKey(const QString& key) const override;
+    void deleteKey(const QString& key) override;
+    QStringList keyList() const override;
+
+private:
+    /// The object reads observe: the overlaid one for an Effective view, the
+    /// stored one for a Persisted view.
+    QJsonObject groupObject() const;
+    /// The file's own object for this group. Every write starts from this,
+    /// never from @c groupObject().
+    QJsonObject storedGroupObject() const;
+    void setGroupObject(const QJsonObject& obj);
+    /// Returns true when writes through this group must be silently dropped
+    /// because another JsonGroup on the same backend was already alive at
+    /// construction time. See JsonGroup constructor docs.
+    bool refuseWrite(const char* op) const;
+
+    QJsonObject& m_root;
+    QString m_groupName;
+    JsonBackend* m_backend;
+    View m_view;
+    /// Set in the constructor when the single-active-group invariant is
+    /// violated. Disabled groups still allow reads (they share the backend's
+    /// root in-memory state) but reject writes so the concurrent live group
+    /// retains sole ownership of mutations.
+    bool m_disabled = false;
+};
+
+/// Atomic-write JSON configuration backend.
+///
+/// Reads and writes a single JSON document. Writes are deferred until
+/// @c sync() is called and then committed via @c QSaveFile (temp file +
+/// rename, safe against crashes and power loss).
+///
+/// Group resolution order:
+///   1. If an @c IGroupPathResolver is installed and returns a path, use it.
+///   2. If the group name contains a dot, treat as a dot-path hierarchy.
+///   3. Otherwise treat it as a flat top-level object name.
+///
+/// The "root group" (see @c rootGroupName) holds ungrouped keys written via
+/// @c writeRootString. Defaults to "General" for compatibility with
+/// QSettings INI behaviour.
+///
+/// An optional in-memory overlay (see @c setOverlay) supplies values that win
+/// over the file's for every read but are never written to it.
+class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
+{
+public:
+    /// Construct a backend backed by @p filePath. The file is loaded
+    /// immediately. A missing file starts with an empty root object and
+    /// accepts writes. An unreadable one (open failure, parse error, a
+    /// non-object root) also starts empty but reports @c loadFailed() and
+    /// refuses writes (unless @c setOverwriteUnreadable), with a warning
+    /// logged. A flush also refuses when the file has been rewritten since
+    /// this backend last read or wrote it and no longer reads.
+    explicit JsonBackend(QString filePath);
+    ~JsonBackend() override;
+
+    // IBackend interface
+    std::unique_ptr<IGroup> group(const QString& name) override;
+    /// A @c JsonGroup opened as @c JsonGroup::View::Persisted: the file's
+    /// values without the overlay.
+    std::unique_ptr<IGroup> persistedGroup(const QString& name) override;
+    /// Reloads the file. The overlay is kept and keeps winning over the
+    /// reloaded values. On an unreadable file the root falls back to the last
+    /// document this backend read or wrote successfully (empty if none), and
+    /// @c loadFailed() turns on until a later reparse reads the file cleanly.
+    void reparseConfiguration() override;
+    bool loadFailed() const override;
+
+    /// Let writes replace an unreadable file instead of refusing. For a file
+    /// only machines write, such as session state, where an unreadable copy
+    /// holds nothing worth protecting and refusing would only lose the next
+    /// save. Off by default: a file a user may edit by hand is protected.
+    void setOverwriteUnreadable(bool overwrite);
+    bool sync() override;
+    /// Bypasses the Deferred sync policy's debounce so the return value is a
+    /// real commit result under every policy. Equivalent to @c flushPending().
+    bool commit() override;
+    void deleteGroup(const QString& name) override;
+    /// Sees the overlay's root-group values over the file's.
+    QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
+    void writeRootString(const QString& key, const QString& value) override;
+    void removeRootKey(const QString& key) override;
+    /// Enumerates the file's groups and the overlay's together, as one
+    /// document with the overlay merged in.
+    QStringList groupList() const override;
+
+    /// Lay @p overlay over the file for every read, without ever writing it.
+    ///
+    /// @p overlay has the same shape as the file's document: group objects
+    /// keyed by name (nested for dot-path groups, under @c rootGroupName for
+    /// root keys, wherever an installed @c IGroupPathResolver maps a group),
+    /// holding keys and values. Reads behave as if @p overlay had been merged
+    /// into the document, objects merging key by key at every depth (an
+    /// object-valued key included) and any other overlay value replacing the
+    /// file's outright. That covers every read: the @c JsonGroup readers,
+    /// @c hasKey and @c keyList, @c readRootString, @c groupList, and so
+    /// everything @c Store reads through them.
+    ///
+    /// Nothing else sees it. Writes, @c deleteKey, @c deleteGroup and the root
+    /// key mutators act on the file's values alone, so writing one key of a
+    /// group never carries the group's overlay values to disk with it.
+    /// @c sync, @c commit, @c jsonRootSnapshot, @c replaceRoot and
+    /// @c applyMigration work on the backend's own document alone (the file
+    /// as last read or written, or the last good stand-in while
+    /// @c loadFailed() is set), so the overlay must already be in the current
+    /// schema's shape. It is not dirtying: setting it
+    /// schedules no write. It survives @c reparseConfiguration and lasts until
+    /// replaced; an empty object removes it.
+    ///
+    /// Safe to call while a group view is alive: views resolve the overlay
+    /// on every read rather than caching it.
+    void setOverlay(const QJsonObject& overlay);
+    /// The overlay last set, or an empty object.
+    QJsonObject overlay() const;
+
+    /// Attach a custom path resolver. Passing @c nullptr removes it.
+    /// Safe to call at any time; the resolver is consulted on every group
+    /// access, so it should be cheap.
+    void setPathResolver(std::shared_ptr<IGroupPathResolver> resolver) override;
+    std::shared_ptr<IGroupPathResolver> pathResolver() const override;
+
+    /// Change the JSON object that receives ungrouped @c writeRootString
+    /// calls. Defaults to @c "General". Call before the first write.
+    void setRootGroupName(const QString& name);
+    QString rootGroupName() const;
+
+    /// Stamp-on-sync: if non-empty, every @c sync() that writes the file
+    /// will insert @p key = @p version when the key is absent from the
+    /// root. Used by consumers who pair a @c JsonBackend with a @c Schema
+    /// so fresh stores carry the current version from day one. Default
+    /// disables the behaviour (empty key).
+    void setVersionStamp(const QString& key, int version) override;
+
+    /// Currently-installed version stamp as @c {key, version}. Returns an
+    /// empty key when no stamp is installed. Used by shared-backend safety
+    /// checks (see @c Store::Store) to detect a clobber.
+    std::pair<QString, int> versionStamp() const override;
+
+    /// Insert the installed version stamp into @p root when a stamp is
+    /// configured and @p root does not already carry the key. No-op otherwise.
+    ///
+    /// This is the same step @c sync() applies on its way to disk, exposed so
+    /// that a caller writing a root snapshot out of band (an export, say) can
+    /// stamp it identically. A document written without the stamp reads back as
+    /// version-less and re-runs the whole migration chain when it is imported.
+    void applyVersionStamp(QJsonObject& root) const;
+
+    /// Run @p schema's migration chain against the in-memory root, and
+    /// if any step bumps the version stamp, atomically rewrite the backing
+    /// file and refresh the in-memory state. Returns @c true unless the
+    /// atomic disk rewrite fails or is refused because @c loadFailed() is
+    /// set. In either case the backend stays at the unmigrated state, and the
+    /// chain runs again from the next Store built over a fresh load.
+    /// Consumers that need the "did migrations actually apply" bit should
+    /// check @c versionStamp() before and after, not this return value.
+    bool applyMigration(const Schema& schema) override;
+
+    /// Atomically write @p root to @p filePath (temp file + rename via
+    /// @c QSaveFile). Exposed for use by @c MigrationRunner and other
+    /// external callers that already have a @c QJsonObject in hand.
+    /// Returns @c true on success.
+    static bool writeJsonAtomically(const QString& filePath, const QJsonObject& root);
+
+    /// Read-only access to the in-memory document. Implicitly shared (COW),
+    /// so the copy is cheap and isolated from future mutations. This is the
+    /// backend's own document: the file as last read or written, or, while
+    /// @c loadFailed() is set, the last good document standing in for it. The
+    /// overlay is not merged in.
+    QJsonObject jsonRootSnapshot() const;
+
+    /// Backing file path (useful for migration-chain callers that need
+    /// to rewrite via @c writeJsonAtomically during schema upgrades).
+    QString filePath() const;
+
+    /// Clear the dirty flag without writing. Used by migration
+    /// (@c applyMigration) and by callers that stage something into the root,
+    /// take a snapshot of it, then restore the root and need to put the flag
+    /// back the way they found it (see @c isDirty()).
+    void clearDirty();
+
+    /// Whether the in-memory document carries changes that have not been
+    /// committed to disk. Pairs with @c clearDirty() for callers that
+    /// snapshot/restore the root (see @c jsonRootSnapshot / @c replaceRoot)
+    /// and need to put the flag back the way they found it.
+    bool isDirty() const override;
+
+    /// Replace the in-memory document with @p root. Marks the backend
+    /// dirty — callers who paired this with a successful
+    /// @c writeJsonAtomically may call @c clearDirty() immediately after
+    /// to restore the "in-memory matches disk" invariant. Must not be
+    /// called while any @c JsonGroup views are alive.
+    void replaceRoot(QJsonObject root);
+
+    /// Sync timing policy. See @c setSyncPolicy for the full contract.
+    enum class SyncPolicy {
+        /// @c sync() flushes the dirty root to disk synchronously and
+        /// returns the commit result. Default — matches the pre-policy
+        /// behaviour so switching an existing consumer requires no change.
+        Synchronous,
+        /// @c sync() restarts a single-shot debounce timer and returns
+        /// @c true without touching disk. The actual flush happens on the
+        /// timer's timeout, on the same thread that owns the backend (i.e.
+        /// whichever thread is pumping the event loop that owns the timer).
+        /// Callers that need a guaranteed-committed state before proceeding
+        /// (e.g. closing a save dialog, shutting down a daemon) call
+        /// @c flushPending() to force an immediate flush. The backend's
+        /// destructor also flushes pending writes.
+        ///
+        /// Requires a running event loop to actually fire. Tests that
+        /// exercise this path must call @c QTest::qWait() or
+        /// @c QCoreApplication::processEvents() after @c sync() to let the
+        /// timer elapse, or call @c flushPending() directly.
+        Deferred,
+    };
+
+    /// Configure when @c sync() commits to disk. @p debounceMs is only
+    /// consulted for @c Deferred policy; it sets the coalescing window
+    /// during which repeated @c sync() calls restart the same timer.
+    /// Values <= 0 are clamped to 1 ms.
+    ///
+    /// Safe to call at any time. Switching from @c Deferred back to
+    /// @c Synchronous also flushes any pending deferred write so the
+    /// in-memory and on-disk state agree on return.
+    void setSyncPolicy(SyncPolicy policy, int debounceMs = 500);
+    SyncPolicy syncPolicy() const;
+
+    /// Flush to disk now, cancelling any pending deferred-sync timer first.
+    /// No-op only when the backend is not dirty — under @c Synchronous policy
+    /// there is no timer to cancel, but a dirty root is still written, so this
+    /// is a commit under every policy rather than a Deferred-only escape
+    /// hatch. Returns the commit result (or @c true when there was nothing to
+    /// flush). Safe to call from any context that could call @c sync().
+    bool flushPending();
+
+private:
+    friend class JsonGroup;
+
+    void loadFromDisk();
+    void markDirty();
+    /// Synchronous inner flush used by @c sync() (Synchronous policy),
+    /// @c flushPending(), the deferred-sync timer callback, and the
+    /// destructor. No-op when not dirty; returns the @c writeJsonAtomically
+    /// result otherwise.
+    bool flushNow();
+    void incActiveGroupCount();
+    void decActiveGroupCount();
+    int activeGroupCount() const;
+
+    /// Per-instance warn-once dedup. Returns true the first time
+    /// @c tag+@c key is observed on this backend, false on every subsequent
+    /// call. Stores entries up to an internal cap; beyond the cap every
+    /// unique combination fires its warning (safer than silent corruption).
+    bool shouldWarnOnce(const char* tag, const QString& key);
+
+    struct Data;
+    std::unique_ptr<Data> d;
+};
+
+} // namespace PhosphorConfig

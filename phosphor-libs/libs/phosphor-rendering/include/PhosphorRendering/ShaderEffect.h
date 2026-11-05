@@ -1,0 +1,1150 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorRendering/ShaderNodeLiveness.h>
+#include <PhosphorRendering/phosphorrendering_export.h>
+
+#include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/ShaderBindings.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
+
+#include <QColor>
+#include <QImage>
+#include <QMutex>
+#include <QPointF>
+#include <QQuickItem>
+#include <QSizeF>
+#include <QStringList>
+#include <QUrl>
+#include <QVariantMap>
+#include <QVector4D>
+
+#include <QPointer>
+#include <array>
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
+
+QT_BEGIN_NAMESPACE
+class QSGNode;
+QT_END_NAMESPACE
+
+namespace PhosphorShaders {
+class IUniformExtension;
+}
+
+namespace PhosphorRendering {
+
+class ShaderNodeRhi;
+
+/// Public mirror of `PhosphorRendering::kMaxUserTextures` (4 user-texture slots at
+/// SRB bindings 11..14), read straight from the binding table. ShaderBindings.h
+/// is a Qt-strings-only header, so this costs nothing; what this header avoids
+/// is ShaderNodeRhi.h, whose rhi/qrhi.h transitive chain is the heavy one. The
+/// `static_assert` in shadereffect.cpp still guards the two against divergence.
+inline constexpr int kMaxUserTextureSlots = PhosphorShaders::Bindings::kUserTextureCount;
+
+/// Default per-axis rasterisation size for an SVG user texture, used until a
+/// slot's shader param overrides it.
+inline constexpr int kDefaultUserTextureSvgSize = 1024;
+
+/// Peel the QML delivery wrappers off a property value and return the inner
+/// QVariant. Handles a QJSValue and a QVariant nested inside a QVariant, in
+/// any order and interleaved, up to a fixed depth (a chain deeper than that is
+/// already pathological, and an unbounded peel would hang on a self-
+/// referencing one).
+///
+/// Returns the PEELED variant only — it deliberately does not convert to a
+/// payload type, because each of the THREE call sites wants a different
+/// terminal conversion: `setAudioSpectrumVariant` a QVector<float> through a
+/// QVariantList walk, `setWallpaperTextureVariant` a QImage, and
+/// `ZoneShaderItem::setLabelsTextureVariant` a `ZoneLabelTexture` through a
+/// registered converter. Each keeps its own handling of an unconvertible one.
+PHOSPHORRENDERING_EXPORT QVariant peelQmlVariant(const QVariant& value);
+
+/**
+ * @brief QQuickItem that renders a fullscreen fragment shader via Qt RHI.
+ *
+ * Shadertoy-compatible: iTime, iTimeDelta, iFrame, iResolution, iMouse,
+ * multipass buffers, custom parameters, and custom colors.
+ *
+ * Extend with IUniformExtension to append application-specific uniform data
+ * after the base UBO layout.
+ *
+ * Consumers that want this type available in QML must register it themselves
+ * with qmlRegisterType() under their own module URI. The library does not
+ * ship a QML module — doing so would force every consumer onto one module
+ * name and duplicate registration with subclasses (e.g. ZoneShaderItem).
+ */
+class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
+{
+    Q_OBJECT
+
+    // ── Shadertoy-compatible animation uniforms ──────────────────────
+    Q_PROPERTY(qreal iTime READ iTime WRITE setITime NOTIFY iTimeChanged FINAL)
+    Q_PROPERTY(qreal iTimeDelta READ iTimeDelta WRITE setITimeDelta NOTIFY iTimeDeltaChanged FINAL)
+    Q_PROPERTY(int iFrame READ iFrame WRITE setIFrame NOTIFY iFrameChanged FINAL)
+    Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
+    Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
+    Q_PROPERTY(bool isReversed READ isReversed WRITE setIsReversed NOTIFY isReversedChanged FINAL)
+
+    /// Auto-tick mode. When true, this item hooks the host QQuickWindow's
+    /// per-frame signal and advances iTime / iTimeDelta / iFrame on every
+    /// rendered frame. The Shadertoy-style uniforms then "just work" for
+    /// QML callers — no FrameAnimation / Timer plumbing required.
+    ///
+    /// When false (default) the iTime/iTimeDelta/iFrame Q_PROPERTYs stay
+    /// fully under the caller's control. This is what the daemon's
+    /// SurfaceAnimator (phosphor-animation) and its transition shaders use:
+    /// they drive iTime by hand to map the animation curve through the
+    /// shader without committing to wall-clock pacing.
+    ///
+    /// Toggling at runtime is supported. While true, the manual setters
+    /// for iTime/iTimeDelta/iFrame are additive: the next frame's tick
+    /// adds the wall-clock delta to whatever value is currently stored,
+    /// so a manual write is preserved as a baseline rather than
+    /// overwritten. iFrame is incremented by 1 per tick.
+    Q_PROPERTY(bool playing READ isPlaying WRITE setPlaying NOTIFY playingChanged FINAL)
+
+    // ── Shader source ────────────────────────────────────────────────
+    Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
+    Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
+    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
+    Q_PROPERTY(QString paramPreamble READ paramPreamble WRITE setParamPreamble NOTIFY paramPreambleChanged FINAL)
+    Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
+
+    // ── Multipass ────────────────────────────────────────────────────
+    Q_PROPERTY(
+        QString bufferShaderPath READ bufferShaderPath WRITE setBufferShaderPath NOTIFY bufferShaderPathChanged FINAL)
+    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths WRITE setBufferShaderPaths NOTIFY
+                   bufferShaderPathsChanged FINAL)
+    Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
+    Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(QVariantList bufferScales READ bufferScales WRITE setBufferScales NOTIFY bufferScalesChanged FINAL)
+    Q_PROPERTY(
+        bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
+    Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
+    Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
+    Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
+    Q_PROPERTY(QStringList bufferFilters READ bufferFilters WRITE setBufferFilters NOTIFY bufferFiltersChanged FINAL)
+
+    // ── Custom parameters (32 floats in 8 vec4s) ────────────────────
+    Q_PROPERTY(QVector4D customParams1 READ customParams1 WRITE setCustomParams1 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams2 READ customParams2 WRITE setCustomParams2 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams3 READ customParams3 WRITE setCustomParams3 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams4 READ customParams4 WRITE setCustomParams4 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams5 READ customParams5 WRITE setCustomParams5 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams6 READ customParams6 WRITE setCustomParams6 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams7 READ customParams7 WRITE setCustomParams7 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams8 READ customParams8 WRITE setCustomParams8 NOTIFY customParamsChanged FINAL)
+
+    // ── Custom colors (16 color slots) ───────────────────────────────
+    Q_PROPERTY(QColor customColor1 READ customColor1 WRITE setCustomColor1 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor2 READ customColor2 WRITE setCustomColor2 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor3 READ customColor3 WRITE setCustomColor3 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor4 READ customColor4 WRITE setCustomColor4 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor5 READ customColor5 WRITE setCustomColor5 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor6 READ customColor6 WRITE setCustomColor6 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor7 READ customColor7 WRITE setCustomColor7 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor8 READ customColor8 WRITE setCustomColor8 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor9 READ customColor9 WRITE setCustomColor9 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor10 READ customColor10 WRITE setCustomColor10 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor11 READ customColor11 WRITE setCustomColor11 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor12 READ customColor12 WRITE setCustomColor12 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor13 READ customColor13 WRITE setCustomColor13 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor14 READ customColor14 WRITE setCustomColor14 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor15 READ customColor15 WRITE setCustomColor15 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QColor customColor16 READ customColor16 WRITE setCustomColor16 NOTIFY customColorsChanged FINAL)
+
+    // ── Textures ─────────────────────────────────────────────────────
+    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY
+                   audioSpectrumChanged FINAL)
+    Q_PROPERTY(QVariant wallpaperTexture READ wallpaperTextureVariant WRITE setWallpaperTextureVariant NOTIFY
+                   wallpaperTextureChanged FINAL)
+    Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
+    Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
+    /// Image-pass grid tessellation for vertex-displacing packs (the
+    /// `geometryGrid` metadata key); 0 = the default fullscreen quad. See
+    /// ShaderNodeRhi::setGridSubdivisions for the mesh contract.
+    Q_PROPERTY(
+        int gridSubdivisions READ gridSubdivisions WRITE setGridSubdivisions NOTIFY gridSubdivisionsChanged FINAL)
+
+    // ── Status ───────────────────────────────────────────────────────
+    Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
+    Q_PROPERTY(QString errorLog READ errorLog NOTIFY errorLogChanged FINAL)
+
+public:
+    /**
+     * @brief Shader loading and compilation status
+     */
+    enum class Status {
+        Null, ///< No shader loaded
+        Loading, ///< Shader is being loaded/compiled
+        Ready, ///< Shader compiled successfully
+        Error, ///< Shader compilation failed
+    };
+    Q_ENUM(Status)
+
+    /// Hard ceiling on the per-axis SVG rasterisation dimension applied by
+    /// `setShaderParams` to the `uTexture<N>_svgSize` parameter. Exposed so
+    /// consumers (UI sliders, validators, tests) can mirror the clamp range
+    /// without hardcoding the value. The setter performs
+    /// `qBound(kMinSvgDimension, requested, kMaxSvgDimension)`; values outside
+    /// the range are silently clamped, not rejected.
+    static constexpr int kMaxSvgDimension = 2048;
+
+    /// Floor of the same clamp. Named for the same mirror-the-cap reason as
+    /// `kMaxSvgDimension`, and so the two `qBound` sites in
+    /// shadereffect_params.cpp stop repeating a bare literal.
+    static constexpr int kMinSvgDimension = 64;
+
+    /// Hard cap on the byte budget for a single rasterised SVG (16 MiB —
+    /// matches RGBA8 at `kMaxSvgDimension` × `kMaxSvgDimension`). When a
+    /// near-square doc would exceed this even after the per-axis clamp,
+    /// the rasterisation is downscaled proportionally and a warning is
+    /// logged. Exposed for the same mirror-the-cap reason as
+    /// `kMaxSvgDimension`.
+    static constexpr qint64 kMaxSvgPixelBytes = 16LL * 1024 * 1024;
+
+    explicit ShaderEffect(QQuickItem* parent = nullptr);
+    ~ShaderEffect() override;
+
+    // ── Uniform extension ────────────────────────────────────────────
+
+    /**
+     * @brief Attach a uniform extension that appends custom data after BaseUniforms.
+     *
+     * Stored on this item and pushed down to the render node in
+     * syncBasePropertiesToNode(). `virtual` so a subclass that owns its own
+     * extension (e.g. ZoneShaderItem) can intercept stray assignments and
+     * preserve its internal extension contract instead of having the call
+     * silently no-op.
+     */
+    virtual void setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension);
+    std::shared_ptr<PhosphorShaders::IUniformExtension> uniformExtension() const;
+
+    // ── Shadertoy uniforms ───────────────────────────────────────────
+
+    qreal iTime() const
+    {
+        return m_iTime;
+    }
+    void setITime(qreal time);
+
+    qreal iTimeDelta() const
+    {
+        return m_iTimeDelta;
+    }
+    void setITimeDelta(qreal delta);
+
+    int iFrame() const
+    {
+        return m_iFrame;
+    }
+    void setIFrame(int frame);
+
+    bool isPlaying() const
+    {
+        return m_playing;
+    }
+    void setPlaying(bool playing);
+
+    bool isReversed() const
+    {
+        return m_isReversed;
+    }
+    /// Direction signal forwarded to ShaderNodeRhi → BaseUniforms::iIsReversed.
+    /// SurfaceAnimator pushes this on every leg attach (false for show, true
+    /// for hide). Symmetric shaders ignore the value; asymmetric shaders
+    /// branch on it (see canonical animation_uniforms.glsl docs).
+    void setIsReversed(bool reverse);
+
+    QSizeF iResolution() const
+    {
+        return m_iResolution;
+    }
+    void setIResolution(const QSizeF& resolution);
+
+    QPointF iMouse() const
+    {
+        return m_iMouse;
+    }
+    void setIMouse(const QPointF& mouse);
+
+    // ── Shader source ────────────────────────────────────────────────
+
+    QUrl shaderSource() const
+    {
+        return m_shaderSource;
+    }
+    void setShaderSource(const QUrl& source);
+
+    QUrl vertexShaderUrl() const
+    {
+        return m_vertexShaderUrl;
+    }
+    void setVertexShaderUrl(const QUrl& source);
+
+    QVariantMap shaderParams() const
+    {
+        return m_shaderParams;
+    }
+    /// Push a parameter map onto the shader. Recognised keys:
+    ///   • `customParams<N>_<x|y|z|w>` (1-based) — float vec4 sub-slots
+    ///   • `customColor<N>` (1-based) — color vec4 slots
+    ///   • `uTexture<N>` (0-based, 0..3) — file path for the user-texture
+    ///     sampler at SRB binding 11..14 / GLSL `uTexture<N>`
+    ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
+    ///     "mirror"); ignored if no companion `uTexture<N>` resolves
+    ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
+    ///     (clamped 64..2048; ignored for bitmap formats). The cap is
+    ///     exposed as `ShaderEffect::kMaxSvgDimension` for callers that
+    ///     want to mirror the clamp without hardcoding the value, and
+    ///     the per-rasterisation byte budget is exposed as
+    ///     `ShaderEffect::kMaxSvgPixelBytes` (a near-square doc whose
+    ///     RGBA8 size would exceed the budget is downscaled
+    ///     proportionally with a warning).
+    ///
+    /// **Trust boundary.** `uTexture<N>` paths are passed verbatim to
+    /// `QImage::load` / `QSvgRenderer::load`. This class does NOT
+    /// sanitise traversal segments or enforce absolute-path-only — the
+    /// caller is the trust boundary.
+    /// `AnimationShaderRegistry::translateAnimationParams` already
+    /// resolves and traversal-checks pack-default paths at scan time;
+    /// the kwin-effect's `m_textureCache` lookup keys absolute paths.
+    /// A direct caller (e.g. tests, custom QML embedding) that
+    /// forwards untrusted strings into `params["uTexture<N>"]` MUST
+    /// pre-resolve and traversal-check before calling.
+    ///
+    /// **SVG rasterisation cost.** When the params map contains a
+    /// `uTexture<N>` whose path resolves to an `.svg` / `.svgz` file
+    /// (and the path or `uTexture<N>_svgSize` differs from the cached
+    /// state for that slot), this method calls `QSvgRenderer` and
+    /// `QPainter` synchronously on the calling thread to rasterise the
+    /// document up to the clamped dimension. The cost scales with
+    /// `kMaxSvgPixelBytes` in the worst case. Hot-path callers (e.g.
+    /// per-frame parameter pushes) should pre-warm via
+    /// `loadUserTextureFile(path, svgMaxDim)` from a worker thread (it's
+    /// thread-safe per Qt docs: each call constructs its own
+    /// QSvgRenderer / QImage instance with no shared mutable state)
+    /// and call `setUserTexture(slot, image)` on the GUI thread to
+    /// install the result. Bitmap formats are decoded via `QImageReader`
+    /// under the same `kMaxSvgPixelBytes` budget — an oversized file is
+    /// downscaled during decode with a warning, never materialised at
+    /// full resolution — and carry the same synchronous-IO caveat.
+    ///
+    /// **Subclass contract.** Overrides MUST chain to
+    /// `ShaderEffect::setShaderParams(params)` (or replicate the full
+    /// trust-boundary parse, including uTexture* / *_wrap /
+    /// *_svgSize). Skipping the base call leaves user-texture paths
+    /// uninterpreted and pinned to whatever the previous parse set —
+    /// silent stale samplers across reloads.
+    virtual void setShaderParams(const QVariantMap& params);
+
+    /// Static helper that loads a user-texture file (PNG/JPG/etc. via
+    /// QImageReader, downscaled during decode when the file exceeds the
+    /// `kMaxSvgPixelBytes` budget; SVG/SVGZ via QSvgRenderer rasterised
+    /// at @p svgMaxDim max-axis with the same byte-budget guard as
+    /// `setShaderParams`).
+    /// Thread-safe: each invocation constructs its own QSvgRenderer /
+    /// QImage instance — callers may invoke from a worker thread (e.g.
+    /// `QtConcurrent::run`) to off-load the cost from the GUI thread.
+    /// Returns a null QImage on load failure (file missing, parse
+    /// error, OOM); callers should keep their prior image in that case.
+    /// The result is in `QImage::Format_RGBA8888`, ready for
+    /// `setUserTexture(slot, image)` upload on the GUI thread.
+    static QImage loadUserTextureFile(const QString& path, int svgMaxDim);
+
+    /// @brief Live texture-provider source bound to SRB binding 11
+    ///        (`uTexture0`).
+    ///
+    /// When set to a non-null QQuickItem, the shader samples that item's
+    /// rendered visual every frame instead of whatever QImage was uploaded
+    /// via `setUserTexture(0, ...)`. This is what the SurfaceAnimator
+    /// transition shaders (pixelate / dissolve / glitch) use to operate
+    /// on the rendered surface — no async grab, no first-show gap, no
+    /// stale snapshot.
+    ///
+    /// setSourceItem forces `layer.enabled = true` in C++, through the item's
+    /// QQuickItemLayer sub-object, so `QQuickItem::textureProvider()` returns
+    /// the layer's provider and the scene graph re-renders the item each frame
+    /// the consumer dirties it. Sampling an ANCESTOR is supported and
+    /// load-bearing: Qt's layer system uses a back buffer, so an ancestor read
+    /// returns last frame's content rather than recursing, and SurfaceAnimator
+    /// depends on exactly that. Only sampling `this` is refused, by the setter.
+    /// An earlier ancestor-walk guard here broke every shader leg.
+    ///
+    /// Setting the property to nullptr unbinds the texture; subsequent
+    /// frames fall back to the user-texture-0 QImage path (or the
+    /// transparent fallback if neither has been set).
+    QQuickItem* sourceItem() const
+    {
+        return m_sourceItem.data();
+    }
+    void setSourceItem(QQuickItem* item);
+
+    // ── Multipass ────────────────────────────────────────────────────
+
+    QString bufferShaderPath() const
+    {
+        return m_bufferShaderPath;
+    }
+    void setBufferShaderPath(const QString& path);
+
+    QStringList bufferShaderPaths() const
+    {
+        return m_bufferShaderPaths;
+    }
+    void setBufferShaderPaths(const QStringList& paths);
+
+    bool bufferFeedback() const
+    {
+        return m_bufferFeedback;
+    }
+    void setBufferFeedback(bool enable);
+
+    qreal bufferScale() const
+    {
+        return m_bufferScale;
+    }
+    void setBufferScale(qreal scale);
+
+    /// Per-pass render-target scales, positionally aligned with
+    /// bufferShaderPaths (a pack's `bufferScales`), fed by surface packs alone
+    /// today. A pass past the list's end renders at bufferScale, as does every
+    /// pass when the list is empty. setBufferScales clamps each entry into
+    /// [kMinBufferScale, kMaxBufferScale] and drops anything past kMaxBufferPasses.
+    QVariantList bufferScales() const
+    {
+        return m_bufferScales;
+    }
+    void setBufferScales(const QVariantList& scales);
+
+    bool halfFloatBuffers() const
+    {
+        return m_halfFloatBuffers;
+    }
+    void setHalfFloatBuffers(bool enable);
+
+    QString bufferWrap() const
+    {
+        return m_bufferWrap;
+    }
+    void setBufferWrap(const QString& wrap);
+
+    QStringList bufferWraps() const
+    {
+        return m_bufferWraps;
+    }
+    void setBufferWraps(const QStringList& wraps);
+
+    QString bufferFilter() const
+    {
+        return m_bufferFilter;
+    }
+    void setBufferFilter(const QString& filter);
+
+    QStringList bufferFilters() const
+    {
+        return m_bufferFilters;
+    }
+    void setBufferFilters(const QStringList& filters);
+
+    // ── Custom parameters (32 float slots in 8 vec4s) ────────────────
+
+    QVector4D customParams1() const
+    {
+        return m_customParams[0];
+    }
+    void setCustomParams1(const QVector4D& params);
+    QVector4D customParams2() const
+    {
+        return m_customParams[1];
+    }
+    void setCustomParams2(const QVector4D& params);
+    QVector4D customParams3() const
+    {
+        return m_customParams[2];
+    }
+    void setCustomParams3(const QVector4D& params);
+    QVector4D customParams4() const
+    {
+        return m_customParams[3];
+    }
+    void setCustomParams4(const QVector4D& params);
+    QVector4D customParams5() const
+    {
+        return m_customParams[4];
+    }
+    void setCustomParams5(const QVector4D& params);
+    QVector4D customParams6() const
+    {
+        return m_customParams[5];
+    }
+    void setCustomParams6(const QVector4D& params);
+    QVector4D customParams7() const
+    {
+        return m_customParams[6];
+    }
+    void setCustomParams7(const QVector4D& params);
+    QVector4D customParams8() const
+    {
+        return m_customParams[7];
+    }
+    void setCustomParams8(const QVector4D& params);
+
+    // ── Custom colors (16 color slots) ───────────────────────────────
+
+    QColor customColor1() const
+    {
+        return m_customColors[0];
+    }
+    void setCustomColor1(const QColor& color);
+    QColor customColor2() const
+    {
+        return m_customColors[1];
+    }
+    void setCustomColor2(const QColor& color);
+    QColor customColor3() const
+    {
+        return m_customColors[2];
+    }
+    void setCustomColor3(const QColor& color);
+    QColor customColor4() const
+    {
+        return m_customColors[3];
+    }
+    void setCustomColor4(const QColor& color);
+    QColor customColor5() const
+    {
+        return m_customColors[4];
+    }
+    void setCustomColor5(const QColor& color);
+    QColor customColor6() const
+    {
+        return m_customColors[5];
+    }
+    void setCustomColor6(const QColor& color);
+    QColor customColor7() const
+    {
+        return m_customColors[6];
+    }
+    void setCustomColor7(const QColor& color);
+    QColor customColor8() const
+    {
+        return m_customColors[7];
+    }
+    void setCustomColor8(const QColor& color);
+    QColor customColor9() const
+    {
+        return m_customColors[8];
+    }
+    void setCustomColor9(const QColor& color);
+    QColor customColor10() const
+    {
+        return m_customColors[9];
+    }
+    void setCustomColor10(const QColor& color);
+    QColor customColor11() const
+    {
+        return m_customColors[10];
+    }
+    void setCustomColor11(const QColor& color);
+    QColor customColor12() const
+    {
+        return m_customColors[11];
+    }
+    void setCustomColor12(const QColor& color);
+    QColor customColor13() const
+    {
+        return m_customColors[12];
+    }
+    void setCustomColor13(const QColor& color);
+    QColor customColor14() const
+    {
+        return m_customColors[13];
+    }
+    void setCustomColor14(const QColor& color);
+    QColor customColor15() const
+    {
+        return m_customColors[14];
+    }
+    void setCustomColor15(const QColor& color);
+    QColor customColor16() const
+    {
+        return m_customColors[15];
+    }
+    void setCustomColor16(const QColor& color);
+
+    // ── Indexed accessors (avoid per-slot function-pointer tables at call sites) ──
+    /**
+     * @brief Read a customParams slot by index.
+     * @param index [0, 8). Returns a zero vector for out-of-range indices.
+     */
+    QVector4D customParamAt(int index) const;
+    /**
+     * @brief Write a customParams slot by index.
+     * @param index [0, 8). Out-of-range indices are ignored.
+     *
+     * Emits customParamsChanged() and schedules an update only when the value
+     * actually differs from the stored slot.
+     */
+    void setCustomParamAt(int index, const QVector4D& params);
+
+    /**
+     * @brief Read a customColor slot by index.
+     * @param index [0, 16). Returns an invalid QColor for out-of-range indices.
+     */
+    QColor customColorAt(int index) const;
+    /**
+     * @brief Write a customColor slot by index.
+     * @param index [0, 16). Out-of-range indices are ignored.
+     */
+    void setCustomColorAt(int index, const QColor& color);
+
+    // ── Textures ─────────────────────────────────────────────────────
+
+    QVariant audioSpectrumVariant() const;
+    void setAudioSpectrumVariant(const QVariant& spectrum);
+    /** Direct setter from C++ avoiding QVariantList round-trip. */
+    void setAudioSpectrum(const QVector<float>& spectrum);
+
+    /**
+     * Set a user texture (slots 0-3, bindings 11-14) directly from a QImage,
+     * bypassing the path-driven loader.
+     *
+     * Clears the per-slot cached path and resets the companion svgSize / wrap
+     * settings so a subsequent params-driven load starts from a clean slot.
+     *
+     * Mixing-with-`setShaderParams` contract: a subsequent
+     * `setShaderParams(p)` will reload the texture from `p["uTextureN"]`
+     * even when `p` is byte-equal to the cached params map. The
+     * intervening direct-push sets a private dirty flag that suppresses
+     * the equality short-circuit on the very next call, so the cleared
+     * path is honoured and the on-disk image replaces the directly-set
+     * QImage. After that one re-parse, the flag is cleared and the
+     * usual fast-path resumes.
+     */
+    void setUserTexture(int slot, const QImage& image);
+    /** Set user texture wrap mode (slots 0-3). "clamp", "repeat", or "mirror". */
+    void setUserTextureWrap(int slot, const QString& wrap);
+
+    QImage wallpaperTexture() const;
+
+    /// QML-facing form of `wallpaperTexture`, and the reason the Q_PROPERTY is
+    /// a QVariant rather than a QImage.
+    ///
+    /// QML cannot reliably drive a QImage-typed property: a
+    /// `Binding on wallpaperTexture { value: someVarHoldingAnImage }` writes
+    /// NOTHING AT ALL — silently, with no engine warning — while the sibling
+    /// bool binding beside it applies. That is how every decoration preview in
+    /// the settings app came to render its no-backdrop fallback: the image
+    /// reached the host QML and stopped there.
+    ///
+    /// Measured delivery shapes (Qt 6.11.2), because the retype alone does not
+    /// rescue a Binding and the difference decides how a host must write this:
+    ///
+    ///   - direct assignment (`item.wallpaperTexture = someImage`), a
+    ///     `createObject` initial-property map, and a C++ `setProperty` all
+    ///     deliver the image intact;
+    ///   - QML `null` arrives as a VALID std::nullptr_t;
+    ///   - QML `undefined`, an ABSENT key on a JS object, an undefined
+    ///     `property var`, and BOTH `Binding` forms (the
+    ///     `Binding { target: …; property: … }` element and
+    ///     `Binding on wallpaperTexture`) ALL arrive as an INVALID QVariant,
+    ///     carrying no payload at all. The QVariant property type does not
+    ///     change that; only writing the value directly does.
+    ///
+    /// So a host must assign this property directly. An invalid QVariant is
+    /// treated as "no texture" and clears, which is correct for the absent-key
+    /// and `undefined` cases and is the only option for the Binding case: the
+    /// two are INDISTINGUISHABLE at the setter. That is why the QML-source sweep
+    /// test — over every tier that hosts one of these items, not this code — is the
+    /// guard against a host driving one property from both a direct and a Binding.
+    ///
+    /// Mirrors the `audioSpectrum` property beside it, which is a QVariant for
+    /// the same class of reason.
+    QVariant wallpaperTextureVariant() const;
+    void setWallpaperTexture(const QImage& image);
+    /// Accepts a QImage, a null, an undefined, an absent key, or an invalid
+    /// QVariant — a host with nothing behind its surface passes one of the
+    /// latter four, which is the ordinary no-backdrop state rather than an
+    /// error, and resolves to a null QImage without a warning. A VALID but
+    /// unconvertible value (a QString, a QUrl, a number) also clears, but logs
+    /// first: that one is a host bug, not an ordinary state.
+    void setWallpaperTextureVariant(const QVariant& texture);
+
+    bool useWallpaper() const
+    {
+        return m_useWallpaper;
+    }
+    void setUseWallpaper(bool use);
+
+    bool useDepthBuffer() const
+    {
+        return m_useDepthBuffer;
+    }
+    void setUseDepthBuffer(bool use);
+
+    int gridSubdivisions() const
+    {
+        return m_gridSubdivisions;
+    }
+    void setGridSubdivisions(int subdivisions);
+
+    // ── Shader include paths ─────────────────────────────────────────
+
+    /** Set directories to search for #include directives in shaders. */
+    void setShaderIncludePaths(const QStringList& paths);
+    QStringList shaderIncludePaths() const
+    {
+        return m_shaderIncludePaths;
+    }
+
+    // ── Parameter preamble (T1.1: generated `#define p_<id> ...`) ─────
+
+    /** Set the generated named-parameter preamble spliced after `#version`
+     *  into the fragment source at load time, so authors read a parameter by
+     *  name (`p_speed`) instead of a `customParams[N].xyzw` lane. Empty (the
+     *  default) is a no-op. Forwarded to the render node and folded into its
+     *  bake-cache key; a change forces a reload so the new defines take. */
+    void setParamPreamble(const QString& preamble);
+    QString paramPreamble() const
+    {
+        return m_paramPreamble;
+    }
+
+    // ── Entry-point scaffold (T1.4: harness-generated `main()`) ────────
+
+    /** Install the entry-point scaffold forwarded to the render node: when the
+     *  fragment source defines no `main()`, the node prepends @p prologue and
+     *  appends the generated `main()` of the first @p candidates entry function
+     *  the source defines. Empty/empty (the default) disables assembly. Forces a
+     *  reload so the new scaffold takes; folded into the node's bake-cache key.
+     *  NO GETTER, unlike its two neighbours: write-only, never read back. */
+    void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
+
+    // ── Status ───────────────────────────────────────────────────────
+
+    Status status() const
+    {
+        return m_status.load(std::memory_order_acquire);
+    }
+    QString errorLog() const
+    {
+        QMutexLocker lock(&m_errorLogMutex);
+        return m_errorLog;
+    }
+
+    // ── Actions ──────────────────────────────────────────────────────
+
+    /** Force reload of shader from source (callable from QML). */
+    Q_INVOKABLE void reloadShader();
+
+    /**
+     * Release the render node's RHI resources (buffer FBOs, pipelines,
+     * uploaded textures) while the item sits idle, without destroying the
+     * node, the item, or the window. Safe to call from the GUI thread: the
+     * release runs as a scheduled render job on the scene-graph thread, the
+     * only thread allowed to touch the node. Everything re-creates lazily
+     * through the ensure* paths on the next painted frame (the same recovery
+     * the device-loss path exercises), so the cost of calling this on a
+     * window that immediately resumes is one warm-up frame, not a teardown.
+     * Note the call itself always requests one composited frame of the
+     * window (QQuickWindow::update()): that frame is what dispatches the
+     * release on an otherwise idle window and what flushes any park state
+     * the caller latched alongside.
+     *
+     * Intended for long-lived, kept-alive windows whose content goes
+     * invisible for long stretches (the daemon's idle-quiesced overlays):
+     * an invisible item never reaches updatePaintNode, so without this its
+     * full-screen render targets stay pinned in (shared, on an iGPU) memory
+     * for the window's whole lifetime.
+     */
+    Q_INVOKABLE void releaseIdleGraphicsResources();
+
+Q_SIGNALS:
+    void iTimeChanged();
+    void iTimeDeltaChanged();
+    void iFrameChanged();
+    void iResolutionChanged();
+    void iMouseChanged();
+    void isReversedChanged();
+    void playingChanged();
+    void shaderSourceChanged();
+    void vertexShaderUrlChanged();
+    void shaderParamsChanged();
+    void paramPreambleChanged();
+    void sourceItemChanged();
+    void bufferShaderPathChanged();
+    void bufferShaderPathsChanged();
+    void bufferFeedbackChanged();
+    void bufferScaleChanged();
+    void bufferScalesChanged();
+    void halfFloatBuffersChanged();
+    void bufferWrapChanged();
+    void bufferWrapsChanged();
+    void bufferFilterChanged();
+    void bufferFiltersChanged();
+    void customParamsChanged();
+    void customColorsChanged();
+    void audioSpectrumChanged();
+    void wallpaperTextureChanged();
+    void useWallpaperChanged();
+    void useDepthBufferChanged();
+    void gridSubdivisionsChanged();
+    /// Emitted when status() transitions. Always delivered on the object's
+    /// (GUI) thread: setStatus is called from updatePaintNode on the render
+    /// thread under Qt's threaded loop, and notifyOnGuiThread marshals the
+    /// emission there via a queued call — so any connection type is safe,
+    /// including DirectConnection. Consequence of the marshalling: when a
+    /// transition originates in the sync phase, delivery is asynchronous
+    /// relative to the m_status write, and two rapid transitions can
+    /// coalesce from a handler's point of view (both handlers run with the
+    /// final status). Handlers MUST gate on the current status() value and
+    /// must not assume one delivery per transition.
+    void statusChanged();
+    /// Emitted from setError(). Same delivery contract as statusChanged():
+    /// marshalled to the object's thread by notifyOnGuiThread, so any
+    /// connection type is safe, and a handler should read errorLog() rather
+    /// than assume one delivery per write (the log itself is written
+    /// synchronously under its mutex before the notify is posted, so the
+    /// handler always observes the updated value).
+    void errorLogChanged();
+
+protected:
+    QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
+    void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
+    void componentComplete() override;
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+
+    /**
+     * @brief The factor the GPU-bound iResolution is multiplied by.
+     *
+     * 1.0 when the installed extension reports
+     * `requiresPhysicalResolution() == false` (the animation path keeps
+     * iResolution logical), and 1.0 when the item has no window. Otherwise the
+     * window's effectiveDevicePixelRatio(), which already carries the screen.
+     * There is deliberately NO screen() term: gating on one produced the
+     * edge-stripe bug the implementation's own comment names.
+     *
+     * Exposed because a subclass that puts its own lengths into the UBO has to
+     * agree with iResolution or its geometry lands in a different space. That
+     * agreement is the whole contract, so it is one function rather than a
+     * derivation each subclass re-implements and a comment asking them to keep
+     * the copies in step.
+     */
+    qreal effectiveResolutionScale() const;
+
+    /**
+     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper,
+     *        user textures, uniform extension) to a render node.
+     *
+     * Does NOT sync shader source (updatePaintNode's needLoad branch owns it,
+     * and it differs between ShaderEffect and subclasses), and does NOT push
+     * sourceItem's texture provider — the BASE updatePaintNode does. A subclass
+     * that REPLACES updatePaintNode must push it, or its sourceItem reads none.
+     *
+     * Called from updatePaintNode(); subclasses that override updatePaintNode should call
+     * this instead of duplicating the property sync.
+     */
+    void syncBasePropertiesToNode(ShaderNodeRhi* node);
+
+    /**
+     * @brief Atomically read-and-clear the shader-dirty flag.
+     *
+     * Subclasses that override updatePaintNode() must call this to observe
+     * pending reload requests from setShaderSource / setShaderIncludePaths /
+     * reloadShader(). Without consuming the flag, runtime include-path
+     * changes never reach the render node.
+     */
+    bool consumeShaderDirty()
+    {
+        return m_shaderDirty.exchange(false);
+    }
+
+    /**
+     * @brief Factory hook for the render node updatePaintNode() will create.
+     *
+     * Default returns a plain ShaderNodeRhi. Subclasses that need an enriched
+     * node (e.g. ZoneShaderNodeRhi for zone-aware shaders with a labels
+     * texture binding) override this to return their own subclass — base
+     * updatePaintNode() will then drive that node through the same
+     * sync/render flow without subclasses having to duplicate it.
+     *
+     * Called only when oldNode is null. Ownership transfers to the scene graph.
+     */
+    virtual ShaderNodeRhi* createShaderNode();
+
+    /**
+     * @brief Register the live render node for base-class teardown coverage.
+     *
+     * The base tracks the node it returned from updatePaintNode so the
+     * destructor and the sceneGraphAboutToStop handler can sever the node's
+     * back-pointer (invalidateItem) / release its GPU resources. That tracking
+     * member is private and is only set by the BASE updatePaintNode — a
+     * subclass that fully reimplements updatePaintNode (SurfaceShaderItem)
+     * MUST register its node here (and register nullptr when it deletes the
+     * node) or the base teardown silently no-ops and a render-thread access
+     * between item destruction and node deletion walks a freed item.
+     *
+     * Registration takes a share of the node's liveness block, so the base no
+     * longer has to guess whether a tracked node is still alive — see
+     * ShaderNodeLiveness. Re-registering the same node every frame (the
+     * documented usage) is an early-out, not a refcount churn.
+     */
+    void registerRenderNode(ShaderNodeRhi* node);
+
+    void setError(const QString& error);
+    void setStatus(Status newStatus);
+    static QString localShaderPath(const QUrl& url); ///< URL to loader path; see the definition.
+
+private:
+    // ── Auto-tick (playing=true) plumbing ────────────────────────────
+    /// Subscribe / unsubscribe to the host QQuickWindow's per-frame
+    /// signal. Called from setPlaying and from itemChange when the item
+    /// moves between windows (or is removed from any window).
+    void updatePlayingConnection();
+    /// Per-frame slot when playing=true. Computes the wall-clock delta
+    /// from the previous frame and advances iTime / iTimeDelta / iFrame.
+    void onPlayingTick();
+
+    // ── Output-scale plumbing ────────────────────────────────────────
+    /// Re-subscribe to whatever reports a change in
+    /// effectiveResolutionScale(). Called from itemChange when the item
+    /// moves between windows.
+    ///
+    /// The mechanism is version-split. On Qt 6.11+ this is a single
+    /// connection to QQuickWindow::devicePixelRatioChanged, the NOTIFY for
+    /// effectiveDevicePixelRatio, which is the exact accessor
+    /// effectiveResolutionScale() reads: it covers a screen move, a screen
+    /// rescaled in place, and a per-surface scale change that touches no
+    /// screen at all (Wayland fractional-scale-v1), which no QScreen signal
+    /// reports. Below 6.11 that notifier does not exist, so it approximates
+    /// with QWindow::screenChanged plus the screen's
+    /// logicalDotsPerInchChanged.
+    ///
+    /// Without this, a scale change only reaches the GPU on a frame that
+    /// something else already scheduled. Moving an overlay to a
+    /// differently-scaled screen at the same logical size dirties nothing:
+    /// geometryChange() sees no logical-size change, and itemChange() does
+    /// not report screen moves. An animated pack masks it because playing=true
+    /// ticks every frame anyway, but a static pack keeps painting at the old
+    /// scale until an unrelated event dirties the item. This covers
+    /// iResolution and the zone extension's scale together, since both
+    /// derive from effectiveResolutionScale().
+    void updateScaleConnections();
+
+    // ── Animation state ──────────────────────────────────────────────
+    // Field order minimises padding: 8-byte (qreal/QSizeF/QPointF) members
+    // grouped together, followed by 4-byte (int), trailing 1-byte bool.
+    // qreal-bool-int interleaving wastes 7 bytes via alignment padding.
+    qreal m_iTime = 0.0;
+    qreal m_iTimeDelta = 0.0;
+    qreal m_playingLastFrameSeconds = 0.0; ///< Wall-clock time of the previous tick
+    QSizeF m_iResolution;
+    QPointF m_iMouse;
+    int m_iFrame = 0;
+    bool m_isReversed = false;
+    bool m_playing = false;
+    QMetaObject::Connection m_playingConnection;
+    /// Assigned on both arms of the version split: the window's DPR notifier
+    /// on 6.11+, the screen-change signal below that.
+    QMetaObject::Connection m_scaleConnection;
+    /// Pre-6.11 only: on 6.11+ the single connection above covers this case and
+    /// this stays default-constructed. Declared UNCONDITIONALLY even so. This
+    /// is an exported class in a shared library whose supported Qt range spans
+    /// the 6.11 boundary, and a member that exists only on one side of a
+    /// version check shifts every later member's offset between translation
+    /// units built against different Qt minors.
+    QMetaObject::Connection m_screenDprConnection;
+
+    // ── Shader source ────────────────────────────────────────────────
+    QUrl m_shaderSource;
+    QUrl m_vertexShaderUrl;
+    QVariantMap m_shaderParams;
+    QStringList m_shaderIncludePaths;
+    QString m_paramPreamble; ///< Generated `#define p_<id> ...` block (T1.1); empty = none.
+    QString m_entryPrologue; ///< T1.4 entry-point prologue forwarded to the node; empty = none.
+    QList<PhosphorShaders::EntryCandidate> m_entryCandidates; ///< T1.4 entry candidates; empty = no assembly.
+
+    // QPointer because the source item is owned by the QML scene, not
+    // the ShaderEffect — a torn-down source must auto-null rather than
+    // leave a dangling pointer that the per-frame textureProvider()
+    // lookup would dereference.
+    QPointer<QQuickItem> m_sourceItem;
+    /// Single-shot warning latch for `setSourceItem(this)` rejection. A QML
+    /// binding mistakenly wired to `this` would otherwise spam the journal at
+    /// 60 Hz; mirrors the pattern used by `m_warnedForeignRhi` on the node.
+    bool m_warnedSelfSourceItem = false;
+
+    // ── Multipass ────────────────────────────────────────────────────
+    QString m_bufferShaderPath;
+    QStringList m_bufferShaderPaths;
+    bool m_bufferFeedback = false;
+    qreal m_bufferScale = 1.0;
+    QVariantList m_bufferScales;
+    bool m_halfFloatBuffers = true;
+    QString m_bufferWrap = QStringLiteral("clamp");
+    QStringList m_bufferWraps;
+    QString m_bufferFilter = QStringLiteral("linear");
+    QStringList m_bufferFilters;
+
+    // ── Custom parameters (kVecCount vec4s, -1.0 "unset" sentinel) ─────────
+    // Sized from the shared budget, not a literal: the sync loop indexes these
+    // by the same constants, so a drifted literal would be an out-of-bounds write.
+    std::array<QVector4D, PhosphorShaders::CustomParams::kVecCount> m_customParams = {{
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+        QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
+    }};
+
+    // ── Custom colors (16 colors) ────────────────────────────────────
+    std::array<QColor, PhosphorShaders::CustomColors::kColorCount> m_customColors = {{
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+    }};
+
+    // ── Textures ─────────────────────────────────────────────────────
+    QVector<float> m_audioSpectrum;
+    std::array<QImage, kMaxUserTextureSlots> m_userTextureImages;
+    // Filled with "clamp" by the constructor rather than a brace list, exactly like
+    // m_userTextureSvgSizes below and for the same reason: the count is the binding
+    // table's, so a literal list stops covering the array the moment the table
+    // grows a slot. Filled at all because setShaderParams string-compares these,
+    // so a null default reads as a change and fires a spurious update().
+    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps;
+    /// Last-resolved file path per user-texture slot. Tracked here so
+    /// `setShaderParams` can detect path changes (load on transition,
+    /// not re-load on every params write) and so the SVG rasterise size
+    /// can re-render the same SVG path when only the size changes.
+    /// Empty when the slot has never been assigned a path.
+    std::array<QString, kMaxUserTextureSlots> m_userTexturePaths;
+    /// Per-slot SVG rasterise dimension (logical pixels, max-axis). Only
+    /// consulted on `.svg` / `.svgz` paths; bitmap formats ignore this.
+    /// Default 1024 carries forward the pre-unification ZoneShaderItem
+    /// behaviour — sized to be sharp at the typical zone-icon scale
+    /// without the 16× cost a 4096 default would impose on the common
+    /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
+    // Filled with kDefaultUserTextureSvgSize by the constructor rather than a
+    // brace list, so bumping kMaxUserTextureSlots cannot silently zero-fill the
+    // new slots (qBound would then rasterise them at the 64 px floor).
+    std::array<int, kMaxUserTextureSlots> m_userTextureSvgSizes{};
+    /// Set by `setUserTexture` to flag that a directly-pushed QImage now
+    /// occupies one of the user-texture slots (path cache cleared). Honoured
+    /// by `setShaderParams`: when the incoming params map is byte-equal to
+    /// `m_shaderParams`, the early-return is normally fine, but if a direct
+    /// push intervened the cleared path needs to be reloaded from the
+    /// unchanged-on-the-wire `uTextureN` entry. Bypassing the early-return
+    /// in that one case lets the texture pipeline re-parse and reload.
+    /// Reset at the end of the parse branch so the cost is paid exactly
+    /// once per intervening direct push.
+    bool m_userTexturesDirectlyOverridden = false;
+    QImage m_wallpaperTexture;
+    mutable QMutex m_wallpaperTextureMutex;
+    bool m_useWallpaper = false;
+    bool m_useDepthBuffer = false;
+    int m_gridSubdivisions = 0;
+
+    // ── Uniform extension ────────────────────────────────────────────
+    std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
+
+    // ── Status ───────────────────────────────────────────────────────
+    // Atomic because setStatus is called from updatePaintNode (render
+    // thread under threaded render loop) while onPlayingTick reads it on
+    // the GUI thread. A torn read would only matter at status
+    // transitions, but the gate at `m_status != Status::Ready` would
+    // skip-or-tick spuriously around the boundary. Acquire/release
+    // semantics suffice — there's no associated data we need to publish
+    // alongside.
+    std::atomic<Status> m_status{Status::Null};
+    /// Guarded because setError() runs on the RENDER thread (from
+    /// updatePaintNode) while errorLog() is a Q_PROPERTY READ reachable from
+    /// QML on the GUI thread. A QString assignment is a non-atomic d-pointer
+    /// write plus a refcount touch, so an unguarded concurrent read can hand
+    /// QML a torn pointer. The neighbouring m_status is std::atomic for exactly
+    /// this reason; a QString cannot be, hence the mutex. Written at most once
+    /// per shader load, so contention is nil.
+    mutable QMutex m_errorLogMutex;
+    QString m_errorLog;
+
+    // ── Render node tracking ─────────────────────────────────────────
+    /// Share of the tracked node's liveness block (ShaderNodeLiveness), or
+    /// null when no node is registered. The node nulls itself inside the block
+    /// when the scene graph deletes it, so this is the one place that can
+    /// answer "is the tracked node still alive?" without guessing — and,
+    /// because every use holds the block's mutex, the answer cannot go stale
+    /// between the check and the call.
+    ///
+    /// Guarded by m_renderNodeMutex rather than made atomic: registration runs
+    /// on the render thread during the sync phase, while the destructor and
+    /// the idle-release job reach it from the GUI and render threads at
+    /// arbitrary times, and a shared_ptr swap is not a single atomic store.
+    std::shared_ptr<ShaderNodeLiveness> m_renderNodeLink;
+    /// Serialises reads and writes of m_renderNodeLink. Held only long enough
+    /// to copy the shared_ptr out; the node call itself happens under the
+    /// block's own mutex, after this one has been released. The two are never
+    /// held simultaneously — see withTrackedNode() for why.
+    mutable std::mutex m_renderNodeMutex;
+    /// Take a share of the tracked liveness block. Null when nothing is
+    /// registered. Never dereference the node without holding the block's
+    /// mutex — see withTrackedNode().
+    std::shared_ptr<ShaderNodeLiveness> trackedNodeLink() const;
+    /// Run @p fn on the tracked node while holding its liveness mutex, so the
+    /// scene graph cannot delete the node mid-call. No-op when no node is
+    /// tracked or the node has already been deleted.
+    void withTrackedNode(const std::function<void(ShaderNodeRhi*)>& fn) const;
+    // QPointer defends against reparent/teardown storms where the window is
+    // destroyed out from under us before windowChanged(nullptr) fires.
+    QPointer<QQuickWindow> m_connectedWindow;
+    /// Liveness token for render jobs queued via releaseIdleGraphicsResources.
+    /// A QPointer is not documented thread-safe against concurrent destruction
+    /// (a NoStage job can sit queued for an unbounded interval and pass a
+    /// QPointer null-check just as ~QObject begins on the GUI thread). The
+    /// job captures this shared_ptr by value, takes the mutex, and bails when
+    /// the pointer is null; the destructor takes the same mutex and nulls the
+    /// pointer as its FIRST statement, before any member teardown. Because
+    /// the job holds the lock across its node access, a destructor that
+    /// begins mid-job blocks until the job finishes — this CLOSES the
+    /// destruction race (an earlier atomic-only token merely narrowed it to
+    /// the destructor body). Contention is one uncontended lock per idle
+    /// grace.
+    struct SelfToken
+    {
+        std::mutex mutex;
+        ShaderEffect* effect = nullptr;
+    };
+    std::shared_ptr<SelfToken> m_selfToken = std::make_shared<SelfToken>();
+
+    /// Emit @p signal on the GUI thread regardless of the calling thread.
+    /// setStatus/setError run in the sync phase on the render thread; a
+    /// direct emit there hands DirectConnection consumers the wrong thread.
+    void notifyOnGuiThread(void (ShaderEffect::*signal)());
+
+    // ── Thread-safe dirty flags for main -> render thread sync ───────
+    std::atomic<bool> m_shaderDirty{false};
+};
+
+} // namespace PhosphorRendering

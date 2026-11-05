@@ -3,8 +3,8 @@
 
 # Kirigami Color Usage — Ruleset
 
-Which Kirigami theme role to reach for when painting QML in `src/settings/qml`,
-`src/shared`, `src/ui`, `src/editor/qml`, and `libs/phosphor-control`. The shell
+Which Kirigami theme role to reach for when painting QML in `plasmazones/src/settings/qml`,
+`plasmazones/src/shared`, `plasmazones/src/ui`, `plasmazones/src/editor/qml`, and `phosphor/libs/phosphor-control`. The shell
 libraries (`phosphor-shell*`, `phosphor-popout`, `phosphor-theme`) have their own
 token system and are out of scope; `phosphor-control` is in scope because it
 paints the settings app's own sidebar and footer chrome with `Kirigami.Theme`.
@@ -75,7 +75,7 @@ tertiary accent, which is exactly why the misuses above render in
   user-configurable Settings stored as theme-fallback strings: an EMPTY value
   (the shipped default) means "follow the system palette", resolved on READ by
   `Settings::resolvedSystemColor(SystemColorRole)`
-  (`src/config/settings/systemcolors.cpp`), and nothing is ever written back
+  (`plasmazones/src/config/settings/systemcolors.cpp`), and nothing is ever written back
   into config on a palette change. The daemon cascades the resolved colors
   into every overlay/popup slot (`overlay_data.cpp`: zone-custom → rule
   override → global). QML-side defaults (`ZoneColorDefaults`) only apply

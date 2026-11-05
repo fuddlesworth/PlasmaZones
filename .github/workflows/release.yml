@@ -9,26 +9,50 @@ on:
   push:
     tags:
       - "v*"
+  # Cache warming, not a release. A tag run can restore the default branch's
+  # caches but saves into the tag's own scope, which no later release can
+  # read, so the compiler caches the package builds restore are made here: the
+  # nightly run builds every package on main and publishes nothing. See the
+  # `gate` job, and "Restore the compiler cache" in build-deb.
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v3.0.0). Must already exist.'
-        required: true
+        description: 'Tag to release (e.g. v3.0.0). Must already exist. Leave empty only with warm_cache.'
+        required: false
       pkgrel:
         description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Leave empty for a normal release. A rebuild-only republish normally carries its revision in the tag itself (v3.4.17-r2, see the version job); set this only to republish a MUTABLE release under its original tag.'
         required: false
         default: ''
+      warm_cache:
+        description: 'Build every package to warm the compiler caches, and publish nothing. Ignores tag and pkgrel.'
+        type: boolean
+        default: false
 
-# Default scope is read-only. Only the `release` job and the AUR publish
-# need writes — they opt in via per-job permissions blocks.
+# Default scope is read-only. Only the `release` job opts into writes, via
+# its own permissions block. publish-aur and publish-obs deliberately have
+# none: they push over SSH with AUR_SSH_PRIVATE_KEY and to OBS with osc
+# credentials, so neither needs GITHUB_TOKEN writes. Do not "restore" a
+# permissions block for them — that would hand a write token to jobs whose
+# whole purpose is pushing to third-party hosts.
 permissions:
   contents: read
 
 # Two tag pushes (or a re-run of the same tag dispatch) must not race
-# the delete-and-recreate dance in the `release` job. Serialising per
-# ref keeps multiple in-flight releases out of each other's way.
+# the delete-and-recreate dance in the `release` job.
+#
+# Keyed on the resolved TAG, not github.ref: on a tag push the ref is
+# refs/tags/vX.Y.Z, but on workflow_dispatch it is whatever ref the
+# dispatch was fired against — kwin-rebuild-watch.yml passes a branch. Those
+# landed in two different concurrency groups, so a dispatch and a push for
+# the SAME tag could run simultaneously, which is exactly the case the
+# comment claimed to cover.
+#
+# A cache-warming run has no tag, so it gets a group of its own rather than
+# sharing the dispatched branch's with a release fired against that branch.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ (github.event_name == 'schedule' || github.event.inputs.warm_cache == 'true') && 'cache-warm' || github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -48,11 +72,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.gate.outputs.build }}
+      warm: ${{ steps.gate.outputs.warm }}
     steps:
       - name: Skip push events for revision tags
         id: gate
+        env:
+          WARM_INPUT: ${{ github.event.inputs.warm_cache }}
         run: |
           set -euo pipefail
+          # A cache-warming run (the nightly schedule, or a dispatch with
+          # warm_cache) builds every package and must never publish one. Every
+          # job that releases or uploads checks the version job's `warm`.
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "${WARM_INPUT:-}" == "true" ]]; then
+              echo "build=true" >> "$GITHUB_OUTPUT"
+              echo "warm=true" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          echo "warm=false" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" =~ -r[2-9][0-9]*$ ]]; then
               echo "::notice::$GITHUB_REF_NAME is a package-revision tag; it is released by the workflow_dispatch that cut it, not by its push. Nothing to do."
               echo "build=false" >> "$GITHUB_OUTPUT"
@@ -74,7 +110,17 @@ jobs:
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       pkgrel: ${{ steps.version.outputs.pkgrel }}
       release_tag: ${{ steps.version.outputs.release_tag }}
+      warm: ${{ needs.gate.outputs.warm }}
     steps:
+      # Checked out only for a cache-warming run, which has no tag to read a
+      # version from; see the first branch of "Extract version from tag".
+      - name: Checkout
+        if: needs.gate.outputs.warm == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - name: Extract version from tag
         id: version
         # Pass the user-supplied dispatch input through env (not via ${{ … }}
@@ -84,8 +130,30 @@ jobs:
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
           INPUT_PKGREL: ${{ github.event.inputs.pkgrel }}
+          WARM: ${{ needs.gate.outputs.warm }}
         run: |
           set -euo pipefail
+          # A cache-warming run builds the commit it was fired on, as the
+          # newest dated CHANGELOG.md version. Not CMakeLists.txt's: the
+          # Debian and RPM steps assert that the changelog they generate from
+          # CHANGELOG.md carries VERSION, and a version bump lands in
+          # CMakeLists.txt before its changelog entry is dated.
+          if [[ "$WARM" == "true" ]]; then
+              VERSION="$(awk -F'[][]' '/^## \[[0-9]/ && / - / { print $2; exit }' CHANGELOG.md)"
+              if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.?[0-9]+)?)?$ ]]; then
+                  echo "Error: newest dated CHANGELOG.md version '$VERSION' is not a release version" >&2
+                  exit 1
+              fi
+              {
+                  echo "ref=$GITHUB_SHA"
+                  echo "version=$VERSION"
+                  echo "is_prerelease=false"
+                  echo "pkgrel=1"
+                  echo "release_tag="
+              } >> "$GITHUB_OUTPUT"
+              echo "Cache-warming build of $GITHUB_SHA as $VERSION; nothing is published."
+              exit 0
+          fi
           # On push the ref is refs/tags/v<x>; on manual dispatch we
           # accept an explicit tag input. Fail loudly if neither yields
           # a tag-shaped value so downstream packaging steps don't see
@@ -234,6 +302,13 @@ jobs:
         suite: [unstable, testing]
     container:
       image: debian:${{ matrix.suite }}
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: deb-${{ matrix.suite }}
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
@@ -262,7 +337,7 @@ jobs:
           # git so actions/checkout does a real clone rather than falling back
           # to the REST tarball; dpkg-dev so `apt-get build-dep` can read the
           # source package below.
-          apt_install_with_retry git ca-certificates dpkg-dev fakeroot
+          apt_install_with_retry git ca-certificates dpkg-dev fakeroot ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -296,6 +371,28 @@ jobs:
               apt-get build-dep -y --no-install-recommends ./
           fi
 
+      # The third-party archives the build compiles in, pinned in
+      # cmake/PhosphorDependencies.cmake. debian/rules hands packaging/deps to
+      # CMake as PHOSPHOR_DEPS_ARCHIVES, the same in-tree path the OBS Debian
+      # source package carries them at (see publish-obs), so the rules file
+      # names one location for both and the build itself never reaches the
+      # network. The script mode downloads each pinned archive and checks its
+      # SHA-256 before keeping it. cmake is a Build-Depends, installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree
+      # and its rules file passes no archive directory, so it needs nothing
+      # here. The watch rebuilds whatever the latest release is, which can be
+      # one of those.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$PWD/packaging/deps" -P cmake/PhosphorDependencies.cmake
+
       - name: Generate Debian changelog from CHANGELOG.md
         # Force bash for the same reason the build step below does: the
         # Debian container's default shell is dash, which has neither
@@ -325,6 +422,40 @@ jobs:
           fi
           echo "Debian version: $GOT"
 
+      # The compiler cache. Each package build restores the newest cache saved
+      # for its flavour (distro, release and architecture). A tag run can
+      # restore the default branch's caches but would save into the tag's own
+      # scope, which no later release can read, so only branch runs save: the
+      # nightly cache-warming run on main, and kwin-rebuild-watch's
+      # dispatches. The job's CMAKE_<LANG>_COMPILER_LAUNCHER variables put
+      # ccache in front of the compiler through every packaging tool, because
+      # CMake reads them from the environment and makepkg, rpmbuild and
+      # dpkg-buildpackage all run it with the environment intact.
+      #
+      # ccache's defaults otherwise hold, deliberately. These builds compile
+      # with -g, and the cwd ccache hashes for that is what keeps the debug
+      # info's compilation directory right; the RPM builds run in a directory
+      # named after the version, so their cache hits only within a version
+      # (which is what a KWin rebuild of it is). No sloppiness either: nothing
+      # uses __DATE__ or __TIME__, and the three precompiled-header targets
+      # simply compile uncached.
+      #
+      # The cache directory sits outside the workspace, because the RPM jobs
+      # tar the workspace into the source RPM.
+      #
+      # Housekeeping only, so none of the cache steps can fail a release.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
         # bash builtins. The container's /bin/sh is dash, and GitHub's
@@ -347,6 +478,36 @@ jobs:
               mv ../*.ddeb dist/
           fi
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       # KWin baseline for the kwin-rebuild-watch workflow: the upstream KWin
       # version this .deb was compiled against. The effect plugin's IID embeds
       # it, so the package is inert the moment the distro ships a different
@@ -361,7 +522,7 @@ jobs:
           dpkg-query -W -f='${source:Upstream-Version}\n' kwin-dev \
             | tee baseline/debian-unstable
       - name: Upload KWin build baseline
-        if: matrix.suite == 'unstable'
+        if: matrix.suite == 'unstable' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-debian-unstable
@@ -376,7 +537,7 @@ jobs:
       # an artifact. Unstable is the one published because it matches the
       # Debian_Unstable OBS target and is the sharper signal of the two.
       - name: Upload artifact
-        if: matrix.suite == 'unstable'
+        if: matrix.suite == 'unstable' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: deb-debian-unstable
@@ -387,21 +548,41 @@ jobs:
   # Build RPM Package
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm:
-    name: Build .rpm (Fedora ${{ matrix.fedora }})
+    name: Build .rpm (Fedora ${{ matrix.fedora }}, ${{ matrix.arch }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         # Fedora 44 is the earliest release whose repos carry Plasma 6.7
         # (KF 6.26 / Qt 6.10 / KWin 6.7), the PlasmaZones build baseline.
-        fedora: [44]
+        # One build per release: an RPM only loads against the KWin and Qt it was built on.
+        include:
+          - fedora: 44
+            arch: x86_64
+            runner: ubuntu-latest
+          - fedora: 44
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - fedora: 45
+            arch: x86_64
+            runner: ubuntu-latest
+          - fedora: 45
+            arch: aarch64
+            runner: ubuntu-24.04-arm
     container:
       image: fedora:${{ matrix.fedora }}
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: rpm-fedora-${{ matrix.fedora }}-${{ matrix.arch }}
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
-        run: dnf install -y git rpm-build rpmdevtools
+        run: dnf install -y git rpm-build rpmdevtools ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -424,6 +605,28 @@ jobs:
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
+
+      # The spec's Source1 and Source2: the third-party archives the build
+      # compiles in, pinned in cmake/PhosphorDependencies.cmake. rpmbuild looks
+      # for them in SOURCES under their file names, and the spec hands that
+      # directory to CMake as PHOSPHOR_DEPS_ARCHIVES, so the build itself never
+      # reaches the network. The script mode downloads each pinned archive and
+      # checks its SHA-256 before keeping it. cmake comes from the build
+      # dependencies installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree
+      # and its spec names no extra sources, so it needs nothing here. The
+      # watch rebuilds whatever the latest release is, which can be one of
+      # those.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$HOME/rpmbuild/SOURCES" -P cmake/PhosphorDependencies.cmake
 
       # Template the version FIRST so the source tarball baked into the
       # SRPM carries the matching spec rather than the 0.0.0 placeholder.
@@ -451,7 +654,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Copy source files. Exclude anything produced by prior steps
@@ -471,6 +679,19 @@ jobs:
               -cf - . | tar -xf - -C "PlasmaZones-${VERSION}/"
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build RPM
         run: |
           cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
@@ -478,20 +699,53 @@ jobs:
           mkdir -p dist
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: rpm-fedora-${{ matrix.fedora }}
+          name: rpm-fedora-${{ matrix.fedora }}-${{ matrix.arch }}
           path: dist/*.rpm
           retention-days: 30
 
       # KWin baseline for kwin-rebuild-watch.yml — see the Debian job.
       - name: Record KWin build baseline
+        if: matrix.arch == 'x86_64'
         run: |
           set -euo pipefail
           mkdir -p baseline
           rpm -q --qf '%{VERSION}\n' kwin-devel | tee baseline/fedora-${{ matrix.fedora }}
       - name: Upload KWin build baseline
+        if: matrix.arch == 'x86_64' && needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-fedora-${{ matrix.fedora }}
@@ -507,6 +761,13 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: opensuse/tumbleweed:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: rpm-opensuse-tumbleweed
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
@@ -554,7 +815,7 @@ jobs:
                   zypper -n install --allow-downgrade "$@"
               fi
           }
-          install_with_retry git rpm-build rpmdevtools
+          install_with_retry git rpm-build rpmdevtools ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -595,6 +856,17 @@ jobs:
       - name: Setup rpmbuild
         run: rpmdev-setuptree
 
+      # See build-rpm for the dependency archives.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$HOME/rpmbuild/SOURCES" -P cmake/PhosphorDependencies.cmake
+
       - name: Generate RPM changelog and set version from CHANGELOG.md
         # See the Debian step: the version assertion below uses `[[ ]]`, which
         # dash does not have, and a container's default shell may resolve to it.
@@ -619,7 +891,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Same exclude list as build-rpm above — keep them in sync.
@@ -635,6 +912,19 @@ jobs:
               -cf - . | tar -xf - -C "PlasmaZones-${VERSION}/"
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build RPM
         run: |
           cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
@@ -642,7 +932,38 @@ jobs:
           mkdir -p dist
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: rpm-opensuse-tumbleweed
@@ -656,6 +977,7 @@ jobs:
           mkdir -p baseline
           rpm -q --qf '%{VERSION}\n' kwin6-devel | tee baseline/opensuse-tumbleweed
       - name: Upload KWin build baseline
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-opensuse-tumbleweed
@@ -671,12 +993,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: generic
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Install prerequisites
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git tar
+          pacman -S --noconfirm git tar ccache
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -703,8 +1032,51 @@ jobs:
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DBUILD_TESTING=OFF
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build
         run: cmake --build build --parallel $(nproc)
+
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Install to AppDir
         run: |
@@ -733,6 +1105,19 @@ jobs:
           # Create VERSION file for version detection
           echo "$VERSION" > "$DIRNAME/VERSION"
 
+          # The Qt and KWin this build links against. install.sh compares
+          # them with the host's before copying anything: an older Qt fails
+          # at load time on Qt's per-minor version tag, and KWin only loads
+          # the effect at its exact build version. Epoch and pkgrel are
+          # stripped, as in the KWin baseline step of build-arch.
+          {
+            echo "QT_VERSION=$(pacman -Q qt6-base | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//')"
+            echo "KWIN_VERSION=$(pacman -Q kwin | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//')"
+          } > "$DIRNAME/BUILD_ENV"
+          cat "$DIRNAME/BUILD_ENV"
+          grep -qE '^QT_VERSION=[0-9]+\.[0-9]+\.[0-9]+$' "$DIRNAME/BUILD_ENV"
+          grep -qE '^KWIN_VERSION=[0-9]+\.[0-9]+\.[0-9]+$' "$DIRNAME/BUILD_ENV"
+
           # Copy uninstall.sh to the installed location so it's available after install
           mkdir -p "$DIRNAME/usr/share/plasmazones"
           cp packaging/local-install/uninstall.sh "$DIRNAME/usr/share/plasmazones/"
@@ -742,6 +1127,7 @@ jobs:
           tar czf plasmazones-${VERSION}-linux-x86_64.tar.gz "$DIRNAME"
 
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: generic-linux-tarball
@@ -757,12 +1143,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    # The compiler cache; see "Restore the compiler cache" in build-deb.
+    env:
+      CCACHE_FLAVOR: arch
+      CCACHE_DIR: /var/cache/plasmazones-ccache
+      CCACHE_COMPILERCHECK: content
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - name: Setup build environment
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git sudo namcap
+          pacman -S --noconfirm base-devel git sudo namcap ccache
 
           # Create non-root user (makepkg refuses to run as root)
           useradd -m builder
@@ -784,6 +1177,26 @@ jobs:
             qt6-wayland plasma-activities \
             vulkan-headers vulkan-icd-loader
 
+      # The third-party archives the build compiles in, pinned in
+      # cmake/PhosphorDependencies.cmake. PKGBUILD.ci below builds from this
+      # checkout and hands packaging/deps to CMake as PHOSPHOR_DEPS_ARCHIVES,
+      # the offline path packaging/arch/PKGBUILD takes with its extra sources,
+      # so the build itself never reaches the network. The script mode
+      # downloads each pinned archive and checks its SHA-256 before keeping
+      # it. cmake comes from the build dependencies installed above.
+      #
+      # A tag older than that file carries its archives inside its own tree.
+      # Its CMake ignores PHOSPHOR_DEPS_ARCHIVES, so it needs nothing here.
+      - name: Fetch the pinned dependency archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; nothing to fetch."
+              exit 0
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$PWD/packaging/deps" -P cmake/PhosphorDependencies.cmake
+
       - name: Prepare PKGBUILD
         run: |
           VERSION="${{ needs.version.outputs.version }}"
@@ -799,7 +1212,7 @@ jobs:
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
           pkgrel=${{ needs.version.outputs.pkgrel }}
-          pkgdesc="Window tiling and autotiling for KDE Plasma"
+          pkgdesc="Window snapping, tiling and scrolling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -811,6 +1224,10 @@ jobs:
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              # kcolorscheme: the KWin effect links KF6::ColorScheme. It
+              # arrives transitively via kwin today, but packaging/arch/PKGBUILD
+              # declares it and this array says it mirrors that file.
+              'kcolorscheme'
               'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
@@ -826,6 +1243,7 @@ jobs:
                   -DCMAKE_INSTALL_PREFIX=/usr \
                   -DCMAKE_INSTALL_LIBDIR=lib \
                   -DBUILD_TESTING=OFF \
+                  -DPHOSPHOR_DEPS_ARCHIVES="$PWD/packaging/deps" \
                   -Wno-dev
               cmake --build build --parallel
           }
@@ -842,16 +1260,69 @@ jobs:
           }
           PKGBUILD_EOF
 
+      # See build-deb for the compiler cache.
+      - name: Restore the compiler cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-release-${{ env.CCACHE_FLAVOR }}-
+
+      - name: Note when the build started
+        shell: bash
+        run: echo "CCACHE_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build package
         run: |
-          chown -R builder:builder .
+          # makepkg runs as builder, so builder owns the compiler cache too.
+          # su without --login keeps the environment, which is how ccache's
+          # variables and the CMake launchers reach makepkg's build().
+          mkdir -p "$CCACHE_DIR"
+          chown -R builder:builder . "$CCACHE_DIR"
           cd packaging/arch
           su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
 
+      # Evicting everything this build did not touch keeps the saved cache to
+      # one build's worth. A build that ran no compile through ccache means
+      # the launcher never reached CMake; that is warned about, and the
+      # restored cache is left as it was rather than evicted to nothing.
+      - name: Trim the compiler cache
+        id: ccache-trim
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats --verbose
+          compiles=$(ccache --print-stats | awk -F'\t' '$1 == "direct_cache_hit" || $1 == "preprocessed_cache_hit" || $1 == "cache_miss" { n += $2 } END { print n + 0 }')
+          if [[ "$compiles" -eq 0 ]]; then
+              echo "::warning::ccache saw no compiles in this build, so CMAKE_CXX_COMPILER_LAUNCHER did not reach CMake. Leaving the restored cache as it was."
+              exit 0
+          fi
+          ccache --evict-older-than "$(( $(date +%s) - CCACHE_START + 60 ))s"
+          ccache --zero-stats
+          du -sh "$CCACHE_DIR"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.ccache-trim.outputs.save == 'true' && startsWith(github.ref, 'refs/heads/') }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /var/cache/plasmazones-ccache
+          key: ccache-release-${{ env.CCACHE_FLAVOR }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Validate package
+        # continue-on-error rather than `|| true`, matching ci.yml's draft
+        # step: namcap's advisory warnings should not red a release, but the
+        # intent belongs in the step definition where it is visible, not
+        # hidden in a shell operator that makes the step unconditionally
+        # green.
+        continue-on-error: true
         run: |
           cd packaging/arch
-          namcap *.pkg.tar.zst || true
+          namcap *.pkg.tar.zst
 
       - name: Move artifacts
         run: |
@@ -859,6 +1330,7 @@ jobs:
           mv packaging/arch/*.pkg.tar.zst dist/
 
       - name: Upload artifact
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: arch-package
@@ -876,6 +1348,7 @@ jobs:
           mkdir -p baseline
           pacman -Q kwin | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//' | tee baseline/arch
       - name: Upload KWin build baseline
+        if: needs.version.outputs.warm != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-arch
@@ -888,6 +1361,9 @@ jobs:
   build-nix:
     name: Verify Nix Build
     needs: version
+    # Nix builds in its sandbox, where no compiler cache reaches, so a
+    # cache-warming run has nothing to do here.
+    if: needs.version.outputs.warm != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -909,10 +1385,18 @@ jobs:
         run: nix build -L --fallback .#default
 
       - name: Verify package version
+        # Actually compare. `--version || true` reported success for any output,
+        # including none, so a step named Verify verified nothing.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           echo "Expected version: $VERSION"
-          ./result/bin/plasmazonesd --version || true
+          got="$(./result/bin/plasmazonesd --version)"
+          echo "Built: $got"
+          case "$got" in
+              *"$VERSION"*) ;;
+              *) echo "::error::built '$got', expected to contain '$VERSION'"; exit 1 ;;
+          esac
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
@@ -921,10 +1405,14 @@ jobs:
     name: Create GitHub Release
     needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
-    # No `if:` — the implicit success() gate is intentional. If any
-    # package build fails, the release is NOT cut: we don't ship a
-    # partial release. Fix the failing distro and re-run the tag.
+    # The implicit success() gate is intentional, and the `if:` below keeps
+    # it: an `if:` with no status function still requires every need to have
+    # succeeded. If any package build fails, the release is NOT cut: we
+    # don't ship a partial release. Fix the failing distro and re-run the
+    # tag. A cache-warming run never releases (and build-nix skips in one,
+    # which this gate would read as not-succeeded anyway).
     # Only this job writes release assets back to the repo.
+    if: needs.version.outputs.warm != 'true'
     permissions:
       contents: write
 
@@ -960,7 +1448,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          CHANNELS=(arch debian-unstable fedora-44 opensuse-tumbleweed)
+          CHANNELS=(arch debian-unstable fedora-44 fedora-45 opensuse-tumbleweed)
           for dir in artifacts/kwin-baseline-*/; do
               found="${dir#artifacts/kwin-baseline-}"
               found="${found%/}"
@@ -1046,6 +1534,8 @@ jobs:
             echo '```bash'
             echo "# Fedora 44"
             echo "sudo dnf install plasmazones-${VERSION}-*.fc44.x86_64.rpm"
+            echo "# Fedora 45"
+            echo "sudo dnf install plasmazones-${VERSION}-*.fc45.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (OBS):**"
@@ -1055,8 +1545,16 @@ jobs:
             echo "sudo zypper install plasmazones"
             echo '```'
             echo ""
-            echo "**Universal Linux (AppDir):**"
-            echo "For Fedora Atomic, Steam Deck, or non-root user installation:"
+            echo "**Fedora Atomic (Kinoite):**"
+            echo "Layer the COPR package. Replace 44 with your Fedora release."
+            echo '```bash'
+            echo "sudo curl -fsSL -o /etc/yum.repos.d/plasmazones.repo https://copr.fedorainfracloud.org/coprs/fuddlesworth/PlasmaZones/repo/fedora-44/fuddlesworth-PlasmaZones-fedora-44.repo"
+            echo "rpm-ostree install plasmazones"
+            echo "systemctl reboot"
+            echo '```'
+            echo ""
+            echo "**Arch-based tarball (no root):**"
+            echo "Built on Arch Linux, so it only runs where KWin is exactly the version Arch shipped at release time and Qt is the same or newer. It does not work on Fedora, Debian or SteamOS. The installer checks both versions and stops before copying anything if they do not match."
             echo '```bash'
             echo "tar xzf plasmazones-${VERSION}-linux-x86_64.tar.gz"
             echo "cd plasmazones-linux-x86_64"
@@ -1168,7 +1666,7 @@ jobs:
     # Skip AUR publish for pre-releases. Single source of truth: the
     # version job's `is_prerelease` output — keeps this in sync with
     # the GH release's `--prerelease` flag automatically.
-    if: needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout
@@ -1231,34 +1729,47 @@ jobs:
           cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
           cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
 
-          # Update version and hash. Use the same awk-anchored array
-          # rewrite as the source PKGBUILD (below) so future additional
-          # `source=` entries don't silently leave a stale second hash.
+          # Update version and hash. Same first-entry rewrite as the source
+          # PKGBUILD below and packaging/arch/update-aur.sh; see the source
+          # step for why only the first entry moves.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
           # The tarball is downloaded from the release that carries it, which
           # on a rebuild is the v<version>-r<N> release, not v<version>.
           sed -i "s/^_release=.*/_release=$RELEASE_TAG/" PKGBUILD
           grep -q "^_release=$RELEASE_TAG\$" PKGBUILD
-          awk -v sum="$SHA256" '
-            # Single-line form: sha256sums=(\047hash\047) — replace inline.
-            /^sha256sums=\(.*\)$/ {
+          SUM="$SHA256"
+          awk -v sum="$SUM" '
+            # Single-line form with one entry: sha256sums=(\047hash\047), replaced inline.
+            !done && /^sha256sums=\(\047[^\047]*\047\)$/ {
               print "sha256sums=(\047" sum "\047)"
+              done = 1
               next
             }
-            # Multi-line form: opening `sha256sums=(` on its own line,
-            # then entries, then a `)` on its own line.
-            /^sha256sums=\(/ {
-              print "sha256sums=("
+            # Multi-line form: `sha256sums=(` alone, one entry per line, `)` alone.
+            # Only the first entry is rewritten.
+            !done && /^sha256sums=\($/ { in_block = 1; print; next }
+            in_block && /^\)/ { in_block = 0; print; next }
+            in_block && !done && /^[[:space:]]*\047[^\047]*\047[[:space:]]*(#.*)?$/ {
               print "    \047" sum "\047"
-              print ")"
-              in_block = 1
+              done = 1
               next
             }
-            in_block && /^\)/ { in_block = 0; next }
-            in_block { next }
             { print }
-          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
+            END {
+              if (!done) {
+                print "sha256sums: no first entry found to rewrite" > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' PKGBUILD > PKGBUILD.new
+          mv PKGBUILD.new PKGBUILD
+          # Every source needs its own hash, or makepkg refuses the PKGBUILD.
+          # Sourced in a subshell: a PKGBUILD's top level is assignments only.
+          if ! (source ./PKGBUILD && [[ ${#source[@]} -eq ${#sha256sums[@]} && "${sha256sums[0]}" == "$SUM" ]]); then
+              echo "Error: the PKGBUILD's sha256sums array does not match its source array after the rewrite" >&2
+              exit 1
+          fi
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
           # Enumerate inputs explicitly rather than `cp /build/*` so a future
@@ -1308,9 +1819,18 @@ jobs:
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
 
-          # Calculate and update source tarball hash. Anchor inside the
-          # sha256sums=(...) block via awk so future additional hashes
-          # (e.g. for the .install file) aren't silently left stale.
+          # Calculate the release tarball's hash and write it into the FIRST
+          # sha256sums entry, the one for source[0], which the PKGBUILD leaves
+          # as 'SKIP'. The entries after it pin the dependency archives by
+          # their literal hashes, which check-conventions.py holds to
+          # cmake/PhosphorDependencies.cmake, so the rewrite passes them
+          # through untouched. Same rewrite as packaging/arch/update-aur.sh.
+          # A PKGBUILD from a tag that predates those archives has the
+          # single-line one-entry form, which the rewrite also takes.
+          #
+          # awk and mv are two commands, not `awk ... && mv ...`: under
+          # bash -e a failure on the left of && does not stop the step, so a
+          # PKGBUILD the rewrite could not parse was pushed with 'SKIP'.
           TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
           # Stage the tarball to disk first so we can detect both curl
           # failures and pipe-side errors. Piping `curl | sha256sum`
@@ -1324,27 +1844,38 @@ jobs:
           TARBALL_SHA256=$(sha256sum "$tmptar" | cut -d' ' -f1)
           rm -f "$tmptar"
           echo "Source tarball SHA256: $TARBALL_SHA256"
-          awk -v sum="$TARBALL_SHA256" '
-            # Single-line form: sha256sums=(\047hash\047) — replace inline.
-            /^sha256sums=\(.*\)$/ {
+          SUM="$TARBALL_SHA256"
+          awk -v sum="$SUM" '
+            # Single-line form with one entry: sha256sums=(\047hash\047), replaced inline.
+            !done && /^sha256sums=\(\047[^\047]*\047\)$/ {
               print "sha256sums=(\047" sum "\047)"
+              done = 1
               next
             }
-            # Multi-line form: opening `sha256sums=(` on its own line, then
-            # entries, then a `)` on its own line. Replace the entire array
-            # with a single sum (the source tarball). Add more entries here
-            # when PKGBUILD grows additional source= lines.
-            /^sha256sums=\(/ {
-              print "sha256sums=("
+            # Multi-line form: `sha256sums=(` alone, one entry per line, `)` alone.
+            # Only the first entry is rewritten.
+            !done && /^sha256sums=\($/ { in_block = 1; print; next }
+            in_block && /^\)/ { in_block = 0; print; next }
+            in_block && !done && /^[[:space:]]*\047[^\047]*\047[[:space:]]*(#.*)?$/ {
               print "    \047" sum "\047"
-              print ")"
-              in_block = 1
+              done = 1
               next
             }
-            in_block && /^\)/ { in_block = 0; next }
-            in_block { next }
             { print }
-          ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
+            END {
+              if (!done) {
+                print "sha256sums: no first entry found to rewrite" > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' PKGBUILD > PKGBUILD.new
+          mv PKGBUILD.new PKGBUILD
+          # Every source needs its own hash, or makepkg refuses the PKGBUILD.
+          # Sourced in a subshell: a PKGBUILD's top level is assignments only.
+          if ! (source ./PKGBUILD && [[ ${#source[@]} -eq ${#sha256sums[@]} && "${sha256sums[0]}" == "$SUM" ]]); then
+              echo "Error: the PKGBUILD's sha256sums array does not match its source array after the rewrite" >&2
+              exit 1
+          fi
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
           # Enumerate inputs explicitly — see the matching note in
@@ -1379,9 +1910,11 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Publish to openSUSE Build Service (OBS)
   # ═══════════════════════════════════════════════════════════════════════════
-  # Commits the spec + _service to the home:fuddlesworth/plasmazones OBS
-  # package; OBS then fetches the release tarball (via the download_files
-  # source service) and rebuilds for every enabled repository. Gated on the
+  # Commits the spec + _service, the Debian recipe and the Debian orig
+  # tarball to the home:fuddlesworth/plasmazones OBS package; OBS then fetches
+  # the release tarball and the pinned dependency archives (via the
+  # download_files source service) and rebuilds for every enabled repository.
+  # Gated on the
   # GitHub release being created, so all distro builds (including the
   # openSUSE Tumbleweed RPM smoke build) must succeed first — a spec that
   # fails to build is never pushed to the repo users have added with
@@ -1425,7 +1958,7 @@ jobs:
     # Skip pre-releases — the home:fuddlesworth repo users add with
     # `zypper addrepo` is a stable channel. Single source of truth: the
     # version job's `is_prerelease` output, same as publish-aur.
-    if: needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout
@@ -1436,7 +1969,8 @@ jobs:
       - name: Install osc (OBS command-line client)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends osc
+          # cmake for the dependency fetch in "Build the Debian orig tarball".
+          sudo apt-get install -y --no-install-recommends osc cmake
 
       - name: Configure osc credentials
         env:
@@ -1453,15 +1987,18 @@ jobs:
           # which hangs the runner. The file is chmod 600 and lives only
           # on the ephemeral CI VM; GitHub masks the secret values in logs.
           mkdir -p ~/.config/osc
-          cat > ~/.config/osc/oscrc << EOF
-          [general]
-          apiurl = https://api.opensuse.org
-
-          [https://api.opensuse.org]
-          credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
-          user = $OBS_USERNAME
-          pass = $OBS_PASSWORD
-          EOF
+          # printf with %s, not an unquoted heredoc: the heredoc expanded the
+          # credentials through the shell, so a password containing $, a
+          # backtick or a backslash was mangled or command-substituted. A
+          # QUOTED heredoc is not the fix either -- it would write the literal
+          # \$OBS_PASSWORD and break every upload. Values go in as arguments.
+          {
+            printf '[general]\napiurl = https://api.opensuse.org\n\n'
+            printf '[https://api.opensuse.org]\n'
+            printf 'credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager\n'
+            printf 'user = %s\n' "$OBS_USERNAME"
+            printf 'pass = %s\n' "$OBS_PASSWORD"
+          } > ~/.config/osc/oscrc
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec
@@ -1532,11 +2069,80 @@ jobs:
           fi
           echo "Debian recipe version: $DSC_VER"
 
+      # The Debian targets' source tarball: this tag's tree with the pinned
+      # dependency archives (cmake/PhosphorDependencies.cmake) added at
+      # packaging/deps, where debian/rules points CMake as
+      # PHOSPHOR_DEPS_ARCHIVES. OBS builds offline, so the archives have to
+      # arrive as sources, and the RPM targets get theirs that way:
+      # download_files fetches the spec's Source1 and Source2 next to Source0.
+      # The Debian targets cannot take them the same way. debtransform takes
+      # exactly one source tarball and has no component tarballs. Its one
+      # flat-file route (DEBTRANSFORM-FILES) writes the files into the debian
+      # tarball at the top of the tree under their bare names, which makes
+      # them binary local changes to the upstream source rather than part of
+      # it, at a path build-deb would have to copy. The archives are upstream
+      # source of this package, and the orig tarball is where that goes. So
+      # this job builds one tarball that already holds them, commits it, and
+      # the .dsc's DEBTRANSFORM-TAR line (written by generate-dsc.sh) picks it
+      # out of the four tarballs in the package.
+      # build-deb fills the same packaging/deps from the same pins, so
+      # debian/rules names one location for both.
+      #
+      # git archive of HEAD, so the tree is the tag's and none of this job's
+      # stamping, and every entry this step adds is normalised (owner, mode,
+      # mtime from the tagged commit, gzip -n), so re-running the same tag
+      # builds the same bytes and the commit step still finds nothing to do.
+      #
+      # A tag older than that file carries its archives inside its own tree,
+      # and its .dsc names no tarball, so it gets none here. The commit step
+      # drops a tarball an earlier release left in the package, because two
+      # tarballs and no DEBTRANSFORM-TAR is exactly what debtransform aborts on.
+      - name: Build the Debian orig tarball
+        id: orig
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f cmake/PhosphorDependencies.cmake ]]; then
+              echo "::notice::This tag predates cmake/PhosphorDependencies.cmake and carries its dependency archives in-tree; its Debian targets build from Source0."
+              echo "path=" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          ORIG="plasmazones_${VERSION}.orig.tar.gz"
+          TOP="PlasmaZones-${VERSION}"
+          STAGE="$RUNNER_TEMP/obs-orig"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          git archive --format=tar --prefix="$TOP/" -o "$STAGE/orig.tar" HEAD
+          # Not grep -q: it stops reading at the first match, tar then dies of
+          # SIGPIPE, and pipefail turns the match into a false condition.
+          if tar -tf "$STAGE/orig.tar" | grep "^$TOP/packaging/deps/" >/dev/null; then
+              echo "Error: the tag tracks files under packaging/deps, which this step fills itself" >&2
+              exit 1
+          fi
+          cmake -DPHOSPHOR_DEPS_FETCH="$STAGE/$TOP/packaging/deps" -P cmake/PhosphorDependencies.cmake
+          MTIME="$(git log -1 --format=%ct HEAD)"
+          tar -C "$STAGE" -rf "$STAGE/orig.tar" \
+              --sort=name --owner=0 --group=0 --numeric-owner \
+              --mode='u+rwX,go+rX,go-w' --mtime="@$MTIME" \
+              "$TOP/packaging/deps"
+          gzip -n -9 -c "$STAGE/orig.tar" > "$STAGE/$ORIG"
+          tar -tzf "$STAGE/$ORIG" | grep "^$TOP/packaging/deps/"
+          # The .dsc comes from this tag's generate-dsc.sh, so check it names
+          # the file built here rather than assume the two agree.
+          DSC_TAR="$(sed -n 's/^DEBTRANSFORM-TAR:[[:space:]]*//p' packaging/obs/plasmazones.dsc)"
+          if [[ "$DSC_TAR" != "$ORIG" ]]; then
+              echo "Error: plasmazones.dsc names DEBTRANSFORM-TAR '$DSC_TAR', but this step built $ORIG" >&2
+              exit 1
+          fi
+          echo "path=$STAGE/$ORIG" >> "$GITHUB_OUTPUT"
+
       - name: Commit package to OBS
         env:
           OBS_PROJECT: home:fuddlesworth
           VERSION: ${{ needs.version.outputs.version }}
           PKGREL: ${{ needs.version.outputs.pkgrel }}
+          ORIG_TARBALL: ${{ steps.orig.outputs.path }}
         run: |
           set -euo pipefail
           # Check out the existing OBS package working copy — the project
@@ -1564,6 +2170,16 @@ jobs:
           cp packaging/debian/plasmazones.postinst "$PKGDIR/debian.plasmazones.postinst"
           cp packaging/debian/plasmazones.postrm "$PKGDIR/debian.plasmazones.postrm"
           cp packaging/debian/plasmazones.triggers "$PKGDIR/debian.plasmazones.triggers"
+          # The Debian orig tarball from the step above. The working copy
+          # still holds the previous release's, and osc addremove only drops
+          # it once it is gone from disk, so clear every one first. Left in
+          # place it would be a stale tarball beside the new one, and beside
+          # Source0 alone for a tag whose .dsc names none, which debtransform
+          # refuses to choose between.
+          rm -f "$PKGDIR"/plasmazones_*.orig.tar.*
+          if [[ -n "$ORIG_TARBALL" ]]; then
+              cp "$ORIG_TARBALL" "$PKGDIR/"
+          fi
           cd "$PKGDIR"
           # addremove stages new files and drops removed ones; commit only
           # when something actually changed so re-running the same tag is a

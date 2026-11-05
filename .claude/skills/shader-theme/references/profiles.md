@@ -5,9 +5,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Profiles, sets, curves: the "apply the theme" artefacts
 
-Source of truth: `src/settings/stores/shadersetstore.cpp`, `src/settings/services/motionsetdomain.cpp`,
-`src/settings/pages/decorationpagecontroller_sets.cpp`, `src/settings/pages/animationspagecontroller_overrides.cpp`,
-`libs/phosphor-animation/src/curveloader.cpp`, `src/config/configdefaults_shaders.h`
+Source of truth: `plasmazones/src/settings/stores/shadersetstore.cpp`, `plasmazones/src/settings/services/motionsetdomain.cpp`,
+`plasmazones/src/settings/pages/decorationpagecontroller_sets.cpp`, `plasmazones/src/settings/pages/animationspagecontroller_overrides.cpp`,
+`phosphor-libs/libs/phosphor-animation/src/curveloader.cpp`, `plasmazones/src/config/configdefaults_shaders.h`
 (`ConfigDefaults::decorationProfileTree()` is the canonical well-formed chain example).
 
 There is NO single theme/bundle object in PlasmaZones. A theme is applied through the
@@ -85,7 +85,7 @@ with `parameters` but no `effectId` overrides only the map over an inherited pac
 `shader` key entirely means "leave this event's pack alone", which is what every format-1 set
 means. An entry may carry the shader half alone, with no timing keys.
 All optional (omit = inherit from parent path). Paths: any built-in event path from
-`libs/phosphor-animation/src/profilepaths.cpp` (see animations.md table; parents like
+`phosphor-libs/libs/phosphor-animation/src/profilepaths.cpp` (see animations.md table; parents like
 `window.appearance`, `window.movement`, `desktop`, `popup`, `osd` are real cascade parents).
 
 ### Motion set: rules that bite
@@ -99,7 +99,7 @@ rules that actually bite:
   format 2 refuses a v2 set outright, which is the correct clean failure. Do not write
   version 1 with shader keys hoping for the best.
 - **A `shader` key is only legal on a path the daemon consumes as a shader leg.** The SSOT is
-  `shaderConsumedLeafEventPaths()` in `src/core/types/animationshadersupportedpaths.h`, plus
+  `shaderConsumedLeafEventPaths()` in `plasmazones/src/core/types/animationshadersupportedpaths.h`, plus
   every ancestor of those leaves. `eventPathSupportsShaderLeg()` refuses anything else, and
   the refusal is of the WHOLE SET on apply and import (`motionsetdomain.cpp`), with a
   `motionset: path carries a shader half but supports no shader leg` warning in the journal.
@@ -153,7 +153,7 @@ read once on the upgrade and ignored afterwards.
 Every pack id in a chain must exist AND belong to the surface family: an unknown id, or a
 pointer pack on a surface path, refuses the whole decoration set on apply and import
 (`decorationpagecontroller_sets.cpp`), unlike a parameter typo, which is ignored.
-Supported surface paths (`libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`,
+Supported surface paths (`phosphor-libs/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`,
 verified 2026-09-07). Leaves: `window.tiled`, `window.snapped`, `window.floating`, `osd`,
 `popup.snapAssist`, `popup.zoneSelector`, `popup.layoutPicker`, `popup.cheatsheet`,
 `shell.panel`, `shell.appletPopup`, `shell.phosphor.{bar,popout,osd,notification,picker,lock}`,
@@ -163,7 +163,7 @@ Cascade parents: `window`, `popup`, `shell`, `shell.phosphor`. A theme set write
 `shell.appletPopup`. Re-read that header before writing paths. There are no focused/unfocused
 slots; packs read focus themselves via `focusDim()`.
 Parameter values must name declared params of that pack. Nothing validates them: an
-undeclared id is silently ignored at stage compose (`libs/phosphor-surface/src/surfacechaincompose.cpp`
+undeclared id is silently ignored at stage compose (`phosphor-libs/libs/phosphor-surface/src/surfacechaincompose.cpp`
 walks the pack's declared parameters and looks each one up in the override), so a typo
 leaves the default in place with no warning.
 
@@ -185,7 +185,7 @@ leaves the default in place with no warning.
   cubic-bezier 0.33, 1, 0.68, 1). A misspelled key is ignored without a warning and the curve
   becomes the default, so after writing a curve confirm each intended key by name (grep), or
   check that the produced curve differs from the default.
-- Bundled curves go in `data/curves/`; two per theme is the phosphor convention
+- Bundled curves go in `plasmazones/data/curves/`; two per theme is the phosphor convention
   (`<theme>-settle` for arrivals, `<theme>-release` for departures).
 
 ## Animations.ShaderProfileTree (config.json)
@@ -230,7 +230,7 @@ in config.json, as one global baseline plus a per-layout override keyed by layou
 overlay set carries the baseline and every override together.
 
 Overlay `shaderId` is the registry's braced UUID, not the metadata slug used by animation
-and surface packs. The parser in `libs/phosphor-shaders/src/shaderregistry_parse.cpp`
+and surface packs. The parser in `phosphor-libs/libs/phosphor-shaders/src/shaderregistry_parse.cpp`
 derives it with UUIDv5 from `shaderNamespaceUuid()` and the metadata `id`. Resolve it
 through the registry or that parser before writing a set. Encode the global default as
 an `overrides` entry with `path: "overlay:global"` and
@@ -253,7 +253,7 @@ The settings app owns config.json while it is open.
    `Decorations.DecorationProfileTree`, keyed by `path`, using a small python script in the
    scratchpad. Keep every unrelated key byte-identical.
 3. Nothing watches config.json. Tell the daemon to re-read it (verified on the live bus,
-   `src/dbus/settingsadaptor/settingsadaptor.cpp` `reloadSettings` calls `Settings::load()`):
+   `plasmazones/src/dbus/settingsadaptor/settingsadaptor.cpp` `reloadSettings` calls `Settings::load()`):
    ```bash
    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.Settings.reloadSettings
    ```

@@ -1,0 +1,825 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+import org.plasmazones.common as PZCommon
+import "../../js/MatchWireValue.js" as MatchWireValue
+
+/**
+ * @brief One leaf predicate row — `{ field, op, value }`.
+ *
+ * The field is a categorized picker and the operator is a dropdown; the value
+ * editor is chosen by the field's value kind (see the Loader below): a text
+ * field, a number, a switch, or a picker for kinds whose values come from a
+ * list. Two-way: edits emit `leafChanged(updatedLeaf)`.
+ */
+RowLayout {
+    id: leaf
+
+    /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
+    required property var node
+    /// The RuleController: operator lists, value hints and the zone options.
+    required property QtObject controller
+    /// RulesPage's editor settings surface (`_editorAppSettings`): the screens,
+    /// activities, desktops and layouts the pickers list, and the shared
+    /// running-windows picker.
+    required property QtObject appSettings
+    // Each entry carries `{ value, wire, label, valueKind }` — the controller
+    // owns the enum↔wire-string table; this component never reconstructs it.
+    // Cached once at RuleEditorSheet (matchFields() is a Q_INVOKABLE that
+    // allocates a fresh list per call) and threaded down via MatchExpressionEditor.
+    required property var fieldOptions
+    // Widest operator label across the FULL operator vocabulary, in pixels —
+    // the operator dropdown is sized to this (not to the current field's
+    // operator subset) so the operator column lines up on every condition row
+    // and doesn't resize when the field changes. Measured once in
+    // RuleEditorBody and threaded down, because the sweep is field-independent
+    // and every leaf otherwise repeated the identical measurement.
+    required property real widestOperatorTextWidth
+    // The current field's descriptor (by wire string), or undefined if the
+    // stored field is unknown / legacy.
+    readonly property var _fieldEntry: leaf._entryForWire(leaf.fieldOptions, leaf.node.field)
+    // True once a field is chosen. A freshly-added condition seeds an empty
+    // field so the picker shows its placeholder and the user must select one;
+    // the operator / value editors stay hidden until then (mirroring how an
+    // action row shows no param editors until its type is picked). Keyed on
+    // the field STRING being non-empty — not on `_fieldEntry` — so a legacy /
+    // unknown field (non-empty but unrecognised) still shows its editors.
+    readonly property bool _hasField: leaf.node.field !== undefined && String(leaf.node.field).length > 0
+    // Operator options depend on the current field's enum value.
+    readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? leaf.controller.operatorsForField(leaf._fieldEntry.value) : []
+    readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
+
+    /// True when this condition may be removed. False at the ROOT of a match,
+    /// where there is no enclosing group to remove it from — `removeRequested`
+    /// has no handler there, so the button would do nothing at all. Every
+    /// guided starting point seeds a bare leaf as the whole match, so the root
+    /// case is the common one rather than an edge.
+    property bool removable: true
+    /// The whole rule's match, so a screen-size condition can name the size of
+    /// the monitor the rule pins elsewhere in it. Threaded down from the root
+    /// MatchExpressionEditor.
+    property var ruleMatch
+    /// Under a Screen width, Screen height or Screen aspect ratio value: the
+    /// current device-pixel size and nearest ratio of each monitor the rule
+    /// pins (RuleController::screenSizeHint). Empty for every other field, or
+    /// when the rule pins no connected monitor whose size the daemon knows.
+    readonly property string _screenSizeHint: {
+        const field = leaf.node.field;
+        if (field !== "screenWidth" && field !== "screenHeight" && field !== "screenAspectRatio")
+            return "";
+
+        if (!leaf.controller || !leaf.appSettings || !leaf.ruleMatch)
+            return "";
+
+        return leaf.controller.screenSizeHint(leaf.appSettings.screens || [], leaf.ruleMatch);
+    }
+
+    signal leafChanged(var updatedLeaf)
+    signal removeRequested
+
+    /// The descriptor in @p options whose `wire` equals @p wire, or undefined.
+    function _entryForWire(options, wire) {
+        for (var i = 0; i < options.length; ++i) {
+            if (options[i].wire === wire)
+                return options[i];
+        }
+        return undefined;
+    }
+
+    /// The index of @p wire in @p options, or -1 when unknown — an unknown
+    /// (legacy) value must surface as no selection, never coerce to index 0.
+    function _indexForWire(options, wire) {
+        for (var i = 0; i < options.length; ++i) {
+            if (options[i].wire === wire)
+                return i;
+        }
+        return -1;
+    }
+
+    function _emit(field, op, value) {
+        leaf.leafChanged({
+            "field": field,
+            "op": op,
+            "value": value
+        });
+    }
+
+    /// True when the running-windows picker has a mode that fills @p wire
+    /// — AppId, WindowClass, DesktopFile and Title all have a 1:1 mode in
+    /// the WindowPickerDialog. Other string fields (e.g. WindowRole on a
+    /// rare X11 client) stay freeform.
+    function _fieldIsPickable(wire) {
+        return wire === "appId" || wire === "windowClass" || wire === "desktopFile" || wire === "title";
+    }
+
+    /// Open the running-windows picker on the leaf's behalf in the mode
+    /// that maps to the current field. The picker lives at the page level
+    /// (hosting it inside the OverlaySheet collapsed its content area),
+    /// shared across every leaf in every open rule editor — so we
+    /// dynamically wire a one-shot `picked` handler that fills THIS leaf
+    /// and then disconnects itself, instead of permanently binding the
+    /// dialog's `onPicked`. A matching `closed` listener disconnects the
+    /// handler when the user dismisses the dialog without picking
+    /// (Escape / outside-click) — without it the stale handler would
+    /// still be wired the next time ANY leaf opened the picker, and one
+    /// pick would fan out to every previously-cancelled leaf.
+    function _openWindowPicker() {
+        function pickedHandler(value) {
+            picker.picked.disconnect(pickedHandler);
+            picker.closed.disconnect(closedHandler);
+            leaf._emit(leaf.node.field, leaf.node.op, value);
+        }
+
+        function closedHandler() {
+            // `picked` already fired and self-disconnected before `closed`
+            // runs (Kirigami emits `closed` AFTER the close completes);
+            // disconnecting again is a no-op when the handler is no
+            // longer wired, so this branch handles dismissal without
+            // double-firing on a successful pick.
+            picker.picked.disconnect(pickedHandler);
+            picker.closed.disconnect(closedHandler);
+        }
+
+        var picker = leaf.appSettings ? leaf.appSettings.windowPicker : null;
+        if (!picker)
+            return;
+
+        picker.picked.connect(pickedHandler);
+        picker.closed.connect(closedHandler);
+        if (leaf.node.field === "appId")
+            picker.openForApps();
+        else if (leaf.node.field === "desktopFile")
+            picker.openForDesktopFiles();
+        else if (leaf.node.field === "title")
+            picker.openForTitles();
+        else
+            picker.openForClasses();
+    }
+
+    /// Short tooltip / accessible-name suffix for the pick button. Saves
+    /// the inline ternary chain from repeating in two places.
+    function _pickTooltip(wire) {
+        if (wire === "appId")
+            return i18n("Pick from running applications");
+
+        if (wire === "desktopFile")
+            return i18n("Pick desktop file from running windows");
+
+        if (wire === "title")
+            return i18n("Pick title from running windows");
+
+        return i18n("Pick from running windows");
+    }
+
+    spacing: Kirigami.Units.smallSpacing
+
+    Kirigami.Icon {
+        id: fieldInfoIcon
+
+        source: "dialog-information"
+        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        // Top-align every control in the row so they line up with the value
+        // field's top. The value editor can grow tall (a wrapped operator hint
+        // sits beneath the field); vertically centring the siblings against that
+        // taller column would drop the combos and trash below the field. The icon
+        // is shorter than the field controls, so nudge it down to sit centred on
+        // the first control line rather than at its very top.
+        Layout.alignment: Qt.AlignTop
+        Layout.topMargin: Math.max(0, (fieldCombo.height - height) / 2)
+        color: Kirigami.Theme.highlightColor
+        // Hover help describing the selected field. An unknown / legacy field
+        // (_fieldEntry undefined) yields no text, so the tooltip just doesn't
+        // appear rather than showing an empty bubble.
+        readonly property string _fieldDesc: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.description || "") : ""
+        Accessible.name: _fieldDesc
+        ToolTip.text: _fieldDesc
+        ToolTip.visible: fieldInfoHover.hovered && _fieldDesc !== ""
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        HoverHandler {
+            id: fieldInfoHover
+        }
+    }
+
+    // Categorized field picker — the same cascading category-menu button the
+    // shader choosers use (PZCommon.CategoryMenuButton). The field list is long,
+    // so it's grouped into Identity / State / Size / Context. Keyed on the
+    // field's `wire` string, matching `leaf.node.field`.
+    PZCommon.CategoryMenuButton {
+        id: fieldCombo
+
+        Layout.alignment: Qt.AlignTop
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+        // Map the field metadata to the picker's { id, name, category,
+        // categoryOrder } item shape.
+        items: leaf.fieldOptions.map(function (o) {
+            return {
+                "id": o.wire,
+                "name": o.label,
+                "category": o.category,
+                "categoryOrder": o.categoryOrder
+            };
+        })
+        currentId: leaf.node.field
+        placeholderText: i18n("Choose…")
+        Accessible.description: i18n("Match field")
+        onSelected: function (value) {
+            if (value === leaf.node.field)
+                return;
+
+            // Changing the field invalidates the carried-over value and
+            // (often) the carried-over operator. Concrete examples:
+            //   appId "firefox" + field→isFullscreen → predicate
+            //   `isFullscreen == "firefox"` (nonsense).
+            //   appId + AppIdMatches + field→title → AppIdMatches is not a
+            //   valid operator for Title, leaving the rule un-saveable.
+            // So we reset the value to empty and only carry the operator
+            // if the new field's allowed-operator set still includes it.
+            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, value);
+            var newOps = newFieldEntry !== undefined ? leaf.controller.operatorsForField(newFieldEntry.value) : [];
+            var carryOp = leaf.node.op;
+            var opStillValid = false;
+            for (var i = 0; i < newOps.length; ++i) {
+                if (newOps[i].wire === carryOp) {
+                    opStillValid = true;
+                    break;
+                }
+            }
+            if (!opStillValid)
+                carryOp = newOps.length > 0 ? newOps[0].wire : "";
+
+            // Seed a value of the new field's kind so the leaf is immediately
+            // well-typed rather than carrying an empty string a bool/number
+            // field would coerce: bool -> false, number -> 0, and every other
+            // kind (the text field and every picker) -> "". The pickers treat
+            // "" as the "no value yet" state and show their placeholder until
+            // the user picks.
+            var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
+            var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
+            leaf._emit(value, carryOp, seedValue);
+        }
+    }
+
+    WideComboBox {
+        id: opCombo
+
+        // Hidden until a field is chosen — a field-less placeholder has no
+        // operator vocabulary to offer yet.
+        visible: leaf._hasField
+        Layout.alignment: Qt.AlignTop
+        // Fixed to the widest operator label across ALL fields' operator sets
+        // (plus chrome for the dropdown indicator + padding) instead of the
+        // WideComboBox auto-width, which keys off the CURRENT field's operator
+        // subset and so renders a different width per field (e.g. Desktop's
+        // numeric operators vs Monitor's string operators). The gridUnit * 3
+        // chrome allowance mirrors WideComboBox's own popup-width formula.
+        Layout.preferredWidth: leaf.widestOperatorTextWidth + Kirigami.Units.gridUnit * 3
+        textRole: "label"
+        valueRole: "wire"
+        model: leaf._operatorOptions
+        currentIndex: leaf._indexForWire(leaf._operatorOptions, leaf.node.op)
+        Accessible.name: i18n("Match operator")
+        onActivated: function (index) {
+            if (currentValue !== leaf.node.op)
+                leaf._emit(leaf.node.field, currentValue, leaf.node.value);
+        }
+    }
+
+    Loader {
+        Layout.fillWidth: true
+        // Hidden until a field is chosen — there is no value to type against a
+        // field-less placeholder (mirrors the operator combo above).
+        visible: leaf._hasField
+        active: leaf._hasField
+        // Most value editors top-align so a string editor's wrapped operator hint
+        // can grow downward without dragging the combos with it. The bool toggle
+        // is a short fixed-height control with no hint line, so it vertically
+        // centers against the taller field / operator combos instead of clinging
+        // to their top edge (which read as "not centered").
+        Layout.alignment: leaf._valueKind === "bool" ? Qt.AlignVCenter : Qt.AlignTop
+        sourceComponent: {
+            if (leaf._valueKind === "bool")
+                return boolValueEditor;
+
+            if (leaf._valueKind === "number")
+                return numberValueEditor;
+
+            if (leaf._valueKind === "virtualDesktop")
+                return virtualDesktopValueEditor;
+
+            if (leaf._valueKind === "screen")
+                return screenValueEditor;
+
+            if (leaf._valueKind === "activity")
+                return activityValueEditor;
+
+            if (leaf._valueKind === "windowType")
+                return windowTypeValueEditor;
+
+            if (leaf._valueKind === "mode")
+                return modeValueEditor;
+
+            if (leaf._valueKind === "orientation")
+                return orientationValueEditor;
+
+            if (leaf._valueKind === "aspectRatio")
+                return aspectRatioValueEditor;
+
+            if (leaf._valueKind === "colorScheme")
+                return colorSchemeValueEditor;
+
+            if (leaf._valueKind === "layout")
+                return layoutValueEditor;
+
+            if (leaf._valueKind === "zone")
+                return zoneValueEditor;
+
+            return stringValueEditor;
+        }
+    }
+
+    // Slack absorber for the field-less state. Before a field is chosen the
+    // operator combo and value editor are both hidden, so the row's only
+    // fillWidth item (the value Loader above) is invisible and absorbs no
+    // stretch. QtQuick.Layouts then hands the leftover width to the remaining
+    // cells that carry a Layout.alignment (the info icon, field picker and
+    // trash), inflating each cell and left-aligning its item inside — which
+    // pushes the field picker rightward (the "Choose…" inset) and un-pins the
+    // trash. This empty fillWidth item soaks up that slack instead, so the
+    // picker stays at its natural left position and the trash stays hard right.
+    // Once a field is chosen the value Loader becomes the fillWidth item, so
+    // this collapses out of the layout.
+    Item {
+        Layout.fillWidth: true
+        visible: !leaf._hasField
+    }
+
+    ToolButton {
+        visible: leaf.removable
+        icon.name: "edit-delete"
+        Layout.alignment: Qt.AlignTop
+        ToolTip.text: i18n("Remove condition")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Remove this condition")
+        onClicked: leaf.removeRequested()
+    }
+
+    Component {
+        id: stringValueEditor
+
+        // ColumnLayout root so an operator-specific input hint (regex syntax /
+        // app-id-match semantics) can sit beneath the freeform field. The inner
+        // RowLayout keeps the "pick from running windows" button next to the
+        // field — that button only appears for fields where a live-window lookup
+        // makes sense (typing an AppId / windowClass from memory is the friction
+        // the picker existed to solve).
+        ColumnLayout {
+            id: stringEditorRoot
+
+            spacing: Kirigami.Units.smallSpacing / 2
+
+            // Operator-keyed input hint (regex / app-id match); empty for
+            // operators that need none. Re-reads when the operator changes.
+            readonly property string _valueHint: leaf.controller ? leaf.controller.matchValueHint(leaf.node.op) : ""
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                TextField {
+                    Accessible.name: i18n("Match value")
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Value")
+                    text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
+                    // Only on a real change, like the pickers: editingFinished
+                    // also fires when focus leaves an untouched field.
+                    onEditingFinished: {
+                        if (text !== (leaf.node.value !== undefined ? String(leaf.node.value) : ""))
+                            leaf._emit(leaf.node.field, leaf.node.op, text);
+                    }
+                }
+
+                ToolButton {
+                    Accessible.name: leaf._pickTooltip(leaf.node.field)
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.text: leaf._pickTooltip(leaf.node.field)
+                    ToolTip.visible: hovered
+                    icon.name: "window-duplicate"
+                    visible: leaf._fieldIsPickable(leaf.node.field)
+                    onClicked: leaf._openWindowPicker()
+                }
+            }
+
+            // Muted helper line under the value field; only present when the
+            // current operator carries a hint. Plain text, word-wrapped, never
+            // interactive. Mirrors the action-param hint in ActionRow.
+            Label {
+                Layout.fillWidth: true
+                visible: stringEditorRoot._valueHint.length > 0
+                text: stringEditorRoot._valueHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                Accessible.ignored: true
+            }
+        }
+    }
+
+    Component {
+        id: numberValueEditor
+
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing / 2
+
+            // The style's typed-input handler assigns `value` directly, which
+            // severs the `value:` binding below after the first keystroke.
+            // The box is one instance across every numeric field (the Loader
+            // keeps it while the value kind stays "number"), so a later field
+            // switch, which seeds a new value, would leave it showing the old
+            // number. Following the node here keeps it in step either way.
+            Connections {
+                function onNodeChanged() {
+                    numberSpin.value = Number(leaf.node.value) || 0;
+                }
+
+                target: leaf
+            }
+
+            SpinBox {
+                id: numberSpin
+
+                // PositionX / PositionY are the only SIGNED numeric fields: a
+                // monitor placed left of or above the primary starts at a negative
+                // frame coordinate, so a floor of 0 made those two conditions
+                // impossible to author and displayed a stored -1920 as 0 while the
+                // rule kept matching -1920. Every other numeric field (Width,
+                // Height, Pid, Tiled window count, Screen width, Screen height)
+                // is unsigned. Desktop has its own picker.
+                readonly property bool _signed: leaf.node.field === "positionX" || leaf.node.field === "positionY"
+
+                Layout.fillWidth: true
+                // Numeric fields include Pid; the kernel pid_max ceiling is
+                // 4194304, so 5e6 covers every possible PID with headroom. It is
+                // written in scientific form because qmlformat rewrites large
+                // decimal literals to 6-significant-figure scientific notation —
+                // 5e6 is exact under that rounding (a plain 2147483647 is not).
+                // The signed floor mirrors the ceiling so a coordinate has the same
+                // range in both directions.
+                from: _signed ? -5e+06 : 0
+                to: 5e+06
+                value: Number(leaf.node.value) || 0
+                // Typed, not stepped: reaching a screen width such as 2560 by
+                // the arrows alone takes thousands of steps. The default
+                // textFromValue / valueFromText format through the style's
+                // locale, which in the desktop style omits group separators
+                // (as QSpinBox does), so the box shows plain digits while
+                // they are typed. Grouping and the px unit appear only in the
+                // read-only summaries (RuleAuthoring::numericMatchValueLabel).
+                editable: true
+                Accessible.name: i18n("Match value")
+                onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
+            }
+
+            // The pinned monitor's current size, under a Screen width or
+            // Screen height value. Same muted styling as the string editor's
+            // operator hint, but left announced where that hint is ignored by
+            // screen readers: this is the one place the editor states the
+            // monitor's current size, which is what the value is compared
+            // against.
+            Label {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: leaf._screenSizeHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+            }
+        }
+    }
+
+    Component {
+        id: boolValueEditor
+
+        // SettingsSwitch is a fixed-size custom Item whose track fills its
+        // bounds, but the hosting Loader is Layout.fillWidth (for the text /
+        // combo editors), which would stretch the toggle into a full-width pill.
+        // Host it in a fill wrapper and keep the toggle at its implicit size,
+        // left- and vertically-centered — the same control and wrapper the
+        // action editor's bool param uses (ActionRow's _boolParamEditor), so
+        // a WHEN bool value and a THEN bool value share one widget.
+        Item {
+            implicitHeight: boolToggle.implicitHeight
+
+            SettingsSwitch {
+                id: boolToggle
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                checked: leaf.node.value === true
+                accessibleName: i18n("Match value")
+                // Echo the toggle's state as On / Off so the predicate value is
+                // legible at a glance (the field and operator to the left say
+                // what is being matched, this says to what). Same On / Off
+                // vocabulary as the read-only match summary.
+                label: checked ? i18n("On") : i18n("Off")
+                onToggled: function (newValue) {
+                    leaf._emit(leaf.node.field, leaf.node.op, newValue);
+                }
+            }
+        }
+    }
+
+    // Virtual-desktop picker for the VirtualDesktop condition. The wire value stays
+    // the 1-based desktop NUMBER (so the operator semantics — equals / greater /
+    // less — are unchanged); the user just picks "2: Work" instead of typing a
+    // number. Mirrors the screen picker, and the RouteToDesktop action editor.
+    Component {
+        id: virtualDesktopValueEditor
+
+        MatchValueCombo {
+            id: desktopCombo
+
+            readonly property int _count: leaf.appSettings && leaf.appSettings.virtualDesktopCount > 0 ? leaf.appSettings.virtualDesktopCount : 1
+            readonly property var _names: (leaf.appSettings && leaf.appSettings.virtualDesktopNames) || []
+            model: {
+                var items = [];
+                for (var i = 1; i <= desktopCombo._count; ++i) {
+                    var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
+                    items.push({
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, the same way the monitor
+                        // picker below composes its primary marker.
+                        "label": name && name.length > 0 ? i18nc("virtual desktop number, then its name", "%1: %2", i, name) : ("" + i),
+                        "value": i
+                    });
+                }
+                return items;
+            }
+            textRole: "label"
+            valueRole: "value"
+            // The wire value is the 1-based desktop number, possibly stored as a
+            // string. 0 and an unparseable value are no desktop, so they show
+            // the placeholder. A desktop beyond the current count (it was
+            // removed) shows its stored number, so the rule stays legible.
+            value: Number(leaf.node.value) || ""
+            placeholderText: i18n("Choose a desktop…")
+            Accessible.name: i18n("Desktop")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: screenValueEditor
+
+        MatchValueCombo {
+            // Drive the picker off `appSettings.screens` so the user picks
+            // "LG Ultra HD · DP-2" while the wire value remains the raw
+            // connector / virtual-screen id. displayLabel already carries the
+            // connector; append a Primary marker here (a plain ComboBox has no
+            // badge surface like the monitor tiles do) so the user can tell the
+            // primary monitor and which port each entry is on. A screen that
+            // isn't connected now (an offline monitor, a virtual-screen id
+            // whose physical monitor is unplugged) shows its stored id.
+            readonly property var _screens: (leaf.appSettings && leaf.appSettings.screens) || []
+            model: _screens.map(function (s) {
+                var label = s.displayLabel || s.name || "";
+                if (s.isPrimary)
+                    // Composed inside one i18nc so translators control the
+                    // order and the separator survives RTL bidi runs.
+                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
+                return {
+                    "label": label,
+                    "name": s.name
+                };
+            })
+            textRole: "label"
+            valueRole: "name"
+            value: leaf.node.value
+            placeholderText: i18n("Choose a monitor…")
+            Accessible.name: i18n("Monitor")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: activityValueEditor
+
+        MatchValueCombo {
+            // Picker over `appSettings.activities`; the wire value stays the
+            // activity UUID so the rule store format is unchanged. The `|| []`
+            // covers the property being absent as well as the bridge being
+            // null, matching the screen / layout pickers in this file. An
+            // activity that has been removed shows its stored id.
+            model: (leaf.appSettings && leaf.appSettings.activities) || []
+            textRole: "name"
+            valueRole: "id"
+            value: leaf.node.value
+            placeholderText: i18n("Choose an activity…")
+            Accessible.name: i18n("Activity")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    // The closed-vocabulary editors below (window type, mode, orientation,
+    // aspect ratio, colour scheme) read the field entry's `options`, `{value, wire, label}`
+    // triples from the controller. The stored value is the window type's enum
+    // int, or for the string fields the wire token itself. A value no option
+    // holds (a hand-edited rule, a token from a newer build) shows raw.
+    Component {
+        id: windowTypeValueEditor
+
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+            textRole: "label"
+            valueRole: "value"
+            value: leaf.node.value
+            placeholderText: i18n("Choose a window type…")
+            Accessible.name: i18n("Window type")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: modeValueEditor
+
+        MatchValueCombo {
+            // "snapping" / "tiling" / "scrolling"; Floating was dropped from
+            // the Mode condition.
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+            textRole: "label"
+            valueRole: "value"
+            value: leaf.node.value
+            placeholderText: i18n("Choose a mode…")
+            Accessible.name: i18n("Placement mode")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: orientationValueEditor
+
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+            textRole: "label"
+            valueRole: "value"
+            value: leaf.node.value
+            placeholderText: i18n("Choose an orientation…")
+            Accessible.name: i18n("Screen orientation")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: aspectRatioValueEditor
+
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing / 2
+
+            MatchValueCombo {
+                Layout.fillWidth: true
+                // The value IS the wire token ("16:9", "32:9"), and the options
+                // come straight from the rules library's ratio table.
+                model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+                textRole: "label"
+                valueRole: "value"
+                value: leaf.node.value
+                placeholderText: i18n("Choose an aspect ratio…")
+                Accessible.name: i18n("Screen aspect ratio")
+                onPicked: function (value) {
+                    leaf._emit(leaf.node.field, leaf.node.op, value);
+                }
+            }
+
+            // The pinned monitor's current size and ratio, as under the
+            // Screen width and Screen height values, and announced for the
+            // same reason.
+            Label {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: leaf._screenSizeHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+            }
+        }
+    }
+
+    Component {
+        id: colorSchemeValueEditor
+
+        MatchValueCombo {
+            model: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+            textRole: "label"
+            valueRole: "value"
+            value: leaf.node.value
+            placeholderText: i18n("Choose a scheme…")
+            Accessible.name: i18n("Color scheme")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: layoutValueEditor
+
+        MatchValueCombo {
+            // Picker over `appSettings.activeLayoutMatchOptions`: the layouts
+            // list with each native template row rewritten to its derived
+            // "scrolling:<uuid>" wire form, plus the bare "scrolling:"
+            // sentinel entry for a scrolling screen with no template. The
+            // wire value stays the id the daemon's context resolvers stamp
+            // for the screen (snap UUID, "autotile:<algo>", bare "scrolling:",
+            // or the prefixed template form). A deleted layout shows its
+            // stored id.
+            model: (leaf.appSettings && leaf.appSettings.activeLayoutMatchOptions) || []
+            textRole: "displayName"
+            valueRole: "id"
+            value: leaf.node.value
+            placeholderText: i18n("Choose a layout…")
+            Accessible.name: i18n("Active layout")
+            onPicked: function (value) {
+                leaf._emit(leaf.node.field, leaf.node.op, value);
+            }
+        }
+    }
+
+    Component {
+        id: zoneValueEditor
+
+        PZCommon.CategoryMenuButton {
+            id: zonePicker
+
+            // Picker over `controller.zoneMatchOptions`, one submenu per
+            // layout in the layout pickers' order, so a long list of zones is
+            // reached by layout rather than scrolled through. The wire value
+            // stays the braced zone UUID the Zone condition matches on.
+            readonly property var _zones: (leaf.controller && leaf.controller.zoneMatchOptions) || []
+            // The option the stored id names, matched ignoring case as the
+            // rule engine's Equals does, or null for an unset or vanished zone.
+            readonly property var _current: {
+                const target = String(leaf.node.value || "");
+                if (target === "")
+                    return null;
+                for (let i = 0; i < zonePicker._zones.length; ++i) {
+                    if (MatchWireValue.same(String(zonePicker._zones[i].id), target))
+                        return zonePicker._zones[i];
+                }
+                return null;
+            }
+
+            // The category string is split on "/" into a submenu level, so a
+            // slash in a layout name is shown as the look-alike division slash
+            // (U+2215) to keep the layout one submenu. `order` keeps each
+            // submenu in zone-number order, the order the options arrive in,
+            // where the menu would otherwise sort its items by name.
+            items: zonePicker._zones.map(function (zone, index) {
+                return {
+                    "id": zone.id,
+                    "name": zone.zoneName,
+                    "category": String(zone.layoutName).replace(/\//g, "∕"),
+                    "categoryOrder": zone.layoutOrder,
+                    "order": index
+                };
+            })
+            currentId: zonePicker._current ? zonePicker._current.id : ""
+            // With no zones there is nothing to pick, but a rule already
+            // pointing at a vanished zone keeps showing its id.
+            enabled: zonePicker._zones.length > 0
+            placeholderText: zonePicker._zones.length > 0 ? i18n("Choose a zone…") : i18n("No zones in your layouts")
+            // The button names the layout as well as the zone, since the zone
+            // name alone is ambiguous across layouts. A zone whose layout was
+            // deleted shows its stored id, as the other pickers do.
+            displayText: zonePicker._current ? zonePicker._current.displayName : (leaf.node.value ? String(leaf.node.value) : zonePicker.placeholderText)
+            // The button's accessible name is its selection (displayText), so
+            // the field goes in the description, as the other pickers on the
+            // rules page do.
+            Accessible.description: i18n("Zone")
+            onSelected: function (id) {
+                if (id && !MatchWireValue.same(String(id), String(leaf.node.value || "")))
+                    leaf._emit(leaf.node.field, leaf.node.op, id);
+            }
+        }
+    }
+}

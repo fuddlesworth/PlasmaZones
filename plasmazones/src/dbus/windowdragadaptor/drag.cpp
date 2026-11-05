@@ -1,0 +1,1082 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "windowdragadaptor.h"
+#include "dragactivation.h"
+#include <QGuiApplication>
+#include <QScreen>
+#include <cmath>
+#include "config/configdefaults.h"
+#include "core/types/enums.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/interfaces/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
+#include "core/utils/geometryutils.h"
+#include <PhosphorScreens/Manager.h>
+#include "core/types/zoneselectorlayout.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
+#include <PhosphorScreens/VirtualScreen.h>
+#include "core/types/constants.h"
+#include "dbus/dbushelpers.h"
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+namespace PlasmaZones {
+
+void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
+        return;
+    }
+
+    if (!m_settings) {
+        return;
+    }
+
+    // Trigger caches are populated unconditionally by beginDrag (bypass and
+    // snap paths alike), so they are already current here — no re-parse.
+    // Ensure no stale preview carries over from a prior drag.
+    cancelDragInsertIfActive();
+
+    // Check if snapping is enabled
+    if (!m_settings->snappingEnabled()) {
+        qCInfo(lcDbusWindow) << "Snapping disabled in settings, ignoring drag";
+        m_snapCancelled = true;
+        m_draggedWindowId.clear();
+        return;
+    }
+
+    // Dismiss any visible snap assist overlay from a previous snap.
+    // The user is starting a new drag, so the previous snap assist is stale.
+    if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+        m_overlayService->hideSnapAssist();
+    }
+
+    // No KGlobalAccel Escape grab is bound here. During a snap drag the
+    // kwin-effect grabs the keyboard (lifecycle_wiring.cpp's dragStarted)
+    // and routes Escape through grabbedKeyboardEvent (plasmazoneseffect.cpp)
+    // -> callCancelSnap -> cancelSnap(), so a
+    // KGlobalAccel binding would never fire during the drag anyway. Binding
+    // it per-drag used to force kwin (which hosts kglobalaccel) to rewrite
+    // kglobalshortcutsrc + kglobalshortcutsstaterc with an fsync at drag
+    // start and end, stalling the compositor on slow-fsync disks
+    // (discussion #167). The grab is now bound only for the snap-assist
+    // phase, which has no keyboard grab (see shortcuts_wiring.cpp's
+    // snapAssistShown handler), and for the layout picker
+    // (shortcuts_wiring.cpp).
+    m_draggedWindowId = windowId;
+    m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
+    m_originalFrameFillsOutput = windowFillsOutput(windowId);
+    m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
+    m_currentZoneGeometry = QRect();
+    m_currentAdjacentZoneIds.clear();
+    m_isMultiZoneMode = false;
+    m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    // m_modifierConflictWarned reset moved to beginDrag — keeping it
+    // here only covered snap-path drags, leaving the latch stale across
+    // bypass drags.
+    m_lastEmittedZoneGeometry = QRect();
+    m_restoreSizeEmittedDuringDrag = false;
+    m_lastLoggedActivationActive = false;
+    // A pending grace replay must not fire into the next drag (or into no
+    // drag at all); the timestamps themselves are re-seeded by beginDrag.
+    stopGraceExpiry();
+    m_snapCancelled = false;
+    m_triggerReleasedAfterCancel = false;
+    m_activationToggled = false;
+    // Seeded true so the first dragMoved tick can't register a spurious
+    // rising edge when the drag was initiated with the activation trigger
+    // already held (e.g. Alt+Click, where Alt is KWin's move-window modifier
+    // and is also commonly the configured snap activation trigger). The user
+    // must perform a real release→press cycle to toggle.
+    m_prevTriggerHeld = true;
+    // Zone span toggle latch (#563) reset lives in beginDrag, not here — the
+    // bypass path (autotile-only) never calls dragStarted, so resetting it
+    // here would leave the latch stale across bypass drags (same hazard the
+    // autotile drag-insert latch and m_modifierConflictWarned avoid).
+    m_overlayShown = false;
+    // m_overlayIdled is NOT reset here. Every drag-end path
+    // (hideOverlayAndSelector, hideOverlayAndClearZoneState) hides the
+    // overlay and clears it, so showAtPosition on the next activation tick
+    // shows the overlay fresh.
+    m_zoneSelectorShown = false;
+    m_zoneSelectorShownOn.clear();
+    // Strip popup card exclusion: the popup must never render the window
+    // being dragged as its own card. Cleared in resetDragState.
+    if (m_overlayService) {
+        m_overlayService->setActiveDragWindowId(windowId);
+    }
+    // Selector suppression for rule-excluded windows, evaluated at the
+    // begin and again here when a pending drag promotes (see the member's
+    // comment).
+    {
+        auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcludedByRule(windowId);
+    }
+
+    // Check if window started inside a zone (for restoreOriginalSizeOnUnsnap feature)
+    // Primary method: Check if window is tracked as snapped in WindowTrackingAdaptor
+    // This is more reliable than geometry matching because KWin may report window
+    // positions differently (decorations, shadows, etc.) than how we calculated zones
+    m_wasSnapped = false;
+    if (m_windowTracking) {
+        QString trackedZone = m_windowTracking->getZoneForWindow(windowId);
+        if (!trackedZone.isEmpty()) {
+            m_wasSnapped = true;
+        }
+    }
+
+    // Fallback: If not tracked, try geometry matching (handles windows snapped before daemon restart)
+    if (!m_wasSnapped) {
+        QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
+
+        if (screen) {
+            // Never empty here: effectiveScreenIdAt falls back to the QScreen
+            // at the point, which is the non-null screen just found.
+            const QString screenId =
+                effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
+            // Suppressed context: the resolve below would hand back the global
+            // default layout for a screen that has no zones, and a window that
+            // happens to match one of its rects would be misread as snapped
+            // (#724). No layout means nothing to geometry-match against. The
+            // guard scopes the matcher block (not a function-wide return) so
+            // code appended to dragStarted later still runs.
+            auto* layout = isActiveLayoutSuppressedForScreen(screenId)
+                ? nullptr
+                : m_layoutManager->resolveLayoutForScreen(screenId);
+            if (layout) {
+                PhosphorZones::LayoutComputeService::recalculateSync(
+                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId),
+                    PhosphorZones::GeometryUtils::screenScale(m_screenManager, screenId, screen));
+
+                for (auto* zone : layout->zones()) {
+                    QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
+                                                                             layout, m_settings, m_layoutManager);
+
+                    // Use class constants for tolerances
+                    int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
+                    int yDiff = std::abs(m_originalGeometry.y() - zoneRect.y());
+                    int wDiff = std::abs(m_originalGeometry.width() - zoneRect.width());
+                    int hDiff = std::abs(m_originalGeometry.height() - zoneRect.height());
+
+                    // Size must match closely, position can be off due to decorations
+                    if (wDiff <= SizeTolerance && hDiff <= SizeTolerance && xDiff <= PositionTolerance
+                        && yDiff <= PositionTolerance) {
+                        m_wasSnapped = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
+{
+    // Resolve effective (virtual-aware) screen ID
+    auto resolved = resolveScreenAt(QPointF(x, y));
+    outScreen = resolved.qscreen;
+    if (!outScreen) {
+        return nullptr;
+    }
+    outScreenId = resolved.screenId;
+    // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+    // Snapping switched off entirely. This is the FOURTH bypass reason and it
+    // had no gate here, unlike its three siblings below — beginDrag's bypass
+    // branch never calls dragStarted, so dragStarted's own snappingEnabled
+    // check never runs, and the effect still forwards cursor ticks for a
+    // non-engine bypass. The result was that holding the activation trigger
+    // with snapping disabled lit the zone overlay and ran zone detection for
+    // the whole drag. Nothing could snap (endDrag no-ops), so it was wasted
+    // work and a wrong picture rather than a wrong placement.
+    if (m_settings && !m_settings->snappingEnabled()) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        m_overlayIdled = false;
+        return nullptr;
+    }
+
+    // The cursor can cross from a snap-mode screen onto an autotile-mode
+    // screen mid-drag; gating on the hard-coded Snapping disable list
+    // would consult the wrong list for the destination. Mirrors the
+    // matching fix in drop.cpp::useOverlayZone and
+    // drag_protocol.cpp::computeDragPolicy.
+    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(outScreenId))) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        // Crosses real hide(): the overlay window is destroyed, so the "blanked
+        // but alive" invariant that m_overlayIdled documents is broken. Clear
+        // it so a later activation-return doesn't call refreshFromIdle() on a
+        // dead surface.
+        m_overlayIdled = false;
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on ENGINE-managed screens (autotile
+    // AND scrolling — both own placement; running the per-tick snap
+    // resolve/zone-detect/overlay machinery there is pure waste even though
+    // the excluded-screens set suppresses the visuals).
+    if ((m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(outScreenId))) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        m_overlayIdled = false;
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on a screen whose context has no active
+    // zone layout (default assignment suppressed). resolveLayoutForScreen
+    // below would fall back to the GLOBAL default layout for such a screen, so
+    // without this gate a drag crossing onto it mid-drag hit-tests and snaps
+    // into zones the screen was never assigned (#724). beginDrag's policy gate
+    // covers drags STARTING here; this covers mid-drag crossings, which reach
+    // this per-tick path without a fresh beginDrag.
+    //
+    // Deliberately NOT the disabled branch's destructive hide(): a
+    // layout-suppressed secondary monitor is a normal configuration, so this
+    // fires on every crossing onto it and hide() routes through the Vulkan
+    // overlay destroy (QRhi teardown — the NVIDIA multi-second-stall path the
+    // trigger-release flow avoids for the same reason). Warm-idle instead:
+    // windows stay alive and blanked, refreshFromIdle repopulates on the next
+    // active-screen tick, and its inactive-context gate keeps the idle from
+    // re-lighting a suppressed screen.
+    if (isActiveLayoutSuppressedForScreen(outScreenId)) {
+        if (m_overlayShown && m_overlayService) {
+            // Forget the remembered screen unconditionally: this gate returns
+            // before showAtPosition ever runs, so the service would otherwise
+            // keep pointing at the last ACTIVE screen and a later
+            // refreshFromIdle would re-light it for a tick (the #724
+            // wrong-screen flash), including after a crossing back onto a
+            // different active screen.
+            m_overlayService->forgetCurrentScreen();
+            if (!m_overlayIdled) {
+                m_overlayService->setIdleForDragPause();
+                m_overlayIdled = true;
+            }
+        }
+        return nullptr;
+    }
+
+    // Call showAtPosition unconditionally on every tick. OverlayService
+    // short-circuits on same-physical-monitor re-shows (compares extracted
+    // physical ids of m_currentOverlayScreenId vs the cursor's effective id),
+    // so rapid drag ticks that stay on one monitor cost only two findScreen
+    // calls and a string extract — no Vulkan churn. The adaptor-side
+    // m_overlayScreenId comparator that used to gate this was fed by the
+    // same jittery effective-id source, and its string mismatches triggered
+    // a second path into initializeOverlay even when the cursor hadn't
+    // left the physical monitor. Dropping the comparator makes
+    // OverlayService the single source of truth for "is a re-init needed".
+    if (!m_overlayShown) {
+        qCInfo(lcDbusWindow) << "prepareHandlerContext: show overlay at" << x << y << "screen=" << outScreenId;
+    }
+    m_overlayService->showAtPosition(x, y);
+    m_overlayShown = true;
+
+    auto* layout = m_layoutManager->resolveLayoutForScreen(outScreenId);
+    if (!layout) {
+        return nullptr;
+    }
+
+    // Use virtual screen geometry for zone calculation when available
+    auto* mgr = m_screenManager;
+    QRectF effectiveGeom;
+    if (mgr) {
+        QRect vsGeom = mgr->screenGeometry(outScreenId);
+        if (vsGeom.isValid()) {
+            if (layout->useFullScreenGeometry()) {
+                effectiveGeom = QRectF(vsGeom);
+            } else {
+                QRect vsAvailGeom = mgr->screenAvailableGeometry(outScreenId);
+                effectiveGeom = vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
+            }
+        }
+    }
+    if (!effectiveGeom.isValid()) {
+        effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
+    }
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, effectiveGeom, PhosphorZones::GeometryUtils::screenScale(mgr, outScreenId, outScreen));
+    return layout;
+}
+
+void WindowDragAdaptor::hideOverlayAndClearZoneState()
+{
+    // Fast path: if overlay isn't shown and zone state is already clear, skip all work.
+    //
+    // NOTE the asymmetry with clearOverlayForTriggerRelease()'s fast path:
+    // this method is the full-hide variant (compositor reconnect / window
+    // closed / context disabled mid-drag), so it keys on m_overlayShown,
+    // not m_overlayIdled. An overlay idled by a mid-drag trigger release
+    // still has m_overlayShown true, so it correctly proceeds to the real
+    // hide() call.
+    if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
+        return;
+    }
+
+    if (m_overlayShown && m_overlayService) {
+        qCInfo(lcDbusWindow) << "hideOverlayAndClearZoneState: hide overlay triggerHeld=false";
+        m_overlayService->hide();
+        m_overlayShown = false;
+    }
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
+    if (m_overlayService) {
+        m_overlayService->clearHighlight();
+    }
+    m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
+    m_currentAdjacentZoneIds.clear();
+    m_isMultiZoneMode = false;
+    m_currentZoneGeometry = QRect();
+    m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    m_overlayIdled = false;
+}
+
+void WindowDragAdaptor::clearOverlayForTriggerRelease()
+{
+    // Mid-drag trigger release. The user let go of the activation modifier,
+    // but the drag is still live — the overlay must visually go away, but the
+    // backing QQuickWindow must STAY ALIVE. Destroying the window on every
+    // trigger toggle pays a Vulkan swap-chain teardown (~QQuickWindow blocks
+    // on the scene graph render thread) plus a labels-texture rebuild on the
+    // next show. With modifier-key thrashing mid-drag, these stacked on the
+    // main thread and stalled D-Bus dispatch long enough for kwin-effect's
+    // endDrag to time out ("daemon unresponsive") and queued shortcut events
+    // to deliver in a microsecond burst when the thread finally drained.
+    //
+    // Compare to hideOverlayAndClearZoneState() which IS destructive — that
+    // path runs on actual drag end / compositor reconnect / dragged-window
+    // closed.
+    //
+    // Intentional side effect: we clear m_currentZoneId / the zone geometry
+    // state alongside the visual blank. If the user then drops the window
+    // while the trigger is still released, dragStopped captures an empty
+    // zone and the window lands at its release position with no snap. This
+    // matches the activation-trigger contract — "hold the trigger to snap,
+    // release to float-drop" — and is the same behavior the legacy
+    // destructive hide path produced. Intentional, not a regression.
+
+    // Fast path: already idled and zone state already clear. dragMoved still
+    // calls us on every tick while the trigger is released, so this hot loop
+    // must be cheap.
+    if (m_overlayIdled && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
+        return;
+    }
+
+    if (m_overlayService) {
+        m_overlayService->setIdleForDragPause();
+    }
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
+
+    m_currentZoneId.clear();
+
+    m_currentZoneScreenId.clear();
+    m_currentAdjacentZoneIds.clear();
+    m_isMultiZoneMode = false;
+    m_currentZoneGeometry = QRect();
+    m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    m_overlayIdled = true;
+    // NOTE: m_overlayShown intentionally left true — the window is still alive.
+}
+
+void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
+{
+    if (windowId != m_draggedWindowId) {
+        return;
+    }
+
+    // Parse modifiers early — needed for both retrigger check and normal processing.
+    // KWin Effect provides modifiers via the mouseChanged signal.
+    const Qt::KeyboardModifiers mods = resolveReportedModifiers(modifiers);
+
+    // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs this
+    // tick's inputs once the grace has run out. Records the RESOLVED modifiers:
+    // a mouse-button-only trigger arrives as 0, and replaying that raw 0 would
+    // re-run the fallback above at EXPIRY time, reading a later tick's keyboard.
+    m_lastTickCursorX = cursorX;
+    m_lastTickCursorY = cursorY;
+    m_lastTickModifiers = static_cast<int>(mods);
+    m_lastTickMouseButtons = mouseButtons;
+    // beginDrag starts the clock before any tick can arrive; the guard only
+    // keeps a tick on an unstarted clock (nothing legitimate) from reading
+    // an undefined elapsed value.
+    const qint64 nowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
+
+    // Always-active bit: derived per-tick from the activation cache so the
+    // bypass path (autotile-only, never goes through dragStarted) can't carry
+    // a stale value into the inversion below. Cap is MaxTriggersPerAction (4)
+    // so the scan is essentially free.
+    const bool alwaysActiveOnDrag = std::any_of(m_cachedActivationTriggers.cbegin(), m_cachedActivationTriggers.cend(),
+                                                [](const ParsedTrigger& pt) {
+                                                    return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                                                });
+
+    // Use pre-parsed triggers (cached by beginDrag) to avoid QVariantMap
+    // unboxing per tick. EXCLUDES the AlwaysActive sentinel — that bit is
+    // owned by alwaysActiveOnDrag above. Otherwise the inversion in
+    // always-active mode would read as "trigger always held" and the overlay
+    // would never show. The non-sentinel entries serve double duty: they
+    // activate the overlay when always-active is off, and deactivate it
+    // (hold or toggle) when always-active is on (#249).
+    const bool rawTriggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, SentinelMatch::SkipAll);
+
+    // Hold-mode release grace: a mouse-button trigger lifts a few
+    // milliseconds before the drop when the same hand releases both, and
+    // that release tick used to clear the zone state the drop reads. Keep
+    // the trigger reading as held for the configured grace after its last
+    // physically-held tick. Plain hold mode only: toggle mode has no release
+    // to extend, and the always-active inversion (#249) makes the trigger a
+    // deactivate-while-held, where a grace would prolong the suppression the
+    // user just ended. Off in those modes the resolver still tracks the
+    // last-held stamp (grace 0) so a later mode read starts from fresh data.
+    // Also gated on being on the snap path: elsewhere prepareHandlerContext
+    // returns null, so arming would schedule a replay whose only work is to
+    // walk back out through that gate. The policy is re-latched per screen
+    // crossing, not snapshotted at beginDrag. Drag re-insert, the arm that
+    // does matter on engine screens, is scoped by its own engine lookup.
+    const bool onSnapPath = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::None;
+    const bool activationHoldMode = m_settings && onSnapPath && !m_settings->toggleActivation() && !alwaysActiveOnDrag;
+    const HoldGraceDecision activationGrace = resolveHoldGrace(
+        rawTriggerHeld, nowMs, m_activationLastHeldMs, activationHoldMode ? m_settings->dragActivationGraceMs() : 0);
+    m_activationLastHeldMs = activationGrace.nextLastHeldMs;
+    const bool triggerHeld = activationGrace.held;
+    if (triggerHeld && !rawTriggerHeld) {
+        armGraceExpiry(activationGrace.remainingMs);
+    }
+
+    // Zone span trigger, resolved once here for both the drag-insert
+    // keep-alive arm and the main span read below, with the same hold-mode
+    // grace. The sentinel is excluded for the reason given at the main read.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, SentinelMatch::SkipAll);
+    // Gated on zoneSpanEnabled() as well as the mode: with the feature off the
+    // sole consumer below skips the span read entirely, so arming a grace there
+    // would schedule a whole replay tick that cannot change any outcome.
+    const bool zoneSpanHoldMode = m_settings && m_settings->zoneSpanEnabled() && !m_settings->zoneSpanToggleMode();
+    const HoldGraceDecision zoneSpanGrace = resolveHoldGrace(rawZoneSpanHeld, nowMs, m_zoneSpanLastHeldMs,
+                                                             zoneSpanHoldMode ? m_settings->zoneSpanGraceMs() : 0);
+    m_zoneSpanLastHeldMs = zoneSpanGrace.nextLastHeldMs;
+    const bool zoneSpanHeld = zoneSpanGrace.held;
+    if (zoneSpanHeld && !rawZoneSpanHeld) {
+        armGraceExpiry(zoneSpanGrace.remainingMs);
+    }
+
+    // Snap assist stamp. Only the stamp is maintained here: the value is read
+    // once at the drop (see drop.cpp), so there is no tick to keep alive and
+    // nothing to arm an expiry replay for. Fed unconditionally because the list
+    // has no toggle mode, so the grace always applies when one is configured.
+    m_snapAssistLastHeldMs =
+        resolveHoldGrace(anyTriggerHeld(m_cachedSnapAssistTriggers, mods, mouseButtons), nowMs, m_snapAssistLastHeldMs,
+                         /*graceMs=*/0)
+            .nextLastHeldMs;
+
+    // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
+    // This block is intentionally ABOVE the snap-cancelled early return because
+    // Escape (cancelSnap) latches m_snapCancelled for the rest of the drag, and
+    // that must not starve a drag-insert the user begins afterwards: it lives
+    // on independent trigger lists, with its own trigger, so it should
+    // activate regardless of snap-overlay cancel state. The engine owning the
+    // cursor's screen (autotile or scrolling) selects which trigger list and
+    // toggle setting apply this tick; the rising-edge latch is shared (the
+    // cursor is on one screen at a time).
+    // One cursor-screen resolve per tick, shared by the drag-insert block
+    // and the overlay un-idle gate below (each used to re-resolve).
+    const QString cursorScreenId = effectiveScreenIdAt(cursorX, cursorY);
+    if (m_settings && (m_autotileEngine || m_scrollEngine)) {
+        const QString& insertScreenId = cursorScreenId;
+        PhosphorEngine::IPlacementEngine* insertEngine = dragInsertEngineFor(insertScreenId);
+        // The daemon's engine-set derivation already leaves a context-DISABLED
+        // screen out (a disabled tiling context runs snapping), so this gate
+        // covers the gap between a disable edit and the next engine-set
+        // recompute, when the screen is still in the set. The policy tier
+        // ranks ContextDisabled above EngineOwnedScreen for the same window,
+        // and the preview block must not reorder a disabled screen's stack
+        // inside it.
+        if (insertEngine && m_contextResolver
+            && m_contextResolver->isDisabled(m_contextResolver->handleFor(insertScreenId))) {
+            insertEngine = nullptr;
+        }
+        if (insertEngine) {
+            m_dragInsertEngineTicked = true;
+        }
+        const bool onScrollingScreen = insertEngine && insertEngine == m_scrollEngine;
+        const QVector<ParsedTrigger>& insertTriggers =
+            onScrollingScreen ? m_cachedScrollingDragInsertTriggers : m_cachedAutotileDragInsertTriggers;
+
+        // "Always re-insert" is the bare AlwaysActive sentinel in the list. It
+        // turns the user's own triggers around (#1162, the drag-insert twin of
+        // the activation inversion #249): the preview is on by default, and a
+        // held or toggled trigger keeps the drag OUT, so a window can still be
+        // dragged as a floating one. The bare sentinel matches every tick, so
+        // under always-on the trigger read leaves it out.
+        const bool insertAlwaysOn = insertEngine && hasBareAlwaysActive(insertTriggers);
+        const bool toggleMode = insertEngine
+            && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
+
+        // Escape dismissed the re-insert for this drag (cancelSnap). Only a real
+        // trigger re-press brings it back: an entry other than the bare sentinel
+        // released and then pressed again on an engine screen. The bare sentinel
+        // is left out of that test because it matches every tick, so under
+        // "always re-insert" it would begin the preview again on the very next
+        // tick and the drop would commit the re-insert Escape dismissed.
+        //
+        // Under always re-insert in hold mode the re-pressed trigger then keeps
+        // the drag out for as long as it is held, so the preview comes back once
+        // it is let go. In toggle mode the press only lifts the dismissal: Escape
+        // already left the drag out, which is what a tap would do, so reading
+        // the same press as a tap as well would toggle the drag straight back out
+        // and the preview would need a second tap to return. Seeding the edge
+        // latch as held consumes that edge. Without always re-insert the press
+        // has to toggle, since that is what turns the preview on there.
+        if (m_dragInsertCancelled && insertEngine) {
+            if (!anyTriggerHeld(insertTriggers, mods, mouseButtons, SentinelMatch::SkipBare)) {
+                m_dragInsertReleasedAfterCancel = true;
+            } else if (m_dragInsertReleasedAfterCancel) {
+                m_dragInsertCancelled = false;
+                m_dragInsertReleasedAfterCancel = false;
+                if (insertAlwaysOn && toggleMode) {
+                    m_prevDragInsertHeld = true;
+                }
+            }
+        }
+        const bool rawInsertHeld = insertEngine && !m_dragInsertCancelled
+            && anyTriggerHeld(insertTriggers, mods, mouseButtons,
+                              insertAlwaysOn ? SentinelMatch::SkipBare : SentinelMatch::Include);
+        // Hold-mode release grace, the drag-insert twin of the activation
+        // grace above, on the grace setting of the engine owning the cursor
+        // screen. Hold mode only, since toggle mode has no release to extend.
+        // Unlike activation it stays on under always-on, where it extends the
+        // keep-out: the held trigger there decides that the drop floats, and a
+        // trigger let go just before the button would otherwise re-insert the
+        // window it was held to keep out. Off any engine screen the stamp is
+        // dropped rather than kept: rawInsertHeld is false there by
+        // construction, and a return to an engine screen inside the window must
+        // not read as held without a physical press (the leave already
+        // cancelled the preview).
+        if (!insertEngine) {
+            m_dragInsertLastHeldMs = -1;
+        }
+        const int insertGraceMs = (insertEngine && !toggleMode)
+            ? (onScrollingScreen ? m_settings->scrollingDragInsertGraceMs() : m_settings->autotileDragInsertGraceMs())
+            : 0;
+        const HoldGraceDecision insertGrace =
+            resolveHoldGrace(rawInsertHeld, nowMs, m_dragInsertLastHeldMs, insertGraceMs);
+        m_dragInsertLastHeldMs = insertGrace.nextLastHeldMs;
+        if (insertGrace.held && !rawInsertHeld) {
+            armGraceExpiry(insertGrace.remainingMs);
+        }
+
+        // Hold, toggle, the always-on inversion, Escape's dismissal and the
+        // reorder latch (Krohnkite drag-to-swap for autotile, the sentinel for
+        // scrolling, which keeps a tiled window's preview on from drag start)
+        // resolve together; see resolveDragInsertActive. The reorder latch is
+        // the beginDrag-time snapshot, so nothing re-queries settings or the
+        // engine's tiled state per tick, and it applies only on an engine
+        // screen, so leaving one mid-drag runs the cross-screen cancel below.
+        const DragInsertDecision insertDecision = resolveDragInsertActive(
+            insertEngine != nullptr, m_dragInsertCancelled, insertAlwaysOn, toggleMode, rawInsertHeld, insertGrace.held,
+            m_prevDragInsertHeld, m_dragInsertToggled, m_dragInsertToggledInsert, m_dragReorderActive);
+        m_prevDragInsertHeld = insertDecision.nextPrevTriggerHeld;
+        m_dragInsertToggled = insertDecision.nextToggled;
+        m_dragInsertToggledInsert = insertDecision.nextToggledInsert;
+        const bool insertHeld = insertDecision.active;
+
+        // Journal diagnostic, AFTER the resolve so it reports what the
+        // block actually acts on. One line on the first tick (the block's
+        // silent failure modes — engine unresolved, trigger never held —
+        // are indistinguishable from "no ticks" without it), then one per
+        // raw-held transition, so a mid-drag press/release is visible
+        // instead of vanishing behind a first-tick-only latch.
+        if (!m_dragInsertTickLogged || rawInsertHeld != m_lastLoggedRawInsertHeld) {
+            m_dragInsertTickLogged = true;
+            m_lastLoggedRawInsertHeld = rawInsertHeld;
+            qCInfo(lcDbusWindow) << "drag-insert tick:" << windowId << "screen=" << insertScreenId
+                                 << "engine=" << (insertEngine ? insertEngine->engineId() : QStringLiteral("none"))
+                                 << "rawHeld=" << rawInsertHeld << "effectiveHeld=" << insertHeld
+                                 << "keptOut=" << insertDecision.suppressedByTrigger
+                                 << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
+        }
+
+        PhosphorEngine::IPlacementEngine* previewEngine = dragInsertPreviewEngine();
+
+        if (insertEngine && insertHeld) {
+            // Put out the snap overlay before anything below can return early.
+            // prepareHandlerContext owns this for every other path, and its
+            // engine-screen arm does exactly this, but the preview branch
+            // returns without ever reaching it. So a drag that lit the overlay
+            // on a snapping screen and then crossed onto an engine screen with
+            // the trigger held left it burning on the old screen for the rest
+            // of the drag, hit-testable and offering zones for a window the
+            // strip is about to claim. Placed at the top of the block rather
+            // than beside the one return, because a failed begin and a
+            // cross-engine cancel below leave through their own paths.
+            if (m_overlayShown && m_overlayService) {
+                m_overlayService->hide();
+                m_overlayShown = false;
+            }
+            m_overlayIdled = false;
+            // Cursor crossed between two engine-owned screens (same engine
+            // or autotile↔scrolling) while the trigger is held: cancel the
+            // old preview before starting a fresh one on the new screen.
+            // screensMatch, not raw !=: an id spelling change (connector name
+            // vs EDID form) for the SAME screen must not read as a crossing —
+            // it would cancel the preview and reset the auto-scroll's
+            // start-delay clock every tick. Distinct virtual screens still
+            // compare unequal through screensMatch, so a genuine VS crossing
+            // cancels as before.
+            if (previewEngine
+                && (previewEngine != insertEngine
+                    || !PhosphorScreens::ScreenIdentity::screensMatch(previewEngine->dragInsertPreviewScreenId(),
+                                                                      insertScreenId))) {
+                // Captured before the cancel empties them, mirroring the
+                // trigger-release arm below: the departed screen's strip
+                // popup must re-snapshot at this boundary (the cancel
+                // re-attaches the drag window, changing that strip's shape),
+                // and nothing later on this tick reaches the departed screen
+                // — the per-tick selector check runs against the NEW screen
+                // only, so a stale popup would otherwise stay up for as long
+                // as the new screen's preview lives.
+                const QString departedScreenId = previewEngine->dragInsertPreviewScreenId();
+                const bool departedStripSelector = previewEngine->providesDragInsertSelector();
+                previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
+                if (departedStripSelector && m_overlayService && !departedScreenId.isEmpty()) {
+                    m_overlayService->refreshStripSelector(departedScreenId);
+                }
+                // The departed screen's indicator goes with the preview it
+                // described. pushScrollDropIndicator would clear it anyway on
+                // the first tick that resolves a rect for the new screen, but
+                // a begin that fails, or a new screen with no valid target
+                // yet, would leave it lit in the meantime.
+                clearScrollDropIndicator();
+                // The heartbeat was armed against the departed preview, and
+                // its elapsed clock has been running across the crossing.
+                // Stopping here makes the re-arm below take the fresh-drag
+                // branch, so the first tick on the new screen integrates from
+                // zero instead of from a gap that spans the screen change.
+                stopDragScrollTimer();
+            }
+            if (!insertEngine->hasDragInsertPreview()) {
+                // A window under the minimum window size stays out of tiling
+                // (the effect keeps it out of the tree at open), so a drag
+                // must not adopt one into the strip or stack either. Asked of
+                // the global setting against the size the window holds as its
+                // own (dragInsertClientSize), and only for an adoption: a
+                // window the engine already tiles is only being reordered. A
+                // window managed at begin started on a frame its zone or tile
+                // decided, so that frame says nothing about the window: it is
+                // tested only once a restore during the drag hands its own
+                // size back, and the gate is re-asked every tick until a
+                // preview begins, so a restore landing later is seen.
+                const bool adoptionRefused = dragClientSizeBelowMinimum() && !insertEngine->isWindowTiled(windowId);
+                if (adoptionRefused != m_lastLoggedAdoptionRefused) {
+                    m_lastLoggedAdoptionRefused = adoptionRefused;
+                    if (adoptionRefused) {
+                        qCDebug(lcDbusWindow) << "drag-insert adoption refused:" << windowId << "on" << insertScreenId
+                                              << "is under the minimum window size at" << dragInsertClientSize();
+                    }
+                }
+                const bool began = !adoptionRefused && insertEngine->beginDragInsertPreview(windowId, insertScreenId);
+                if (!adoptionRefused) {
+                    qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
+                                          << "engine=" << insertEngine->engineId() << "=>" << began;
+                }
+                if (!began) {
+                    // Correct on tick 1, wrong on tick 2 without this. A failed
+                    // begin (or an engine that dropped its own preview between
+                    // ticks) skips the whole inner block below, so nothing
+                    // updates AND nothing clears — and the `else if
+                    // (previewEngine)` cancel arm is unreachable because this
+                    // outer branch was taken. A rect pushed on an earlier tick
+                    // would stay painted for the rest of the drag.
+                    clearScrollDropIndicator();
+                    stopDragScrollTimer();
+                    // A begin the reorder latch asked for and the engine
+                    // refused abandons reorder for the rest of the drag. Left
+                    // armed, this would retry every tick and the policy-flip
+                    // re-latch would re-arm it.
+                    if (m_dragReorderActive && !adoptionRefused) {
+                        qCWarning(lcDbusWindow)
+                            << "dragMoved: reorder mode requested but beginDragInsertPreview failed for" << windowId
+                            << "screen=" << insertScreenId << "so the drop floats it";
+                        m_dragReorderActive = false;
+                        m_dragReorderAbandoned = true;
+                    }
+                } else {
+                    // Before the first target lands, so the indicator the
+                    // update below paints already shows the slot at the size
+                    // the drop will give it.
+                    insertEngine->setDragInsertClientSize(dragInsertClientSize());
+                    if (insertEngine->providesDragInsertSelector() && m_overlayService) {
+                        // The begin detached the drag window. The popup's
+                        // exclusion emulated that detach, so the column set
+                        // normally matches — but the begin boundary is the ONE
+                        // mid-drag moment the frozen strip is ALLOWED to change
+                        // shape (DETACH-ONCE), so re-snapshot here rather than
+                        // relying on the emulation staying faithful forever.
+                        m_overlayService->refreshStripSelector(insertScreenId);
+                    }
+                }
+            }
+            if (insertEngine->hasDragInsertPreview()
+                && PhosphorScreens::ScreenIdentity::screensMatch(insertEngine->dragInsertPreviewScreenId(),
+                                                                 insertScreenId)) {
+                // The client size again on every tick of a live preview, not
+                // only at its begin: a restore during the drag (the effect's
+                // drag-to-float, a drag-out size) can land after the begin,
+                // and the indicator below and the commit should both see the
+                // size the user is holding now. The engine only stores it.
+                insertEngine->setDragInsertClientSize(dragInsertClientSize());
+                // Strip popup keep-alive: the early return below starves the
+                // per-tick selector check for the whole preview, which is
+                // fine on autotile screens (no popup there) but would freeze
+                // the strip popup's show/hide/hit-test the moment a preview
+                // begins. Runs BEFORE the target resolve so a hit stored
+                // this tick feeds this tick's preview.
+                const bool stripSelector = insertEngine->providesDragInsertSelector();
+                // Skipped while the auto-scroll owns the target: this is what
+                // STORES the popup's pick, and a pick stored now is a pick the
+                // drop would commit even though the branch below has stopped
+                // consuming it. Suppressing only the consumer would leave the
+                // producer quietly overwriting the target behind the edge slot
+                // the user is actually watching.
+                if (stripSelector && !insertEngine->dragAutoScrollActive()) {
+                    checkZoneSelectorTrigger(cursorX, cursorY);
+                }
+                // Per-tick preview ownership: while the popup holds a valid
+                // strip target for THIS screen the popup's pick drives the
+                // preview (and the in-strip indicator paints its slot); the
+                // popup clears its target the moment the cursor leaves the
+                // cards, handing ownership straight back to the bands.
+                //
+                // Edge auto-scroll gets the cursor and a heartbeat here; the
+                // strip's own view motion runs off the timer, because motion
+                // ticks stop the instant the hand does and a PARKED cursor in
+                // the band is the whole gesture. Armed unconditionally for a
+                // live preview: the engine answers "not me" for free when it
+                // cannot scroll (autotile's interface default) or when the
+                // strip already fits the viewport.
+                m_lastDragCursorPos = QPoint(cursorX, cursorY);
+                // The strip popup and the edge bands are alternative ways to
+                // aim, and while the popup is up it is the one the user is
+                // using. They also physically overlap: the popup's bar spans
+                // most of the work area and can be anchored left or right, so
+                // its OUTERMOST cards sit inside the edge band. Arming there
+                // would take the target away from the card under the cursor
+                // and scroll the strip out from under it. Not armed while the
+                // popup is shown on this screen, and stopped if it came up
+                // after the arm. The two states cannot both hold: the popup's
+                // own trigger check is skipped while the scroll owns the
+                // target, so it cannot appear mid-scroll, and this gate stops
+                // the scroll arming under an already-visible popup. That is
+                // what makes the stop below safe — there is never an owned
+                // target here to strand.
+                const bool selectorOwnsAiming = m_zoneSelectorShown
+                    && PhosphorScreens::ScreenIdentity::screensMatch(m_zoneSelectorShownOn, insertScreenId);
+                if (selectorOwnsAiming) {
+                    // The engine is disarmed as well as the timer stopped.
+                    // stopDragScrollTimer touches only daemon state, so an
+                    // armed band would keep its start-delay clock running
+                    // behind the popup and the first tick after the popup
+                    // hides would find the delay long since elapsed and lurch
+                    // the strip with no dwell at all.
+                    insertEngine->cancelDragAutoScroll();
+                    stopDragScrollTimer();
+                } else {
+                    ensureDragScrollTimerRunning(windowId);
+                }
+
+                PhosphorEngine::IPlacementEngine::DragInsertTarget target;
+                // While the auto-scroll is running it OWNS the target — it
+                // writes the view's leading/trailing new-column slot itself.
+                // Re-hit-testing here would undo that on the next cursor
+                // twitch and bring back the churn the first version of this
+                // feature was reverted for: columns sliding under a nearly
+                // stationary cursor re-answer on every boundary they cross,
+                // flipping the indicator between a new column and a join.
+                if (!insertEngine->dragAutoScrollActive()) {
+                    if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
+                        && PhosphorScreens::ScreenIdentity::screensMatch(
+                            m_overlayService->selectedStripTargetScreenId(), insertScreenId)) {
+                        const auto strip = m_overlayService->selectedStripTarget();
+                        target.primary = strip.columnIndex;
+                        target.secondary = strip.tileIndex;
+                        target.newSlot = strip.newColumn;
+                    } else {
+                        target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                    }
+                    if (target.isValid()) {
+                        insertEngine->updateDragInsertPreview(target);
+                    }
+                }
+                // Paint the drop target. Pushed AFTER the update above so the
+                // rect reflects this tick's target, and pushed unconditionally
+                // because the overlay change-gates on the rect itself, so a
+                // repeat costs a compare. Empty for autotile by interface
+                // default, which is correct — its live restructure already
+                // shows the target. Animated, because it follows a CURSOR
+                // MOVE and any rect change here is the user aiming somewhere
+                // new, which is exactly what the transitions exist to make
+                // legible — EXCEPT while the auto-scroll is running. There the
+                // heartbeat is already pushing un-animated rects at ~60 Hz
+                // against a rect that is moving on its own, and interleaving
+                // an animated push retargets a transition that has not
+                // settled, which stretches the indicator instead of sliding
+                // it. That is the case the animate flag was added for.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId),
+                                        /*animate=*/!insertEngine->dragAutoScrollActive());
+                // The early return below starves the activation and
+                // zone-span rising-edge latches for as long as the preview
+                // lives; keep them fed here so a release→press performed
+                // over the strip is not read as stale state at the next
+                // snap-screen crossing (the resolver is pure, the persisted
+                // latches are its only side channel).
+                const ActivationDecision actKeepAlive =
+                    resolveActivationActive(triggerHeld, m_settings->toggleActivation(), alwaysActiveOnDrag,
+                                            m_prevTriggerHeld, m_activationToggled);
+                m_prevTriggerHeld = actKeepAlive.nextPrevTriggerHeld;
+                m_activationToggled = actKeepAlive.nextActivationToggled;
+                const ActivationDecision spanKeepAlive =
+                    resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(),
+                                            /*alwaysActiveOnDrag=*/false, m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
+                m_prevZoneSpanTriggerHeld = spanKeepAlive.nextPrevTriggerHeld;
+                m_zoneSpanToggled = spanKeepAlive.nextActivationToggled;
+                return;
+            }
+        } else if (previewEngine) {
+            // Trigger released, cursor left the engine-owned screen mid-drag,
+            // or under always re-insert the keep-out trigger held or toggled.
+            // Cancel so neighbours snap back to their original order. Logged:
+            // a cancel on the LAST tick before release is otherwise
+            // indistinguishable from "never began" at drop time.
+            qCDebug(lcDbusWindow) << "drag-insert cancel:" << windowId << "screen=" << insertScreenId
+                                  << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
+                                  << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
+            // Captured before the cancel empties it: the strip popup on the
+            // preview's screen must re-snapshot at this boundary (the cancel
+            // re-attaches the drag window, changing the strip's shape).
+            const QString cancelledScreenId = previewEngine->dragInsertPreviewScreenId();
+            const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
+            previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
+            clearScrollDropIndicator();
+            stopDragScrollTimer();
+            if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {
+                m_overlayService->refreshStripSelector(cancelledScreenId);
+            }
+        }
+    }
+
+    if (m_snapCancelled) {
+        // Allow retriggering the overlay after Escape: the user must release the
+        // activation trigger and then press it again (a full release→press cycle).
+        //
+        // Reads rawTriggerHeld, NOT the graced triggerHeld: this gesture is a
+        // deliberate physical release-then-press, which is the very thing the
+        // grace papers over. Gated on the graced value, a cycle faster than the
+        // grace never latches and the drag stays cancelled for good.
+        if (!rawTriggerHeld) {
+            m_triggerReleasedAfterCancel = true;
+        } else if (m_triggerReleasedAfterCancel) {
+            // Trigger released and re-pressed: clear cancel, resume zone snapping.
+            // No Escape grab to re-arm: the kwin-effect's keyboard grab stays
+            // held for the whole drag (it ungrabs only on dragStopped), so
+            // Escape still reaches cancelSnap() after a cancel+re-press cycle.
+            m_snapCancelled = false;
+            m_triggerReleasedAfterCancel = false;
+            // Fall through to normal processing
+        } else {
+            return; // Trigger still held from before Escape — stay cancelled
+        }
+
+        if (m_snapCancelled) {
+            return; // Trigger released but not yet re-pressed
+        }
+    }
+
+    // Update mouse position for shader effects
+    if (m_overlayService && m_overlayShown) {
+        m_overlayService->updateMousePosition(cursorX, cursorY);
+    }
+
+    // Resolve overlay state via the pure helper — keeps the truth table
+    // (toggle rising edge + always-active inversion) in one testable place.
+    // Adaptor stays as the I/O shell that feeds in current input state and
+    // persists the returned latches. In always-active mode the resolver
+    // inverts the active output so non-sentinel triggers become
+    // deactivate-while-held (hold mode) or toggle-off (toggle mode).
+    const ActivationDecision decision = resolveActivationActive(
+        triggerHeld, m_settings->toggleActivation(), alwaysActiveOnDrag, m_prevTriggerHeld, m_activationToggled);
+    m_prevTriggerHeld = decision.nextPrevTriggerHeld;
+    m_activationToggled = decision.nextActivationToggled;
+    bool activationActive = decision.active;
+
+    // Log activation-state transitions so overlay show/hide churn can be traced.
+    if (activationActive != m_lastLoggedActivationActive) {
+        qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
+                             << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
+                             << "triggerHeld=" << triggerHeld << "rawHeld=" << rawTriggerHeld
+                             << "alwaysActive=" << alwaysActiveOnDrag
+                             << "toggleActivation=" << m_settings->toggleActivation();
+        m_lastLoggedActivationActive = activationActive;
+    }
+
+    // Resume the overlay out of its mid-drag idle state whenever the
+    // activation trigger is currently held AND we're currently idled,
+    // regardless of whether this was the tick that logged the transition.
+    // Keeping this independent of the logging predicate above means a
+    // missed transition log (or a coalesced dragMoved) can still refresh
+    // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
+    // L2's labels-texture hash cache skips the sparse glyph-tile payload
+    // rebuild, and the QVariantList zones push is small.
+    // Not on a layout-suppressed cursor screen: prepareHandlerContext idles
+    // the overlay for those, and un-idling here first would fight it — a
+    // refresh/idle ping-pong every tick at the cursor rate, with each refresh
+    // briefly re-lighting the LAST ACTIVE screen's overlay while the cursor
+    // sits on the suppressed one (the #724 wrong-screen highlight, recreated).
+    // The suppression read is memoized per drag, so this costs a string
+    // compare on the hot path.
+    if (activationActive && m_overlayIdled && m_overlayService && !isActiveLayoutSuppressedForScreen(cursorScreenId)) {
+        m_overlayService->refreshFromIdle();
+        m_overlayIdled = false;
+    }
+
+    // Check all configured zone span triggers (multi-bind support). In toggle
+    // mode the raw held-state is resolved through the same rising-edge latch as
+    // activation (#563): tap the span modifier once to start spanning, tap
+    // again to stop, instead of holding it. The sentinel is EXCLUDED like the
+    // activation read above — the legacy scalar ZoneSpanModifier key admits
+    // alwaysActive (schema value 8) and its Triggers synthesis carries it
+    // into this list, where an unconditional match would latch paint-to-span
+    // for the whole drag. The latch is evaluated every tick (not just when
+    // the overlay is active) so a release→press while the overlay is off is
+    // still seen on the next active tick.
+    const ActivationDecision zoneSpanDecision =
+        resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
+                                m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
+    m_prevZoneSpanTriggerHeld = zoneSpanDecision.nextPrevTriggerHeld;
+    m_zoneSpanToggled = zoneSpanDecision.nextActivationToggled;
+    const bool zoneSpanModifierHeld = zoneSpanDecision.active;
+
+    // Conflict detection: warn once per drag when activation and zone span
+    // can both fire on the same physical input. Runtime semantics are AND
+    // within an entry, with 0 acting as a wildcard for that field (see
+    // anyTriggerHeld). So (Ctrl, LMB) vs (Ctrl, RMB) is not a conflict —
+    // those triggers are mutually exclusive — but (Ctrl, 0) vs (Ctrl, RMB)
+    // IS, because the 0-button entry matches whenever Ctrl is held,
+    // including when Ctrl+RMB satisfies the zone-span entry too. Treat 0 as
+    // wildcard in both fields to catch these real overlaps.
+    if (!m_modifierConflictWarned) {
+        m_modifierConflictWarned = true;
+        for (const auto& at : m_cachedActivationTriggers) {
+            if (at.modifier == 0 && at.mouseButton == 0)
+                continue;
+            for (const auto& st : m_cachedZoneSpanTriggers) {
+                const bool modOverlap = at.modifier == st.modifier || at.modifier == 0 || st.modifier == 0;
+                const bool btnOverlap = at.mouseButton == st.mouseButton || at.mouseButton == 0 || st.mouseButton == 0;
+                if (modOverlap && btnOverlap) {
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span can both match"
+                                            << "(activation mod:" << at.modifier << "btn:" << at.mouseButton
+                                            << "vs zone-span mod:" << st.modifier << "btn:" << st.mouseButton << ");"
+                                            << "zone span takes priority when both match";
+                }
+            }
+        }
+    }
+
+    // Mutual exclusion: overlay (modifier-triggered) and zone selector (edge-triggered)
+    // cannot be active simultaneously. Modifier takes priority as an explicit user action.
+    // Priority: zone span > proximity snap (always active) > none
+    if (activationActive) {
+        // Modifier held: overlay takes priority — dismiss zone selector if open
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
+            m_overlayService->hideZoneSelector();
+            m_overlayService->clearSelectedZone();
+        }
+
+        if (zoneSpanModifierHeld && m_settings->zoneSpanEnabled()) {
+            handleZoneSpanModifier(cursorX, cursorY);
+        } else {
+            // Transitioning away from zone span: clear painted zones
+            if (!m_paintedZoneIds.isEmpty()) {
+                m_paintedZoneIds.clear();
+            }
+            handleMultiZoneModifier(cursorX, cursorY);
+        }
+    } else {
+        // No modifier: blank overlay shader output + clear painted zones.
+        // CRITICAL: do NOT destroy the overlay window here — we're mid-drag.
+        // Destroying on every trigger toggle caused multi-second D-Bus stalls.
+        // See clearOverlayForTriggerRelease() for the full rationale.
+        if (!m_paintedZoneIds.isEmpty()) {
+            m_paintedZoneIds.clear();
+        }
+        clearOverlayForTriggerRelease();
+        checkZoneSelectorTrigger(cursorX, cursorY);
+    }
+
+    // Emit zone geometry during drag (effect applies only on release; overlay uses for highlight)
+    // Only emit when geometry actually changes
+    QRect geom = m_isMultiZoneMode ? m_currentMultiZoneGeometry : m_currentZoneGeometry;
+    if (geom.isValid()) {
+        if (geom != m_lastEmittedZoneGeometry) {
+            m_lastEmittedZoneGeometry = geom;
+            m_restoreSizeEmittedDuringDrag = false;
+            Q_EMIT zoneGeometryDuringDragChanged(windowId, geom.x(), geom.y(), geom.width(), geom.height());
+        }
+    } else {
+        // Cursor left all zones: restore pre-snap size immediately if window was snapped.
+        // The record is read for the CURSOR's screen, the same basis the
+        // drop-time commit uses (drop.cpp reads preSnapSizeFor for the
+        // release screen) — getValidatedPreTileGeometry resolves the
+        // window's TRACKED screen instead, so a cross-monitor drag-out
+        // previewed one monitor's remembered size and committed the other's.
+        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_windowTracking
+            && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
+            const auto preSnap = preSnapSizeFor(windowId, cursorScreenId);
+            if (preSnap) {
+                m_restoreSizeEmittedDuringDrag = true;
+                // The window's own size again, which a later drag-insert may
+                // hand an engine (dragInsertClientSize).
+                m_dragRestoredSize = *preSnap;
+                m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit
+                Q_EMIT restoreSizeDuringDragChanged(windowId, preSnap->width(), preSnap->height());
+            }
+        }
+    }
+}
+
+void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
+{
+    // A compositor report like beginDrag and the cursor ticks: only the
+    // registered bridge may send it over the bus (#1155).
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
+    // An idle-time call must not scroll a popup that is not there.
+    if (m_zoneSelectorShown && m_overlayService) {
+        m_overlayService->scrollZoneSelector(angleDeltaY);
+    }
+}
+
+} // namespace PlasmaZones

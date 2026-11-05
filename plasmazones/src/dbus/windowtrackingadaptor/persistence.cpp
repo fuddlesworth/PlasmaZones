@@ -1,0 +1,408 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "windowtrackingadaptor.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/RuleStore.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorScreens/Manager.h>
+#include "core/interfaces/interfaces.h"
+#include "core/platform/logging.h"
+#include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+namespace PlasmaZones {
+
+void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
+                                                 const QString& screenId, bool overwrite)
+{
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
+    if (!validateWindowId(windowId, QStringLiteral("store pre-tile geometry"))) {
+        return;
+    }
+
+    if (width <= 0 || height <= 0) {
+        qCWarning(lcDbusWindow) << "Invalid geometry for pre-tile storage:"
+                                << "width=" << width << "height=" << height;
+        return;
+    }
+
+    // SINGLE float-back store: the placement record's SHARED per-screen free
+    // geometry (NOT a per-engine store). The effect's guarded pre-tile/pre-snap
+    // capture is the source; snap and autotile read the SAME value, so a window's
+    // free position never differs between modes and a managed rect can't leak from
+    // one engine's store into the other's float restore.
+    m_service->recordFreeGeometry(windowId, screenId, QRect(x, y, width, height), overwrite);
+    qCDebug(lcDbusWindow) << "Stored pre-tile geometry to record for" << windowId << "screen=" << screenId
+                          << "overwrite=" << overwrite;
+}
+
+bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
+{
+    // No m_service guard: the ctor qFatals on a null service and then assigns
+    // it unconditionally, so it is non-null for the object's whole life. The
+    // three siblings below deref unguarded on that basis, and a half-guard here
+    // only made a reader wonder which of the two positions the file held.
+    if (windowId.isEmpty()) {
+        return false;
+    }
+    const QString screenId = m_service->screenForWindow(windowId);
+    // Same resolver as getValidatedPreTileGeometry, which is what keeps the two
+    // honest: they are a documented pair — "is there a pre-tile geometry" and
+    // "give me the pre-tile geometry" — and answering them from different
+    // record sets would make one a liar.
+    //
+    // The resolver is per-window by construction, which is the right answer on
+    // its own terms. SnapHandler dropped its pre-check against this method for
+    // exactly what appId matching used to bring: "a stale cross-session entry
+    // from a prior window instance (keyed by appId) would block the fresh
+    // per-instance capture and freeze float-restore at ancient coordinates". A
+    // per-window question deserves a per-window answer.
+    return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
+}
+
+void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
+{
+    // The inverse of storePreTileGeometry takes its gate (#1155): another peer
+    // must not wipe every screen's float-back of a window.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
+    if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
+        return;
+    }
+    // No in-tree caller; external contract surface. Clears every screen's
+    // float-back, unlike the consume-once restore paths.
+    m_service->clearFreeGeometry(windowId);
+}
+
+PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
+{
+    PhosphorProtocol::PreTileGeometryList result;
+    // Source from the SINGLE float-back store — the unified record's shared
+    // per-screen free geometry — so the effect's float-cache seed sees every
+    // window's float-back regardless of which mode captured it.
+    // Intentionally NOT gated by isPersistedContextDisabled (unlike
+    // getPendingRestoreGeometries): float-back restores a window to a FREE
+    // position, it does not snap it into a zone, so the snap-disable gate must
+    // not apply here — mirroring the snap engine's floating-branch policy in
+    // SnapEngine::resolveWindowRestore.
+    for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
+        // LIVE records only, and each names its window: the consumer
+        // (TilingHandler's pre-tile fetch) applies an entry to the window it
+        // belongs to (by instance id), never to a same-app sibling (F627). A
+        // closed record has no window to seed.
+        if (!m_service->placementStore().isLiveInstance(p.windowId)) {
+            continue;
+        }
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            const QRect& geo = it.value();
+            if (!geo.isValid()) {
+                continue;
+            }
+            PhosphorProtocol::PreTileGeometryEntry entry;
+            entry.appId = p.appId;
+            entry.windowId = p.windowId;
+            entry.x = geo.x();
+            entry.y = geo.y();
+            entry.width = geo.width();
+            entry.height = geo.height();
+            const QString& screen = it.key();
+            if (!screen.isEmpty()) {
+                entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(screen)
+                    ? screen
+                    : PhosphorScreens::ScreenIdentity::idForName(screen);
+            }
+            result.append(entry);
+        }
+    }
+    return result;
+}
+
+bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width,
+                                                        int& height)
+{
+    x = y = width = height = 0;
+
+    if (windowId.isEmpty()) {
+        return false;
+    }
+
+    // m_service is non-null by constructor invariant (the ctor qFatals on
+    // null), so no guard is needed; the half-guard this replaced checked
+    // one deref and missed the next.
+    const QString screenId = m_service->screenForWindow(windowId);
+
+    // A PER-WINDOW restore ("put THIS window back where it was before we tiled
+    // it"), and the resolver is per-window by construction — there is no
+    // sharing mode left to opt out of. That is the whole point: sharing used to
+    // admit a same-app SIBLING's free geometry, and for a window with no record
+    // of its own — the ordinary case once an app's bucket has filled with dead
+    // instances at MaxPerApp — it borrowed a stranger's rect and handed it back
+    // as this window's pre-tile position. Worse, the rect is resolved against
+    // screenForWindow(), the daemon's TRACKED screen, so a sibling's rect from
+    // another monitor came back either verbatim (when the tracked screen
+    // matched the sibling's) or re-centred onto that tracked screen — and the
+    // effect applies it as absolute coordinates, moving the window there.
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
+    if (!geo) {
+        return false;
+    }
+
+    x = geo->x();
+    y = geo->y();
+    width = geo->width();
+    height = geo->height();
+    return true;
+}
+
+PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
+{
+    // A geometry re-apply is a placement: none with snapping switched off,
+    // none in a context the user disabled (F445).
+    if (m_settings && !m_settings->snappingEnabled()) {
+        return {};
+    }
+    QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
+    PhosphorProtocol::WindowGeometryList result;
+    result.reserve(geometries.size());
+    const QString activity = m_layoutManager->currentActivity();
+    for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
+        const QString screenId = m_service->screenForWindow(it.key());
+        if (isPersistedContextDisabled(screenId, currentDesktopForScreen(screenId), activity)) {
+            continue;
+        }
+        // The screen the zone is on, so the effect re-applies only a window
+        // that is on that output (F616): a window KWin moved off it is the
+        // settle's to classify, not this pass's to pull back.
+        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(), screenId));
+    }
+    qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
+    return result;
+}
+
+namespace {
+// An enabled rule that can turn the zone restore off for some window. A closed
+// record has no live window to ask the rule about, so any such rule empties
+// the cache (F703).
+bool anyRuleRefusesZoneRestore(const PhosphorRules::RuleSet& rules)
+{
+    for (const PhosphorRules::Rule& rule : rules.rules()) {
+        if (!rule.enabled) {
+            continue;
+        }
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (action.type == PhosphorRules::ActionType::SetRestoreToZoneOnLogin
+                && !action.params.value(QString(PhosphorRules::ActionParam::Value)).toBool()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
+
+QString WindowTrackingAdaptor::getPendingRestoreGeometries()
+{
+    // The cache stands in for the snap restore's own answer, so it is empty
+    // wherever that answer is no: snapping off, the zone restore off
+    // (shouldRestoreToZoneOnLogin's global setting), or a rule that can switch
+    // it off for a window (F703). A window the cache skips still restores
+    // through resolveWindowRestore; it only loses the instant placement.
+    if (m_settings && (!m_settings->snappingEnabled() || !m_settings->restoreWindowsToZonesOnLogin())) {
+        return QStringLiteral("{}");
+    }
+    if (m_ruleStore && anyRuleRefusesZoneRestore(m_ruleStore->ruleSet())) {
+        return QStringLiteral("{}");
+    }
+    auto targets = m_service->pendingRestoreGeometries();
+    if (targets.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+
+    // Disabled-context gate (discussion #461 item 7). The KWin effect's
+    // instant-restore fast path teleports a window straight into target.geometry
+    // from this cache, BEFORE the daemon's resolveWindowRestore predicate gate
+    // runs — so an entry left here for a disabled monitor would be snapped onto
+    // it regardless of the engine-side ShouldRestorePredicate, leaving a window
+    // visually placed on a disabled context but absent from SnapState (the
+    // "ghost" the instant-restore registration fix otherwise eliminates).
+    // Funnel this read through the same isPersistedContextDisabled check that
+    // guards saveState, loadState and the engine restore path so all four
+    // paths can never drift.
+    //
+    // The gate keys on the record screen's CURRENT desktop and the CURRENT
+    // activity: the opener lands in the activity in view, so a record from
+    // another activity must not teleport it into a context disabled here.
+    //
+    // One ARRAY per appId, newest record first: the effect takes the newest
+    // entry on the opener's output (InstantRestoreDecisions::pickEntry), so a
+    // newer record on another output stays for an opener there instead of
+    // costing this one its instant restore.
+    QJsonObject result;
+    for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
+        QJsonArray entries;
+        for (const auto& target : it.value()) {
+            // Per-output virtual desktops (#648): gate each record on ITS screen's desktop.
+            const int desktop = currentDesktopForScreen(target.screenId);
+            if (isPersistedContextDisabled(target.screenId, desktop, m_layoutManager->currentActivity())) {
+                qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
+                                      << "— disabled context on screen" << target.screenId;
+                continue;
+            }
+            QJsonObject geoObj;
+            geoObj[QLatin1String("x")] = target.geometry.x();
+            geoObj[QLatin1String("y")] = target.geometry.y();
+            geoObj[QLatin1String("width")] = target.geometry.width();
+            geoObj[QLatin1String("height")] = target.geometry.height();
+            geoObj[QLatin1String("screenId")] = target.screenId;
+            geoObj[QLatin1String("windowId")] = target.windowId;
+            entries.append(geoObj);
+        }
+        if (!entries.isEmpty()) {
+            result[it.key()] = entries;
+        }
+    }
+
+    qCDebug(lcDbusWindow) << "Returning pending restore geometries for" << result.size() << "apps";
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
+void WindowTrackingAdaptor::onLayoutChanged()
+{
+    // Mid-removal the layoutsChanged that closes it moves the windows, then
+    // prunes; pruning here first would unsnap them before they move.
+    if (!m_layoutRemovalPending) {
+        relayZonePrune(m_service->pruneStaleZoneAssignments());
+    }
+
+    // After layout becomes available, check if we have placement records to
+    // restore. The unified WindowPlacementStore is the only restore source.
+    if (m_service->placementStore().size() > 0) {
+        m_hasPendingRestores = true;
+        qCDebug(lcDbusWindow) << "Layout available with" << m_service->placementStore().size()
+                              << "placement records, checking if panel geometry is ready";
+        tryEmitPendingRestoresAvailable();
+    }
+}
+
+void WindowTrackingAdaptor::relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result)
+{
+    // The effect clears its snapped mark on "unsnapped" (F328): a window the
+    // prune left in no zone kept its snap decoration, and a later minimize
+    // floated it as a snap suspension.
+    for (const PhosphorEngine::ZoneAssignmentEntry& entry : result.unsnapped) {
+        Q_EMIT windowStateChanged(entry.windowId,
+                                  PhosphorProtocol::WindowStateEntry{entry.windowId, QString(), entry.targetScreenId,
+                                                                     false, QStringLiteral("unsnapped"), QStringList{},
+                                                                     false});
+    }
+    // A span that kept some zones moves to them. The batch commits through
+    // the engine as a re-statement, which states "snapped" with the new
+    // primary (F442).
+    if (!result.narrowed.isEmpty() && m_cachedSnapEngine) {
+        m_cachedSnapEngine->emitBatchedResnap(result.narrowed);
+    }
+}
+
+void WindowTrackingAdaptor::resnapScreensToTheirLayouts(const QSet<QString>& excludeScreens,
+                                                        const QSet<QString>& screens, int desktop)
+{
+    if (!m_service || !m_cachedSnapEngine) {
+        return;
+    }
+    m_service->populateResnapBufferForAllScreens(excludeScreens, screens, desktop);
+    // Synchronous: the batch commits through the adaptor's direct connection,
+    // so the prune below sees the new zones and removes only what the switch
+    // could not carry, such as a window past the new layout's zone count
+    // with no float spot to go to (F475).
+    m_cachedSnapEngine->resnapToNewLayout(PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
+    relayZonePrune(m_service->pruneStaleZoneAssignments());
+}
+
+void WindowTrackingAdaptor::onPanelGeometryReady()
+{
+    qCDebug(lcDbusWindow) << "Panel geometry: ready, checking if pending restores available";
+    tryEmitPendingRestoresAvailable();
+}
+
+void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
+{
+    // Don't emit more than once per session
+    if (m_pendingRestoresEmitted) {
+        return;
+    }
+
+    // Check both conditions: layout has pending restores AND panel geometry is known
+    if (!m_hasPendingRestores) {
+        qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, no pending restores";
+        return;
+    }
+
+    // Check if panel geometry is ready, or if PhosphorScreens::ScreenManager doesn't exist (fallback)
+    // If PhosphorScreens::ScreenManager instance is null, we proceed anyway with a warning - this is
+    // better than blocking window restoration indefinitely
+    if (m_service->screenManager() && !m_service->screenManager()->isPanelGeometryReady()) {
+        qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
+        return;
+    }
+
+    // Both conditions met (or PhosphorScreens::ScreenManager unavailable) - emit the signal
+    m_pendingRestoresEmitted = true;
+    if (!m_service->screenManager()) {
+        qCWarning(lcDbusWindow)
+            << "pendingRestoresAvailable: no PhosphorScreens::ScreenManager, geometry may be incorrect";
+    } else {
+        qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
+    }
+    Q_EMIT pendingRestoresAvailable();
+}
+
+QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
+{
+    if (!m_layoutManager) {
+        return QString();
+    }
+    auto zoneUuid = Utils::parseUuid(zoneId);
+    if (!zoneUuid) {
+        return QString();
+    }
+
+    // Search per-screen layouts to find which screen's layout contains this zone.
+    // This correctly handles multi-monitor setups where each screen has a different layout.
+    // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
+    const QStringList effectiveIds =
+        (m_service->screenManager() ? m_service->screenManager()->effectiveScreenIds() : QStringList());
+    for (const QString& sid : effectiveIds) {
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
+        PhosphorZones::Layout* layout =
+            m_layoutManager->layoutForScreen(sid, desktop, m_layoutManager->currentActivity());
+        if (layout && layout->zoneById(*zoneUuid)) {
+            return sid;
+        }
+    }
+    // A zone no screen's layout holds names no screen. There used to be a
+    // projection of the zone's centre under the active layout here, but a
+    // zone's normalized geometry is relative to the very screen it is
+    // projected onto, so for any zone that fits its screen the centre landed
+    // inside the first screen tried, and the answer was that screen whatever
+    // the zone. Empty lets
+    // resolveScreenForSnap fall through to the cursor's or the focused
+    // window's screen, which at least describe where the user is.
+    return QString();
+}
+
+} // namespace PlasmaZones

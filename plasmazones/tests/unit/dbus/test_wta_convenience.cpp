@@ -1,0 +1,1140 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_wta_convenience.cpp
+ * @brief Unit tests for WindowTrackingAdaptor: moveWindowToZone,
+ *        swapWindowsById, the window-state queries and stream, the float and
+ *        float-restore surface, the focused-window and close reports, and the
+ *        in-process relays. The open routing and cross-mode handoff tests live
+ *        in test_wta_routing.cpp (shared fixture: wta_convenience_fixture.h).
+ */
+
+#include "wta_convenience_fixture.h"
+#include "dbus/windowtrackingadaptor/lifecyclerelay.h"
+
+#include <PhosphorEngine/GeometryUtils.h>
+#include <PhosphorProtocol/AutotileTypes.h>
+#include <QRegularExpression>
+#include <QScopeGuard>
+#include <QSignalSpy>
+
+class TestWtaConvenience : public QObject, protected WtaConvenienceFixture
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void init()
+    {
+        initFixture();
+    }
+    void cleanup()
+    {
+        cleanupFixture();
+    }
+
+    // =====================================================================
+    // moveWindowToZone
+    // =====================================================================
+
+    void testMoveWindowToZone_validZone_emitsApplyGeometry()
+    {
+        installRegistry();
+        QString windowId = registerWindow(QStringLiteral("firefox|12345"));
+
+        // Assign a screen mapping so resolveScreenForSnap works. With no screen
+        // manager here the zone's screen is not detectable, so the cursor's
+        // screen answers (a snap on no screen is refused).
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        m_wta->cursorScreenChanged(m_screenId);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[0]);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), windowId);
+        // Geometry args (x, y, width, height) should have valid dimensions
+        QVERIFY(spy.at(0).at(3).toInt() > 0); // width
+        QVERIFY(spy.at(0).at(4).toInt() > 0); // height
+        QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[0]);
+    }
+
+    void testMoveWindowToZone_invalidZone_noSignal()
+    {
+        installRegistry(); // live, so the refusal is the zone's
+        QString windowId = registerWindow(QStringLiteral("firefox|12345"));
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_snapAdaptor->moveWindowToZone(windowId, QStringLiteral("nonexistent-zone-id"));
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testMoveWindowToZone_emptyWindowId_noSignal()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_snapAdaptor->moveWindowToZone(QString(), m_zoneIds[0]);
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    // The focused-window screen that window shortcuts act on follows the
+    // focused window when it moves output without a new activation. Before,
+    // only windowActivated set it, so a key pressed after a KWin move of the
+    // focused window acted on the output it had left. A report for any other
+    // window must not repoint it.
+    void testActiveWindowScreenChanged_followsTheFocusedWindow()
+    {
+        const QString focused = QStringLiteral("firefox|12345");
+        const QString other = QStringLiteral("konsole|67890");
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+
+        m_wta->activeWindowScreenChanged(other, QStringLiteral("DP-3"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+
+        m_wta->activeWindowScreenChanged(focused, QStringLiteral("DP-2"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
+    }
+
+    // A close drives the sibling adaptors' teardown exactly once, through the
+    // in-process relay rather than a bus-visible adaptor signal (F514, F851).
+    void testWindowClosed_notifiesTheRelayOnce()
+    {
+        QSignalSpy spy(m_wta->lifecycleRelay(), &WindowLifecycleRelay::windowClosed);
+        const QString windowId = QStringLiteral("firefox|closed-1");
+        m_wta->windowClosed(windowId, 0);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), windowId);
+    }
+
+    // The shutdown save takes the synchronous path by design (the worker is
+    // gone first), so it logs at debug rather than as a fallback warning (F636).
+    void testShutdownSave_logsNoWarning()
+    {
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("synchronous fallback")));
+        m_wta->service()->markDirty(PhosphorPlacement::WindowTrackingService::DirtyAll);
+        m_wta->saveStateOnShutdown();
+    }
+
+    void testPruneStaleWindows_relaysTheAliveInstances()
+    {
+        QSignalSpy spy(m_wta->lifecycleRelay(), &WindowLifecycleRelay::stalePruned);
+        m_wta->pruneStaleWindows({QStringLiteral("app|1")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toStringList(), QStringList{QStringLiteral("1")});
+    }
+
+    // Closing the focused window forgets its screen too, on the close path and
+    // on the prune path alike, so the daemon's shortcut screen resolution
+    // falls back to the cursor's screen instead of a closed window's (F291).
+    void testClosingTheFocusedWindow_forgetsItsScreen()
+    {
+        const QString focused = QStringLiteral("firefox|focused-1");
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+        m_wta->windowClosed(focused, 0);
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
+
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+        m_wta->pruneStaleWindows({QStringLiteral("konsole|alive-1")}); // an empty set is refused
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
+    }
+
+    // The focused window is matched by its instance, so a close naming a
+    // class-renamed composite of it still forgets it (F851).
+    void testClosingTheFocusedWindow_byAnotherCompositeOfItsInstance()
+    {
+        m_wta->windowActivated(QStringLiteral("app|inst-a"), QStringLiteral("DP-1"));
+        m_wta->windowClosed(QStringLiteral("renamed|inst-a"), 0);
+        QVERIFY(m_wta->lastActiveWindowId().isEmpty());
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
+    }
+
+    // A close drops the window's suspension-float classification, its frame
+    // shadow and its float-broadcast dedup entry, so the same float state
+    // broadcasts again for a window reusing the id (F851).
+    void testWindowClosed_dropsTheSuspensionAndBroadcastMemory()
+    {
+        const QString w = QStringLiteral("app|closed-2");
+        m_wta->service()->markSuspensionFloat(w);
+        QVERIFY(m_wta->relayWindowFloatingChanged(w, true, m_screenId));
+        m_wta->setFrameGeometry(w, 100, 100, 400, 300);
+        QVERIFY(m_wta->frameGeometry(w).isValid());
+
+        m_wta->windowClosed(w, 0);
+
+        QVERIFY(!m_wta->service()->isSuspensionFloat(w));
+        QVERIFY(!m_wta->frameGeometry(w).isValid());
+        QVERIFY2(m_wta->relayWindowFloatingChanged(w, true, m_screenId), "the dedup entry went with the window");
+    }
+
+    // The activation backstop re-homes a window whose snap store names
+    // another monitor, but never a SNAPPED one: a migrate leaves the zone
+    // behind, so an activation report naming a stale output (one racing a
+    // snap commit) would silently unsnap the window.
+    void testActivationOnAnotherScreen_keepsASnappedWindowSnapped()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString windowId = QStringLiteral("firefox|activated-1");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(QStringLiteral("DP-2"), 1);
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], m_screenId, 1);
+        QCOMPARE(m_snapEngine->zoneForWindow(windowId), m_zoneIds[0]);
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(windowId), m_screenId);
+
+        m_wta->windowActivated(windowId, QStringLiteral("DP-2"));
+
+        QCOMPARE(m_snapEngine->zoneForWindow(windowId), m_zoneIds[0]);
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(windowId), m_screenId);
+    }
+
+    // A batch whose every entry re-states a placement (the desktop carry) is
+    // relayed as "restate", which shows no Snap Assist; a placing batch stays
+    // "resnap" (F461).
+    void testHandleBatchedResnap_restatementBatchRelaysRestate()
+    {
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = QStringLiteral("app|carried");
+        entry.targetZoneId = m_zoneIds[0];
+        entry.targetGeometry = m_wta->service()->zoneGeometry(m_zoneIds[0], m_screenId);
+        entry.targetScreenId = m_screenId;
+        entry.restatement = true;
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        m_snapEngine->emitBatchedResnap({entry});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.last().at(1).toString(), QStringLiteral("restate"));
+
+        entry.targetZoneId = m_zoneIds[1];
+        entry.targetGeometry = m_wta->service()->zoneGeometry(m_zoneIds[1], m_screenId);
+        entry.restatement = false;
+        m_snapEngine->emitBatchedResnap({entry});
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.last().at(1).toString(), QStringLiteral("resnap"));
+    }
+
+    // =====================================================================
+    // unfloat-to-zone re-snap discriminator
+    // =====================================================================
+
+    void testUnfloatToZone_emitsApplyGeometryWithZoneId()
+    {
+        // Regression: unfloat-to-zone IS a snap commit, so its
+        // applyGeometryRequested must carry the (representative) zone id, NOT an
+        // empty string. The KWin effect uses an empty zoneId as the
+        // "float-restore" discriminator (→ clearWindowSnapped, which strips the
+        // snap title-bar / border chrome) and a non-empty one as the "snap
+        // commit" discriminator (→ markWindowSnapped, which re-applies it). An
+        // empty zoneId here left a re-snapped window wearing its floating chrome.
+        const QString windowId = QStringLiteral("firefox|float-resnap");
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+
+        // Snap, then float — floating captures the pre-float zone.
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->toggleWindowFloat(windowId, m_screenId);
+        QVERIFY(m_snapEngine->snapState()->isFloating(windowId));
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        // Unfloat back to the zone — a snap commit, not a float-restore.
+        m_snapEngine->toggleWindowFloat(windowId, m_screenId);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), windowId);
+        // zoneId (arg index 5) must be the original zone, not empty.
+        QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[0]);
+    }
+
+    // =====================================================================
+    // reapplyWindowAppearance — daemon-driven, engine-common chrome re-apply
+    // =====================================================================
+
+    void testReapplyWindowAppearance_reemitsSnappedSkipsFloating()
+    {
+        // On a compositor-bridge reconnect the daemon must re-drive the chrome
+        // (snap border / hidden title bar) for already-snapped windows — the
+        // effect cleared it on daemon loss. reapplyWindowAppearance fans out
+        // through the common IPlacementEngine API; the snap engine re-emits a
+        // snap-commit applyGeometryRequested (non-empty zoneId) per window
+        // snapped in view and not floating (gate rows: test_snap_per_monitor).
+        // Per-screen stores as in the daemon: the global holder is never in view.
+        // A setWindowFloat float leaves the snapped set, so the floating-with-zone
+        // shape the engine's own float skip guards is covered by
+        // testReapplyWindowAppearance_skipsAFloatThatStillHoldsItsZone.
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString snapped1 = QStringLiteral("app1|reapply-1");
+        const QString snapped2 = QStringLiteral("app2|reapply-2");
+        const QString floated = QStringLiteral("app3|reapply-float");
+
+        m_snapEngine->commitSnap(snapped1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(snapped2, m_zoneIds[1], m_screenId);
+        m_snapEngine->commitSnap(floated, m_zoneIds[2], m_screenId);
+        m_snapEngine->setWindowFloat(floated, true); // leaves the snapped set
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_wta->reapplyWindowAppearance();
+
+        // One snap-commit emission per snapped, non-floating window; floated skipped.
+        QCOMPARE(spy.count(), 2);
+        QSet<QString> emittedWindows;
+        QSet<QString> emittedZones;
+        for (int i = 0; i < spy.size(); ++i) {
+            const QList<QVariant>& args = spy.at(i);
+            // non-empty zoneId = snap commit
+            QVERIFY2(!args.at(5).toString().isEmpty(), qPrintable(QString::number(i)));
+            QCOMPARE(
+                args.at(8).toInt(),
+                static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement)); // the re-apply re-states (F490)
+            emittedWindows.insert(args.at(0).toString());
+            emittedZones.insert(args.at(5).toString());
+        }
+        QVERIFY(emittedWindows.contains(snapped1));
+        QVERIFY(emittedWindows.contains(snapped2));
+        QVERIFY(!emittedWindows.contains(floated));
+        QVERIFY(emittedZones.contains(m_zoneIds[0]));
+        QVERIFY(emittedZones.contains(m_zoneIds[1]));
+    }
+
+    // The float bit set on a store whose window still holds its zone: the
+    // re-apply skips it, and re-states the snapped window beside it.
+    void testReapplyWindowAppearance_skipsAFloatThatStillHoldsItsZone()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString snapped = QStringLiteral("app1|reapply-snapped");
+        const QString held = QStringLiteral("app2|reapply-held");
+        m_snapEngine->commitSnap(snapped, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(held, m_zoneIds[2], m_screenId);
+        auto* state = static_cast<SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY(state);
+        state->setFloating(held, true); // the bit only: the zone stays
+        QCOMPARE(state->zonesForWindow(held), QStringList{m_zoneIds[2]});
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        m_wta->reapplyWindowAppearance();
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), snapped);
+    }
+
+    // =====================================================================
+    // float-restore — close-while-floating → reopen-floating (unified store)
+    // =====================================================================
+
+    // getPreTileGeometries answers LIVE records only, and each entry names its
+    // window, so the consumer applies it to that window only, never to a
+    // same-app sibling (F627). A closed instance has no window to seed.
+    void testGetPreTileGeometries_liveRecordsOnly()
+    {
+        using PhosphorEngine::WindowPlacement;
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        // Only these two instances are registered, so only they are live.
+        for (const QString& inst : {QStringLiteral("liveinst"), QStringLiteral("liveinst2")}) {
+            m_wta->setWindowMetadata(inst, QStringLiteral("pretile"), QString(), QString(), QString(), 0, 0, QString(),
+                                     0, QVariantMap());
+        }
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
+        const QRect liveRect(40, 50, 900, 700);
+        const QRect siblingRect(500, 60, 700, 500);
+        WindowPlacement live;
+        live.windowId = QStringLiteral("pretile|liveinst");
+        live.appId = QStringLiteral("pretile");
+        live.screenId = m_screenId;
+        live.freeGeometryByScreen.insert(m_screenId, liveRect);
+        QVERIFY(store.record(live));
+        WindowPlacement sibling = live;
+        sibling.windowId = QStringLiteral("pretile|liveinst2");
+        sibling.freeGeometryByScreen.insert(m_screenId, siblingRect);
+        QVERIFY(store.record(sibling));
+        WindowPlacement dead;
+        dead.windowId = QStringLiteral("pretile|deadinst");
+        dead.appId = QStringLiteral("pretile");
+        dead.screenId = m_screenId;
+        dead.freeGeometryByScreen.insert(m_screenId, QRect(0, 0, 320, 240));
+        QVERIFY(store.record(dead));
+
+        const PhosphorProtocol::PreTileGeometryList entries = m_wta->getPreTileGeometries();
+        QCOMPARE(entries.size(), 2);
+        QHash<QString, QRect> byWindow;
+        for (const PhosphorProtocol::PreTileGeometryEntry& entry : entries) {
+            QCOMPARE(entry.appId, QStringLiteral("pretile"));
+            byWindow.insert(entry.windowId, entry.toRect());
+        }
+        QCOMPARE(byWindow.value(QStringLiteral("pretile|liveinst")), liveRect);
+        QCOMPARE(byWindow.value(QStringLiteral("pretile|liveinst2")), siblingRect);
+    }
+
+    // An engine's size-only restore (#1106) reaches the wire as a size-only
+    // applyGeometryRequested: zero origin, the size, no zone, the screen,
+    // and the sizeOnly flag that routes the effect to its size-only,
+    // position-keeping arm (an open-path restore teleports only because it
+    // arrives under first-frame suppression).
+    void testSizeRestore_relayedAsSizeOnlyApply()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        Q_EMIT m_snapEngine->sizeRestoreRequested(QStringLiteral("app|w"), QSize(640, 480), m_screenId);
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("app|w"));
+        QCOMPARE(args.at(1).toInt(), 0);
+        QCOMPARE(args.at(2).toInt(), 0);
+        QCOMPARE(args.at(3).toInt(), 640);
+        QCOMPARE(args.at(4).toInt(), 480);
+        QVERIFY(args.at(5).toString().isEmpty());
+        QCOMPARE(args.at(6).toString(), m_screenId);
+        QVERIFY(args.at(7).toBool());
+    }
+
+    void testFloatRestore_closeWhileFloating_reopensFloatingAtGeometry()
+    {
+        // End-to-end: a snapped window is floated (and moved), then closed while
+        // floating. WindowTrackingAdaptor::windowClosed captures a floated
+        // WindowPlacement into the unified store, keyed by appId. A reopened
+        // instance of the SAME app consumes it via resolveWindowRestore: NOT
+        // snapped (shouldSnap=false), placed at the floated geometry via
+        // applyGeometryRequested with an EMPTY zoneId, and marked floating.
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString w1 = QStringLiteral("settings|float-old");
+        const QRect floatedGeo(123, 456, 800, 600);
+
+        m_snapEngine->commitSnap(w1, m_zoneIds[0], m_screenId);
+        m_snapEngine->setWindowFloat(w1, true);
+        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
+        QVERIFY(m_snapEngine->snapState()->isFloating(w1));
+
+        // Close while floating → captures a floated placement for app "settings".
+        m_wta->windowClosed(w1, static_cast<int>(PhosphorEngine::WindowKind::Normal));
+        QVERIFY(m_wta->service()->placementStore().contains(w1, QStringLiteral("settings")));
+
+        // Reopen as a new instance of the same app.
+        const QString w2 = QStringLiteral("settings|float-new");
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        int x = 0, y = 0, wd = 0, h = 0;
+        bool shouldSnap = true;
+        m_snapAdaptor->resolveWindowRestore(w2, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
+                                            static_cast<int>(PhosphorEngine::RestoreReason::Open), /*minWidth=*/0,
+                                            /*minHeight=*/0, x, y, wd, h, shouldSnap);
+
+        QCOMPARE(shouldSnap, false); // float-restore is not a snap
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), w2);
+        // Empty zoneId (index 5) = float/unmanaged discriminator (no snap border).
+        QCOMPARE(spy.at(0).at(5).toString(), QString());
+        QCOMPARE(spy.at(0).at(8).toInt(),
+                 static_cast<int>(
+                     PhosphorProtocol::PlacementPurpose::Restatement)); // a remembered float spot re-states (F575)
+        QCOMPARE(
+            QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
+            floatedGeo);
+        // Reopened floating in the screen's per-key store (the engine's open path
+        // registers it there). This test wires the single-store facade convenience,
+        // which only sees the global holder, so check the engine's own store-agnostic
+        // float view instead of snapState() (globals).
+        QVERIFY(m_snapEngine->isFloating(w2)); // reopened floating, not snapped
+        // The record is re-recorded under the LIVE windowId (w2) so the window's
+        // float-back survives logout/login — KWin assigns a new uuid at login, so the
+        // record matched by appId FIFO, and consuming it (the old behaviour) lost the
+        // float-back, leaving a later float with no recorded free position. The stale
+        // recorded-uuid entry (w1) is rebound, not left as a duplicate.
+        QVERIFY(m_wta->service()->placementStore().contains(w2));
+        QVERIFY(!m_wta->service()->placementStore().contains(w1));
+        // Pre-float zone is restored so a subsequent float-toggle resnaps the
+        // window back into its original zone (unfloatToZone reads preFloatZones).
+        // stateForWindow is never null — it falls back to the global holder for
+        // an untracked window — so this asserts the zone, not the pointer.
+        PhosphorSnapEngine::SnapState* w2State = m_snapEngine->stateForWindow(w2);
+        QCOMPARE(w2State->preFloatZones(w2), QStringList{m_zoneIds[0]});
+    }
+
+    // A context release relays "unsnapped" only when the window holds no
+    // zone in the context in view: the effect's zone cache and the IsSnapped
+    // / Zone rule fields follow the view, and a window still snapped there
+    // must keep matching them.
+    void testReleasedFromContextRelay_silentWhileSnappedInView()
+    {
+        const QString w = QStringLiteral("app|relay");
+        m_snapEngine->commitSnap(w, m_zoneIds[0], m_screenId);
+        QSignalSpy stateSpy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        m_wta->relayWindowReleasedFromContext(w, m_screenId);
+        QCOMPARE(stateSpy.count(), 0);
+
+        m_wta->service()->unassignWindow(w);
+        stateSpy.clear();
+        m_wta->relayWindowReleasedFromContext(w, m_screenId);
+        QCOMPARE(stateSpy.count(), 1);
+        QCOMPARE(stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>().changeType,
+                 QStringLiteral("unsnapped"));
+    }
+
+    void testFloatRestore_loadedAssignmentDoesNotMaskFloatedRecord()
+    {
+        // Daemon-only restart regression: the old WindowZoneAssignmentsFull is
+        // still loaded, so a window that was FLOATED comes back with its zone
+        // assignment intact → isWindowSnapped()
+        // == true. The unified store MUST be consulted before the
+        // "already has assignment, skipping" path, otherwise the window stays
+        // snapped instead of floating. Same uuid (daemon restart), so the record
+        // is found uuid-exact.
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString w = QStringLiteral("settings|restart-same-uuid");
+        const QRect floatedGeo(321, 654, 700, 500);
+
+        // Simulate post-restart load: window has its zone assignment (snapped)…
+        m_snapEngine->commitSnap(w, m_zoneIds[0], m_screenId);
+        QVERIFY(m_snapEngine->snapState()->isWindowSnapped(w));
+        // …and a floated placement record persisted for it.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("settings");
+        rec.screenId = m_screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        slot.zoneIds = QStringList{m_zoneIds[0]}; // pre-float zones
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(m_screenId, floatedGeo);
+        m_wta->service()->placementStore().record(rec);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        int x = 0, y = 0, wd = 0, h = 0;
+        bool shouldSnap = true;
+        m_snapAdaptor->resolveWindowRestore(w, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
+                                            static_cast<int>(PhosphorEngine::RestoreReason::Open), /*minWidth=*/0,
+                                            /*minHeight=*/0, x, y, wd, h, shouldSnap);
+
+        QCOMPARE(shouldSnap, false); // floated, NOT snapped despite the loaded assignment
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(5).toString(), QString()); // empty zoneId = float (no border)
+        QCOMPARE(
+            QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
+            floatedGeo);
+        QVERIFY(m_snapEngine->isFloating(w));
+        // Same-uuid restart re-records the floated entry so it survives further restarts.
+        QVERIFY(m_wta->service()->placementStore().contains(w, QStringLiteral("settings")));
+    }
+
+    void testFloatToggle_usesPlacementRecordFloatBack()
+    {
+        // Float-back source of truth: toggling a snapped window to floating must
+        // restore it to the float-back geometry carried by its unified placement
+        // record, the only store of it (the per-engine store that sat beside it
+        // was uuid-keyed and is gone).
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString w = QStringLiteral("settings|floatback");
+        const QRect floatBack(271, 314, 962, 655);
+
+        m_snapEngine->commitSnap(w, m_zoneIds[0], m_screenId);
+        // Record a snapped placement carrying the float-back, the post-restart
+        // shape where nothing but the record holds it.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("settings");
+        rec.screenId = m_screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{m_zoneIds[0]};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(m_screenId, floatBack); // shared float-back (single store)
+        m_wta->service()->placementStore().record(rec);
+
+        QSignalSpy spy(m_snapEngine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested);
+        m_snapEngine->setWindowFloat(w, true);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(5).toString(), QString()); // empty zoneId = float
+        QCOMPARE(
+            QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
+            floatBack);
+    }
+
+    void testFloatRestore_openFloatingWindowSnapshot()
+    {
+        // A floating window that is still OPEN (never closed) must be captured into
+        // the unified store at save time, so its floating geometry survives a
+        // daemon restart (windows stay open → no windowClosed → no close-recorded
+        // entry). saveState() calls refreshOpenWindowPlacements() to do this.
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        const QString w1 = QStringLiteral("settings|open-float");
+        const QRect floatedGeo(200, 300, 900, 700);
+
+        m_snapEngine->commitSnap(w1, m_zoneIds[0], m_screenId);
+        m_snapEngine->setWindowFloat(w1, true);
+        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
+        QVERIFY(m_wta->service()->isWindowFloating(w1));
+
+        m_wta->refreshOpenWindowPlacements();
+
+        // The store now holds a floated record for the open window at its live geo.
+        auto rec = m_wta->service()->placementStore().peek(w1, QStringLiteral("settings"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QCOMPARE(rec->freeGeometryFor(m_screenId), floatedGeo);
+    }
+
+    void testFloatRestore_openFloatingWindow_emptyEngineScreen_resolvesFromFrame()
+    {
+        // Regression (settings-app float-geometry not restored across logout/login):
+        // a window FLOATED without a tracked screen assignment reports an EMPTY
+        // screenId from capturePlacement. The save-time sync
+        // (refreshOpenWindowPlacements → captureWindowPlacement) previously gated the
+        // freeGeometry write on `!screenId.isEmpty()`, so such a window's live float
+        // geometry was SILENTLY DROPPED: never persisted, so a later re-float or
+        // logout→login had no freeGeometry to restore. The fix resolves the screen
+        // from the live frame's position, so a floating window's geometry is always
+        // captured.
+        //
+        // A local WTA wired to a deterministic ScreenManager (FakePhysicalScreenSource) is
+        // used so the frame → screen resolution is independent of the test QPA
+        // (offscreen has no usable screen identifier). The shared fixture's WTA has a
+        // null ScreenManager, which cannot resolve a frame to a screen, so this row
+        // builds its own.
+        const QString screenId = QStringLiteral("DP-9");
+        const QRect screenRect(0, 0, 1920, 1080);
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(screenId, screenRect, screenId); // before the manager so it is in the initial snapshot
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start(); // ingest the provider's screens into the tracked snapshot
+        QCOMPARE(screenMgr.effectiveScreenAt(QPoint(500, 400)), screenId); // resolution sanity
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+        // Detached on EVERY exit, including a mid-slot QVERIFY abort, so the
+        // service never outlives the engine it borrows.
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        const QRect floatedGeo(120, 90, 760, 540); // inside screenRect
+        const QString w1 = QStringLiteral("settings|orphan-float");
+        // Float WITHOUT a prior snap → the snap engine never recorded a screen
+        // assignment, so capturePlacement comes back with an empty screenId.
+        snap->setWindowFloat(w1, true);
+        QVERIFY(wta->service()->isWindowFloating(w1));
+        auto captured = snap->capturePlacement(w1);
+        QVERIFY(captured.has_value());
+        QVERIFY(captured->screenId.isEmpty()); // precondition the old gate tripped on
+
+        wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
+        wta->refreshOpenWindowPlacements();
+
+        auto rec = wta->service()->placementStore().peek(w1, QStringLiteral("settings"));
+        QVERIFY(rec.has_value());
+        // The live float geometry is persisted despite the engine's empty screenId,
+        // keyed by the screen resolved from the frame's position.
+        QCOMPARE(rec->freeGeometryFor(screenId), floatedGeo);
+    }
+
+    void testFloatRestore_tiledFrameNeverPoisonsSnapFloatBack()
+    {
+        // Regression (Steam "tiled geometry restored to floated in snapping mode"):
+        // the shared free/float geometry is written by captureWindowPlacement from
+        // the live frame whenever the OWNING engine reports `floating`. Across a mode
+        // flip, a window TILED by autotile becomes snap-owned and snap reports
+        // `floating`, yet the live frame still holds the autotile TILE rect (the
+        // window has not been repositioned). Writing it poisons the float-back, and a
+        // later snap reopen restores the tile rect as the floated position. The write
+        // must be refused while the autotile engine still reports the window tiled —
+        // the genuine prior free geometry stays intact.
+        const QString screenId = QStringLiteral("DP-9");
+        const QRect screenRect(0, 0, 3840, 2160);
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(screenId, screenRect, screenId);
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+        // Detached on every exit, as in the twin above.
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->service()->setEngineTiledPredicate({});
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        const QString w1 = QStringLiteral("steam|abc123");
+        const QRect goodFloat(918, 624, 1608, 957); // a genuine floated geometry
+        const QRect tileRect(8, 1138, 3184, 602); // a full-width bottom-row tile rect
+
+        // The autotile engine still reports this window actively tiled.
+        wta->service()->setEngineTiledPredicate([&](const QString& id) {
+            return id == w1;
+        });
+
+        // Seed a genuine prior free geometry (as an earlier honest snap-float capture
+        // would have). Recorded directly so the seed is independent of the guard.
+        PhosphorEngine::WindowPlacement seed;
+        seed.windowId = w1;
+        seed.appId = QStringLiteral("steam");
+        seed.screenId = screenId;
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        seed.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
+        seed.freeGeometryByScreen.insert(screenId, goodFloat);
+        wta->service()->placementStore().record(seed);
+
+        // Now the window is snap-floating but its live frame is the TILE rect.
+        snap->setWindowFloat(w1, true);
+        QVERIFY(wta->service()->isWindowFloating(w1));
+        wta->setFrameGeometry(w1, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
+
+        wta->captureWindowPlacement(w1);
+
+        // The tile rect must NOT have overwritten the genuine float-back.
+        auto rec = wta->service()->placementStore().peek(w1, QStringLiteral("steam"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryFor(screenId), goodFloat);
+        QVERIFY(rec->freeGeometryFor(screenId) != tileRect);
+    }
+
+    // =====================================================================
+    // swapWindowsById
+    // =====================================================================
+
+    void testSwapWindowsById_twoSnappedWindows_emitsTwoApplyGeometry()
+    {
+        installRegistry();
+        QString window1 = registerWindow(QStringLiteral("app1|11111"));
+        QString window2 = registerWindow(QStringLiteral("app2|22222"));
+
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+
+        // Snap both windows to different zones
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_snapAdaptor->swapWindowsById(window1, window2);
+
+        QCOMPARE(spy.count(), 2);
+
+        // Window1 should move to zone2, window2 to zone1; the second window is
+        // not the subject of the swap, so its apply re-states (F547).
+        QCOMPARE(spy.at(0).at(0).toString(), window1);
+        QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[1]);
+        QCOMPARE(spy.at(0).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+        QCOMPARE(spy.at(1).at(0).toString(), window2);
+        QCOMPARE(spy.at(1).at(5).toString(), m_zoneIds[0]);
+        QCOMPARE(spy.at(1).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+    }
+
+    void testSwapWindowsById_oneNotSnapped_noSignal()
+    {
+        installRegistry();
+        QString window1 = registerWindow(QStringLiteral("app1|11111"));
+        QString window2 = registerWindow(QStringLiteral("app2|22222"));
+
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+
+        // Only snap window1
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        m_snapAdaptor->swapWindowsById(window1, window2);
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    // =====================================================================
+    // getWindowState
+    // =====================================================================
+
+    void testGetWindowState_snappedWindow_returnsStruct()
+    {
+        QString windowId = QStringLiteral("firefox|12345");
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
+        QCOMPARE(state.windowId, windowId);
+        QCOMPARE(state.zoneId, m_zoneIds[0]);
+        QCOMPARE(state.screenId, m_screenId);
+        QCOMPARE(state.isFloating, false);
+    }
+
+    void testGetWindowState_floatingWindow_returnsFloatingTrue()
+    {
+        QString windowId = QStringLiteral("firefox|12345");
+
+        // Snap then float
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+        m_wta->syncWindowFloating(windowId, true);
+
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
+        QCOMPARE(state.isFloating, true);
+    }
+
+    void testGetWindowState_unknownWindow_returnsEmptyZone()
+    {
+        QString windowId = QStringLiteral("unknown|99999");
+
+        PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
+        QVERIFY(state.zoneId.isEmpty());
+    }
+
+    // =====================================================================
+    // getAllWindowStates
+    // =====================================================================
+
+    void testGetAllWindowStates_multipleWindows_returnsList()
+    {
+        QString window1 = QStringLiteral("app1|11111");
+        QString window2 = QStringLiteral("app2|22222");
+
+        m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
+        m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
+
+        PhosphorProtocol::WindowStateList allStates = m_wta->getAllWindowStates();
+        QCOMPARE(allStates.size(), 2);
+
+        // Collect all window IDs from the list
+        QStringList windowIds;
+        for (const auto& ws : allStates) {
+            windowIds.append(ws.windowId);
+        }
+        QVERIFY(windowIds.contains(window1));
+        QVERIFY(windowIds.contains(window2));
+    }
+
+    // =====================================================================
+    // windowStateChanged signal
+    // =====================================================================
+
+    void testWindowStateChanged_emittedOnSnap()
+    {
+        QString windowId = QStringLiteral("firefox|12345");
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+
+        QVERIFY(spy.count() >= 1);
+
+        // Find the "snapped" emission
+        bool foundSnapped = false;
+        for (int i = 0; i < spy.count(); ++i) {
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
+            if (state.changeType == QLatin1String("snapped")) {
+                QCOMPARE(spy.at(i).at(0).toString(), windowId);
+                foundSnapped = true;
+                break;
+            }
+        }
+        QVERIFY(foundSnapped);
+    }
+
+    void testWindowStateChanged_emittedOnUnsnap()
+    {
+        QString windowId = QStringLiteral("firefox|12345");
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        m_snapEngine->uncommitSnap(windowId);
+
+        QVERIFY(spy.count() >= 1);
+
+        bool foundUnsnapped = false;
+        for (int i = 0; i < spy.count(); ++i) {
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
+            if (state.changeType == QLatin1String("unsnapped")) {
+                QCOMPARE(spy.at(i).at(0).toString(), windowId);
+                foundUnsnapped = true;
+                break;
+            }
+        }
+        QVERIFY(foundUnsnapped);
+    }
+
+    // A context release (TilingAdaptor::applyMembershipResult dropping a window
+    // from a desktop or activity it has left, per window or per screen) does NOT
+    // run through uncommitSnap, so the engine emits no windowSnapStateChanged;
+    // WindowTrackingAdaptor::relayWindowReleasedFromContext says why that signal
+    // would be wrong there.
+    // The effect's per-window zone mirror still has to be told, or the
+    // IsSnapped / Zone rule fields keep matching against a zone the window has
+    // left. This relay is the narrow announcement that does it, and an EMPTY
+    // zoneId is the part that matters: that is what the effect's zone cache
+    // reads as "occupies no zone" and removes the entry for.
+    void testWindowStateChanged_emittedOnContextRelease()
+    {
+        const QString windowId = QStringLiteral("firefox|12345");
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->relayWindowReleasedFromContext(windowId, m_screenId);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), windowId);
+        const auto state = spy.at(0).at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(state.changeType, QLatin1String("unsnapped"));
+        QVERIFY2(state.zoneId.isEmpty(), "an empty zoneId is what clears the effect's zone cache entry");
+        QVERIFY(state.zoneIds.isEmpty());
+        // The screen the window was released FROM, which is the only context
+        // this statement is about.
+        QCOMPARE(state.screenId, m_screenId);
+        // Not a float report. The release says the window stopped being a
+        // resident, and the float domain is per mode and answered elsewhere.
+        QVERIFY(!state.isFloating);
+    }
+
+    // Guard the one caller's guard: an empty id must announce nothing rather
+    // than broadcast a release for a window that cannot be named.
+    void testWindowStateChanged_contextReleaseIgnoresEmptyId()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->relayWindowReleasedFromContext(QString(), m_screenId);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testWindowStateChanged_emittedOnFloat()
+    {
+        QString windowId = QStringLiteral("firefox|12345");
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        m_wta->syncWindowFloating(windowId, true);
+
+        QVERIFY(spy.count() >= 1);
+
+        bool foundFloated = false;
+        for (int i = 0; i < spy.count(); ++i) {
+            auto state = spy.at(i).at(1).value<PhosphorProtocol::WindowStateEntry>();
+            if (state.changeType == QLatin1String("floated")) {
+                QCOMPARE(spy.at(i).at(0).toString(), windowId);
+                foundFloated = true;
+                break;
+            }
+        }
+        QVERIFY(foundFloated);
+    }
+
+    // Regression: under the per-engine float model the owning engine flips its
+    // float bit BEFORE the daemon's sync slot reaches WTA::syncWindowFloating
+    // (e.g. AutotileEngine::performToggleFloat toggles then emits
+    // windowFloatingChanged → Daemon::syncAutotileFloatState → here). A re-query
+    // of the service therefore already reports floating==true, so the old
+    // broadcast gate (which compared against m_service->isWindowFloating())
+    // suppressed EVERY autotile float broadcast — leaving the effect's float
+    // cache stale and silently breaking the autotile FFM float-pause. The gate
+    // must instead compare against the last value WTA broadcast.
+    void testSyncWindowFloating_broadcastsWhenServiceAlreadyReportsFloating()
+    {
+        const QString windowId = QStringLiteral("firefox|12345");
+
+        // Simulate the engine having ALREADY set the float bit: the resolver
+        // (consulted by m_service->isWindowFloating) reports floating regardless
+        // of WTS's own set.
+        m_wta->service()->setEngineFloatResolver([windowId](const QString& id) {
+            return id == windowId;
+        });
+        // Cleared on every exit (same discipline as the tiled predicate in the
+        // float-back test): cleanup() rebuilds the fixture today, but a stale
+        // closure would outlive this slot if it ever becomes per-class.
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        // The real float edge must broadcast even though a re-query says true.
+        m_wta->syncWindowFloating(windowId, true);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), windowId);
+        QCOMPARE(spy.first().at(1).toBool(), true);
+
+        // Dedup still holds: setting the same broadcast value again is a no-op.
+        m_wta->syncWindowFloating(windowId, true);
+        QCOMPARE(spy.count(), 1);
+
+        // The unfloat edge broadcasts.
+        m_wta->syncWindowFloating(windowId, false);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(1).toBool(), false);
+    }
+
+    // End-to-end regression for Discussion #724 (the 3.3.x recurrence): a
+    // window snapped on monitor A, floated, moved to monitor B, then minimized
+    // and unminimized ON B must stay on B — the suspension unfloat must not
+    // restore the stale home zone on A. Exercises the
+    // setWindowFloatingForScreen ordering contract: the suspension bit is
+    // marked before the routed engine call on the minimize edge and
+    // declassified only AFTER it on the unminimize edge (clearing it before
+    // routing turned the engine's suspension gate into a constant false, which
+    // is exactly what let the cross-monitor restore fire).
+    void testSetWindowFloatingForScreen_suspensionUnfloatStaysOnLiveMonitor()
+    {
+        const QString instanceId = QStringLiteral("724-suspend-inst");
+        const QString windowId = QStringLiteral("kate|") + instanceId;
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+
+        // Snap on A, float out (captures the home zone on A), move to B while
+        // floating through the snap-to-snap handoff windowScreenChanged's
+        // floating branch runs after a KWin output move. That move drops the
+        // home, so the stale one a path that does not drop it leaves behind is
+        // written back directly: without it the refusal has nothing to refuse.
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        m_wta->service()->unsnapForFloat(windowId);
+        m_wta->service()->setWindowFloating(windowId, true);
+        QCOMPARE(m_wta->service()->preFloatScreen(windowId), monitorA);
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = monitorB;
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
+        ctx.wasFloating = true;
+        m_snapEngine->handoffReceive(ctx);
+        QVERIFY(m_wta->service()->preFloatZones(windowId).isEmpty());
+        m_snapEngine->snapState()->addPreFloatZone(windowId, QStringList{m_zoneIds[0]});
+        m_snapEngine->snapState()->addPreFloatScreen(windowId, monitorA);
+        QCOMPARE(m_wta->service()->preFloatScreen(windowId), monitorA);
+
+        // Minimize edge: metadata first (the effect pushes it ahead of float
+        // traffic), then the suspension float write.
+        meta.isMinimized = true;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, monitorB, true);
+        QVERIFY2(m_wta->service()->isSuspensionFloat(windowId),
+                 "the minimize-edge float write must classify the float as a suspension");
+
+        // Unminimize edge: the suspension unfloat on B must keep the window
+        // floating on B, not teleport it into A's zone.
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, monitorB, false);
+
+        QVERIFY2(m_snapEngine->isFloating(windowId),
+                 "the suspension unfloat must keep the window floating on its live monitor");
+        QVERIFY2(m_snapEngine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                 "the suspension unfloat must not re-snap the stale home zone");
+        QVERIFY2(m_wta->service()->isSuspensionFloat(windowId),
+                 "a REFUSED unfloat must retain the suspension classification — the effect retries, and a "
+                 "declassified retry would take the user tiers");
+
+        // The effect's retry: it observes the window still floating after the
+        // unminimize and re-drives the same call (up to three times, 250 ms
+        // apart). Every retry must behave identically. Clearing the suspension
+        // bit unconditionally on the first call made retry #1 a USER unfloat,
+        // which is how the original fix was defeated.
+        for (int retry = 0; retry < 3; ++retry) {
+            m_wta->setWindowFloatingForScreen(windowId, monitorB, false);
+            QVERIFY2(m_snapEngine->isFloating(windowId),
+                     qPrintable(QStringLiteral("retry %1 must keep the window floating on B").arg(retry)));
+            QVERIFY2(m_snapEngine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                     qPrintable(QStringLiteral("retry %1 must not re-snap the stale cross-monitor home").arg(retry)));
+        }
+    }
+
+    // Companion to the test above: when the unfloat SUCCEEDS (same-monitor
+    // round trip), the suspension classification must be dropped, otherwise
+    // later captures that are not state changes (save refreshes, the close)
+    // keep taking the minimize-preserve path, and the window stays out of
+    // getFloatingWindows until another unfloat, its close or a stale prune
+    // clears the bit.
+    void testSetWindowFloatingForScreen_successfulSuspensionUnfloatDeclassifies()
+    {
+        const QString instanceId = QStringLiteral("724-declassify-inst");
+        const QString windowId = QStringLiteral("kate|") + instanceId;
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], m_screenId, 1);
+
+        meta.isMinimized = true;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, m_screenId, true);
+        QVERIFY(m_wta->service()->isSuspensionFloat(windowId));
+
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, m_screenId, false);
+
+        QVERIFY2(!m_snapEngine->isFloating(windowId), "a same-monitor suspension unfloat must land");
+        QVERIFY2(!m_wta->service()->isSuspensionFloat(windowId),
+                 "a LANDED unfloat must declassify the suspension float");
+    }
+
+    // An Exclude rule's prune drops the excluded app's placement records,
+    // keeps the others, and marks the placements for the next save (F859).
+    void testPruneExcludedPlacements_dropsOnlyTheExcludedApp()
+    {
+        PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
+        for (const QString& windowId : {QStringLiteral("firefox|a"), QStringLiteral("konsole|b")}) {
+            PhosphorEngine::WindowPlacement rec;
+            rec.windowId = windowId;
+            rec.appId = windowId.section(QLatin1Char('|'), 0, 0);
+            rec.screenId = m_screenId;
+            rec.freeGeometryByScreen.insert(m_screenId, QRect(10, 10, 400, 300));
+            QVERIFY(store.record(rec));
+        }
+        (void)m_wta->service()->takeDirty();
+
+        m_wta->pruneExcludedPlacements({QStringLiteral("firefox")});
+
+        QVERIFY(!store.contains(QStringLiteral("firefox|a"), QStringLiteral("firefox")));
+        QVERIFY(store.contains(QStringLiteral("konsole|b"), QStringLiteral("konsole")));
+        QVERIFY(m_wta->service()->takeDirty() & PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+    }
+};
+
+QTEST_MAIN(TestWtaConvenience)
+#include "test_wta_convenience.moc"

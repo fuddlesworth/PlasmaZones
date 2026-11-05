@@ -1,0 +1,363 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSurface/DecorationProfile.h>
+
+// withPresetsResolved() calls into the registry, which the header only
+// forward-declares.
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QLoggingCategory>
+
+namespace PhosphorSurfaceShaders {
+
+namespace {
+// A malformed profile is a config-file problem the user can fix, so it warns
+// rather than failing the load. Local to this translation unit; the registry's
+// own category covers pack scanning.
+Q_LOGGING_CATEGORY(lcDecorationProfile, "phosphorsurface.decorationprofile")
+} // namespace
+
+DecorationProfile DecorationProfile::withDefaults() const
+{
+    DecorationProfile out = *this;
+    if (!out.chain)
+        out.chain = QStringList();
+    if (!out.parameters)
+        out.parameters = QVariantMap();
+    if (!out.disabledPacks)
+        out.disabledPacks = QStringList();
+    if (!out.presetIds)
+        out.presetIds = QVariantMap();
+    return out;
+}
+
+QJsonObject DecorationProfile::toJson() const
+{
+    QJsonObject obj;
+    if (chain) {
+        QJsonArray chainArr;
+        for (const QString& packId : *chain)
+            chainArr.append(packId);
+        obj.insert(QLatin1String(JsonFieldChain), chainArr);
+    }
+    if (parameters) {
+        QJsonObject paramsObj;
+        for (auto it = parameters->constBegin(); it != parameters->constEnd(); ++it)
+            paramsObj.insert(it.key(), QJsonValue::fromVariant(it.value()));
+        obj.insert(QLatin1String(JsonFieldParameters), paramsObj);
+    }
+    if (disabledPacks) {
+        QJsonArray disabledArr;
+        for (const QString& packId : *disabledPacks)
+            disabledArr.append(packId);
+        obj.insert(QLatin1String(JsonFieldDisabledPacks), disabledArr);
+    }
+    if (presetIds) {
+        QJsonObject presetsObj;
+        for (auto it = presetIds->constBegin(); it != presetIds->constEnd(); ++it)
+            presetsObj.insert(it.key(), QJsonValue::fromVariant(it.value()));
+        obj.insert(QLatin1String(JsonFieldPresetIds), presetsObj);
+    }
+    return obj;
+}
+
+DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
+{
+    DecorationProfile p;
+
+    // An ENGAGED chain, even an empty one, is a statement: "this surface
+    // runs exactly these packs", which stops the seed defaults from being
+    // injected and overrides whatever an ancestor set (see the class doc).
+    // So a non-string entry must not coerce to "" and quietly engage that
+    // statement on the author's behalf: it is skipped, and an array holding
+    // only non-strings is treated as if the field were absent, which leaves
+    // the optional disengaged and the seeds in force.
+    if (obj.contains(QLatin1String(JsonFieldChain))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldChain));
+        if (v.isArray()) {
+            QStringList chain;
+            bool anyString = false;
+            const QJsonArray arr = v.toArray();
+            for (const QJsonValue& entry : arr) {
+                if (!entry.isString())
+                    continue;
+                anyString = true;
+                chain.append(entry.toString());
+            }
+            if (arr.isEmpty() || anyString)
+                p.chain = std::move(chain);
+        }
+    }
+
+    if (obj.contains(QLatin1String(JsonFieldParameters))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldParameters));
+        if (!v.isObject() && !v.isUndefined()) {
+            // Present but not an object. toObject() answers an empty one, so
+            // this used to load as "no parameters for ANY pack", which the
+            // engage guard below then applied — a wrong-typed field silently
+            // wiping the layer beneath it.
+            qCWarning(lcDecorationProfile)
+                << "DecorationProfile: \"" << QLatin1String(JsonFieldParameters)
+                << "\" must be an object of packId -> parameters; ignoring a value of type" << v.type();
+        }
+        if (v.isObject()) {
+            QVariantMap params;
+            const QJsonObject paramsObj = v.toObject();
+            for (auto it = paramsObj.constBegin(); it != paramsObj.constEnd(); ++it) {
+                // THIS MAP IS PACK-KEYED: packId -> { paramId -> value }, unlike
+                // the animation twin this block was adapted from, whose
+                // parameters is a flat paramId -> value map. So a null HERE is a
+                // whole pack entry, and the null that pins a parameter to zero
+                // is one level DOWN. Both are dropped, for the same reason and
+                // with different reach.
+                //
+                // A JSON null is NOT "leave this at its default". In Qt 6 it
+                // converts to a QMetaType::Nullptr variant, which is VALID
+                // (isValid() is true, so a validity check does not catch it);
+                // every numeric consumer reads it as 0, clampToBounds skips it
+                // as non-numeric, and translateSurfaceParams prefers ANY
+                // present entry over the declared default — so it survives the
+                // flatten and PINS the parameter to zero. Dropping the key is
+                // what actually means "say nothing about this one".
+                // `parsePackPresets` drops nulls for exactly this reason.
+                if (it.value().isNull()) {
+                    continue;
+                }
+                if (it.value().isObject()) {
+                    // Drop the nulls inside the per-pack object too. Dropping
+                    // only the outer level left {"blur": {"radius": null}}
+                    // reaching the uniform as 0.
+                    QVariantMap packParams;
+                    const QJsonObject packObj = it.value().toObject();
+                    for (auto pit = packObj.constBegin(); pit != packObj.constEnd(); ++pit) {
+                        if (!pit.value().isNull()) {
+                            packParams.insert(pit.key(), pit.value().toVariant());
+                        }
+                    }
+                    params.insert(it.key(), packParams);
+                    continue;
+                }
+                params.insert(it.key(), it.value().toVariant());
+            }
+            // ENGAGE only when the author said something. This field is
+            // optional, and nullopt ("inherit") is a different statement from
+            // an engaged empty map ("no parameters for ANY pack"), which wipes
+            // whatever the layer below supplied. Assigning unconditionally
+            // conflated the two: `{"parameters": {"blur": null}}` means "say
+            // nothing about blur", but every key was dropped by the null skip
+            // above and the empty result then engaged and wiped the lot. Same
+            // guard the disabledPacks block below already applies, for the same
+            // reason: a genuinely empty object IS an author statement and still
+            // engages.
+            if (paramsObj.isEmpty() || !params.isEmpty()) {
+                p.parameters = std::move(params);
+            }
+        }
+    }
+
+    // Absent field = nullopt = "inherit / nothing disabled", so a config
+    // written before the per-layer toggle existed loads with every pack on.
+    if (obj.contains(QLatin1String(JsonFieldDisabledPacks))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldDisabledPacks));
+        // Same rule as the chain: non-string entries are skipped, and an
+        // array of nothing but non-strings leaves the field absent.
+        if (v.isArray()) {
+            QStringList disabled;
+            bool anyString = false;
+            const QJsonArray arr = v.toArray();
+            for (const QJsonValue& entry : arr) {
+                if (!entry.isString())
+                    continue;
+                anyString = true;
+                disabled.append(entry.toString());
+            }
+            if (arr.isEmpty() || anyString)
+                p.disabledPacks = std::move(disabled);
+        }
+    }
+
+    // Absent field = nullopt = "inherit / no presets", so a config written
+    // before presets existed loads with every layer on its own parameters.
+    // Non-string values are skipped rather than coerced: a preset id is a
+    // lookup key, and "" would mean "no preset" — a different statement from
+    // the malformed entry the author actually wrote.
+    if (obj.contains(QLatin1String(JsonFieldPresetIds))) {
+        const QJsonValue v = obj.value(QLatin1String(JsonFieldPresetIds));
+        if (v.isObject()) {
+            QVariantMap presets;
+            const QJsonObject presetsObj = v.toObject();
+            for (auto it = presetsObj.constBegin(); it != presetsObj.constEnd(); ++it) {
+                if (!it.value().isString())
+                    continue;
+                presets.insert(it.key(), it.value().toString());
+            }
+            // Same engagement guard as parameters above: an object whose every
+            // value was non-string left an empty map that then engaged and
+            // stated "no presets for any pack", wiping inherited ones, when the
+            // author had written something malformed rather than nothing.
+            if (presetsObj.isEmpty() || !presets.isEmpty()) {
+                p.presetIds = std::move(presets);
+            }
+        }
+    }
+
+    return p;
+}
+
+void DecorationProfile::overlay(DecorationProfile& dst, const DecorationProfile& src)
+{
+    if (src.chain)
+        dst.chain = src.chain;
+    if (src.parameters)
+        dst.parameters = src.parameters;
+    if (src.disabledPacks)
+        dst.disabledPacks = src.disabledPacks;
+    if (src.presetIds)
+        dst.presetIds = src.presetIds;
+}
+
+bool DecorationProfile::operator==(const DecorationProfile& other) const
+{
+    // presetIds rides the raw compare with chain and disabledPacks rather than the
+    // normalisation `parameters` gets below, and that asymmetry is deliberate: both
+    // writers of this field put a QString in it (fromJson keeps only `isString` values,
+    // setChainPreset inserts a QString, and withPresetsResolved in this file inserts a
+    // default-constructed QString), so there is no numeric category for a round trip to
+    // change. A new writer that stores anything else here has to revisit this.
+    if (chain != other.chain || disabledPacks != other.disabledPacks || presetIds != other.presetIds) {
+        return false;
+    }
+    // ENGAGEMENT first, then the contents, the same policy ShaderProfile,
+    // OverlayShaderProfile and ShaderPreset all apply. This type used to compare
+    // `parameters` as raw QVariants while its three siblings JSON-normalised, which
+    // is a drift rather than a decision: the settings setter on this tree compares a
+    // map BUILT in C++ against one read back from disk, so a value whose type changed
+    // on the way through failed the no-op gate and re-emitted. The change QJsonValue
+    // actually makes is WIDTH, not category: it is strictly typed and performs no
+    // implicit conversion, so an int and a double both arrive back as Double while a
+    // bool stays Bool and a string stays String. (Earlier text here gave "a bool
+    // stored as 1" and "a number stored as \"1\"" as the examples; the normalisation
+    // produces neither, and quoting them made it look like a coercion pass.)
+    //
+    // Raw compare first and normalise only on a miss, because the normalisation is
+    // what costs. The animation twin words the safety as "QVariantMap equality cannot
+    // report a false EQUAL"; Qt documents one exception, since QVariant::operator==
+    // converts a QString to a matching numeric type before comparing. That direction
+    // cannot hurt here: it would make the raw compare succeed where the JSON one also
+    // succeeds, because both sides round-trip to the same Double.
+    if (parameters.has_value() != other.parameters.has_value()) {
+        return false;
+    }
+    if (!parameters.has_value() || *parameters == *other.parameters) {
+        return true;
+    }
+    return QJsonObject::fromVariantMap(*parameters) == QJsonObject::fromVariantMap(*other.parameters);
+}
+
+DecorationProfile withPresetsResolved(const DecorationProfile& profile,
+                                      const PhosphorShaders::ShaderPresetRegistry& presets,
+                                      PhosphorShaders::ShaderFamily family)
+{
+    // Every pack's entry goes through resolveParams, including the ones naming no
+    // preset, because that call is also where the pack's declared min/max is
+    // applied. Early-returning on "no presets here" left a hand-edited or
+    // schema-predating parameter value to reach the uniform unbounded, which is the
+    // one thing this function is positioned to prevent: the flatten is the last
+    // place the declared ranges and the stored values are both in hand.
+    //
+    // ONE named return object on every path (the early exit returns the same
+    // `out` the flatten fills), so the copy is elided the same way on both and
+    // GCC 16's -Wmaybe-uninitialized stops losing track of the presetIds
+    // optional's engaged flag across the two differently-shaped returns.
+    DecorationProfile out = profile;
+    if ((!profile.presetIds || profile.presetIds->isEmpty())
+        && (!profile.parameters || profile.parameters->isEmpty())) {
+        return out;
+    }
+
+    // storedParameters(), not effectiveParameters(): this IS the flatten, so reading
+    // the raw map while the presets are still engaged is exactly right, and the
+    // effective getter would warn about the one read that is not a mistake.
+    QVariantMap params = out.storedParameters();
+    bool resolvedAny = false;
+    // Keyed on the PARAMETER map, so a pack with stored values and no preset is
+    // clamped, and then on any preset-only pack the map does not mention.
+    for (auto it = params.begin(); it != params.end(); ++it) {
+        const QString presetId = profile.presetIds ? profile.presetIds->value(it.key()).toString() : QString();
+        // The pack's own entry in `parameters` is the DELTA set, so it is the
+        // second argument: preset values first, this layer's edits on top. An empty
+        // presetId resolves to the deltas alone, clamped.
+        it.value() = presets.resolveParams(family, it.key(), presetId, it.value().toMap());
+        if (!presetId.isEmpty()) {
+            resolvedAny = true;
+        }
+    }
+    if (profile.presetIds) {
+        for (auto it = profile.presetIds->constBegin(); it != profile.presetIds->constEnd(); ++it) {
+            const QString presetId = it.value().toString();
+            if (presetId.isEmpty() || params.contains(it.key())) {
+                continue;
+            }
+            params.insert(it.key(), presets.resolveParams(family, it.key(), presetId, QVariantMap()));
+            resolvedAny = true;
+        }
+    }
+    // Never INVENT engagement, but do keep the clamp on a map that was already
+    // engaged. nullopt and engaged-empty are different statements — engaged-empty
+    // is "no parameters here, and do not inherit any" — and assigning
+    // unconditionally turned the first into the second, which this function has no
+    // business doing. Reachable whenever every entry in presetIds holds an empty
+    // string, the sentinel an assignment writes to BLOCK an inherited preset
+    // without naming one of its own, so the flatten of a blocking-only profile used
+    // to silently also block inherited parameters.
+    //
+    // `has_value()` as well as `resolvedAny`, because the loop above now clamps a
+    // stored map even when no preset was named, and gating that on resolvedAny
+    // would have thrown the clamp away again.
+    if (resolvedAny || profile.parameters.has_value()) {
+        out.parameters = params;
+    }
+    // Drop only the entries this flatten CONSUMED, and keep the blocking ones.
+    //
+    // An empty presetId is the sentinel an assignment writes to block an inherited
+    // preset without naming one of its own, which the paragraph above already
+    // relies on. Resetting the whole map revoked those blocks: a profile saying
+    // "this pack follows no preset" came out of the flatten saying nothing at all,
+    // so a later overlay was free to re-apply the ancestor's preset. The animation
+    // twin avoids this by returning unchanged on an engaged-empty presetId; here
+    // the map is per-pack, so one profile can block one pack and resolve another
+    // and neither an early return nor a wholesale reset is right.
+    //
+    // Idempotent for the same reason it was before: a second flatten over the
+    // result finds only empty presetIds, resolves nothing, and preserves them.
+    QVariantMap blocking;
+    const QVariantMap declaredPresetIds = profile.presetIds.value_or(QVariantMap());
+    for (auto it = declaredPresetIds.constBegin(); it != declaredPresetIds.constEnd(); ++it) {
+        if (it.value().toString().isEmpty()) {
+            blocking.insert(it.key(), QString());
+        }
+    }
+    // Decide the final presetIds in a fresh optional and assign it ONCE. Assigning
+    // the three outcomes into `out.presetIds` in place tripped GCC 16's
+    // -Wmaybe-uninitialized on the optional's payload (it lost track of the
+    // engaged flag across the inlined QMap move); one move-assignment of a
+    // value it has watched from construction keeps the analysis whole.
+    std::optional<QVariantMap> resolvedPresetIds;
+    if (!blocking.isEmpty()) {
+        resolvedPresetIds = std::move(blocking);
+    } else if (profile.presetIds.has_value() && profile.presetIds->isEmpty()) {
+        // ENGAGED-EMPTY in, engaged-empty out. `{}` is the user's explicit "no presets
+        // for any pack here", and resetting it to nullopt revoked that statement —
+        // while the early return above preserves it for the same input when
+        // `parameters` happens to be empty too, so the answer depended on an unrelated
+        // field.
+        resolvedPresetIds = QVariantMap();
+    }
+    out.presetIds = std::move(resolvedPresetIds);
+    return out;
+}
+
+} // namespace PhosphorSurfaceShaders

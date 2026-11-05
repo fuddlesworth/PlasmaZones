@@ -1,0 +1,291 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorRules/WindowQuery.h>
+
+#include <QTest>
+
+using namespace PhosphorRules;
+using PhosphorProtocol::WindowType;
+
+class TestWindowQuery : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    void testContextOnlyQuery_hasNoWindow()
+    {
+        WindowQuery q;
+        q.screenId = QStringLiteral("DP-2");
+        q.virtualDesktop = 2;
+        q.activity = QStringLiteral("{work}");
+        QVERIFY(!q.hasWindow());
+    }
+
+    void testPerWindowQuery_hasWindow()
+    {
+        WindowQuery q;
+        q.appId = QStringLiteral("org.kde.konsole");
+        QVERIFY(q.hasWindow());
+    }
+
+    void testValueForField_contextAlwaysPresent()
+    {
+        WindowQuery q;
+        q.screenId = QStringLiteral("DP-1");
+        q.virtualDesktop = 3;
+        q.activity = QStringLiteral("{act}");
+        q.screenOrientation = QStringLiteral("portrait");
+        q.activeLayout = QStringLiteral("autotile:bsp");
+        q.colorScheme = QStringLiteral("dark");
+
+        QCOMPARE(q.valueForField(Field::ScreenId)->toString(), QStringLiteral("DP-1"));
+        QCOMPARE(q.valueForField(Field::VirtualDesktop)->toInt(), 3);
+        QCOMPARE(q.valueForField(Field::Activity)->toString(), QStringLiteral("{act}"));
+        // Context fields, always present — empty when unpopulated by a resolver.
+        QCOMPARE(q.valueForField(Field::ScreenOrientation)->toString(), QStringLiteral("portrait"));
+        QCOMPARE(q.valueForField(Field::ActiveLayout)->toString(), QStringLiteral("autotile:bsp"));
+        QCOMPARE(q.valueForField(Field::ColorScheme)->toString(), QStringLiteral("dark"));
+        // A windowless query carrying only context fields is still not a window.
+        QVERIFY(!q.hasWindow());
+    }
+
+    void testValueForField_absentWindowAttribute()
+    {
+        WindowQuery q; // no window attributes
+        QVERIFY(!q.valueForField(Field::AppId).has_value());
+        QVERIFY(!q.valueForField(Field::Title).has_value());
+        QVERIFY(!q.valueForField(Field::Pid).has_value());
+        QVERIFY(!q.valueForField(Field::WindowType).has_value());
+        QVERIFY(!q.valueForField(Field::IsSticky).has_value());
+        QVERIFY(!q.valueForField(Field::IsFocused).has_value());
+    }
+
+    void testValueForField_presentWindowAttribute()
+    {
+        WindowQuery q;
+        q.appId = QStringLiteral("firefox");
+        q.pid = 4242;
+        q.windowType = WindowType::Dialog;
+        q.isFullscreen = true;
+        q.isFocused = true;
+
+        QCOMPARE(q.valueForField(Field::AppId)->toString(), QStringLiteral("firefox"));
+        QCOMPARE(q.valueForField(Field::Pid)->toInt(), 4242);
+        // WindowType resolves to its underlying int.
+        QCOMPARE(q.valueForField(Field::WindowType)->toInt(), static_cast<int>(WindowType::Dialog));
+        QCOMPARE(q.valueForField(Field::IsFullscreen)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsFocused)->toBool(), true);
+    }
+
+    void testValueForField_falseBoolIsStillPresent()
+    {
+        WindowQuery q;
+        q.isMinimized = false;
+        const auto v = q.valueForField(Field::IsMinimized);
+        QVERIFY(v.has_value()); // present even though false
+        QCOMPARE(v->toBool(), false);
+    }
+
+    void testValueForField_newTransientNotificationSizeFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::IsTransient).has_value());
+        QVERIFY(!q.valueForField(Field::IsNotification).has_value());
+        QVERIFY(!q.valueForField(Field::Width).has_value());
+        QVERIFY(!q.valueForField(Field::Height).has_value());
+
+        q.isTransient = true;
+        q.isNotification = false;
+        q.width = 320;
+        q.height = 240;
+        QCOMPARE(q.valueForField(Field::IsTransient)->toBool(), true);
+        // Present even though false (mirrors the bool-field contract above).
+        QVERIFY(q.valueForField(Field::IsNotification).has_value());
+        QCOMPARE(q.valueForField(Field::IsNotification)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::Width)->toInt(), 320);
+        QCOMPARE(q.valueForField(Field::Height)->toInt(), 240);
+        QVERIFY(q.hasWindow());
+    }
+
+    void testValueForField_kwinPropertyFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::KeepAbove).has_value());
+        QVERIFY(!q.valueForField(Field::KeepBelow).has_value());
+        QVERIFY(!q.valueForField(Field::SkipTaskbar).has_value());
+        QVERIFY(!q.valueForField(Field::SkipPager).has_value());
+        QVERIFY(!q.valueForField(Field::SkipSwitcher).has_value());
+        QVERIFY(!q.valueForField(Field::IsModal).has_value());
+        QVERIFY(!q.valueForField(Field::HasDecoration).has_value());
+        QVERIFY(!q.valueForField(Field::IsResizable).has_value());
+        QVERIFY(!q.valueForField(Field::IsMovable).has_value());
+        QVERIFY(!q.valueForField(Field::IsMaximizable).has_value());
+        QVERIFY(!q.valueForField(Field::PositionX).has_value());
+        QVERIFY(!q.valueForField(Field::PositionY).has_value());
+        QVERIFY(!q.valueForField(Field::CaptionNormal).has_value());
+        QVERIFY(!q.hasWindow());
+
+        q.keepAbove = true;
+        q.keepBelow = false;
+        q.skipTaskbar = true;
+        q.skipPager = false;
+        q.skipSwitcher = true;
+        q.isModal = false;
+        q.hasDecoration = true;
+        q.isResizable = false;
+        q.isMovable = true;
+        q.isMaximizable = false;
+        q.positionX = -50; // a negative X is valid (window straddling the left edge)
+        q.positionY = 100;
+        q.captionNormal = QStringLiteral("Firefox");
+
+        QCOMPARE(q.valueForField(Field::KeepAbove)->toBool(), true);
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::KeepBelow).has_value());
+        QCOMPARE(q.valueForField(Field::KeepBelow)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::SkipTaskbar)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::SkipPager)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::SkipSwitcher)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsModal)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::HasDecoration)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsResizable)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::IsMovable)->toBool(), true);
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::IsMaximizable).has_value());
+        QCOMPARE(q.valueForField(Field::IsMaximizable)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::PositionX)->toInt(), -50);
+        QCOMPARE(q.valueForField(Field::PositionY)->toInt(), 100);
+        QCOMPARE(q.valueForField(Field::CaptionNormal)->toString(), QStringLiteral("Firefox"));
+        QVERIFY(q.hasWindow());
+    }
+
+    void testValueForField_modeAlwaysPresent()
+    {
+        WindowQuery q; // no window attributes, mode unset
+        // Mode is context-sourced: always engaged, even when unset, and
+        // defaults to an empty string.
+        const auto v = q.valueForField(Field::Mode);
+        QVERIFY(v.has_value());
+        QCOMPARE(v->toString(), QString());
+        // Context-sourced, so it never makes the query look per-window.
+        QVERIFY(!q.hasWindow());
+
+        q.mode = QStringLiteral("tiling");
+        QCOMPARE(q.valueForField(Field::Mode)->toString(), QStringLiteral("tiling"));
+        // Setting the mode still does not flip hasWindow().
+        QVERIFY(!q.hasWindow());
+    }
+
+    void testValueForField_pzStateFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::IsFloating).has_value());
+        QVERIFY(!q.valueForField(Field::IsSnapped).has_value());
+        QVERIFY(!q.valueForField(Field::Zone).has_value());
+        QVERIFY(!q.hasWindow());
+
+        q.isFloating = false;
+        q.isSnapped = true;
+        q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
+
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::IsFloating).has_value());
+        QCOMPARE(q.valueForField(Field::IsFloating)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::IsSnapped)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::Zone)->toString(), QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"));
+        QVERIFY(q.hasWindow());
+    }
+
+    void testValueForField_isTiledIsWindowSourced()
+    {
+        // IsTiled is the fourth PlasmaZones state field and the one its three
+        // neighbours' test above never covered. It is WINDOW-sourced, which is
+        // load-bearing twice over: it must be absent on a windowless context
+        // query (so a positive leaf is inert there), and it must appear in
+        // windowSourcedFields() (so the context resolvers refuse a rule that
+        // NEGATES it — an absent field makes a negated leaf match every
+        // context unconditionally).
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::IsTiled).has_value());
+        QVERIFY(!q.hasWindow());
+        QVERIFY(windowSourcedFields().contains(Field::IsTiled));
+
+        // False is a real value — a window explicitly known not to be tiled is
+        // not the same as one whose state is unknown.
+        q.isTiled = false;
+        QVERIFY(q.valueForField(Field::IsTiled).has_value());
+        QCOMPARE(q.valueForField(Field::IsTiled)->toBool(), false);
+        QVERIFY(q.hasWindow());
+
+        q.isTiled = true;
+        QCOMPARE(q.valueForField(Field::IsTiled)->toBool(), true);
+    }
+
+    void testValueForField_tiledWindowCountOptionalContext()
+    {
+        // TiledWindowCount is optional (like the screen width and height, see
+        // the test below), and the
+        // asymmetry is deliberate: 0 is a meaningful count (an empty tiled
+        // desktop), so "unknown" cannot be spelled as a defaulted 0 the way the
+        // string context fields spell it as empty. Absent must therefore make
+        // a count predicate inert, and a present 0 must not.
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::TiledWindowCount).has_value());
+        // Absent though it is, the field is CONTEXT-sourced — an absent
+        // context field must not make the query look per-window.
+        QVERIFY(!q.hasWindow());
+        QVERIFY(!windowSourcedFields().contains(Field::TiledWindowCount));
+
+        q.tiledWindowCount = 0;
+        QVERIFY(q.valueForField(Field::TiledWindowCount).has_value());
+        QCOMPARE(q.valueForField(Field::TiledWindowCount)->toInt(), 0);
+        QVERIFY(!q.hasWindow());
+
+        q.tiledWindowCount = 3;
+        QCOMPARE(q.valueForField(Field::TiledWindowCount)->toInt(), 3);
+        QVERIFY(!q.hasWindow());
+    }
+
+    void testValueForField_screenShapeFields()
+    {
+        // The screen width and height are optional for the tiled count's
+        // reason (no width means "unknown"), while the aspect ratio is a
+        // present string that is empty when unknown. All three are context
+        // fields, so none of their states makes the query look per-window.
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::ScreenWidth).has_value());
+        QVERIFY(!q.valueForField(Field::ScreenHeight).has_value());
+        // Engaged-empty, NOT absent: a positive leaf is false against it and a
+        // negated one matches, which is why the context resolvers refuse a
+        // negated aspect leaf while the size is unknown.
+        QVERIFY(q.valueForField(Field::ScreenAspectRatio).has_value());
+        QVERIFY(q.valueForField(Field::ScreenAspectRatio)->toString().isEmpty());
+        QVERIFY(!q.hasWindow());
+        for (const Field field : {Field::ScreenWidth, Field::ScreenHeight, Field::ScreenAspectRatio}) {
+            QVERIFY(!windowSourcedFields().contains(field));
+        }
+
+        q.screenWidth = 5120;
+        q.screenHeight = 1440;
+        q.screenAspectRatio = QStringLiteral("32:9");
+        QCOMPARE(q.valueForField(Field::ScreenWidth)->toInt(), 5120);
+        QCOMPARE(q.valueForField(Field::ScreenHeight)->toInt(), 1440);
+        QCOMPARE(q.valueForField(Field::ScreenAspectRatio)->toString(), QStringLiteral("32:9"));
+        QVERIFY(!q.hasWindow());
+
+        // Each dimension stands alone: engaging the width does not engage the
+        // height.
+        WindowQuery widthOnly;
+        widthOnly.screenWidth = 2560;
+        QCOMPARE(widthOnly.valueForField(Field::ScreenWidth)->toInt(), 2560);
+        QVERIFY(!widthOnly.valueForField(Field::ScreenHeight).has_value());
+    }
+};
+
+QTEST_GUILESS_MAIN(TestWindowQuery)
+#include "test_windowquery.moc"

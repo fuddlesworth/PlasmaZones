@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build-time integrity check for PhosphorAnimation shipped data.
+"""Integrity check for PhosphorAnimation shipped data. Manual tool.
 
-Validates that every `"curve": "..."` reference inside a shipped
-profile JSON under data/profiles/ resolves — either to a built-in
-curve type (bare 4-comma bezier, or `typeId:params` using a built-in
-typeId) or to a named curve under data/curves/.
+Validates that every `"curve": "..."` reference inside a profile JSON
+under plasmazones/data/profiles/ resolves — either to a built-in curve
+type (bare 4-comma bezier, or `typeId:params` using a built-in typeId)
+or to a named curve under plasmazones/data/curves/.
 
-Runs as a CMake custom-command at build time. Exits non-zero on any
-typo so a missing curve file fails the build rather than shipping and
-silently falling back to library defaults at runtime.
+NOT wired to anything. It used to run as a CMake custom-command; that
+target was removed when the tree stopped shipping per-leaf profile JSONs
+(see the note below and plasmazones/CMakeLists.txt, which records the
+removal). plasmazones/data/profiles/ does not currently exist, so a run
+returns 0 having inspected nothing. Kept as a manual tool for the day
+that tree comes back; run it by hand, or re-add a CMake target, rather
+than assuming the build checks this.
+
+Exits non-zero on any unresolved reference.
 
 ## QML profile references are NOT validated
 
@@ -76,8 +82,15 @@ def curve_reference_resolves(spec: str, shipped_curves: set[str]) -> bool:
     if colon >= 0:
         typeid = spec[:colon].strip().lower()
         return typeid in BUILTIN_CURVE_TYPEIDS or typeid in shipped_curves
-    # Bare identifier: either a built-in typeId (no params) or a named
-    # curve registered by CurveLoader.
+    # Bare identifier: either a built-in typeId (no params) or a named curve
+    # registered by CurveLoader. NOT lowercased, deliberately, even though the
+    # typeId:params branch above is. That asymmetry is real in the runtime and
+    # this checker has to reproduce it rather than tidy it away:
+    # CurveRegistry::parseSpec lowercases only its colon branch, the no-colon
+    # branch keeps the spec verbatim, and the lookup is a case-sensitive QHash
+    # against built-ins registered lower-case only. So "Spring:0.5,10" resolves
+    # and a bare "Spring" does not. Lowercasing here would make the checker
+    # bless a spec that falls back to OutCubic at runtime.
     return spec in BUILTIN_CURVE_TYPEIDS or spec in shipped_curves
 
 
@@ -115,8 +128,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
 
     root = args.source_root.resolve()
-    profiles_dir = root / "data" / "profiles"
-    curves_dir = root / "data" / "curves"
+    profiles_dir = root / "plasmazones" / "data" / "profiles"
+    curves_dir = root / "plasmazones" / "data" / "curves"
 
     # An absent profiles dir is fine — the shipped tree may legitimately
     # ship zero per-leaf JSONs and rely entirely on Settings-driven

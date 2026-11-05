@@ -1,0 +1,550 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
+
+#include <PhosphorRendering/ShaderEffect.h>
+
+#include <QColor>
+#include <QDebug>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QImage>
+#include <QPointF>
+#include <QQmlApplicationEngine>
+#include <QQmlComponent>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QSignalSpy>
+#include <QSizeF>
+#include <QStringList>
+#include <QTest>
+#include <QUrl>
+#include <QVariantMap>
+#include <QVector4D>
+
+#include <memory>
+
+using PhosphorSurfaceQuick::SurfaceShaderItem;
+
+namespace {
+/// Re-exposes the protected static resolver so its URL contract can be pinned without a
+/// scene graph. A static member needs no instance, so this needs no QQuickWindow and no
+/// Q_OBJECT. Any suite that links PhosphorRendering could do the same; the reason it lives
+/// here is that phosphor-rendering ships no test target of its own, so this is the nearest
+/// tier-1 suite that links it.
+struct ShaderPathProbe : PhosphorRendering::ShaderEffect
+{
+    using PhosphorRendering::ShaderEffect::localShaderPath;
+};
+
+/// Collects qWarning output for the duration of a scope, so the resolver's three refusal
+/// arms can be told apart. Two of them log a reason and one is deliberately SILENT, and
+/// bare isEmpty() assertions cannot distinguish them: a future edit adding a warning "for
+/// symmetry" to the silent arm would log once per decoration stage per reload, because
+/// every bundled surface pack declares no vertex shader and so takes that arm.
+class WarningCapture
+{
+public:
+    WarningCapture()
+    {
+        // The previous SINK is saved, not just the previous handler. Nulling the
+        // sink in the destructor while restoring an outer instance's handler
+        // leaves WarningCapture::handler installed over a null sink, which
+        // swallows every later message silently — the outer capture sees nothing
+        // and neither does stderr. The file does not nest today; this keeps a
+        // future nested scope from going quiet instead of failing.
+        m_previousSink = s_sink;
+        s_sink = &m_messages;
+        m_previous = qInstallMessageHandler(&WarningCapture::handler);
+    }
+    ~WarningCapture()
+    {
+        qInstallMessageHandler(m_previous);
+        s_sink = m_previousSink;
+    }
+    WarningCapture(const WarningCapture&) = delete;
+    WarningCapture& operator=(const WarningCapture&) = delete;
+
+    const QStringList& messages() const
+    {
+        return m_messages;
+    }
+
+private:
+    static void handler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        Q_UNUSED(context)
+        if (type == QtWarningMsg && s_sink) {
+            s_sink->append(message);
+        }
+    }
+
+    QStringList m_messages;
+    QtMessageHandler m_previous = nullptr;
+    QStringList* m_previousSink = nullptr;
+    static QStringList* s_sink;
+};
+QStringList* WarningCapture::s_sink = nullptr;
+} // namespace
+
+/**
+ * @brief Unit tests for SurfaceShaderItem and the org.phosphor.surface module.
+ *
+ * SurfaceShaderItem is a QQuickItem (requires QGuiApplication). Only the data
+ * layer is exercised here: construction, the surface-state property surface,
+ * inherited param application, the shader-source status transition, and the
+ * base's static shader-URL resolver, with
+ * no scene graph or GPU, so updatePaintNode (where the SurfaceUniformProfile-
+ * backed node is actually created) is not driven. The profile wiring is
+ * verified structurally: createShaderNode is the only surface-specific node
+ * hook and a node-creation test would need a live QQuickWindow.
+ *
+ * The module slots pin what the QML side of this library promises: the type
+ * and the SurfaceDecoration host both resolve through `import
+ * org.phosphor.surface`, and the item's status enum reaches QML.
+ */
+class TestSurfaceShaderItem : public QObject
+{
+    Q_OBJECT
+
+private:
+    QQmlEngine m_engine;
+
+private Q_SLOTS:
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The shared URL resolver both updatePaintNode overrides depend on
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testLocalShaderPath_acceptsAbsoluteLocalAndQrc()
+    {
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl::fromLocalFile(QStringLiteral("/packs/glass/effect.frag"))),
+                 QStringLiteral("/packs/glass/effect.frag"));
+        // Scheme-less ABSOLUTE: the url.path() fallback both overrides used to drop, which
+        // made the fragment load silently skip instead of fail.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("/packs/glass/effect.frag"))),
+                 QStringLiteral("/packs/glass/effect.frag"));
+        // qrc maps to the ':'-prefixed resource path, which QFileInfo reports as ABSOLUTE.
+        // That is the only reason the relative refusal below does not eat it, so the Qt
+        // behaviour the resolver rests on is asserted directly rather than assumed.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:/shaders/x.frag"))),
+                 QStringLiteral(":/shaders/x.frag"));
+        QVERIFY(!QFileInfo(QStringLiteral(":/shaders/x.frag")).isRelative());
+        // A qrc URL with an EMPTY path resolves to ":" rather than to nothing, so it reaches
+        // the loader and fails there instead of in the empty-path arm.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:"))), QStringLiteral(":"));
+        // A RELATIVE qrc path is accepted too, for the same ':' reason: the relative refusal
+        // never reaches the qrc family at all, which is why the docblock says so outright.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:x.frag"))), QStringLiteral(":x.frag"));
+        // `file://host` carries an AUTHORITY, which toLocalFile() renders as a UNC-style
+        // "//host" that QFileInfo calls absolute. Accepted, and the docblock says it is.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://host"))), QStringLiteral("//host"));
+    }
+
+    void testLocalShaderPath_refusesNonLocalSchemeAndRelativePaths()
+    {
+        // An http URL's path component is an ABSOLUTE local path, so without the scheme vet
+        // it would reach QFile. This is the arm an out-of-library subclass depends on, since
+        // isLocalShaderUrl is not installed with the header that exposes this.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("http://host/x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("https://host/x.frag"))).isEmpty());
+        // A relative answer would be opened against the process CWD, and SurfaceShaderItem
+        // derives its pack-sibling include dir from it.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("shaders/x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("effect.frag"))).isEmpty());
+        // Including through a `file:` URL, which the test asserts because every in-tree host
+        // builds these with QUrl::fromLocalFile.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file:x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl::fromLocalFile(QStringLiteral("rel/x.frag"))).isEmpty());
+        // Vetted, but carrying no usable path at all.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl()).isEmpty());
+        // Scheme-less and authority-only: isLocalShaderUrl passes it (empty scheme), and the
+        // resolver's own path() fallback yields nothing, so it takes the same silent arm.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("//host"))).isEmpty());
+    }
+
+    /// The three refusal arms are NOT interchangeable: two log a reason a user can act on
+    /// and one returns empty in silence, because the silent case is the one every bundled
+    /// surface pack hits on its vertex stage. isEmpty() alone cannot see the difference.
+    void testLocalShaderPath_logsAReasonOnlyWhereItIsActionable()
+    {
+        {
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("http://host/x.frag"))).isEmpty());
+            QCOMPARE(capture.messages().size(), 1);
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("non-local shader URL")));
+        }
+        {
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("shaders/x.frag"))).isEmpty());
+            QCOMPARE(capture.messages().size(), 1);
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("relative shader path")));
+            // The path AND the URL it came from, since a relative answer is the hardest of
+            // the three to diagnose from the caller's own message.
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("shaders/x.frag")));
+        }
+        {
+            // Silent on purpose. SurfaceDecoration binds vertexShaderUrl to an empty QUrl for
+            // every pack declaring no vertex shader, which is all of the bundled ones.
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl()).isEmpty());
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://"))).isEmpty());
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("//host"))).isEmpty());
+            QCOMPARE(capture.messages(), QStringList());
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Construction + surface-state defaults
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testSurfaceShaderItem_constructsWithIdentityDefaults()
+    {
+        SurfaceShaderItem item;
+
+        // Defaults mirror the UboFrameState surface-only field defaults: an
+        // identity decoration (full scale, unfocused, zero geometry).
+        QVERIFY(qFuzzyCompare(item.surfaceScale(), 1.0));
+        QVERIFY(!item.surfaceFocused());
+        QCOMPARE(item.surfaceSize(), QSizeF());
+        QCOMPARE(item.surfaceFrameTopLeft(), QPointF());
+        QCOMPARE(item.surfaceFrameSize(), QSizeF());
+        // The OFF-SURFACE pointer sentinel, not the base's (0,0) default, which a
+        // hover-reactive pack would read as a pointer parked at the top-left corner.
+        QCOMPARE(item.iMouse(), QPointF(-1.0, -1.0));
+
+        // No shader assigned yet.
+        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Surface-state setters + change signals
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testSurfaceShaderItem_surfaceScaleSetterEmitsOnChange()
+    {
+        SurfaceShaderItem item;
+        QSignalSpy spy(&item, &SurfaceShaderItem::surfaceScaleChanged);
+
+        item.setSurfaceScale(2.0);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(qFuzzyCompare(item.surfaceScale(), 2.0));
+
+        // Re-setting the same value must not emit (emit-only-on-change rule).
+        item.setSurfaceScale(2.0);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testSurfaceShaderItem_surfaceFocusedSetterEmitsOnChange()
+    {
+        SurfaceShaderItem item;
+        QSignalSpy spy(&item, &SurfaceShaderItem::surfaceFocusedChanged);
+
+        item.setSurfaceFocused(true);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(item.surfaceFocused());
+
+        item.setSurfaceFocused(true);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testSurfaceShaderItem_surfaceGeometrySettersEmitOnChange()
+    {
+        SurfaceShaderItem item;
+        QSignalSpy sizeSpy(&item, &SurfaceShaderItem::surfaceSizeChanged);
+        QSignalSpy frameTlSpy(&item, &SurfaceShaderItem::surfaceFrameTopLeftChanged);
+        QSignalSpy frameSizeSpy(&item, &SurfaceShaderItem::surfaceFrameSizeChanged);
+
+        item.setSurfaceSize(QSizeF(800, 600));
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(item.surfaceSize(), QSizeF(800, 600));
+
+        item.setSurfaceFrameTopLeft(QPointF(4, 8));
+        QCOMPARE(frameTlSpy.count(), 1);
+        QCOMPARE(item.surfaceFrameTopLeft(), QPointF(4, 8));
+
+        item.setSurfaceFrameSize(QSizeF(792, 584));
+        QCOMPARE(frameSizeSpy.count(), 1);
+        QCOMPARE(item.surfaceFrameSize(), QSizeF(792, 584));
+
+        // Idempotent re-sets suppress signals.
+        item.setSurfaceSize(QSizeF(800, 600));
+        item.setSurfaceFrameTopLeft(QPointF(4, 8));
+        item.setSurfaceFrameSize(QSizeF(792, 584));
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(frameTlSpy.count(), 1);
+        QCOMPARE(frameSizeSpy.count(), 1);
+    }
+
+    void testSurfaceShaderItem_backdropRectSettersEmitOnChange()
+    {
+        SurfaceShaderItem item;
+        QSignalSpy screenSpy(&item, &SurfaceShaderItem::backdropScreenRectChanged);
+        QSignalSpy surfaceSpy(&item, &SurfaceShaderItem::backdropSurfaceRectChanged);
+
+        // Both empty by default: the whole wallpaper is sampled.
+        QVERIFY(!item.backdropScreenRect().isValid());
+        QVERIFY(!item.backdropSurfaceRect().isValid());
+
+        item.setBackdropScreenRect(QRectF(0, 0, 1920, 1080));
+        QCOMPARE(screenSpy.count(), 1);
+        item.setBackdropSurfaceRect(QRectF(100, 50, 400, 300));
+        QCOMPARE(surfaceSpy.count(), 1);
+
+        item.setBackdropScreenRect(QRectF(0, 0, 1920, 1080));
+        item.setBackdropSurfaceRect(QRectF(100, 50, 400, 300));
+        QCOMPARE(screenSpy.count(), 1);
+        QCOMPARE(surfaceSpy.count(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Inherited base behaviour (shaderParams / status)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testSurfaceShaderItem_setShaderParamsAppliesSlots()
+    {
+        // The base setShaderParams maps `customParamsN_<xyzw>` / `customColorN`
+        // (the slot form SurfaceShaderRegistry::translateSurfaceParams emits)
+        // onto the UBO. SurfaceShaderItem does not override it.
+        SurfaceShaderItem item;
+
+        QVariantMap params;
+        params.insert(QStringLiteral("customParams1_x"), 0.42f);
+        params.insert(QStringLiteral("customColor1"), QColor(Qt::blue));
+        item.setShaderParams(params);
+
+        const QVector4D p1 = item.customParams1();
+        QVERIFY(qFuzzyCompare(p1.x(), 0.42f));
+
+        constexpr float kEpsilon = 0.002f;
+        const QColor c1 = item.customColor1();
+        QVERIFY(qAbs(static_cast<float>(c1.blueF()) - 1.0f) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(c1.redF())) < kEpsilon);
+    }
+
+    void testSurfaceShaderItem_shaderSourceTransitionsToLoading()
+    {
+        // In headless tests there is no scene graph, so updatePaintNode never
+        // runs and setShaderSource's Loading state never advances to Ready /
+        // Error / Null.
+        SurfaceShaderItem item;
+        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
+
+        QSignalSpy statusSpy(&item, &SurfaceShaderItem::statusChanged);
+        item.setShaderSource(QUrl::fromLocalFile(QStringLiteral("/nonexistent/effect.frag")));
+        QCOMPARE(item.status(), SurfaceShaderItem::Status::Loading);
+        // Exactly one Null -> Loading transition; headless, updatePaintNode never
+        // runs so no further Ready/Error/Null change can follow to inflate this.
+        QCOMPARE(statusSpy.count(), 1);
+    }
+
+    void testSurfaceShaderItem_unsupportedUrlSchemeIsFullyRefused()
+    {
+        // http:// / ftp:// can't be loaded by the RHI pipeline; the base
+        // rejects them at setShaderSource() as a FULL refusal (no state
+        // changes, only a warning) so status, the property value, and the
+        // rendered output always agree.
+        SurfaceShaderItem item;
+        item.setShaderSource(QUrl(QStringLiteral("http://example.com/effect.frag")));
+        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
+        QVERIFY(item.errorLog().isEmpty());
+        QVERIFY(item.shaderSource().isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The wallpaper image through QML
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// A QML BINDING must actually deliver the backdrop image to the item.
+    ///
+    /// Regression guard, and it has to go through the QML engine rather than
+    /// setProperty(): the property used to be QImage-typed, and a
+    /// `Binding on wallpaperTexture { value: <var holding a QImage> }` wrote
+    /// NOTHING through it, silently, with no engine warning, while a bool
+    /// binding beside it applied. A C++ setProperty() with an exact-typed
+    /// QVariant never reproduced it, so only a real binding pins the fix. The
+    /// plasmazones tier sweeps its shipping QML for the broken shapes
+    /// (test_shader_item_qml_bindings); this pins the shape that works.
+    void testSurfaceShaderItem_qmlBindingDeliversTheWallpaperImage()
+    {
+        QImage backdrop(8, 4, QImage::Format_RGBA8888);
+        backdrop.fill(Qt::red);
+
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("testBackdrop"), QVariant::fromValue(backdrop));
+
+        QQmlComponent component(&engine);
+        component.setData(R"QML(
+import QtQuick
+import org.phosphor.surface
+Item {
+    property alias direct: a
+    SurfaceShaderItem { id: a; wallpaperTexture: testBackdrop }
+}
+)QML",
+                          QUrl(QStringLiteral("inline://test_wallpaper_binding.qml")));
+        // A module import compiles asynchronously; wait for it to settle before
+        // reading the status, the same way the module-load slots below do.
+        QTRY_VERIFY_WITH_TIMEOUT(component.status() != QQmlComponent::Loading, 5000);
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY(root);
+
+        auto* item = root->property("direct").value<SurfaceShaderItem*>();
+        QVERIFY(item);
+        const QImage delivered = item->wallpaperTexture();
+        QVERIFY(!delivered.isNull());
+        QCOMPARE(delivered.size(), backdrop.size());
+    }
+
+    /// The no-backdrop state is ordinary, not an error: a host with nothing
+    /// behind its surface passes null, and that must resolve to a null image
+    /// rather than warning or leaving a stale one in place.
+    ///
+    /// BOTH arms, because the setter distinguishes them and only one was covered.
+    /// `QVariant()` is INVALID, which is what the `!unwrapped.isValid()` half of
+    /// setWallpaperTextureVariant's clear test answers; a QML `null` arrives as a
+    /// nullptr_t and needs the `QMetaType::Nullptr` half. Nothing reached that
+    /// half, so it could be deleted from both variant setters with a green suite,
+    /// and for setAudioSpectrumVariant that is a real behaviour change (a nullptr
+    /// is not convertible to QVariantList, so a QML `null` would go from "clear
+    /// the spectrum" to "warn and keep the previous one").
+    void testSurfaceShaderItem_aNullValueClearsTheWallpaperImage()
+    {
+        QImage backdrop(4, 4, QImage::Format_RGBA8888);
+        backdrop.fill(Qt::blue);
+
+        SurfaceShaderItem item;
+        item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
+        QVERIFY(!item.wallpaperTexture().isNull());
+
+        // SILENTLY, which is what makes each leg pin the arm it names. The image being
+        // null afterwards does NOT distinguish these arms from the fall-through: an
+        // unconvertible value also clears, so deleting either the !isValid() or the
+        // Nullptr test left both legs passing — the setter still ended with a null image,
+        // just via the branch that WARNS first. The absence of a warning is the only
+        // observable difference, so it is the thing to assert.
+        {
+            WarningCapture capture;
+            item.setProperty("wallpaperTexture", QVariant());
+            QVERIFY(item.wallpaperTexture().isNull());
+            QVERIFY2(capture.messages().isEmpty(),
+                     qPrintable(QStringLiteral("an INVALID QVariant is the ordinary no-backdrop state and must "
+                                               "clear silently, but it logged: ")
+                                + capture.messages().join(QLatin1Char('\n'))));
+        }
+
+        item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
+        QVERIFY(!item.wallpaperTexture().isNull());
+        {
+            WarningCapture capture;
+            item.setProperty("wallpaperTexture", QVariant::fromValue(nullptr));
+            QVERIFY(item.wallpaperTexture().isNull());
+            QVERIFY2(capture.messages().isEmpty(),
+                     qPrintable(QStringLiteral("a QML null reaches the setter as QMetaType::Nullptr and must "
+                                               "clear silently, but it logged: ")
+                                + capture.messages().join(QLatin1Char('\n'))));
+        }
+    }
+
+    /// The audioSpectrum twin of the clear test above, and the arm that makes the
+    /// Nullptr half load-bearing rather than tidy: a nullptr_t cannot convert to
+    /// QVariantList, so without that half a QML `null` warns and keeps the last
+    /// spectrum instead of clearing it.
+    void testSurfaceShaderItem_aNullValueClearsTheAudioSpectrum()
+    {
+        // audioSpectrumVariant() answers QVariant::fromValue(QVector<float>), so read
+        // it back through value<QVector<float>>(); toList() on that variant is empty
+        // whatever the spectrum holds and would pass either way.
+        const auto spectrumOf = [](const SurfaceShaderItem& it) {
+            return it.audioSpectrumVariant().value<QVector<float>>();
+        };
+
+        SurfaceShaderItem item;
+        item.setProperty("audioSpectrum", QVariant::fromValue(QVariantList{0.25, 0.5, 0.75}));
+        QCOMPARE(spectrumOf(item).size(), 3);
+
+        item.setProperty("audioSpectrum", QVariant::fromValue(nullptr));
+        QVERIFY(spectrumOf(item).isEmpty());
+
+        item.setProperty("audioSpectrum", QVariant::fromValue(QVariantList{0.25, 0.5, 0.75}));
+        QCOMPARE(spectrumOf(item).size(), 3);
+        item.setProperty("audioSpectrum", QVariant());
+        QVERIFY(spectrumOf(item).isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The org.phosphor.surface module
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// The chain host instantiates through the module. "X is not a type" at
+    /// app runtime hides the nested cause (a bad property in the file, a
+    /// missing dependent import); pinning creation here fails with the real
+    /// error instead. An undecorated instance is the interesting case: every
+    /// host starts here and only then writes a chain.
+    void moduleLoadsSurfaceDecoration()
+    {
+        QQmlComponent comp(&m_engine);
+        comp.setData(QByteArrayLiteral("import QtQuick\nimport org.phosphor.surface\n"
+                                       "SurfaceDecoration { decorationChain: []; decorationOuterPadding: 0 }\n"),
+                     QUrl(QStringLiteral("inline://SurfaceDecoration.qml")));
+        QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
+        if (comp.status() != QQmlComponent::Ready) {
+            qWarning() << "SurfaceDecoration status:" << comp.status() << "errors:" << comp.errorString();
+        }
+        QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
+        std::unique_ptr<QObject> obj(comp.create());
+        if (!obj) {
+            qWarning() << "SurfaceDecoration creation errors:" << comp.errorString();
+        }
+        QVERIFY(obj != nullptr);
+        // Non-null is not enough: a qmldir that resolved the name to some
+        // other creatable type would pass that check. Pin the host's contract.
+        QVERIFY(obj->inherits("QQuickItem"));
+        QVERIFY(obj->property("decorationChain").isValid());
+        QVERIFY(obj->property("decorationOuterPadding").isValid());
+        QCOMPARE(obj->property("chainReady").toBool(), false);
+    }
+
+    /// SurfaceDecoration's readiness gate compares a stage against
+    /// `SurfaceShaderItem.Ready` and `SurfaceShaderItem.Error`, enums it
+    /// reaches through the registered type rather than declaring itself.
+    ///
+    /// Worth pinning because the failure is silent and inverted: an
+    /// unresolvable enum yields `undefined`, every `status === undefined`
+    /// comparison is false, so `chainReady` never goes true and a host that
+    /// covers its preview until then covers it forever.
+    void surfaceShaderItemStatusEnumResolves()
+    {
+        QQmlComponent comp(&m_engine);
+        comp.setData(QByteArrayLiteral("import QtQuick\nimport org.phosphor.surface\n"
+                                       "Item {\n"
+                                       "    property int ready: SurfaceShaderItem.Ready\n"
+                                       "    property int loading: SurfaceShaderItem.Loading\n"
+                                       "    property int failed: SurfaceShaderItem.Error\n"
+                                       "}\n"),
+                     QUrl(QStringLiteral("inline://surfacestatus.qml")));
+        QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
+        if (comp.status() != QQmlComponent::Ready) {
+            qWarning() << "status enum:" << comp.status() << "errors:" << comp.errorString();
+        }
+        QVERIFY(!comp.isError());
+        std::unique_ptr<QObject> obj(comp.create());
+        QVERIFY(obj != nullptr);
+        // Distinct and non-negative: proves they resolved to the real
+        // enumerators rather than both collapsing to a default-constructed int.
+        QVERIFY(obj->property("ready").toInt() >= 0);
+        QVERIFY(obj->property("ready").toInt() != obj->property("loading").toInt());
+        // Error too: it is what settles a chain whose shader will not compile,
+        // so an unresolvable one leaves that chain permanently unsettled, the
+        // same silent inversion reached by a different route.
+        QVERIFY(obj->property("failed").toInt() >= 0);
+        QVERIFY(obj->property("failed").toInt() != obj->property("ready").toInt());
+        QVERIFY(obj->property("failed").toInt() != obj->property("loading").toInt());
+    }
+};
+
+QTEST_MAIN(TestSurfaceShaderItem)
+#include "test_surfaceshaderitem.moc"

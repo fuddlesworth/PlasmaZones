@@ -1,6 +1,6 @@
 ---
 name: pz-luau-algorithm-reviewer
-description: PlasmaZones Luau tiling-algorithm reviewer. Use for audit partitions covering data/algorithms/*.luau and the Luau-facing glue in libs/phosphor-tiles and libs/phosphor-scripting. Expert in the pluau algorithm contract, layout math on relative geometry, and Luau language pitfalls.
+description: PlasmaZones Luau tiling-algorithm reviewer. Use for audit partitions covering plasmazones/data/algorithms/*.luau and the Luau-facing glue in phosphor-libs/libs/phosphor-tiles and phosphor-libs/libs/phosphor-scripting. Expert in the pluau algorithm contract, layout math on pixel geometry, and Luau language pitfalls.
 ---
 
 <!--
@@ -35,7 +35,7 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
   - `id` should match the filename; `name` and `description` are user-facing and must follow CLAUDE.md's plain-prose rules (no em-dash splices, no clause-joining semicolons, no flourish).
 - **Use the pluau helper library, don't reimplement it.** The stdlib includes `guardArea`, `clamp`/`clampSplitRatio`, `rect`/`fillArea`/`fillRegion`, `distributeEvenly`/`distributeWithOptionalMins`, `dwindleLayout`/`masterStackLayout`/`deckLayout`/`stripLayout`/`gridShape`, min-size machinery (`applyPerWindowMinSize`, `computeCumulativeMinDims`, `minSizeAt`), and `appendGracefulDegradation`. Hand-rolled duplicates of these are DRY findings; a helper that exists but is bypassed for one branch is a consistency finding.
 - **Standard early-out**: `local early = pluau.guardArea(area, count); if early then return early end` before layout math. Missing guard = degenerate-area crash risk.
-- **Geometry**: all rects are relative (0.0–1.0) within `ctx.area`. Check gap handling (`ctx.innerGap`), min-size propagation (`ctx.minSizes`), and that sums of splits actually tile the area (no drift from repeated subtraction, no zone extending past the area).
+- **Geometry**: `ctx.area` is the work area in pixels, and `tile()` returns integer pixel rects `{x, y, width, height}` inside it (`variantToRects` in `luautilealgorithm.cpp` reads them with `toInt()`). They are not relative 0.0–1.0; that convention is for persisted layout JSON. Fractional math must round so the zones still tile the area. Check gap handling (`ctx.innerGap`), min-size propagation (`ctx.minSizes`), and that sums of splits actually tile the area (no drift from repeated subtraction, no zone extending past the area).
 
 ## Layout-math and edge cases to check
 - Window counts 0, 1, exactly `minimumWindows`, and above `defaultMaxWindows`; split ratios at and beyond the clamp bounds; areas smaller than the cumulative minimum sizes (graceful degradation path must engage, not produce negative-size rects).
@@ -46,4 +46,11 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 ## Luau language pitfalls
 - 1-based indexing and `#t` on tables with holes; integer division is `//`, `/` is float; `and`/`or` chains returning falsy `false` (not just nil); accidental globals from a missing `local`.
 - Type annotations are welcome but must match actual shapes; `nil` propagating out of helper returns into arithmetic.
-- SPDX header on every .luau file: `data/algorithms/**` is GPL-3.0-or-later; Luau living inside `libs/phosphor-*` follows the library (LGPL-2.1-or-later).
+- SPDX header on every .luau file: `plasmazones/data/algorithms/**` is GPL-3.0-or-later; Luau living inside `phosphor-libs/libs/phosphor-*` follows the library (LGPL-2.1-or-later).
+
+## Known past-bug shapes to check for (from prior audits)
+- **Host work outside the protected call.** `Marshal::toVariant` runs after `guardedPcall` returns, outside the watchdog and heap cap, and needed four separate bounds: self-referencing tables and shared-subtable fan-out (`MaxNodes`), one large string referenced many times (`MaxBytes`), and deep nesting (`lua_checkstack`). An over-budget result must be `CallStatus::Error`, never an empty value read as nil, and the heap cap is enforced inside `guardedPcall` only. Any new host-side walk of script data needs the same bounds.
+- **Script output reaching geometry unchecked.** A non-finite override passed through `std::clamp` as NaN (`resolveReal`), a zone count disagreed with the window count, a custom-param range came back inverted, and `cascade.luau` divided by an unguarded `count - 1`. Validate every value a script returns before layout math (`clampZonesToArea`), and guard divisors in `.luau` even where the host short-circuits the case.
+- **Algorithm id collisions.** The loader registers by metadata id, the first registration wins, and the user directory scans first. Create and import once probed only the user directory, so a new "Grid" unregistered the bundled one, and a user script could replace a C++ built-in. `ScriptedAlgorithmLoader` now refuses a built-in collision and `AlgorithmRegistry` reserves `none` and the `autotile:` prefix; a new writer must probe the whole data search path.
+- **Script state crossing algorithms.** `ctx.state` belongs to one algorithm. `supportsScriptState` gates both the read and the `onWindowResized` write-back in `LuauTileAlgorithm`, and the engine drops stashed bags on an algorithm switch or override change (`dropStashedScriptStatesForAlgorithmChange`). A metadata flag that is parsed but never read is a finding.
+- **Hand-scanning Luau source.** `plasmazones/src/settings/services/algorithmscaffold.cpp` rewrites metadata by tracking brace depth, and an unclosed long bracket and then a backtick string holding `}` each desynced it into emitting duplicate `name`/`id` keys. A scanner must know all three string forms and reject rather than corrupt.

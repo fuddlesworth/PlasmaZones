@@ -1,0 +1,288 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Per-desktop placement bookkeeping: the compositor's report of a window's
+// sticky (on-all-desktops) state, the dirty-marking wrappers the engines'
+// per-desktop membership pass calls to keep the persisted per-desktop zones
+// honest, and the membership-aware walk over every snap store's zone
+// assignments that the occupancy and resnap consumers read.
+//
+// Its own translation unit because these are one concern: what the membership pass
+// reads, what it writes back, and how a window present on several desktops
+// is reported to the consumers that ask about every store at once. The
+// float path's unsnap lives here too: it is the one writer that forgets a
+// desktop's persisted zone outside the pass.
+
+#include <PhosphorPlacement/WindowTrackingService.h>
+
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include "placementlogging.h"
+
+namespace PhosphorPlacement {
+
+void WindowTrackingService::unsnapForFloat(const QString& windowId)
+{
+    PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
+    if (!snapState || !snapState->isWindowSnapped(windowId)) {
+        return;
+    }
+
+    // Read zone/screen for logging BEFORE unsnapForFloat clears them.
+    QStringList zoneIds = snapState->zonesForWindow(windowId);
+    QString screenId = snapState->screenForWindow(windowId);
+    // The desktop this store's assignment belongs to, for the persisted map:
+    // a window present on several desktops keeps its pre-float zones in
+    // slot.zoneIds (the float-back), but its per-desktop entry has to go, or
+    // a restart onto another desktop seeds the zone back as a live snap on
+    // the desktop the user had floated it on.
+    const int floatedDesktop = snapState->desktopForWindow(windowId);
+
+    // SnapState::unsnapForFloat saves pre-float state (windowId-keyed) and unassigns.
+    auto unassignResult = snapState->unsnapForFloat(windowId);
+    if (floatedDesktop >= 1) {
+        forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), floatedDesktop);
+    }
+
+    qCInfo(lcPlacement) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+
+    // Last-used-zone coupling: unsnapForFloat already cleared this store's own
+    // per-key last-used if it named the floated zone. The global holder still carries
+    // the representative restored from disk, so clear it too if it named the zone.
+    bool lastUsedCleared = unassignResult.lastUsedZoneCleared;
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(zoneIds, snapState);
+
+    Q_EMIT windowZoneChanged(windowId, QString());
+    // One mark for every store this path touched: markDirty also kicks the
+    // adaptor's debounced save through stateChanged, so splitting it just
+    // restarts the same timer twice.
+    markDirty(DirtyPreFloatZones | DirtyPreFloatScreens | DirtyZoneAssignments
+              | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
+}
+
+void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sticky)
+{
+    // Canonicalize so sticky state survives the effect-restart-after-class-mutation
+    // re-identification skew (issue #628). The daemon seeds the canonical mapping
+    // in WindowTrackingAdaptor::setWindowMetadata, so canonicalizeForLookup
+    // resolves to the first-seen composite without seeding here.
+    //
+    // Storage only. The per-desktop membership pass is driven by the daemon
+    // from the registry's metadata change, which the effect pushes for the
+    // same transition and which also carries the window's new desktop set;
+    // a signal from here would fire BEFORE that push arrives (the effect
+    // reports stickiness first) and reconcile against the old desktops.
+    m_windowStickyStates[canonicalizeForLookup(rawWindowId)] = sticky;
+}
+
+bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
+{
+    // The compositor's own report wins: on a live edge it reaches the daemon
+    // before the metadata push (F293). A window that already existed when the
+    // daemon registered never sends one, so the registry's copy of its last
+    // metadata push answers instead (F610).
+    const auto it = m_windowStickyStates.constFind(canonicalizeForLookup(rawWindowId));
+    if (it != m_windowStickyStates.constEnd()) {
+        return it.value();
+    }
+    if (m_windowRegistry) {
+        if (const auto ctx = m_windowRegistry->desktopContext(rawWindowId); ctx && ctx->sticky) {
+            return *ctx->sticky;
+        }
+    }
+    return false;
+}
+
+void WindowTrackingService::forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop)
+{
+    if (windowId.isEmpty() || engineId.isEmpty() || desktop < 1) {
+        return;
+    }
+    // A wrapper, not a direct store call from the engines, for the reason
+    // releaseEngineSlot gives: the store has no dirty concept. The first cut
+    // reached into the store directly and the forget never reached disk: the
+    // in-memory record dropped the desktop, nothing marked the placements
+    // dirty, and the next restart resurrected the window onto a desktop it
+    // had left.
+    if (m_placementStore.forgetDesktopZones(windowId, engineId, desktop)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::renumberDesktopZones(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    if (m_placementStore.renumberDesktopZones(removedDesktop) > 0) {
+        markDirty(DirtyWindowPlacements);
+    }
+    // Every structure keyed by a bare desktop number moves with the store
+    // (IPlacementEngine::renumberDesktopsAfterRemoval's contract): a buffered
+    // resnap queued across a mid-list removal would otherwise land one desktop
+    // off. A row on the removed desktop maps to 0, the all-desktops sentinel.
+    for (PhosphorEngine::ResnapEntry& entry : m_resnapBuffer) {
+        if (entry.virtualDesktop == removedDesktop) {
+            entry.virtualDesktop = 0;
+        } else if (entry.virtualDesktop > removedDesktop) {
+            --entry.virtualDesktop;
+        }
+    }
+}
+
+void WindowTrackingService::remapDesktopZones(const PhosphorEngine::DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    if (m_placementStore.remapDesktopZones(remap) > 0) {
+        markDirty(DirtyWindowPlacements);
+    }
+    // The buffered resnap rows move the same way renumberDesktopZones moves
+    // them; a row on a removed desktop maps to 0, the all-desktops sentinel.
+    for (PhosphorEngine::ResnapEntry& entry : m_resnapBuffer) {
+        entry.virtualDesktop = remap.map(entry.virtualDesktop);
+    }
+}
+
+QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
+{
+    // Prefer the live, runtime assignment — it reflects this session's snaps.
+    // Go through the canonicalizing point accessor (not the raw whole-map getter)
+    // so a class-mutated window still resolves its live zones (issue #628).
+    if (const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId)) {
+        // The store for the desktop the window's screen SHOWS, when it holds
+        // the window: a multi-desktop window's primary falls back to another
+        // desktop's store while the viewed desktop holds no membership, and
+        // that store's zone is the wrong answer here (a return to snapping
+        // would put the window in the other desktop's zone).
+        const QString screenId = snapState->screenForWindow(windowId);
+        const PhosphorSnapEngine::SnapState* inView = snapForScreen(screenId);
+        if (inView && inView != snapState && snapHoldsWindow(windowId, inView)) {
+            snapState = inView;
+        }
+        const QStringList live = snapState->zonesForWindow(windowId);
+        if (!live.isEmpty() && snapState == inView) {
+            return live;
+        }
+        // The live store is another desktop's. A window the registry places on
+        // the desktop the screen shows (sticky, or one of its desktops) is
+        // answered by its own record's zone for that desktop or by nothing:
+        // the held count cannot tell it from a window that lives elsewhere, and
+        // a sticky window snapped only on desktop 2 took desktop 2's zone on
+        // desktop 1 (F964).
+        const int shown = (snapState != inView && m_virtualDesktopManager && !screenId.isEmpty())
+            ? m_virtualDesktopManager->currentDesktopForScreen(screenId)
+            : 0;
+        if (const auto ctx =
+                (shown > 0 && m_windowRegistry) ? m_windowRegistry->desktopContext(windowId) : std::nullopt) {
+            const auto desktops = ctx->desktopSet();
+            if (ctx->sticky.value_or(false) || (desktops && desktops->contains(shown))) {
+                const auto own = m_placementStore.peekExact(windowId);
+                const PhosphorEngine::EngineSlot ownSlot =
+                    own ? own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()) : PhosphorEngine::EngineSlot{};
+                return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
+                    ? ownSlot.zonesByDesktop.value(shown)
+                    : QStringList{};
+            }
+        }
+        // A window on one desktop the screen does not show keeps that
+        // desktop's zone when it is the only one it holds.
+        int held = 0;
+        for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+            held += snapHoldsWindow(windowId, state) ? 1 : 0;
+        }
+        if (!live.isEmpty() && held <= 1) {
+            return live;
+        }
+    }
+    // Cold cache (post-restart, or after handoffRelease cleared the live map):
+    // fall back to the DURABLE snap slot in the window's OWN placement record.
+    // windowId is the exact `appId|uuid`; KWin uuids are stable across a daemon
+    // restart, so the exact-instance read resolves the right window. A record
+    // whose snap slot is not snapped answers "no zones".
+    //
+    // Never a sibling's record: a window with no record of its own has no
+    // zones. Another instance's zone describes where THAT window was, and
+    // answering with it would resnap this window there or read it as snapped
+    // on a monitor it never occupied (the reopen contract). Every open writes
+    // a slot-less record under the live uuid, so the case this used to serve
+    // (a relogin's fresh uuid) already reads as "no zones" after the first
+    // save.
+    if (const auto own = m_placementStore.peekExact(windowId)) {
+        const PhosphorEngine::EngineSlot ownSlot = own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
+            ? snapZonesOnDesktopInView(ownSlot, own->screenId)
+            : QStringList{};
+    }
+    return {};
+}
+
+QStringList WindowTrackingService::snapZonesOnDesktopInView(const PhosphorEngine::EngineSlot& slot,
+                                                            const QString& screenId) const
+{
+    // A multi-desktop record names a zone per desktop; its flat zoneIds are
+    // whichever desktop was in view at the last capture. The consumers that
+    // put a window back on a zone (the buffer resnap, the order resnap on a
+    // return to snapping) act on the desktop the screen shows, so that is
+    // the desktop whose zone answers; a desktop the map does not name is one
+    // the window was unsnapped on.
+    if (slot.zonesByDesktop.isEmpty()) {
+        return slot.zoneIds;
+    }
+    const int desktop =
+        m_virtualDesktopManager && !screenId.isEmpty() ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+    return desktop > 0 ? slot.zonesByDesktop.value(desktop) : slot.zoneIds;
+}
+
+void WindowTrackingService::forEachZoneAssignedWindow(
+    const std::function<void(const QString&, const QStringList&, const QString&, int, const QString&,
+                             PhosphorSnapEngine::SnapState*)>& fn) const
+{
+    // Read paths (the empty-zone queries, the drop's snap assist) reach this
+    // with no snap store resolving, which walks nothing.
+    if (!hasSnapState()) {
+        return;
+    }
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        // The store's context: a window held on several desktops or
+        // activities has one membership per store, and only the key says
+        // which context each is (F127, F565).
+        const std::optional<PhosphorEngine::PlacementStateKey> key =
+            m_snapResolver.keyFor ? m_snapResolver.keyFor(state) : std::nullopt;
+        const QHash<QString, QStringList>& zones = state->zoneAssignments();
+        const QHash<QString, QString>& screens = state->screenAssignments();
+        const QHash<QString, int>& desktops = state->desktopAssignments();
+        for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
+            // Membership guard: a window's data is authoritative only in the
+            // stores it is a MEMBER of. Re-keying a window to a new
+            // per-(screen,desktop,activity) store only moves the membership —
+            // it does NOT evict the window's zone/desktop data from the old
+            // store (see PerScreenStates::setKeyForWindow / removeWindow, which
+            // "do not touch state objects"). Iterating the raw stores therefore
+            // sees a re-keyed window twice, once per store, with each store's
+            // own (possibly stale) desktop value — the cross-desktop resnap
+            // leak (a VD1 window read as VD2 from a leftover store, then
+            // resnapped off its real desktop). A window present on several
+            // desktops, on the other hand, is a member of one store per
+            // desktop and each of those holds real data the user chose, so it
+            // is reported from every member store with that store's desktop.
+            // Kept in lockstep with SnapEngine::stateForWindowOnScreen's
+            // eviction, which spares member stores for the same reason.
+            // An untracked window resolves to the global holder, so only its
+            // entries in that holder are reported (that store is its own
+            // owner); a leftover it has in a per-screen store is a phantom and
+            // is skipped like any other non-member store.
+            const PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
+            if (owner && owner != state && !snapHoldsWindow(it.key(), state)) {
+                continue;
+            }
+            const int recorded = desktops.value(it.key(), 0);
+            const int desktop = (recorded != 0 && key && key->desktop > 0) ? key->desktop : recorded;
+            fn(it.key(), it.value(), screens.value(it.key()), desktop, key ? key->activity : QString(), state);
+        }
+    }
+}
+
+} // namespace PhosphorPlacement

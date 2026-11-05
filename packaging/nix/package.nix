@@ -26,8 +26,8 @@
 # BUILD FLAGS
 # ───────────
 # We always pass -DUSE_KDE_FRAMEWORKS=ON. This enables:
-#   • The KWin C++ effect plugin (kwin-effect/)
-#   • The KDE System Settings module / KCM (kcm/)
+#   • The KWin C++ effect plugin (plasmazones/kwin-effect/)
+#   • The KDE System Settings module / KCM (plasmazones/kcm/)
 #   • KGlobalAccel shortcut integration
 # There is no reason to build without KDE frameworks on NixOS — the portable
 # Qt-only mode exists for non-KDE compositors (Hyprland, Sway, GNOME). If
@@ -38,6 +38,8 @@
   lib,
   stdenv,
   fetchFromGitHub,       # Used when building from a pinned upstream release
+  fetchurl,              # The pinned Luau and valijson archives (see `depsArchives`)
+  linkFarm,              # Gathers them into one directory under their file names
   cmake,
   pkg-config,
 
@@ -54,7 +56,7 @@
 
   # -- Vulkan headers (build-time, required by the daemon) --
   # The dma-buf thumbnail daemon path hard-requires the Vulkan SDK via
-  # find_package(Vulkan REQUIRED) in src/CMakeLists.txt (dmabuftextureprovider.cpp
+  # find_package(Vulkan REQUIRED) in plasmazones/src/CMakeLists.txt (dmabuftextureprovider.cpp
   # includes <vulkan/vulkan.h> unconditionally), so a daemon build without these
   # headers fails at configure time. (Qt's separate QVulkanInstance render backend
   # is still QT_CONFIG(vulkan)-guarded/optional — a distinct concern from this SDK.)
@@ -81,6 +83,41 @@
   # cached release artifact via `.override { enableLTO = true; }`.
   enableLTO ? false,
 }:
+
+let
+  # ── Third-party source archives ──────────────────────────────────────────
+  # Luau and valijson, built into the package from the release archives pinned
+  # (version, URL and SHA-256) in cmake/PhosphorDependencies.cmake. The build
+  # runs in the sandbox with no network, so they are fetched here as fixed-output
+  # derivations and handed to CMake as one directory (PHOSPHOR_DEPS_ARCHIVES in
+  # cmakeFlags), holding each under the FILE name the pin gives it. CMake
+  # checks each archive against the pin's hash again before unpacking it.
+  #
+  # fetchurl, not fetchFromGitHub: the pin hashes the archive file itself, and
+  # fetchurl's flat hash is that same SHA-256, where fetchFromGitHub would hash
+  # the unpacked tree. The SRI value is the hex digest in base64. The hex form
+  # sits in the comment beside it because check-conventions.py's dep-pins rule
+  # reads it there, and fails when a URL or hex hash here stops matching the
+  # pin. Bump both forms together.
+  depsArchives = linkFarm "plasmazones-deps-archives" [
+    {
+      name = "luau-0.745.tar.gz";
+      path = fetchurl {
+        url = "https://github.com/luau-lang/luau/archive/refs/tags/0.745.tar.gz";
+        # sha256 53c22773bace6cabbabaead576fbc08d11a0317fce11a3dbf9d027dda6849248
+        hash = "sha256-U8Inc7rObKu6uurVdvvAjRGgMX/OEaPb+dAn3aaEkkg=";
+      };
+    }
+    {
+      name = "valijson-1.1.3.tar.gz";
+      path = fetchurl {
+        url = "https://github.com/tristanpenman/valijson/archive/refs/tags/v1.1.3.tar.gz";
+        # sha256 887b53b1a924f6fe0b35fa3bbc9bbbe5ae8c72097b7f0f7c17b45f4cfa646029
+        hash = "sha256-iHtTsakk9v4LNfo7vJu75a6Mcgl7fw98F7RfTPpkYCk=";
+      };
+    }
+  ];
+in
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "plasmazones";
@@ -133,15 +170,15 @@ stdenv.mkDerivation (finalAttrs: {
 
     # ── Vulkan headers (build-time, required by the daemon) ───────────────────
     # Hard build requirement: the dma-buf thumbnail daemon path uses
-    # find_package(Vulkan REQUIRED) (src/CMakeLists.txt) and includes
+    # find_package(Vulkan REQUIRED) (plasmazones/src/CMakeLists.txt) and includes
     # <vulkan/vulkan.h> unconditionally, so the daemon won't configure without
     # these. Only headers are needed — no runtime lib.
     vulkan-headers
 
     # ── Kirigami (build-time AND runtime, both builds) ────────────────────────
-    # Unconditional on purpose. src/settings/CMakeLists.txt opens with
+    # Unconditional on purpose. plasmazones/src/settings/CMakeLists.txt opens with
     # find_package(KF6Kirigami REQUIRED) and links KF6::Kirigami, and
-    # src/CMakeLists.txt adds the settings subdirectory unconditionally — it is
+    # plasmazones/src/CMakeLists.txt adds the settings subdirectory unconditionally — it is
     # not behind USE_KDE_FRAMEWORKS. So this is a hard configure-time dependency
     # of EVERY build, portable one included; gating it on withKdeFrameworks made
     # `.override { withKdeFrameworks = false; }` fail at CMake configure.
@@ -160,7 +197,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcolorscheme      # KColorScheme: the KWin effect resolves the tab pills' theme colours
 
     # ── KWin (for the C++ effect plugin) ─────────────────────────────────────
-    # The kwin-effect/ subdirectory compiles a plugin that is loaded directly
+    # The plasmazones/kwin-effect/ subdirectory compiles a plugin that is loaded directly
     # by KWin. KWin exposes a private Effects API that the plugin links against.
     # THIS IS THE CRITICAL DEPENDENCY: the plugin's IID embeds the exact KWin
     # version. If this kwin package doesn't match the running KWin, the plugin
@@ -220,6 +257,10 @@ stdenv.mkDerivation (finalAttrs: {
     # environment.systemPackages by the NixOS module). This is the canonical
     # NixOS plugin layout — the same approach quickshell uses for its QML/plugins.
     "-DKDE_INSTALL_QTPLUGINDIR=${placeholder "out"}/${qt6.qtbase.qtPluginPrefix}"
+
+    # The pinned Luau and valijson archives (`depsArchives` above), for the
+    # offline build the sandbox requires.
+    "-DPHOSPHOR_DEPS_ARCHIVES=${depsArchives}"
   ];
 
   # ── Post-install fixups ───────────────────────────────────────────────────
@@ -259,7 +300,11 @@ stdenv.mkDerivation (finalAttrs: {
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     # GPL-3.0-or-later for the app, daemon, editor, settings and KCM;
     # LGPL-2.1-or-later for the bundled Phosphor component libraries.
-    license = with licenses; [ gpl3Plus lgpl21Plus ];
+    # MIT and BSD-2-Clause for the bundled Luau runtime and valijson headers, which
+    # are compiled into the shipped objects, and CC0-1.0 for the two AppStream
+    # metainfo files the package installs. Same set the RPM spec's License tag names,
+    # and for the same reason it records there.
+    license = with licenses; [ gpl3Plus lgpl21Plus mit bsd2 cc0 ];
     maintainers = [ ];   # Add your nixpkgs handle here when submitting upstream
     platforms = [ "x86_64-linux" "aarch64-linux" ];
 

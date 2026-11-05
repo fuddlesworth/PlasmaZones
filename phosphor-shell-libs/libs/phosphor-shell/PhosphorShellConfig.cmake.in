@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt — every entry here needs
+# to be resolvable by find_package consumers so the exported targets
+# file can wire transitively.
+find_dependency(Qt6 @PHOSPHORSHELL_QT_MIN@ COMPONENTS Core Gui Quick Qml WaylandClient)
+find_dependency(PhosphorLayer)
+find_dependency(PhosphorProtocol)
+find_dependency(PhosphorRendering)
+find_dependency(PhosphorShaders)
+find_dependency(PhosphorWayland)
+# PRIVATE deps of the shared library. Not part of the INTERFACE, but the
+# export records them in IMPORTED_LINK_DEPENDENT_LIBRARIES_<CONFIG> and the
+# generated PhosphorShellTargets.cmake refuses to load while any target
+# named there is missing, so installed consumers still need them findable.
+find_dependency(PhosphorWorkspaces)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorShellTargets.cmake")
+
+check_required_components(PhosphorShell)

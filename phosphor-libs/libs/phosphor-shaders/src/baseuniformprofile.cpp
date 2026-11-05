@@ -1,0 +1,190 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorShaders/BaseUniformProfile.h>
+
+#include <PhosphorShaders/ShaderBindings.h>
+
+#include <QDateTime>
+
+#include <cstring>
+#include <type_traits>
+
+namespace PhosphorShaders {
+
+BaseUniformProfile::BaseUniformProfile()
+{
+    // Seed identity qt_Matrix + qt_Opacity=1.0 (moved from the legacy
+    // ShaderNodeRhi ctor). m_u is value-initialized to zero by the in-class
+    // initializer, so only the diagonal + opacity need setting here.
+    m_u.qt_Matrix[0] = 1.0f;
+    m_u.qt_Matrix[5] = 1.0f;
+    m_u.qt_Matrix[10] = 1.0f;
+    m_u.qt_Matrix[15] = 1.0f;
+    m_u.qt_Opacity = 1.0f;
+}
+
+// ============================================================================
+// fill — faithful transcription of the legacy syncBaseUniforms() body, with
+// the iFlipBufferY=1 and qt_Matrix Y-flip folded in from uploadDirtyTextures()
+// (both have no QRhi dependency once yUpInNDC is carried in the frame state).
+// The one intentional departure: the iMouse normalized components divide in
+// float (the frame state carries floats) rather than the historical double.
+// ============================================================================
+
+void BaseUniformProfile::fill(const UboFrameState& state)
+{
+    // NDC Y-orientation correction baked into qt_Matrix, folded in from the
+    // legacy uploadDirtyTextures() which set this EVERY frame. Identity with the
+    // Y-scale (column-major index 5 / m11) negated only on Y-up-in-NDC backends
+    // (OpenGL); plain identity on Vulkan. Direct-to-window animation vertex
+    // stages apply it as `gl_Position = qt_Matrix * vec4(position, 0, 1)`;
+    // overlay/zone stages (zone.vert) ignore it. Dropping this (the ctor seeds a
+    // FLIPLESS identity) left daemon animation shaders rendering Y-inverted on
+    // OpenGL — fill() must reassert it per the carried yUpInNDC, exactly as the
+    // sibling SurfaceUniformProfile does.
+    std::memset(m_u.qt_Matrix, 0, sizeof(m_u.qt_Matrix));
+    m_u.qt_Matrix[0] = 1.0f;
+    m_u.qt_Matrix[5] = state.yUpInNDC ? -1.0f : 1.0f;
+    m_u.qt_Matrix[10] = 1.0f;
+    m_u.qt_Matrix[15] = 1.0f;
+
+    // Copy the already-split time: iTime (wrapped lo) + iTimeHi (wrap offset).
+    // The double-precision split itself happens upstream in syncBaseUniforms.
+    m_u.iTime = state.time;
+    m_u.iTimeHi = state.timeHi;
+    m_u.iTimeDelta = state.timeDelta;
+    // When feedback buffers haven't been cleared yet, override iFrame to 0
+    m_u.iFrame = (state.bufferFeedback && !state.bufferFeedbackCleared) ? 0 : state.frame;
+    m_u.iResolution[0] = state.width;
+    m_u.iResolution[1] = state.height;
+    m_u.iMouse[0] = state.mouseX;
+    m_u.iMouse[1] = state.mouseY;
+    m_u.iMouse[2] = state.width > 0 ? state.mouseX / state.width : 0.0f;
+    m_u.iMouse[3] = state.height > 0 ? state.mouseY / state.height : 0.0f;
+    m_u.iIsReversed = state.isReversed ? 1 : 0;
+    // iDate only advances once per second, so the recompute is throttled to that
+    // rather than run at frame rate: QDateTime::currentDateTime() is not free and
+    // the answer cannot have changed.
+    //
+    // IT NO LONGER WAITS FOR sceneDataDirty, which is what kept it frozen. That
+    // flag is set by a mouse move, a resize or a param change, and NO per-frame
+    // path sets it, so a playing pack with a still cursor never re-read the time
+    // of day at all: the field advanced once at startup and then held whatever the
+    // last interaction left. The parenthetical this comment used to carry, that
+    // "sceneDataDirty remains set for the first frame of each redraw cycle", is
+    // not true of the node's flag.
+    //
+    // Refreshing here is only half of it, and the other half is why this needed a
+    // hook rather than an edit. fill() writes into m_u; what actually reaches the
+    // GPU is chosen SEPARATELY by dirtyRegions() from the NODE's flags. So writing
+    // a fresh iDate with no scene-header upload requested put it in memory nobody
+    // sent. m_sceneHeaderSelfRefreshed is that request, and the node ORs it into
+    // the flags after fill().
+    //
+    // THE GATE OPENS ON A BACKWARDS CLOCK STEP TOO, which it used not to. The
+    // stamp and the interval are both wall clock, so an NTP correction or a
+    // manual clock set that rewinds by N seconds made the difference NEGATIVE for
+    // N seconds. A test for `>= 1000` alone cannot open on a negative, so iDate
+    // froze for the whole skew, and the `== 0` escape only covers the first call
+    // ever. A negative difference is not a reason to wait: it means the clock
+    // just moved, which is precisely when the time of day on screen is wrong.
+    const qint64 sinceDateRefresh = QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs;
+    const bool dateDue = m_lastDateRefreshMs == 0 || sinceDateRefresh >= 1000 || sinceDateRefresh < 0;
+    if (!state.didFullUploadOnce || dateDue) {
+        const QDateTime now = QDateTime::currentDateTime();
+        m_lastDateRefreshMs = now.toMSecsSinceEpoch();
+        // Only on the throttled path: the first fill is part of the full upload,
+        // which sends the whole block anyway, so requesting a scene-header region
+        // there would be redundant.
+        if (state.didFullUploadOnce) {
+            m_sceneHeaderSelfRefreshed = true;
+        }
+        m_u.iDate[0] = static_cast<float>(now.date().year());
+        m_u.iDate[1] = static_cast<float>(now.date().month());
+        m_u.iDate[2] = static_cast<float>(now.date().day());
+        m_u.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60 + now.time().second()
+                                          + now.time().msec() / 1000.0);
+    }
+
+    // appField0/appField1: left as-is (set by setAppField0/1 or extension)
+
+    // Custom params
+    static_assert(std::extent_v<decltype(BaseUniforms::customParams)> == 8,
+                  "customParams extent changed — update this fill loop bound");
+    for (int i = 0; i < 8; ++i) {
+        m_u.customParams[i][0] = state.customParams[i][0];
+        m_u.customParams[i][1] = state.customParams[i][1];
+        m_u.customParams[i][2] = state.customParams[i][2];
+        m_u.customParams[i][3] = state.customParams[i][3];
+    }
+
+    // Custom colors
+    static_assert(std::extent_v<decltype(BaseUniforms::customColors)> == 16,
+                  "customColors extent changed — update this fill loop bound");
+    for (int i = 0; i < 16; ++i) {
+        m_u.customColors[i][0] = state.customColors[i][0];
+        m_u.customColors[i][1] = state.customColors[i][1];
+        m_u.customColors[i][2] = state.customColors[i][2];
+        m_u.customColors[i][3] = state.customColors[i][3];
+    }
+
+    // iChannelResolution — the node resolves live channel sizes (multipass /
+    // single-buffer / unset → 1.0) into state.channelResolution[i].xy.
+    for (int i = 0; i < PhosphorShaders::Bindings::kChannelResolutionSlots; ++i) {
+        m_u.iChannelResolution[i][0] = state.channelResolution[i][0];
+        m_u.iChannelResolution[i][1] = state.channelResolution[i][1];
+        m_u.iChannelResolution[i][2] = 0.0f;
+        m_u.iChannelResolution[i][3] = 0.0f;
+    }
+    m_u.iAudioSpectrumSize = state.audioSpectrumSize;
+
+    // iFlipBufferY: always 1 (folded in from uploadDirtyTextures()).
+    m_u.iFlipBufferY = 1;
+    m_u._pad_after_audioSpectrum[0] = 0;
+    m_u._pad_after_audioSpectrum[1] = 0;
+
+    // User texture resolutions (bindings 11-14) — node resolves live.
+    for (int i = 0; i < PhosphorShaders::Bindings::kUserTextureCount; ++i) {
+        m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
+        m_u.iTextureResolution[i][1] = state.textureResolution[i][1];
+        m_u.iTextureResolution[i][2] = 0.0f;
+        m_u.iTextureResolution[i][3] = 0.0f;
+    }
+}
+
+// ============================================================================
+// dirtyRegions — exact legacy UboRegions dispatch.
+//
+//   time      → K_TIME_BLOCK
+//   timeHi && !sceneData → K_TIME_HI (granular wrap-only path)
+//   sceneData → K_SCENE_HEADER (subsumes appFields, timeHi, iIsReversed)
+//   else if appFields → K_APP_FIELDS
+//
+// Broader-subsumes-narrower: when sceneData fires it covers the appFields and
+// timeHi regions, matching the upload site's else-if structure. The full /
+// !didFullUploadOnce path is handled by the caller via fullUploadRegions().
+// ============================================================================
+
+UboUploadRegionList BaseUniformProfile::dirtyRegions(const UboDirtyFlags& flags) const
+{
+    using namespace UboRegions;
+
+    UboUploadRegionList regions;
+
+    if (flags.time) {
+        regions.push(UboUploadRegion{static_cast<int>(K_TIME_BLOCK_OFFSET), static_cast<int>(K_TIME_BLOCK_SIZE)});
+    }
+    if (flags.timeHi && !flags.sceneData) {
+        regions.push(UboUploadRegion{static_cast<int>(K_TIME_HI_OFFSET), static_cast<int>(K_TIME_HI_SIZE)});
+    }
+    if (flags.sceneData) {
+        regions.push(UboUploadRegion{static_cast<int>(K_SCENE_HEADER_OFFSET), static_cast<int>(K_SCENE_HEADER_SIZE)});
+    } else if (flags.appFields) {
+        regions.push(UboUploadRegion{static_cast<int>(K_APP_FIELDS_OFFSET), static_cast<int>(K_APP_FIELDS_SIZE)});
+    }
+
+    return regions;
+}
+
+} // namespace PhosphorShaders

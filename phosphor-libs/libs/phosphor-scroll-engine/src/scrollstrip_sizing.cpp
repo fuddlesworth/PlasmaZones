@@ -1,0 +1,1057 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorScrollEngine/ScrollStrip.h>
+
+#include <QtGlobal>
+
+#include <algorithm>
+#include <cmath>
+
+namespace PhosphorScrollEngine {
+
+int ScrollStrip::activeTileCrossPx(const ScrollLayoutParams& params) const
+{
+    // activeTileIdx, NOT activeWindowId(): the height verbs write through
+    // activeTileMutable, which indexes activeTileIdx, and activeWindowId()
+    // deliberately falls back to another tile when that one is minimized.
+    // Measuring a different tile than the one about to be written is exactly
+    // the mismatch that makes a verb report success while nothing moves.
+    const Column* col = activeColumn();
+    if (!col || col->activeTileIdx < 0 || col->activeTileIdx >= col->tiles.size()) {
+        return -1;
+    }
+    const QString windowId = col->tiles.at(col->activeTileIdx).windowId;
+    const ResolvedStrip resolved = relayout(params);
+    for (const ResolvedColumn& rc : resolved.columns) {
+        if (rc.columnIndex != m_activeColumnIdx) {
+            continue;
+        }
+        for (const ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return params.axis.crossSize(rt.rect);
+            }
+        }
+    }
+    return -1;
+}
+
+int ScrollStrip::activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const
+{
+    const Column* col = activeColumn();
+    if (!col) {
+        return -1;
+    }
+    const int workH = params.axis.crossSize(params.workArea);
+    if (workH <= 0) {
+        return -1; // degenerate area, the height verbs' bail
+    }
+    // A tabbed column stacks nothing, so it spends no inner gaps and its whole
+    // budget is the cross extent — tabbedColumnCrossPx caps its owner's intent
+    // at exactly that.
+    if (col->display == ColumnDisplay::Tabbed) {
+        return workH;
+    }
+    const int visibleTiles = col->visibleTileCount();
+    // relayout's availH for this column, verbatim: the gaps BETWEEN the
+    // visible tiles come out of the budget, and the floor keeps a pixel for
+    // each of them so a crowded column cannot resolve to nothing.
+    return qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
+}
+
+int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) const
+{
+    const Column* col = activeColumn();
+    if (!col || col->activeTileIdx < 0 || col->activeTileIdx >= col->tiles.size()) {
+        return -1;
+    }
+    const Tile* tile = &col->tiles.at(col->activeTileIdx);
+    const int workH = params.axis.crossSize(params.workArea);
+    if (workH <= 0) {
+        return -1;
+    }
+    const bool tabbed = col->display == ColumnDisplay::Tabbed;
+    const int reservationPx = tabbed ? tabbedCrossReservationPx(*col, params) : 0;
+    // The engine's own declared shortest tile is the floor under the client's.
+    // Every producer that spells a height as a FRACTION clamps against
+    // MinWindowHeightFraction (the preset list parser, the per-screen preset
+    // override list, the persisted blob's Preset arm, the open rule's height
+    // fraction); the repeatable verbs would otherwise be the ones that could
+    // walk a window down to a single pixel with minimum sizes off.
+    const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
+    // tileMinCrossPx: the frame minimum raised to any share the client's own
+    // commits hold the tile to, which the relayout clamps to the same way.
+    int clientFloor = params.respectMinimumSize ? tileMinCrossPx(*tile, *col, params) : 0;
+    if (tabbed && params.respectMinimumSize) {
+        // The whole tab SET's minimum, matching tabbedColumnCrossPx: every
+        // visible tab is committed at this one rect, so a shrink stopped at
+        // the SHOWN tab's minimum alone would write an extent that relayout
+        // clamps straight back up, which is a success verdict per press with
+        // nothing moving.
+        for (const Tile& t : col->tiles) {
+            if (!t.minimized) {
+                clientFloor = qMax(clientFloor, tileMinCrossPx(t, *col, params));
+            }
+        }
+    }
+    // Both floors are in WINDOW space, and while tabbed the value being
+    // clamped is the COLUMN, so the reservation is added once on the outside
+    // rather than to either of them. Capped at the cross extent as well: a
+    // frame minimum larger than the work area (reachable through a work-area
+    // shrink after the minimum was recorded) would otherwise invert the
+    // qBound its callers apply.
+    return qBound(1, qMax(fractionFloor, clientFloor) + reservationPx, workH);
+}
+
+bool ScrollStrip::claimTabbedHeightOwnership(Column& c, int tileIdx, const WindowHeight& incoming)
+{
+    // Only a tabbed column HAS an extent owner; in a stack every tile's own
+    // height governs its own slice, so there is nothing to claim.
+    //
+    // An Auto write claims nothing, which is the rule that keeps an ARRIVAL
+    // from seizing the column: a tile is inserted carrying the context default
+    // height, and every re-insert path (the cross-output move, the unfloat,
+    // the drag-cancel, the stash restore) re-states it through
+    // setWindowHeightIntent. If Auto could claim, each of those would hand a
+    // tabbed column to the arriving tab and resolve it to the whole work area,
+    // discarding the extent the resident owner had.
+    if (c.display != ColumnDisplay::Tabbed || incoming.kind == WindowHeight::Auto || tileIdx < 0
+        || tileIdx >= c.tiles.size()) {
+        return false;
+    }
+    const QString& id = c.tiles.at(tileIdx).windowId;
+    if (c.heightOwnerId == id) {
+        return false;
+    }
+    // Moving the owner is the WHOLE operation. Nothing else is written: the
+    // tabs that no longer own the extent keep the heights they carry, which
+    // is what lets untabbing put the stack back the way the user built it.
+    // Writing an Auto owner is legitimate and means "the whole work area" —
+    // tabbedColumnCrossPx resolves it there rather than scanning past it.
+    c.heightOwnerId = id;
+    return true;
+}
+
+bool ScrollStrip::applyColumnDisplay(Column& c, ColumnDisplay display)
+{
+    if (c.display == display) {
+        return false;
+    }
+    c.display = display;
+    if (display == ColumnDisplay::Tabbed) {
+        // Entering tabbed: the tab on show takes the extent. It is the only
+        // defensible choice at the transition — the alternative is to let the
+        // stack order decide, which hands the column to whichever tile sits
+        // first regardless of what the user was looking at when they pressed
+        // the key. Nothing is cleared, so the flip is reversible.
+        const int owner = qBound(0, c.activeTileIdx, qMax(0, c.tiles.size() - 1));
+        c.heightOwnerId = c.tiles.isEmpty() ? QString() : c.tiles.at(owner).windowId;
+    } else {
+        // Leaving tabbed: every tile's own height governs again, so the
+        // ownership is meaningless and is dropped rather than left to go
+        // stale. Because it was only ever a POINTER, the intents it arbitrated
+        // between are all still intact and the stack comes back as it was.
+        //
+        // The cost is on the way back. A tabbed -> normal -> tabbed round trip
+        // hands the extent to the tab on show at the second flip, not to the
+        // tab that owned it before, so the column's cross extent changes
+        // across the round trip whenever those two differ and carry different
+        // intents. Accepted rather than remembered: a Normal column holds no
+        // owner anywhere else either (Column::heightOwnerId, and the rotate
+        // clears one from a Normal slot), and the entering rule above is one
+        // the user can see and steer, by showing the tab they want sizing the
+        // column before tabbing it.
+        c.heightOwnerId.clear();
+    }
+    return true;
+}
+
+bool ScrollStrip::setActiveColumnWidth(const ColumnWidth& width)
+{
+    Column* col = activeColumnMutable();
+    // A width write on a maximized-to-edges column drops the flag first (the
+    // user is sizing the column, so the override has been countermanded) and
+    // that alone is a change even when the incoming intent equals the stored
+    // one the flag was hiding.
+    if (!col || (col->width == width && !col->maximizedToEdges)) {
+        return false;
+    }
+    col->maximizedToEdges = false;
+    col->width = width;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return reattachViewIf(true);
+}
+
+bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params)
+{
+    Column* col = activeColumnMutable();
+    if (!col || params.presetColumnWidths.isEmpty() || (delta != -1 && delta != 1)) {
+        return false;
+    }
+    // ONE path for every current kind, entered from the rendered extent
+    // rather than from a stored vocabulary index: there is no index to read
+    // back, so a short template vocabulary can never rewrite the anchor's
+    // original intent. Where the cycle ENTERS is niri's rule
+    // (cyclePresetIndexByExtent, whose doc carries the parity note and the
+    // wrap's reason): the nearest entry wider than what the column renders at
+    // going forward, the nearest narrower going back, wrapping at each end to
+    // the vocabulary's own narrowest and widest. The old "nearest
+    // entry, step when it already matches" rule could answer a NARROWER
+    // preset for a forward press — a column resized to sit just above one
+    // entry entered at that entry and shrank.
+    const int count = params.presetColumnWidths.size();
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false;
+    }
+    // Width verbs act on the STORED intent: drop a maximize-to-edges override
+    // before measuring, so the cycle enters from the width the column returns
+    // to rather than from the raw-area extent the flag was rendering. The
+    // drop is itself a change, reported even when the cycle then refuses.
+    const bool clearedEdges = col->maximizedToEdges;
+    col->maximizedToEdges = false;
+    // The RENDERED extent, matching adjustActiveColumnWidth and the entry
+    // rule's premise: a column pinned to its floor (columnMinExtentPx, a
+    // frame minimum or a committed floor) resolves to a narrower intent than
+    // it draws, and entering from the intent would step to a preset it is
+    // already wider than, so the press moved nothing.
+    const int currentPx = columnExtentPx(*col, params);
+    if (currentPx <= 0) {
+        return reattachViewIf(clearedEdges); // empty or fully minimized column: nothing to size
+    }
+    const int idx = cyclePresetIndexByExtent(count, currentPx, delta, [&](int i) {
+        return resolveColumnWidthPx(ColumnWidth::makePreset(params.presetColumnWidths.at(i)), params);
+    });
+    const ColumnWidth result = ColumnWidth::makePreset(params.presetColumnWidths.at(idx));
+    if (col->width == result) {
+        // Single-entry preset list (or a step that landed where we already
+        // are): report no change so the engine skips a pointless relayout —
+        // unless dropping a maximize-to-edges override above IS the change.
+        return reattachViewIf(clearedEdges);
+    }
+    // The entry has to RENDER somewhere else too. Under a floor at or past it
+    // (a backward press from a floored column, or a wrap to the narrowest
+    // entry) the new intent resolves to the very extent the column already
+    // draws, and writing it would report a resize nobody can see while
+    // burying the old intent under one the floor hides. Measured on a copy so
+    // the refusal leaves the column exactly as it found it.
+    Column probe = *col;
+    probe.width = result;
+    if (columnExtentPx(probe, params) == currentPx) {
+        return reattachViewIf(clearedEdges);
+    }
+    col->width = result;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return reattachViewIf(true);
+}
+
+bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params)
+{
+    // deltaPercent is exported API and reaches qRound below, which is
+    // undefined for a NaN, an infinity, or a product past int's range. The
+    // daemon only ever passes a shortcut's integer percent, but an embedder of
+    // this class can pass anything, so a non-finite delta is refused here
+    // (qFuzzyIsNull answers false for one, so the zero test does not cover it)
+    // and a finite one is bounded to a whole work area either way. That bound
+    // changes no result: a larger step already clamps to the work area going
+    // up and to the floor going down.
+    if (!std::isfinite(deltaPercent)) {
+        return false;
+    }
+    deltaPercent = qBound(-100.0, deltaPercent, 100.0);
+    Column* col = activeColumnMutable();
+    if (!col || qFuzzyIsNull(deltaPercent)) {
+        return false;
+    }
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false; // degenerate area: qBound(1, …, workW) would invert
+    }
+    // Stored-intent basis, cycleActiveColumnPresetWidth's reason: drop a
+    // maximize-to-edges override before measuring, and report the drop as a
+    // change even when the adjustment itself then refuses.
+    const bool clearedEdges = col->maximizedToEdges;
+    col->maximizedToEdges = false;
+    // Measure from what is ON SCREEN, not from the bare intent: a column
+    // sitting at its floor (columnMinExtentPx) resolves to a narrower intent
+    // than it renders, and stepping from the intent would let a shrink write
+    // ever smaller values while nothing moved, so the matching grow presses
+    // then did nothing visible until they climbed back out of that hole.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return reattachViewIf(clearedEdges); // empty or fully minimized column: nothing to size
+    }
+    // Floor, the twin of the one adjustActiveWindowHeight applies across the
+    // strip: the engine's declared narrowest column, raised to the column's
+    // own floor (columnMinExtentPx: its frame minimum and any committed
+    // floor) when minimum sizes are respected. Every producer that
+    // spells a width as a FRACTION already clamps against it (the config
+    // read's Proportion arm, the rule overrides, the preset list parser, the
+    // persisted blob), and without this the repeatable verb was the one that
+    // could walk a column down to a single pixel and commit that extent to the
+    // client. The px-valued spellings (the config read's Fixed arm, a px rule
+    // override, a client-supplied open or handoff width) still floor at 1 by
+    // design: those are one-shot values a user or a client asked for by
+    // number, not a key that repeats while held.
+    const int fractionFloor = qMax(1, qRound(MinColumnWidthFraction * workW));
+    const int floorPx = qBound(1, qMax(fractionFloor, columnMinExtentPx(*col, params)), workW);
+    // Lowered to the current extent when the column already renders BELOW the
+    // floor, so a shrink can never widen it. That state is ordinary, not
+    // pathological: every producer that clamps as a FRACTION resolves through
+    // proportionalPx (round(f * (work + gap)) - gap), which lands a gap's
+    // worth under fractionFloor's bare round(f * work) — minimizeActiveColumnWidth
+    // writing Proportion(MinColumnWidthFraction) is exactly such a column. A
+    // bare floorPx there would make the Shrink shortcut grow the column and
+    // report success. A grow press is unaffected: its target clears the
+    // current extent either way.
+    const int lowerPx = qMin(floorPx, current);
+    const int target = qBound(lowerPx, current + qRound(deltaPercent / 100.0 * workW), workW);
+    if (target == current) {
+        return reattachViewIf(clearedEdges);
+    }
+    col->width = ColumnWidth::makeFixed(target);
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return reattachViewIf(true);
+}
+
+bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
+{
+    return toggleMaximizeColumnAt(m_activeColumnIdx, params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params)
+{
+    // columnOfWindow answers -1 for a window this strip does not hold, which
+    // the index guard below turns into a refusal rather than an action on
+    // some other column. That is the whole point of the window-scoped entry:
+    // a maximize request arriving for a window the strip cannot place must do
+    // nothing, not maximize whichever column happens to be active.
+    return toggleMaximizeColumnAt(columnOfWindow(windowId), params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params)
+{
+    if (columnIndex < 0 || columnIndex >= m_columns.size()) {
+        return false;
+    }
+    Column* col = &m_columns[columnIndex];
+    // Degenerate work area, the same bail its sibling width verbs (cycle,
+    // adjust, equalize, minimize) take.
+    // This one writes PERSISTED intent: with a zero main extent the
+    // full-width compare below reads true for anything, and the branch would
+    // overwrite the column's stored width with a half-work-area proportion
+    // and report success against a viewport that does not exist.
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false;
+    }
+    // A column PINNED BY ITS FLOOR (a frame minimum or a committed floor,
+    // columnMinExtentPx) cannot be made narrower, so neither arm below can
+    // move it. Refusing is the honest answer and the same shape the sibling
+    // width verbs take at their own floors: without it the press rewrites
+    // persisted intent, renders identical pixels, and still returns true —
+    // which costs a relayout and raises a "resize" success OSD for a press
+    // that did nothing, forever, on every press.
+    //
+    // Purely this verb's own honesty rule now: nothing on the wire depends on
+    // it. The published maximizedToEdges flag is DECLARED state on its own
+    // toggle, so this width verb has no wire mirror to keep in step with.
+    //
+    // DEAD END, deliberate and unfixable here: a column that was maximized and
+    // whose floor THEN reaches the work area lands in this refusal on the
+    // un-maximize press, so it can never be un-maximized and
+    // m_preMaximizeWidth stays armed for it indefinitely. Letting the press
+    // through would not help — the relayout floors the column there, so it
+    // would render full width regardless, and the user would get the same
+    // pixels plus a spent slot. Where the window has outgrown the strip, the
+    // way out is the engine's oversized float, not this verb, and that float
+    // fires only PAST the work area: on a declared minimum wider than it when
+    // the minimum is reported (ScrollEngine::windowMinSizeUpdated), and on a
+    // committed floor that with the tab reservation is wider than it when the
+    // client teaches it (ScrollEngine::reportCommittedSize). This refusal
+    // starts AT the work area, so a floor that lands exactly on it, or a
+    // declared minimum that reaches it only with the tab reservation added,
+    // floats nothing and stays here until the floor drops (a lowered minimum,
+    // the user's own resize, a narrower answer from the client).
+    if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
+        return false;
+    }
+    // A width verb, so a maximize-to-edges override drops first (the sibling
+    // verbs' rule) and the toggle then runs against the stored intent —
+    // rendersFullWidth below reads the intent, so the arms are unaffected by
+    // what the flag was rendering. Cleared AFTER the refusals above (a press
+    // this verb refuses must not half-act by silently un-maximizing), and no
+    // return needs adjusting: every arm past this point reports true.
+    col->maximizedToEdges = false;
+    // Every arm below succeeds, so a press on the ACTIVE column re-attaches
+    // here (reattachViewIf's reason). A window-addressed request naming a
+    // column that is not the active one leaves the view as it was.
+    reattachViewIf(columnIndex == m_activeColumnIdx);
+    const ColumnWidth full = ColumnWidth::makeProportion(1.0);
+    // EVERY full-width test here compares RESOLVED PIXELS, never the intent
+    // value. ColumnWidth::operator== compares kind first, so Fixed(<work area
+    // main>), Preset(1.0) and Proportion(1.0) all render identically and only
+    // one of them is == full. The pixel compare matters because every other
+    // route to a full-width column (adjustActiveColumnWidth clamping, preset
+    // cycling, expand, an interactive edge-drag's reconcile, a
+    // cross-screen handoff, expel, the minimize round trip, a restore from
+    // disk) must enter this toggle's un-maximize arm on the next press. On a
+    // value compare those columns took the "not full" arm, which re-stored
+    // the slot and wrote Proportion(1.0) — visually nothing, reported as
+    // success. The defaultIsFullWidth test below already worked in pixels for
+    // exactly this reason; the other two agree with it. (The wire flag no
+    // longer measures anything — it is the declared maximize-to-edges state —
+    // so the titlebar button is out of this verb's picture entirely.)
+    const int workMain = params.axis.mainSize(params.workArea);
+    const auto rendersFullWidth = [&params, workMain](const ColumnWidth& w) {
+        return resolveColumnWidthPx(w, params) >= workMain;
+    };
+    if (!rendersFullWidth(col->width)) {
+        m_preMaximizeWidth = col->width;
+        m_preMaximizeColumnIdx = columnIndex;
+        col->width = full;
+        return true;
+    }
+    // The stored intent is re-validated against the CURRENT work area and
+    // axis, not trusted. The slot holds a raw ColumnWidth captured whenever
+    // the column was maximized, and nothing invalidates it when the output
+    // resizes or the strip flips axis — a Fixed(px) captured on a wider work
+    // area (or on the other axis) resolves clamped back to full width, so
+    // restoring it would consume the slot, change nothing visible, and report
+    // success. Falling through to the default-width arm in the same press is
+    // what keeps "the toggle always does something" true.
+    if (m_preMaximizeColumnIdx == columnIndex && !rendersFullWidth(m_preMaximizeWidth)) {
+        col->width = m_preMaximizeWidth;
+        m_preMaximizeColumnIdx = -1;
+        return true;
+    }
+    // Full width with no usable stored intent for THIS column (maximized in
+    // an earlier session, another column's maximize discarded the single
+    // stored slot, or the slot no longer resolves narrow): fall back to the
+    // default width so the toggle can always un-maximize instead of dead-
+    // ending. A user whose DEFAULT is itself full width would dead-end on
+    // that fallback, so take half the work area in that case.
+    const bool defaultIsFullWidth = rendersFullWidth(params.defaultColumnWidth);
+    col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
+    // A stale slot pointing at this column is spent either way — leaving it
+    // armed would make the NEXT maximize restore a width this press discarded.
+    //
+    // KEPT despite being unobservable today, and the reasoning is worth
+    // recording so it is not deleted as dead. Reaching here leaves the column
+    // NARROWER than full, so the next press takes the maximize arm above and
+    // overwrites the slot before anything reads it. Even the roundabout route
+    // — widening back to full through expand, then pressing —
+    // re-enters this same arm, because the stale slot still renders full and
+    // fails the restore arm's !rendersFullWidth test. So no sequence currently
+    // reads the value this line clears. It stays because "the slot describes
+    // THIS column's pre-maximize width" is the invariant the other three arms
+    // are written against, and a future arm that reads the slot without
+    // re-validating it would inherit a discarded width silently.
+    if (m_preMaximizeColumnIdx == columnIndex) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    // Unconditionally true: both arms leave the column narrower than the full
+    // width it had on entry, so the toggle always did something.
+    return true;
+}
+
+bool ScrollStrip::toggleMaximizeToEdgesActiveColumn(const ScrollLayoutParams& params)
+{
+    return toggleMaximizeToEdgesAt(m_activeColumnIdx, params);
+}
+
+bool ScrollStrip::toggleMaximizeToEdgesForWindow(const QString& windowId, const ScrollLayoutParams& params)
+{
+    // columnOfWindow answers -1 for a window this strip does not hold; the
+    // index guard below turns that into a refusal rather than an action on
+    // some other column — toggleMaximizeColumnForWindow's reason, verbatim.
+    return toggleMaximizeToEdgesAt(columnOfWindow(windowId), params);
+}
+
+bool ScrollStrip::toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutParams& params)
+{
+    if (columnIndex < 0 || columnIndex >= m_columns.size()) {
+        return false;
+    }
+    // Degenerate work area, the sibling verbs' bail: the flag persists, so
+    // arming it against a viewport that does not exist writes intent the
+    // user never saw rendered.
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false;
+    }
+    Column& col = m_columns[columnIndex];
+    // Pure declared state: no pinned-by-minimum refusal (nothing is measured
+    // and the stored width is untouched, so there is no press that rewrites
+    // intent while rendering identical pixels), and no pre-maximize slot
+    // (clearing the flag IS the restore). A column whose frame minimum is
+    // wider than the raw area still moves when toggled, since the flag swaps
+    // the gapped, floored extent for the raw one and its neighbours shift
+    // with it, but its client overhangs the column either way. The toggle
+    // also moves the mirrored KWin bit, which is the half the titlebar button
+    // needs.
+    col.maximizedToEdges = !col.maximizedToEdges;
+    // A width change of the active column like any other: the maximized
+    // column has exactly one correct position (focusAnchorFor), which a
+    // detached view would never be moved to.
+    reattachViewIf(columnIndex == m_activeColumnIdx);
+    return true;
+}
+
+bool ScrollStrip::setMaximizedToEdgesForWindow(const QString& windowId, bool maximized)
+{
+    const int ci = columnOfWindow(windowId);
+    if (ci < 0 || m_columns.at(ci).maximizedToEdges == maximized) {
+        return false;
+    }
+    m_columns[ci].maximizedToEdges = maximized;
+    return true;
+}
+
+bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false; // degenerate area, the sibling width verbs' bail
+    }
+    // Stored-intent basis, the sibling width verbs' rule: without the drop a
+    // maximized-to-edges column measures at the raw main extent and the
+    // full-width early-out below refuses a verb whose promise is "grow".
+    const bool clearedEdges = col->maximizedToEdges;
+    col->maximizedToEdges = false;
+    // Measured from what is ON SCREEN, matching adjustActiveColumnWidth and
+    // matching the `taken` walk below, which sums columnExtentPx. Stepping
+    // from the bare intent would mismatch the two: a column held at its
+    // floor (a frame minimum or a committed floor) resolves to a narrower
+    // intent than it renders, so target could land BELOW the rendered
+    // extent, leaving the screen unchanged while the verb reported success
+    // and buried the proportional anchor under a smaller Fixed value.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return reattachViewIf(clearedEdges); // empty or fully minimized column: nothing to expand
+    }
+    // Already filling the viewport: niri's `col.is_full_width` early-out.
+    // Taken before either toggle branch below so both of them MAXIMIZE — the
+    // toggle's un-maximize arm is the wrong answer for a verb whose whole
+    // promise is "grow".
+    if (current >= workW) {
+        return reattachViewIf(clearedEdges);
+    }
+    // A centering policy pins the active column to the middle of the
+    // viewport, so its position after the resize is not ours to choose and
+    // "fill what is left" has no stable answer. niri takes the simple way out
+    // here and so do we: maximize, which the user can back out of.
+    if (isCenteringActiveColumn(params)) {
+        return reattachViewIf(toggleMaximizeActiveColumn(params) || clearedEdges);
+    }
+    // niri's accounting: only the columns lying ENTIRELY in the viewport are
+    // counted as taking space. A straddler's on-screen pixels are reclaimable
+    // — the expansion pushes it out of view — which is the whole difference
+    // between this and measuring the strip's covered interval, the form that
+    // let a clipped neighbour eat the leftover it was about to be pushed out
+    // of. The active column must itself be fully visible: for a straddler
+    // there is no meaningful answer, since the leftover is measured against a
+    // position the column does not fully occupy.
+    const QVector<int> visible = fullyVisibleColumnIndices(params);
+    if (!visible.contains(m_activeColumnIdx)) {
+        return reattachViewIf(clearedEdges);
+    }
+    int taken = params.gap * (visible.size() - 1);
+    for (int idx : visible) {
+        taken += columnExtentPx(m_columns.at(idx), params);
+    }
+    const int leftover = workW - taken;
+    if (leftover <= 0) {
+        return reattachViewIf(clearedEdges);
+    }
+    // The active column is the only one fully on screen, so it is about to
+    // take the whole viewport. niri routes that through the maximize toggle
+    // rather than writing the width, "as it lets you back out of it more
+    // intuitively" — a Fixed(workW) would strand the column at full width
+    // with no un-maximize to undo it.
+    if (visible.size() == 1) {
+        return reattachViewIf(toggleMaximizeActiveColumn(params) || clearedEdges);
+    }
+    const int target = qMin(workW, current + leftover);
+    if (target == current) {
+        // Same pixels: rewriting the intent (a Proportion(1.0) becoming a
+        // Fixed of the identical extent) moves nothing on screen but would
+        // report success and destroy the proportional anchor a later
+        // work-area change would have honoured.
+        return reattachViewIf(clearedEdges);
+    }
+    col->width = ColumnWidth::makeFixed(target);
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    // The leftover was measured as if the fully visible group started at the
+    // lead edge, so put it there, equalizeVisibleColumnWidths' re-derive. The
+    // anchor is ACTIVE-relative, so keeping it would hold the active column
+    // where it was: a lead-edge straddler would keep its on-screen pixels and
+    // the growth would push the group's trailing columns past the trailing
+    // edge by exactly the pixels reclaimed. With the group's lead column at
+    // the lead edge the group fills the viewport and the straddler is pushed
+    // fully out of view, niri's result. No detach: a centering policy took
+    // the maximize branch above, and under the others updateViewForFocus
+    // leaves a fully visible active column where it is.
+    m_viewAnchor = columnStripPos(m_activeColumnIdx, params) - columnStripPos(visible.first(), params);
+    return reattachViewIf(true);
+}
+
+bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
+{
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false; // degenerate area, the sibling width verbs' bail
+    }
+    // Drop the ACTIVE column's maximize-to-edges override BEFORE measuring —
+    // expandActiveColumnToAvailableWidth's drop-then-measure order. A
+    // maximized active column measures at the RAW main extent, which pushes
+    // the neighbours it is drawn over along the strip and out of the group,
+    // and those neighbours are exactly what the user asked to share the
+    // screen with. The drop is itself the change, the rule
+    // setActiveColumnWidth states.
+    //
+    // The other members are measured AS DRAWN, override and all, and their
+    // overrides drop in the write loop below. Two rules, deliberately: the
+    // active column's override is the one this verb is asked to undo, while
+    // a maximized neighbour that is drawn at the raw extent is a column the
+    // user sees at that size, and the view it covers is the view the group is
+    // taken from.
+    //
+    // It is PROVISIONAL until the verb commits, though, because the measure it
+    // enables can still land on a bail: a lone column or an off-screen active
+    // one refuses, and refusing while having silently un-maximized the column
+    // would be a change the user asked equalize for and did not get. Every
+    // bail puts it back.
+    Column* active = activeColumnMutable();
+    const bool clearedEdges = active && active->maximizedToEdges;
+    if (clearedEdges) {
+        active->maximizedToEdges = false;
+    }
+    const auto restoreEdges = [active, clearedEdges] {
+        if (clearedEdges) {
+            active->maximizedToEdges = true;
+        }
+        return false;
+    };
+    // Every column whose strip span intersects the viewport, clipped ones
+    // included. Counting only the fully visible ones left the verb dead after
+    // the commonest way columns become unequal, a hand resize that widens one
+    // and pushes its neighbour part way past the edge, since one fully
+    // visible column has nothing to equalize against. The re-anchor below
+    // lands the group's lead column at the lead edge, so a clipped column
+    // taken in ends up whole on screen.
+    //
+    // Intersection is the strip model's answer, not the compositor's: under
+    // the default edge clamp the engine PARKS a straddler whose sliver is
+    // under its peek floor (resolveTilePlacement), so a member can be one
+    // nothing currently draws. It joins all the same and comes back as a full
+    // share, which is the point of pressing the key with a column pushed off.
+    const QVector<int> visible = visibleColumnIndices(params);
+    // One column has nothing to equalize against; "equal" would mean "full
+    // width", which is maximize's job.
+    const int n = visible.size();
+    if (n < 2) {
+        return restoreEdges();
+    }
+    // The active column must be IN the group: the anchor is re-derived
+    // below to put the group's first column at the lead edge, and an active
+    // column a pan left wholly off screen would stay there, held by the
+    // detached view.
+    if (!visible.contains(m_activeColumnIdx)) {
+        return restoreEdges();
+    }
+    // Shares of the MAIN extent net of the gaps BETWEEN the group, so the
+    // group still tiles the viewport edge to edge afterwards.
+    const int usable = workW - (n - 1) * params.gap;
+    if (usable < n) {
+        return restoreEdges(); // gaps alone outrun the viewport: no share is a pixel
+    }
+    // A column whose floor (its tiles' minimum, or a committed floor) exceeds
+    // its share cannot take it: what renders is columnExtentPx, which floors
+    // the column there, so writing the share would push the group past the
+    // trailing edge and then read back as "already there" on the next press.
+    // Such a column keeps its floor and the others split what is left,
+    // repeated until every share clears the floors it was measured against.
+    QVector<int> extents(n);
+    QVector<bool> floorBound(n, false);
+    for (int k = 0; k < n; ++k) {
+        extents[k] = columnMinExtentPx(m_columns.at(visible.at(k)), params);
+    }
+    int pool = usable;
+    int free = n;
+    // Each round pins every free column whose floor exceeds the current
+    // share; a round that pins nothing means the remaining shares clear
+    // their floors, and a round that pins the last free column ends it.
+    for (bool pinned = true; pinned && free > 0;) {
+        pinned = false;
+        const int share = pool / free;
+        for (int k = 0; k < n; ++k) {
+            if (!floorBound.at(k) && extents.at(k) > share) {
+                floorBound[k] = true;
+                pool -= extents.at(k);
+                --free;
+                pinned = true;
+            }
+        }
+    }
+    // The floors alone outrun the viewport: nothing to share. A group with
+    // every column floor-bound always lands here through pool < free, since
+    // each pin takes a floor larger than the share it was measured against;
+    // free == 0 is spelled out anyway because the share below divides by it.
+    if (free == 0 || pool < free) {
+        return restoreEdges();
+    }
+    // The remainder of the division goes to the LAST free column rather
+    // than being dropped: dropping it would leave a sliver of dead space that
+    // expand-column would then report as reclaimable.
+    const int share = pool / free;
+    // Floored at the fraction floor adjustActiveColumnWidth applies to its
+    // own write, MinColumnWidthFraction of the bare work area. A clipped member
+    // charges its WHOLE floor to the pool, not the part on screen, so a
+    // mostly off-screen column with a large minimum could otherwise squeeze
+    // every other member, the active one included, down to a pixel. Refused
+    // rather than clamped, because a clamped share would no longer tile the
+    // viewport.
+    if (share < qMax(1, qRound(MinColumnWidthFraction * workW))) {
+        return restoreEdges();
+    }
+    int remainder = pool - share * free;
+    for (int k = n - 1; k >= 0; --k) {
+        if (!floorBound.at(k)) {
+            extents[k] = share + remainder;
+            remainder = 0;
+        }
+    }
+    bool changed = clearedEdges;
+    for (int k = 0; k < n; ++k) {
+        Column& col = m_columns[visible.at(k)];
+        // Equalize is a width verb over the whole group: a maximize-to-edges
+        // override on any member drops, and the drop is itself a change.
+        if (col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
+        const ColumnWidth target = ColumnWidth::makeFixed(extents.at(k));
+        // Compared in RENDERED pixels, for toggleMaximizeActiveColumn's
+        // reason: a Proportion that already renders to the share must not be
+        // rewritten as a Fixed of the identical extent, which would move
+        // nothing on screen while reporting success and destroying the
+        // proportional anchor a later work-area change would honour.
+        if (columnExtentPx(col, params) == extents.at(k)) {
+            continue;
+        }
+        col.width = target;
+        if (m_preMaximizeColumnIdx == visible.at(k)) {
+            m_preMaximizeColumnIdx = -1;
+        }
+        changed = true;
+    }
+    // The anchor is ACTIVE-relative (viewOffset = columnStripPos(active) -
+    // anchor), so rewriting a column LEAD of the active one would slide the
+    // whole group under the active column's pinned screen position and clip
+    // the first column at the lead edge. The shares were measured against
+    // the whole viewport, so the group's lead column now belongs AT the lead
+    // edge: re-derive the anchor to put it there. A column clipped at the
+    // lead edge is the group's lead column, so it comes fully into view, and
+    // one clipped at the trailing edge ends where the viewport does.
+    //
+    // The view is part of the verdict, not only the widths. With clipped
+    // columns in the group, shares that already match no longer imply a group
+    // that tiles the viewport: a small pan after an equalize, or a centering
+    // policy re-centering an equal group, leaves a member clipped with every
+    // extent unchanged. A group not flush at the lead edge is therefore a
+    // change on its own, and the press brings it flush.
+    //
+    // And DETACH the view, the way a pan does: edge to edge is this verb's
+    // promise, and under Always the next layout pass would otherwise
+    // re-center the active column and clip the group again, so the position
+    // the press chose would last one frame. A detached view is left alone
+    // until something re-attaches it (the class doc's View detachment section
+    // lists what does), so the second press finds the group exactly as the
+    // first left it and refuses.
+    // Deliberately NOT a centering verb (those re-attach): it chose a view
+    // position the policy did not.
+    const int groupAnchor = columnStripPos(m_activeColumnIdx, params) - columnStripPos(visible.first(), params);
+    if (groupAnchor != m_viewAnchor) {
+        changed = true;
+    }
+    if (changed) {
+        m_viewAnchor = groupAnchor;
+        m_viewDetached = true;
+    }
+    return changed;
+}
+
+bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area, same bail as the sibling verbs
+    }
+    // Stored-intent basis, the sibling width verbs' rule.
+    const bool clearedEdges = col->maximizedToEdges;
+    col->maximizedToEdges = false;
+    // The smallest preset is the narrowest width the user has NAMED, which
+    // beats the engine floor when a list exists: a Preset intent follows the
+    // vocabulary if the list is later edited, where a Proportion at the floor
+    // would be stranded at a value nothing else uses. The list is NOT sorted:
+    // the settings schema's canonicalProportionList deduplicates but keeps the
+    // order the user typed, and neither parsePresets nor the per-screen override
+    // PARSER sorts or deduplicates. A template list arrives already sorted,
+    // having been normalised upstream in phosphor-zones before it rides that
+    // same override transport. So the minimum has to be searched for rather
+    // than read off the front.
+    const QList<qreal>& presets = params.presetColumnWidths;
+    const ColumnWidth target = presets.isEmpty()
+        ? ColumnWidth::makeProportion(MinColumnWidthFraction)
+        : ColumnWidth::makePreset(*std::min_element(presets.cbegin(), presets.cend()));
+    // RENDERED-pixel compare, equalizeVisibleColumnWidths' reason: what the
+    // user sees is columnExtentPx, the intent raised to the column's floor (a
+    // minimum size or a committed floor). A column whose floor already sits at
+    // or above the smallest preset would move nothing on screen if the intent
+    // were rewritten, and the verb would report success for a no-op (then
+    // refuse the second press). Comparing the floored target against the
+    // floored current width makes the first press refuse too. Capped at the
+    // work area's main extent the way columnExtentPx caps what it measures: a
+    // floor PAST the work area (a frame minimum or committed floor wider than
+    // the output, or a work area that shrank under one) renders the column at
+    // the cap, and an uncapped target would never equal it, so every press
+    // would report a resize with nothing moving.
+    const int floorPx = columnMinExtentPx(*col, params);
+    const int targetPx =
+        qMin(qMax(resolveColumnWidthPx(target, params), floorPx), params.axis.mainSize(params.workArea));
+    if (columnExtentPx(*col, params) == targetPx) {
+        return reattachViewIf(clearedEdges);
+    }
+    col->width = target;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return reattachViewIf(true);
+}
+
+bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
+                                  const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
+                                  const ScrollLayoutParams& params)
+{
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area: writes persisted intent, so bail
+    }
+    bool changed = false;
+    for (Column& col : m_columns) {
+        // Intent compare, not resolved pixels: this verb's promise is "back
+        // to what the layout says", and a Fixed that happens to render to the
+        // default's extent is still not the default intent — it would not
+        // follow a later work-area change the way the default would. No
+        // default width at all means the client's own size IS the default,
+        // and the width the column opened at is the closest thing to it.
+        if (defaultWidth && !(col.width == *defaultWidth)) {
+            col.width = *defaultWidth;
+            changed = true;
+        }
+        // "Back to the layout's defaults" leaves nothing maximized: a
+        // maximize-to-edges override drops whenever a default width is
+        // supplied, matching the pre-maximize slot clear below and covering
+        // the column whose stored width already equals the default.
+        if (defaultWidth && col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
+        // Through applyColumnDisplay so a column this write turns Tabbed gets
+        // its extent owner established, and one it turns Normal drops it.
+        // Nothing is cleared either way, so the nullopt-height arm below still
+        // keeps every intent exactly as it found it.
+        if (applyColumnDisplay(col, defaultDisplay)) {
+            changed = true;
+        }
+        // No default height at all means the client's own size IS the
+        // default, exactly as for width above: the heights the windows opened
+        // at are the closest thing to it, so they are left alone.
+        if (defaultHeight) {
+            for (Tile& tile : col.tiles) {
+                // Back to the layout's defaults means no window keeps a
+                // maximize to undo, the same reasoning equalize carries.
+                tile.preMaximizeHeight.reset();
+                if (!(tile.height == *defaultHeight)) {
+                    tile.height = *defaultHeight;
+                    changed = true;
+                }
+            }
+        }
+        // The nullopt-height arm leaves a column the display write just
+        // turned Tabbed holding several non-Auto tiles, and that is now
+        // harmless: applyColumnDisplay named an owner at the transition, so
+        // the extent is decided without any tile being rewritten. The
+        // forced-Auto pass used to collapse them as a side effect, which is
+        // the collapse this arm exists not to perform.
+    }
+    // Nothing is maximized once every column is at the default, so the slot
+    // would otherwise hand a stale intent to the next un-maximize. Keyed on a
+    // default width being SUPPLIED, not on one having been written: a column
+    // already sitting at a full-width default needs no write and is still
+    // un-maximized afterwards, which is the case resetToDefaultsClearsThe-
+    // PreMaximizeSlot pins. Under "the client decides" there is no default,
+    // the widths stay as they are, a maximized column stays maximized, and
+    // clearing the slot would make the next un-maximize fall back to the
+    // half-width proportion instead of the width the user had before.
+    //
+    // "Un-maximized afterwards" holds for every default except one that
+    // itself RENDERS at full width. Those columns still render full width
+    // (the declared maximize-to-edges flag is cleared above, so nothing reads
+    // as maximized on the wire), and toggleMaximizeColumnAt's no-slot arm is
+    // what gives the user a way back out of them.
+    if (defaultWidth) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    // Every column may have changed size, the active one included, so a
+    // successful reset hands the view back like the single-column width verbs.
+    return reattachViewIf(changed);
+}
+
+bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged,
+                                      bool crossChanged, const ScrollLayoutParams& params)
+{
+    const int colIdx = columnOfWindow(windowId);
+    // isEmpty (not merely isValid): a 0x0 ack is "valid" to QSize but would
+    // reconcile into a 1px column.
+    if (colIdx < 0 || ackedSize.isEmpty()) {
+        return false;
+    }
+    Column& col = m_columns[colIdx];
+    bool changed = false;
+    // Only take the column's extent when the resize actually MOVED it along
+    // the strip (the engine compares the gesture's start frame with the frame
+    // it ended on): a resize purely ACROSS the strip must not convert a
+    // Proportion/Preset intent into Fixed pixels — that would stop the column
+    // reflowing on work-area, preset-list, and DPI changes.
+    //
+    // The acked size is a PHYSICAL QSize from the compositor, so it has to be
+    // decoded by role here. Reading .width() unconditionally would, on a
+    // vertical strip, feed the cross extent into the column's intent while the
+    // guard above still spoke about the main one — the resize would appear to
+    // work and then relayout into the wrong shape, with both intents pinned to
+    // Fixed pixels on the wrong axes.
+    if (mainChanged) {
+        // An interactive main-axis resize is a width write like any other, so
+        // a maximize-to-edges override drops with it — BEFORE the equality
+        // test, and the drop is itself the change, exactly the rule
+        // setActiveColumnWidth states. Inside the branch the drop was skipped
+        // whenever the acked extent resolved equal to the intent the override
+        // was hiding, and the next relayout then snapped the column back to
+        // the raw extent, reverting the user's drag.
+        if (col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
+        // Unlike the width VERBS this leaves a detached view detached: the
+        // user released the edge where they wanted it, and handing the view
+        // to the policy here would move the column out from under the pointer
+        // that just placed it.
+        //
+        // Lifted into COLUMN space, the main-axis twin of the cross arm's lift
+        // below: a tabbed column whose indicator eats the main axis offers its
+        // tabs the column less tabbedMainReservationPx, while the ack is the
+        // WINDOW's own extent. Written bare, a main-edge drag of such a tab
+        // settles one reservation narrower than where it was released. Zero
+        // on every other column.
+        const ColumnWidth acked =
+            ColumnWidth::makeFixed(params.axis.mainSize(ackedSize) + tabbedMainReservationPx(col, params));
+        if (!(col.width == acked)) {
+            col.width = acked;
+            changed = true;
+            // Same invariant as every other width mutator in this file: a
+            // width write invalidates a pending maximize-toggle restore for
+            // this column. Unlike those mutators this one is keyed on the
+            // RESIZED column, which need not be the active one.
+            if (m_preMaximizeColumnIdx == colIdx) {
+                m_preMaximizeColumnIdx = -1;
+            }
+        }
+    }
+    // Same guard as the column's: a resize purely ALONG the strip must not
+    // convert the tile's cross-axis intent into Fixed pixels. Lone tiles
+    // included — relayout honors a solo tile's Fixed height (niri parity), so
+    // an interactive cross-axis resize of a lone window sticks instead of
+    // snapping back.
+    if (crossChanged) {
+        // Dropped before the equality test for the main-axis arm's reason: an
+        // interactive cross-axis resize is a height write, and leaving the
+        // override standing on an equal-resolving ack lets the next relayout
+        // snap the column back to the raw extent.
+        if (col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
+        const int ti = col.indexOfWindow(windowId);
+        // Lifted into COLUMN space first, the conversion the height sizing
+        // verbs make: on a tabbed column the height intent sizes the column
+        // (tabbedColumnCrossPx) and the tabs are then committed at the column
+        // minus the indicator's cross-axis reservation, while the ack here is
+        // the WINDOW's own extent. Without the lift every interactive
+        // cross-edge drag would settle one reservation short of where it was
+        // released. Zero on every other column, and on a tabbed one whose
+        // indicator eats the main axis or is not placed within the column.
+        const WindowHeight ackedH =
+            WindowHeight::makeFixed(params.axis.crossSize(ackedSize) + tabbedCrossReservationPx(col, params));
+        // The settled height is recorded even when it is SHORT of the one just
+        // applied, and deliberately so on two counts.
+        //
+        // First, what reaches here is a USER's finished interactive resize and
+        // nothing else: onWindowResized is called only from the daemon's
+        // notifyWindowResized, which the effect fires only from
+        // windowFinishUserMovedResized gated on KWin's isUserResize(). A
+        // client resizing itself never reaches here (its answer to an offered
+        // tile goes to ScrollEngine::reportCommittedSize, which learns only a
+        // floor), so this arm cannot be a client overruling the engine — it is
+        // the user choosing a size, and recording it is the whole point of the
+        // function.
+        //
+        // Second, refusing to record it would not even be safe: returning
+        // false sends onWindowResized into its refused-ack branch, which only
+        // excuses a displacement when the client is pinned LARGER than the
+        // applied rect (pinnedAtMinW/H both require newFrame > lastApplied).
+        // A short frame is unexplained, so it schedules a retile, which
+        // re-applies the same rect, which a client that will not take it
+        // refuses again — the self-driving loop that branch's own comment
+        // describes.
+        //
+        // toggleMaximizeActiveWindowHeight reads this intent back to decide
+        // whether the tile is maximized, so a user resize legitimately makes
+        // it stop reading as maximized. That is the intended interaction, not
+        // a casualty of one; ScrollStrip.h carries the full note.
+        //
+        // The dragged tab becomes the column's sole height owner, the same
+        // claim the keyboard verbs make: the column is sized by the tab
+        // Column::heightOwnerId names, so without the claim a drag on tab B
+        // would settle B's intent and the column would then snap back to the
+        // owning tab A's older one.
+        if (claimTabbedHeightOwnership(col, ti, ackedH)) {
+            changed = true;
+        }
+        // A user who has just dragged this window to a height of their own has
+        // countermanded the maximize, so the restore slot goes with it — the
+        // same rule every keyboard height verb follows, and the reason the
+        // toggle's next press maximizes rather than restoring.
+        col.tiles[ti].preMaximizeHeight.reset();
+        if (!(col.tiles.at(ti).height == ackedH)) {
+            col.tiles[ti].height = ackedH;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+} // namespace PhosphorScrollEngine

@@ -1,0 +1,471 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "screenchangehandler.h"
+#include "tilinghandler/tilinghandler.h"
+#include "handlers/snaphandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+
+#include <QDBusArgument>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QPointer>
+
+Q_LOGGING_CATEGORY(lcScreenChange, "kwin.effect.plasmazones.screenchange", QtWarningMsg)
+
+namespace PlasmaZones {
+
+namespace {
+// Debounce interval for virtualScreenGeometryChanged signals. KWin fires this
+// multiple times per screen connect/disconnect/resolution change. 500ms lets
+// all signals from a single user action settle before we process.
+constexpr int ScreenChangeDebounceMs = 500;
+
+// Whether @p w can reserve screen-edge space (a strut) and so must be tracked
+// for work-area reporting. Plasma panels and X11 docks report isDock(). A
+// layer-shell panel from a third-party shell (e.g. a phosphor-shell bar with
+// an exclusive zone) does NOT — KWin classifies it as an unmovable NORMAL
+// window (isDock()=false, isNormalWindow()=true, isMovable()=false) — so an
+// isDock()-only gate leaves its strut changes unreported and the daemon's
+// compositor work-area override goes stale. Match those by "Wayland client
+// the user cannot interactively move", excluding the unmovable states that
+// cannot carry an exclusive zone: xdg popups (tooltips/menus — they churn on
+// open/close), fullscreen windows, and special windows (desktop, splash,
+// notifications, OSDs). Over-matching is cheap — a tracked window that never
+// reserves space only costs one signal connection, and every report the
+// daemon receives with an unchanged rect is deduplicated there.
+bool mayReserveScreenEdge(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    if (w->isDock()) {
+        return true;
+    }
+    return w->isWaylandClient() && !w->isMovable() && !w->isPopupWindow() && !w->isFullScreen() && !w->isSpecialWindow()
+        && !w->isDesktop();
+}
+} // namespace
+
+ScreenChangeHandler::ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* parent)
+    : QObject(parent)
+    , m_effect(effect)
+{
+    m_screenChangeDebounce.setSingleShot(true);
+    m_screenChangeDebounce.setInterval(ScreenChangeDebounceMs);
+    connect(&m_screenChangeDebounce, &QTimer::timeout, this, &ScreenChangeHandler::applyScreenGeometryChange);
+
+    m_lastVirtualScreenGeometry = KWin::effects->virtualScreenGeometry();
+}
+
+void ScreenChangeHandler::stop()
+{
+    m_screenChangeDebounce.stop();
+    // Suppress any client-area report still queued for a later event-loop
+    // turn — without this guard it would fire a stray D-Bus call between
+    // stop() and this handler's destruction.
+    m_stopped = true;
+    m_evacueeRecords.clear();
+    m_settleBaseline.clear();
+    m_deferredCrossings.clear();
+    m_skippedAnnounces.clear();
+    m_placeholderOpens.clear();
+    m_cascadeOutputs.clear();
+    m_movedOutsideCascade.clear();
+    m_outputSetChanged = false;
+}
+
+void ScreenChangeHandler::slotScreenGeometryChanged()
+{
+    // Post-stop() signals are dropped: the handler has released its side of
+    // the daemon conversation and must not restart the debounce or issue
+    // D-Bus work during teardown.
+    if (m_stopped) {
+        return;
+    }
+    // Debounce screen geometry changes to prevent rapid-fire updates.
+    // virtualScreenGeometryChanged can fire multiple times for monitor
+    // connect/disconnect, arrangement changes, resolution changes, etc.
+    QRect currentGeometry = KWin::effects->virtualScreenGeometry();
+    qCInfo(lcScreenChange) << "virtualScreenGeometryChanged fired"
+                           << "- current:" << currentGeometry << "- previous:" << m_lastVirtualScreenGeometry
+                           << "- pending:" << m_pendingScreenChange;
+
+    if (currentGeometry == m_lastVirtualScreenGeometry && !m_pendingScreenChange) {
+        qCDebug(lcScreenChange) << "Screen geometry unchanged, ignoring signal";
+        return;
+    }
+    slotOutputGeometryChanged();
+}
+
+void ScreenChangeHandler::slotOutputGeometryChanged()
+{
+    if (m_stopped) {
+        return;
+    }
+    // No union test here: an arrangement change can move outputs and keep the
+    // union (F806), and the windows KWin carries along wait for the settle.
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
+    openOutputCascade();
+    m_pendingScreenChange = true;
+    m_screenChangeDebounce.start(); // Restart timer (debounce)
+
+    // A resolution / arrangement change moves panels and resizes the work
+    // area — re-push KWin's clientArea so the daemon's available geometry
+    // tracks the new layout instead of a stale compositor override.
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::applyScreenGeometryChange()
+{
+    if (!m_pendingScreenChange) {
+        return;
+    }
+
+    QRect currentGeometry = KWin::effects->virtualScreenGeometry();
+    qCInfo(lcScreenChange) << "Applying debounced screen geometry change"
+                           << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
+
+    m_pendingScreenChange = false;
+
+    // Only reposition windows when the virtual screen SIZE changed.
+    // Position-only changes (e.g. exiting KDE panel edit mode) should not move windows.
+    const QSize previousSize = m_lastVirtualScreenGeometry.size();
+    const QSize currentSize = currentGeometry.size();
+    const bool sizeChanged = (previousSize != currentSize);
+
+    m_lastVirtualScreenGeometry = currentGeometry;
+
+    // Always refresh virtual screen definitions — physical screen geometry
+    // (including position) changed, so virtual screen absolute coordinates
+    // need recalculation from the daemon.
+    if (m_effect->m_daemonGate.serviceRegistered) {
+        m_effect->fetchAllVirtualScreenConfigs();
+    }
+
+    // The settle runs whatever the size did: a 1080p monitor sleeping onto
+    // KWin's 1080p placeholder, or an unplug and replug inside one debounce,
+    // leaves the size unchanged and still moved windows (F749).
+    sendSettleReport();
+
+    if (!sizeChanged) {
+        // Even when physical size is unchanged, virtual screen split ratio changes
+        // require window repositioning. Only proceed if VS configs exist; otherwise
+        // there's nothing to reposition.
+        if (!m_effect->m_daemonGate.serviceRegistered || m_effect->m_virtualScreenDefs.isEmpty()) {
+            qCDebug(lcScreenChange) << "Screen size unchanged, no VS configs — skipping window repositioning";
+            return;
+        }
+        qCDebug(lcScreenChange) << "Screen size unchanged but VS configs present — repositioning windows";
+    }
+
+    if (m_reapplyInProgress) {
+        m_reapplyPending = true;
+        return;
+    }
+    fetchAndApplyWindowGeometries();
+}
+
+void ScreenChangeHandler::slotScreenLayoutChanged()
+{
+    if (m_stopped) {
+        return;
+    }
+    // KWin emits screenAdded / screenRemoved before per-window outputChanged
+    // signals for windows it reassigns when an output appears or disappears.
+    // virtualScreenGeometryChanged — which the geometry-debounce slot above
+    // listens for — fires later in the same cascade, leaving a window where
+    // outputChanged can be processed with no screen-change flag set. The
+    // output arm (window_output_connections.cpp) defers every crossing while
+    // isScreenChangeInProgress(), and the baseline the settle compares
+    // against has to be taken before KWin moves anything, so both start at
+    // the earliest point KWin tells us anything is happening to the output
+    // set.
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
+    openOutputCascade();
+    m_outputSetChanged = true;
+    m_pendingScreenChange = true;
+    m_screenChangeDebounce.start();
+
+    // A real layout change also moves panels — re-push the work area for the
+    // same reason slotScreenGeometryChanged does. Coalesces via the queued
+    // continuation, so a burst of screenAdded / screenRemoved + a trailing
+    // virtualScreenGeometryChanged collapse into one client-area report.
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::slotReapplyWindowGeometriesRequested()
+{
+    if (m_stopped) {
+        return;
+    }
+    qCInfo(lcScreenChange) << "Daemon requested re-apply of window geometries (e.g. after panel editor close)";
+    if (m_reapplyInProgress) {
+        m_reapplyPending = true;
+        return;
+    }
+    fetchAndApplyWindowGeometries();
+}
+
+void ScreenChangeHandler::fetchAndApplyWindowGeometries()
+{
+    if (!m_effect->isDaemonReady("get updated window geometries")) {
+        return;
+    }
+    m_reapplyInProgress = true;
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    QPointer<ScreenChangeHandler> self(this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (!self) {
+            return;
+        }
+        self->m_reapplyInProgress = false;
+        QDBusPendingReply<PhosphorProtocol::WindowGeometryList> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcScreenChange) << "No window geometries to update";
+        } else {
+            self->applyWindowGeometries(reply.value());
+        }
+        if (self->m_reapplyPending) {
+            self->m_reapplyPending = false;
+            QTimer::singleShot(0, self, [self]() {
+                // m_stopped as well as the QPointer: stop() can run between
+                // this continuation being posted and dispatched, and the
+                // fetch would then issue a D-Bus call during teardown (same
+                // guard the queued client-area report carries).
+                if (self && !self->m_stopped) {
+                    self->fetchAndApplyWindowGeometries();
+                }
+            });
+        } else {
+            // A crossing deferred while this reapply was in flight has no
+            // settle of its own left to replay it.
+            self->replayDeferredCrossings();
+        }
+    });
+}
+
+void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries)
+{
+    if (geometries.isEmpty()) {
+        qCDebug(lcScreenChange) << "Empty geometries list from daemon";
+        return;
+    }
+    qCInfo(lcScreenChange) << "Applying geometries to" << geometries.size() << "windows";
+
+    struct ApplyEntry
+    {
+        QPointer<KWin::EffectWindow> window;
+        QRect geometry;
+        quint64 commandStamp = 0; ///< see WindowCommandStamps
+        QString screenId; ///< the daemon's answer for the zone's screen
+    };
+    QVector<ApplyEntry> toApply;
+
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> valid;
+    QStringList validIds;
+    for (const auto& entry : geometries) {
+        if (entry.windowId.isEmpty()) {
+            qCDebug(lcScreenChange) << "Skipping geometry entry with empty windowId";
+            continue;
+        }
+        if (entry.width <= 0 || entry.height <= 0) {
+            qCDebug(lcScreenChange) << "Skipping geometry entry with invalid size for" << entry.windowId;
+            continue;
+        }
+        valid.append(&entry);
+        validIds.append(entry.windowId);
+    }
+
+    // The effect's shared batch resolve: an entry naming a live window gets
+    // that window or nothing, and only an entry naming no live window falls
+    // back to the ONE unclaimed window of its app. The old first-seen app map
+    // handed a stale entry to whichever same-app window it met first.
+    const QVector<KWin::EffectWindow*> resolved = m_effect->resolveDaemonWindowIds(validIds, /*admitFullscreen=*/true);
+    for (int i = 0; i < valid.size(); ++i) {
+        const auto& entry = *valid.at(i);
+        KWin::EffectWindow* const window = resolved.at(i);
+        if (window) {
+            const QString winScreenId = m_effect->getWindowScreenId(window);
+            if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
+                qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
+                                        << winScreenId;
+                continue;
+            }
+            // A zone on another output is never applied from here: a window
+            // KWin moved off its zone's output was classified at the settle
+            // (an evacuee floats where it is, a user move unsnaps it), and
+            // putting it back is the daemon's verdict, not a resnap (F616).
+            if (!entry.screenId.isEmpty()
+                && m_effect->outputForScreenId(entry.screenId) != m_effect->windowOutput(window)) {
+                qCDebug(lcScreenChange) << "Skipping" << entry.windowId << "whose zone is on" << entry.screenId;
+                continue;
+            }
+            // A window on a desktop or activity not in view would not ack the
+            // configure: its zone is re-applied when that desktop is shown. The
+            // park is keyed by the live id the arrival drain resolves windows
+            // by, never the daemon's spelling of it (F1079).
+            if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
+                m_effect->snapHandler()->armDesktopArrivalRestore(m_effect->getWindowId(window),
+                                                                  DesktopArrivalParks::Cause::ReapplyOnly);
+                continue;
+            }
+            QRect newGeometry = entry.toRect();
+            QRectF currentWindowGeometry = window->frameGeometry();
+            if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
+                // Bumped only for an entry this pass will actually apply: a
+                // skipped window keeps whatever command it already has pending.
+                toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry,
+                                m_effect->m_daemonGate.commandStamps.bump(window), entry.screenId});
+            }
+        }
+    }
+
+    m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
+        const ApplyEntry& e = toApply[i];
+        // A newer command for the window since this pass scheduled it (a daemon
+        // batch, a keyboard move, a float) wins over this resnap.
+        // A fullscreen window was admitted at build time for the re-statement
+        // that keeps it, so it is admitted here too.
+        if (e.window && !e.window->isDeleted()
+            && m_effect->shouldHandleWindow(e.window, nullptr, /*exemptFullscreen=*/e.window->isFullScreen())
+            && m_effect->m_daemonGate.commandStamps.isCurrent(e.window.data(), e.commandStamp)) {
+            // Re-check at apply time (mirrors the build-time guard above): the
+            // window's screen can flip to autotile during the stagger interval,
+            // and a snap-path applyWindowGeometry would then fight the autotile
+            // engine for placement.
+            if (m_effect->m_tilingHandler->isManagedScreen(m_effect->getWindowScreenId(e.window))) {
+                return;
+            }
+            qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
+            // A monitor reconnect can hand back a window the session left
+            // KWin-maximized; placing its zone rect without the placement
+            // statement re-arms the cross-screen restore it exists for.
+            const PlacementStatement::Verdict verdict = m_effect->m_tilingHandler->preparePlacement(
+                e.window, e.geometry, PlacementStatement::Purpose::Restatement);
+            if (!verdict.apply) {
+                return; // a maximized or fullscreen window keeps it, the zone seated (F509)
+            }
+            // Pre-seed and bracket, the pair every daemon-driven apply carries:
+            // the configure's frame change is asynchronous (F294).
+            if (!e.screenId.isEmpty()) {
+                m_effect->m_trackedScreenPerWindow[e.window] = e.screenId;
+                m_effect->m_tilingHandler->updateNotifiedScreen(m_effect->getWindowId(e.window), e.screenId);
+            }
+            const auto applyGuard = m_effect->geometryApplyScope();
+            // Resolution-change resnap: the effect-local twin of the daemon's
+            // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
+            m_effect->applyWindowGeometry(e.window, verdict.applyRect, /*allowDuringDrag=*/false,
+                                          /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowLayoutSwitch,
+                                          QRectF(), QRectF(), PlacementStatement::Purpose::Restatement);
+        }
+    });
+}
+
+void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
+{
+    // The daemon's own overlay shell passes mayReserveScreenEdge (an unmovable
+    // Normal-typed Wayland window) but never reserves space, and it maps and
+    // unmaps with every overlay show, so tracking it would push a work-area
+    // report on each one. Excluded here and in onWindowClosed alike.
+    if (!mayReserveScreenEdge(w) || PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
+        return;
+    }
+    // A panel mapped (or was already mapped at effect startup). KWin reserves
+    // and adjusts its strut asynchronously, and the panel itself may resize
+    // during its own lifetime (config changes, content-driven thickness).
+    // Hook frame-geometry changes so every strut adjustment re-pushes the
+    // work area. `this` as the connection context auto-disconnects the lambda
+    // when either the panel's EffectWindow or this handler is destroyed.
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this]() {
+        scheduleClientAreaReport();
+    });
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::onWindowClosed(KWin::EffectWindow* w)
+{
+    if (!mayReserveScreenEdge(w) || PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
+        return;
+    }
+    // A panel closed — its strut is freed and KWin grows the work area.
+    scheduleClientAreaReport();
+}
+
+void ScreenChangeHandler::scheduleClientAreaReport()
+{
+    if (m_stopped) {
+        return; // Handler is shutting down — no further reports.
+    }
+    if (m_clientAreaReportQueued) {
+        return; // A report is already queued for this event-loop turn.
+    }
+    m_clientAreaReportQueued = true;
+    // Queued, not timed: every scheduleClientAreaReport() in the current
+    // event-loop turn collapses onto this one continuation, which Qt
+    // dispatches after the turn's synchronous work — including KWin's own
+    // strut recompute for the dock signal that triggered us — has run. No
+    // arbitrary delay, and `this` as the context object means the call is
+    // dropped if the handler is destroyed before it fires.
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_clientAreaReportQueued = false;
+            if (m_stopped) {
+                return; // stop() ran after this report was queued.
+            }
+            reportClientArea();
+        },
+        Qt::QueuedConnection);
+}
+
+void ScreenChangeHandler::reportClientArea()
+{
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        // Bridge not registered yet — continueDaemonReadySetup() re-schedules
+        // a report once it is, so dropping this one loses nothing.
+        return;
+    }
+
+    // clientArea(MaximizeArea) is the exact panel-excluded work area KWin
+    // reserves for maximized windows: correct per-edge strut attribution,
+    // and auto-hide panels (no strut) correctly excluded. KWin 6.7 dropped the
+    // per-desktop overload (clientArea is now resolved against the current
+    // desktop internally); a desktopChanged signal still re-schedules a report
+    // so per-desktop panels stay tracked.
+    const auto outputs = KWin::effects->screens();
+    for (KWin::LogicalOutput* output : outputs) {
+        if (!output) {
+            continue;
+        }
+        const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, output).toRect();
+        // isValid() is the exact negation of isEmpty() for QRect — a degenerate
+        // (zero/negative-size) work area is skipped by this single check.
+        if (!work.isValid()) {
+            continue;
+        }
+        qCDebug(lcScreenChange) << "Reporting KWin work area for" << output->name() << "=" << work;
+        PhosphorProtocol::ClientHelpers::fireAndForget(
+            this, PhosphorProtocol::Service::Interface::Screen, QStringLiteral("setAvailableGeometryFromKWin"),
+            {output->name(), work.x(), work.y(), work.width(), work.height()},
+            QStringLiteral("setAvailableGeometryFromKWin"));
+    }
+}
+
+} // namespace PlasmaZones

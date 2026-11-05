@@ -1,5 +1,5 @@
-# SPDX-FileCopyrightText: 2026 PlasmaZones contributors
-# SPDX-License-Identifier: GPL-3.0
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Run qmlformat -i on each file. Ignores per-file failures so one bad
 # QML does not fail the format-qml target. Invoked as:

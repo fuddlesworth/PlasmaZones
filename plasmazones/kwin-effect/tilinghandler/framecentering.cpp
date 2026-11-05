@@ -1,0 +1,1020 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Frame-commit handling for TilingHandler: slotWindowFrameGeometryChanged,
+// which centres a tile whose client committed a smaller size than it was
+// asked for and reports a minimum size it discovers on the way,
+// reportMinSizeIfChanged, the min-size reporter it shares with the batch,
+// noteMinSizeDecorationChanged, which re-reports that minimum when the
+// window's decoration changes, reportStripCommit, which reports a strip
+// window's answer to its offered column (read by
+// PlasmaZonesEffect::readColumnAnswer), cancelStripQuickTile, which takes
+// KWin's quick tile back off a strip tile through dropKWinTile and
+// answerDroppedTileAck, which the batch shares, and
+// stripOutputMovedSinceBatch, whether a strip's output moved since its batch.
+// Split out of tiling.cpp, which keeps the tile batch pipeline.
+
+#include "tilinghandler.h"
+#include "centringdecisions.h"
+#include "scrolldecisions.h"
+#include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
+#include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/gestureenddecisions.h"
+#include "plasmazoneseffect/shader_internal.h"
+#include "compositor/windowanimator.h"
+#include "compositor/effectlogging.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+#include <window.h>
+#include <workspace.h>
+
+#include <QDBusError>
+#include <QDBusPendingCallWatcher>
+#include <QLoggingCategory>
+#include <QScopeGuard>
+
+namespace PlasmaZones {
+
+void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
+{
+    // isDeleted: every other entry point bails on a corpse BEFORE the id
+    // lookup, explicitly to avoid re-polluting the scrubbed id caches; this
+    // slot sees strictly more geometry changes since the counter-assert
+    // widened its fast bail.
+    if (!w || w->isDeleted()) {
+        return;
+    }
+
+    // Fast bail: skip getWindowId entirely when no consumer below needs it
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_tileTargetZones.isEmpty()
+        && m_effect->m_scrollCommandedRects.isEmpty()) {
+        return;
+    }
+
+    const QString windowId = m_effect->getWindowId(w);
+
+    // Counter-assert for a scroll-managed window an EXTERNAL mover relocated.
+    // X11 clients for the self-mover reason below; column-maximize members on
+    // either platform, because KWin's own maximize-area re-assert is an
+    // external mover the self-mover reasoning does not cover.
+    // Any frame change landing here outside our own apply
+    // bracket was not ours: X11 clients can reposition themselves through
+    // ConfigureRequests KWin honors, and a Wine game re-asserting its
+    // saved window position was seen live pulling its frame back on-screen
+    // out of the strip's park and straddle placements — sitting over its
+    // neighbour's column until the next user scroll, because the engine's
+    // emit-on-change gate had nothing to say. Re-apply the commanded rect,
+    // without animation (this is enforcement, not motion). The counter is
+    // RATE-LIMITED to 3 per rolling second (the window resets once a second
+    // elapses since the burst started, and every fresh batch command
+    // re-arms it) — a client that re-asserts a POSITION on every configure
+    // gets countered at most 3 times per rolling second PER COMMAND, so it
+    // does not win outright. A SIZE is different since #1157: an X11 client
+    // that answers the same size again under one command is learned, kept
+    // and reported to the engine (ScrollDecisions::x11ForeignSizeVerdict).
+    // Note the budget is re-armed by every fresh batch command (the insert
+    // resets the pair, deliberately), so on a scrolling strip the effective
+    // ceiling is three per batch rather than three per second.
+    //
+    // User-move/resize terms: DragTracker never tracks an interactive
+    // RESIZE at all (its start handler bails on isUserResize), and a mouse
+    // drag stays live past forceEnd until all buttons release — in both
+    // gaps isDragging() is false while the user is actively manipulating
+    // the frame, and the counter would fight the user's own gesture.
+    // The commandedRect entry survives a resize that STARTS after the
+    // batch (the per-batch disarm only covers one already in flight).
+    //
+    // Screen gate through scrollTrackedScreenFor, not the raw notified map:
+    // the apply loop marks tiled (bar a window in its own fullscreen) but
+    // records the screen only for notified windows, so a demoted window is a
+    // tiled member with no recorded screen — the helper resolves that
+    // (fail-closed either way; the helper just fails closed for the right
+    // set).
+    // Wayland is excluded for the SELF-mover reason above, except where KWin
+    // itself is the mover: a column-maximize member has KWin's own
+    // maximize-area re-assert, and a column committed outside its output has
+    // the KWin 6.8 keep-visible clamp described below. Those populations arm a
+    // commanded rect at the apply site for exactly this, and nothing else
+    // reaches it, so the general exclusion and its reasoning stand.
+    // A maximized-to-edges member whose maximize bit is mid-transition is exempt
+    // on EVERY platform, XWayland included, and that exemption is what keeps
+    // the counter off the user's own restore.
+    //
+    // KWin emits frameGeometryChanged before maximizedChanged (on X11 both from
+    // inside maximize(), on Wayland both from the commit that answers it), so
+    // on a restore click this slot runs first: the frame
+    // has already moved to the restore rect while m_scrollCommandedRects still
+    // holds the maximized column's rect, and the interception has not yet run,
+    // let alone dispatched the toggle the engine will answer with a narrower
+    // batch. Unqualified, the counter reads that as an external mover and
+    // shoves the window back to full width, which the arriving batch then
+    // undoes — a full-width bounce on every restore, seen live at 14ms.
+    //
+    // Nothing is given up. The mover this arm was added for is KWin's own
+    // maximize-area re-assert, which by definition happens while the window IS
+    // maximized, so it still passes. What no longer passes is a frame change
+    // that arrives with the bit already gone, which is never that mover: it is
+    // a maximize/restore transition, and the commanded rect describing the
+    // layout the engine is in the middle of replacing has no authority over
+    // it. Enforcement resumes as soon as the batch re-arms the entry.
+    // The transition test gates the WHOLE predicate, not just the Wayland
+    // member arm. XWayland windows are handled inside this Wayland session and
+    // report isWaylandClient() false, so a member arm qualified only on the
+    // right of the || is unreachable for them: the first disjunct
+    // short-circuits true and the restore bounce described above survives
+    // untouched on every XWayland scroll-managed window. Hoisting it keeps the
+    // X11 arm intact for the mover it exists for (a client moving ITSELF, the
+    // Wine case) while exempting the one frame change that is never an
+    // external mover on either platform.
+    // A NON-member asking for a maximize is in a transition too: on X11 KWin
+    // moves it to the work area before the interception hands the request to
+    // the engine, and countering that frame bounced it back to its column
+    // (F973).
+    //
+    // A column the strip committed OUTSIDE its output (a park, or a straddler
+    // cropped at the edge) has a third mover on KWin 6.8, on either platform:
+    // XdgToplevelWindow::handleRoleCommit runs confineInteractiveMove on every
+    // commit that acks a configure (a deactivation, a suspend, a scale change)
+    // or changes the window geometry on its own, pulling the frame back until
+    // its title bar shows. That population arms a commanded rect too
+    // (outOfView), and is put back by POSITION alone (see
+    // ScrollDecisions::counterAssertsByPosition): a move() sends no configure
+    // of its own and leaves the leaving leg that is still drawing the column
+    // alone, where the re-apply below would drop it. A Wayland re-seat takes
+    // the budget only when it hands the window to another output (the one
+    // Workspace::outputAt picks for the seat, against the moveResizeOutput KWin
+    // holds for it): KWin then re-sends the output's scale, transform and
+    // colour description, the configure that carries them is acked, and that
+    // commit is clamped again, so the pair would loop. A re-seat that stays on
+    // the same output schedules nothing and answers a commit the client made
+    // anyway, so it is never refused. X11 re-seats take the budget always.
+    KWin::Window* kwCounter = w->window();
+    // The mode each one rests in: a member maximized, anything else restored.
+    const KWin::MaximizeMode modeAtRest =
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+    const bool inMaximizeTransition = kwCounter && kwCounter->requestedMaximizeMode() != modeAtRest;
+    const bool maximizedMember = kwCounter && m_maximizedToEdgesWindows.contains(windowId)
+        && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull;
+    const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
+    const bool armed = cit != m_effect->m_scrollCommandedRects.end();
+    const bool externallyMovable = armed
+        && ScrollDecisions::counterAssertMovable(inMaximizeTransition, w->isWaylandClient(), maximizedMember,
+                                                 cit->outOfView);
+    // Only while the strip apply that armed the rect is still the window's
+    // latest command: a snap or float command issued since (a cross-mode move
+    // before the strip's release lands) owns the window now (F71). Nor while
+    // the outputs are changing or the strip's output has moved since its
+    // batch: the rect is in the old coordinates, and the next batch re-arms
+    // it in the new ones (F815). A PARK is the exception, re-checked against
+    // the outputs as they are now instead: a configure reaches every window
+    // when the outputs change, each ack is clamped, and a rect still off every
+    // output keeps the column out of sight whatever coordinates it was built
+    // in. Nor for a frame KWin moved onto another output whole (its Move to
+    // Screen): a real move, which the output arm hands over (F738). Nor for a
+    // window going fullscreen: KWin commits the fullscreen frame before the
+    // state, and the apply this replaces bailed on it (fullscreenBailsApply).
+    if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()
+        && !m_effect->fullscreenBailsApply(w) && !isKWinMoveOfStripTile(w, windowId)) {
+        // One tracked-screen resolve for both readers below (F361).
+        const QString trackedScreen = scrollTrackedScreenFor(windowId);
+        const bool coordinatesHold = cit->parked ? rectAtScrollPark(cit->rect)
+                                                 : !m_effect->m_screenChangeHandler->isScreenChangeInProgress()
+                && !stripOutputMovedSinceBatch(trackedScreen);
+        if (isScrollingScreen(trackedScreen) && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)
+            && coordinatesHold
+            && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+            const QRect actual = w->frameGeometry().toRect();
+            // Within rounding, not exact: QRect sizes from toRect() depend on
+            // where the rect sits, so a pure X11 self-move at a fractional
+            // XWayland scale can read a pixel off the command, and an
+            // out-of-view column then took a full re-apply instead of the
+            // position re-seat (F334).
+            const bool sizeMatches = ScrollDecisions::withinCommittedSizeTolerance(actual.size(), cit->rect.size());
+            bool byPosition = ScrollDecisions::counterAssertsByPosition(cit->outOfView, w->isWaylandClient(),
+                                                                        maximizedMember, sizeMatches);
+            // An X11 client at a size its batch did not command: put back the
+            // first time, kept when it insists and the frame reads as its
+            // answer to the column, which the frame hook then reports (#1157).
+            const bool x11ForeignSize = !byPosition && !w->isWaylandClient() && !sizeMatches;
+            if (x11ForeignSize) {
+                // A client that raises its minimum and resizes to it in one
+                // step lands here, and the put-back below cannot take: the
+                // re-apply is constrained to the new minimum. The min-size
+                // channel is what tells the engine, change-gated like the
+                // batch poll it shares (F287).
+                reportMinSizeIfChanged(windowId, declaredMinSize(w));
+                // The verdict first with the frame taken as readable: only a
+                // Learn can turn on readsAsAnswer, so the frame is read only
+                // for a size seen insisting (F210). The offer is copied out
+                // rather than read through an iterator held across that
+                // read (F562).
+                if (ScrollDecisions::x11ForeignSizeVerdict(cit->rect.size(), actual.size(), cit->putBackSize,
+                                                           /*readsAsAnswer=*/true)
+                    == ScrollDecisions::ForeignSizeVerdict::Learn) {
+                    if (const auto offerIt = m_effect->m_scrollOfferedColumn.constFind(windowId);
+                        offerIt != m_effect->m_scrollOfferedColumn.constEnd()) {
+                        const ScrollOfferedColumn offer = *offerIt;
+                        if (m_effect->frameReadsAsColumnAnswer(w, windowId, offer, actual)) {
+                            // The size this command learned, which the report
+                            // and the size-continuity carry read as the
+                            // client's answer (ScrollDecisions::x11SizeAnswersColumn).
+                            cit->learnedSize = actual.size();
+                            byPosition = true;
+                        }
+                    }
+                }
+            }
+            if (byPosition) {
+                // Seated in the column the strip OFFERED where there is one, as
+                // the offered-column centring and the paint resolver seat it,
+                // so the three agree. A maximized column has no offer; its
+                // commanded rect is the column.
+                const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+                const QPoint seat = ScrollDecisions::reseatOrigin(
+                    offer != m_effect->m_scrollOfferedColumn.constEnd() ? offer->rect : cit->rect, actual.size());
+                // KWin's own test, mirrored: Window::move resolves the output at
+                // the float centre of the moved rect at its COMMANDED size and
+                // switches only when that differs from the one it holds.
+                const bool switchesOutput = kwCounter
+                    && KWin::Workspace::self()->outputAt(
+                           QRectF(QPointF(seat), QRectF(kwCounter->moveResizeGeometry()).size()).center())
+                        != kwCounter->moveResizeOutput();
+                const bool budgeted = !w->isWaylandClient() || switchesOutput;
+                const bool reseat = kwCounter && actual.topLeft() != seat
+                    && (!budgeted
+                        || ScrollDecisions::shouldCounterAssert(cit->burstStartMs, cit->burstCount,
+                                                                ShaderInternal::shaderClockNowMs(), true));
+                if (reseat) {
+                    // Debug, not info: on KWin 6.8 every acked configure of
+                    // every parked column lands here.
+                    qCDebug(lcEffect) << "Re-seating scroll-managed window" << windowId << "from" << actual << "at"
+                                      << seat;
+                    const auto counterGuard = m_effect->geometryApplyScope();
+                    kwCounter->move(QPointF(seat));
+                    return;
+                }
+            } else {
+                // Budget arithmetic is pure and unit-tested
+                // (scrolldecisions.h, test_scroll_decisions).
+                const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+                if (ScrollDecisions::shouldCounterAssert(cit->burstStartMs, cit->burstCount, nowMs,
+                                                         actual != cit->rect)) {
+                    // Copy out of the hash node first: the apply below emits
+                    // frameGeometryChanged synchronously on X11 and re-enters
+                    // this slot — holding a reference into the node across
+                    // re-entrant code is undefined the day anything mutates
+                    // the map from inside that window.
+                    const QRect commanded = cit->rect;
+                    // The size this put-back answers, so the same size again
+                    // under this command reads as the client insisting
+                    // (x11ForeignSizeVerdict). Recorded only here, where the
+                    // put-back is made: a size the budget refused above was
+                    // never put back, and remembering it learned the next
+                    // landing at KWin's size (F116). A size within rounding of
+                    // the command never reaches here (x11ForeignSize), so
+                    // rounding residue cannot overwrite the memory (F412).
+                    if (x11ForeignSize) {
+                        cit->putBackSize = actual.size();
+                    }
+                    qCInfo(lcEffect) << "Countering external move of scroll-managed window" << windowId << "from"
+                                     << actual << "back to" << commanded;
+                    // Bracketed like every sibling moveResize site: the
+                    // synchronous re-entry must not fall through to the
+                    // VS-crossing detector for a move the effect itself made.
+                    // Routed through applyWindowGeometry ON PURPOSE, unlike
+                    // the fullscreen-ack re-commit (signals.cpp): its
+                    // already-at-target skip cannot fire here (this slot runs
+                    // because the frame DIFFERS from the commanded rect), and it
+                    // brings constrainTileGeometry's X11 pre-centre and the
+                    // size-preserving move or moveResize split. Its user-move
+                    // defer cannot trigger, because the gate above excludes a
+                    // live move or resize, and those terms must stay: without
+                    // them the counter would defer to the gesture end and the
+                    // replay would yank the dropped window back to its rect.
+                    // Save/restore, not set/clear (nesting-safe), through
+                    // qScopeGuard like the four siblings in this file and
+                    // signals.cpp. Hand-restoring was correct as written —
+                    // applyWindowGeometry does not throw and the return is
+                    // immediate — but it is the one site where an early exit
+                    // added between the call and the restore would strand the
+                    // flag set for the rest of the frame, silently muting the
+                    // VS-crossing detector.
+                    const auto counterGuard = m_effect->geometryApplyScope();
+                    // Re-asserting the commanded rect is not a new command, so
+                    // the window keeps its stamp: a strip entry the next batch
+                    // has already scheduled for it must still land.
+                    const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
+                    m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                    // A stale-ack answer this re-apply armed carries the
+                    // apply's stamp, which the reinstate takes back; it follows
+                    // the reinstated one, or the frame hook would find it
+                    // superseded and drop it unanswered (cancelStripQuickTile
+                    // does the same). The reinstated stamp is the batch's,
+                    // which lives until the next command, so an answer whose
+                    // configure is never acked at another size waits that long;
+                    // a geometry request KWin makes for another size voids it
+                    // (ScrollDecisions::requestVoidsStaleAck).
+                    const quint64 applyStamp = m_effect->m_daemonGate.commandStamps.current(w);
+                    m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
+                    m_effect->m_daemonGate.commandStamps.carryStaleAck(w, applyStamp);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Virtual screen change detection: KWin's outputChanged only fires on
+    // physical monitor changes. When a window moves between virtual screens
+    // on the same physical monitor (e.g., A/vs:0 → A/vs:1), no outputChanged
+    // fires. Detect the change here so the autotile engine can transfer the
+    // window. Only check windows we're already tracking (m_notifiedWindowScreens)
+    // and only while some monitor has virtual subdivisions (a global test, so
+    // windows on unsubdivided monitors are resolved too and simply never read
+    // as crossing).
+    // Skip during a daemon-driven apply (slotWindowsTileRequested /
+    // slotApplyGeometriesBatch): the daemon is the authoritative source of the
+    // window's intended VS during VS swap/rotate, and the cached
+    // m_virtualScreenDefs may still reflect pre-rotation regions.
+    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
+        && m_effect->m_daemonGate.virtualScreensReady && !m_effect->m_daemonGate.inGeometryApply) {
+        // Don't detect VS crossings for the window in a gesture: the drop
+        // handler (callEndDrag) owns a drag's transitions, and the resize
+        // drain owns a resize's (F486). Detecting mid-gesture would transfer
+        // the window before the user lets go.
+        // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
+        // A tile whose client acks a larger size than its tile has not moved
+        // either (F248): the centring pass below is what answers it.
+        const bool heldByGesture =
+            (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())
+            || m_effect->m_resizeHold.window == w;
+        if (!heldByGesture && !GestureEndDecisions::isSizeOnlyChange(oldGeometry, QRectF(w->frameGeometry()))) {
+            const QString newScreenId = m_effect->getWindowScreenId(w);
+            const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
+            if (PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+                // Virtual screen changed on the same physical monitor — delegate to
+                // the same handler used by outputChanged. The re-entrancy guard
+                // inside handleWindowOutputChanged prevents infinite loops from
+                // geometry changes caused by tiling. The transfer itself runs
+                // during a screen change too (the tile must follow its frame);
+                // only the daemon notice waits, since the settle replays nothing
+                // for a tracked tile.
+                if (handleWindowOutputChanged(w) && !m_effect->m_screenChangeHandler->isScreenChangeInProgress()) {
+                    m_effect->m_screenChangeHandler->reportCrossing(w, oldScreenId, newScreenId);
+                }
+                return;
+            }
+        }
+        // Fall through to centering logic below for all windows (including dragged)
+    }
+
+    // Everything from here down is the reactive centring pass, and it is
+    // WAYLAND-ONLY despite reading engine-general: m_tileTargetZones is
+    // written only by the tile batch apply (slotWindowsTileRequested, in
+    // tiling.cpp), inside an `isWaylandClient()` arm. An X11 client never reaches this
+    // block: constrainTileGeometry pre-centres its frame inside the zone
+    // before the apply commits. An external mover is the counter-assert's on a
+    // scrolling screen; on an autotile screen nothing counters it, and the
+    // backstop below drops a target the mover took the window out of.
+    if (m_tileTargetZones.isEmpty()) {
+        return;
+    }
+
+    // Never centre from inside the effect's own apply bracket, the gate the two
+    // other consumers in this slot take (the counter-assert and the VS
+    // crossing check). A frame change emitted mid-apply carries the position
+    // already but the size still awaiting the client's ack, and the pass would
+    // read that stale size as a refusal and issue a competing moveResize that
+    // supersedes the resize the client is answering. applyWindowGeometry
+    // drops the window's entry before it commits, so this gate is what covers
+    // the bracketed raw moveResize sites (the counter-assert, the fullscreen
+    // re-commit) and this pass's own synchronous re-entry. Losing an enlarge
+    // that way pinned the window a zone-width short for good, the centred
+    // stamp latching it on every later batch (discussion #1028: dead bands
+    // either side of a survivor, where focus-follows-mouse finds nothing).
+    if (m_effect->m_daemonGate.inGeometryApply) {
+        return;
+    }
+
+    auto it = m_tileTargetZones.find(windowId);
+    if (it == m_tileTargetZones.end()) {
+        return;
+    }
+
+    // The user owns the frame for the length of a move or resize. Centring a
+    // mid-gesture frame would moveResize the window under the pointer (the
+    // first step of a shrinking resize, a drag of a centred tile, a Reorder
+    // drag) and stamp the old zone as centred. The tile no longer describes
+    // the window either way, so the target and the stamp both go; whatever
+    // the gesture ends in (a drop outcome, the next batch) commands it anew.
+    if (w->isUserMove() || w->isUserResize()) {
+        m_tileTargetZones.erase(it);
+        m_centeredWaylandZones.remove(windowId);
+        return;
+    }
+
+    const QRect& targetZone = it.value();
+    const QRectF actual = w->frameGeometry();
+
+    // Never centre while a resize configure is still in flight. KWin
+    // reconciles moveResizeGeometry to the client's COMMITTED size (a
+    // smaller-than-requested commit included) before it emits
+    // frameGeometryChanged — XdgSurfaceWindow::handleNextWindowGeometry
+    // calls maybeUpdateMoveResizeGeometry, then updateGeometry, which emits
+    // — so at rest the two sizes agree and a genuinely-refusing client
+    // passes this on the very commit that refused. The sizes diverge only
+    // while an unacknowledged resize configure is pending, and a frame event
+    // that arrives THEN (a move applied synchronously, an earlier commit)
+    // still carries the pre-resize size. Centring on it would issue a
+    // competing moveResize at that stale size and supersede the resize the
+    // client is still answering — the enlarge-loss above, minus the second
+    // batch: this closes the same race for a single batch against a slow
+    // client, which the inGeometryApply gate cannot see.
+    //
+    // Skipping does NOT consume the entry: the commit that acknowledges the
+    // configure re-fires this slot, agrees with moveResizeGeometry, and the
+    // pass runs then. Sizes only — positions legitimately diverge mid-move —
+    // and with a tolerance, because moveResizeGeometry holds the requested
+    // fractional rect while the frame is snapped to pixels.
+    if (KWin::Window* kwPending = w->window()) {
+        const QRectF commandedRect = kwPending->moveResizeGeometry();
+        // The entry describes the tile apply that recorded it, and only for
+        // as long as that apply is the window's latest command. Every command
+        // the effect itself issues drops it (applyWindowGeometry calls
+        // dropCenteringTarget), which covers a snap zone apply landing before
+        // the tiling release (discussion #1124). This is the backstop for a
+        // mover outside the effect, a user or KWin script move, that takes
+        // the window out of its tile: centring the frame that move produced
+        // into the dead tile rect would drag the window back, possibly onto
+        // an output it has left. The commanded origin is the witness: a tile
+        // apply and every refusing or oversized commit keep it at the zone
+        // origin. Containment rather than equality on purpose: a centred
+        // origin also sits inside the zone, and an entry armed by an older
+        // batch must not read a window this pass centred as moved away. The
+        // far edges are excluded: a gapless neighbour zone starts exactly
+        // there (CentringDecisions::commandStillInTile). An origin outside the
+        // zone means another command owns the window now. The centred stamp
+        // goes too, or the redundant-apply skip in slotWindowsTileRequested
+        // would honour it if the window is tiled into the same zone again.
+        if (!CentringDecisions::commandStillInTile(QRectF(targetZone), commandedRect.topLeft())) {
+            qCDebug(lcEffect) << "Autotile centering: target superseded for" << windowId
+                              << "commanded=" << commandedRect << "target=" << targetZone << "- dropping";
+            m_tileTargetZones.erase(it);
+            m_centeredWaylandZones.remove(windowId);
+            return;
+        }
+        const QSizeF commanded = commandedRect.size();
+        if (qAbs(commanded.width() - actual.width()) > 1.0 || qAbs(commanded.height() - actual.height()) > 1.0) {
+            qCDebug(lcEffect) << "Autotile centering: configure in flight for" << windowId << "commanded=" << commanded
+                              << "actual=" << actual.size() << "- waiting";
+            return;
+        }
+    }
+
+    constexpr qreal MinCenteringDelta = 3.0;
+
+    const qreal dw = targetZone.width() - actual.width();
+    const qreal dh = targetZone.height() - actual.height();
+
+    // Window fills the zone (or close enough) — no centering needed; consume entry
+    if (qAbs(dw) <= MinCenteringDelta && qAbs(dh) <= MinCenteringDelta) {
+        qCDebug(lcEffect) << "Autotile centering: matched" << windowId << "dw=" << dw << "dh=" << dh;
+        m_tileTargetZones.erase(it);
+        return;
+    }
+
+    // Window doesn't match zone — center it within the zone so it's visually
+    // balanced rather than stuck at the zone origin.
+    // Clamp offsets to non-negative: when the window is LARGER than the zone
+    // (oversized, dx < 0), left/top-align instead of centering. Centering an
+    // oversized window pushes it to a negative position (off-screen left/top),
+    // which is worse than a slight overflow to the right/bottom. The daemon
+    // receives the min-size report below and will retile with adjusted zones.
+    const qreal dx = qMax(0.0, dw / 2.0);
+    const qreal dy = qMax(0.0, dh / 2.0);
+    QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+
+    // Defensive bounds clamp: if the (oversized) window would extend past the
+    // work area of the physical output nearest the zone's centre, shift it back
+    // inside it (left/up for overflow, right/down for underflow). The work area
+    // (KWin's MaximizeArea, panels excluded), not the whole output, because
+    // that is what the zones were laid out in and what the daemon-side clamp
+    // keeps them inside: clamped to the output, an oversized tile was left
+    // hanging over a panel (F360). Without this,
+    // a window whose min size exceeds its zone leaks into an adjacent monitor
+    // — KWin then reassigns the window's output and the autotile engine ejects
+    // it. The daemon-side bounds clamp in recalculateLayout already shifts
+    // zones to fit, so this is a backstop for cases where the zone still
+    // violates min size (script algorithms, unsatisfiable constraints,
+    // residual rounding).
+    //
+    // Scope: this clamps to the physical Output*, NOT the virtual-screen
+    // sub-region. Overflow that crosses a virtual-screen boundary on the
+    // same physical monitor is the daemon-side clamp's responsibility (it
+    // resolves the VS region from screenGeometry(screenId); the effect side
+    // has no reliable lookup for that here).
+    //
+    // Contract parity with PhosphorGeometry::clampZonesToScreen: both keep
+    // an "effective rect" inside the bounds. The two implementations
+    // intentionally use different size sources — daemon-side uses
+    // max(zone.size, declared minSize) because it runs *before* KWin
+    // enforces min size, while the effect runs *after* and reads the actual
+    // (already-enforced) frame size from `centered`. Same contract, different
+    // input source and rect type (QRectF here, QRect there). Keep the four
+    // shift formulas in sync at the contract level.
+    if (auto* output = KWin::effects->screenAt(targetZone.center())) {
+        const QRect screenGeo = KWin::effects->clientArea(KWin::MaximizeArea, output).toRect();
+        // Use exclusive edges (x + width / y + height) since QRectF::right()
+        // and QRect::right() disagree (QRect is x+width-1, QRectF is x+width).
+        const qreal screenLeft = screenGeo.x();
+        const qreal screenTop = screenGeo.y();
+        const qreal screenRight = screenGeo.x() + screenGeo.width();
+        const qreal screenBottom = screenGeo.y() + screenGeo.height();
+        const QRectF preClamp = centered;
+        if (centered.x() + centered.width() > screenRight) {
+            centered.moveLeft(qMax(screenLeft, screenRight - centered.width()));
+        }
+        if (centered.y() + centered.height() > screenBottom) {
+            centered.moveTop(qMax(screenTop, screenBottom - centered.height()));
+        }
+        // Symmetric left/top underflow: a centered position before the screen
+        // origin (target zone with negative offset, oversized window centered
+        // off-edge) gets snapped back. Matches the daemon-side clamp.
+        if (centered.x() < screenLeft) {
+            centered.moveLeft(screenLeft);
+        }
+        if (centered.y() < screenTop) {
+            centered.moveTop(screenTop);
+        }
+        // Symmetric with daemon-side clampZonesToScreen logging: when the
+        // clamp actually fired, log the before/after so a "clamp ran but
+        // didn't fix it" report is diagnosable from one side.
+        if (Q_UNLIKELY(lcEffect().isDebugEnabled()) && centered.topLeft() != preClamp.topLeft()) {
+            qCDebug(lcEffect) << "Autotile centering: clamp adjusted" << windowId << "from" << preClamp.topLeft()
+                              << "to" << centered.topLeft() << "screen=" << screenGeo;
+        }
+    } else {
+        // Unreachable in a live session: screenAt is nearest-output (see
+        // windowOutput in screens.cpp) and returns null only with no
+        // outputs, which KWin prevents with a placeholder. Kept as a cheap
+        // belt for the OUTPUT pointer, which is a real lookup; the global
+        // KWin::effects itself outlives every effect and is not tested.
+        qCDebug(lcEffect) << "Autotile centering: screenAt(" << targetZone.center()
+                          << ") returned null — skipping bounds clamp for" << windowId;
+    }
+
+    // Window refused to shrink below its actual size — report its declared
+    // minimum to the daemon so future retiles can account for it. Only report
+    // when the window is larger than the zone (negative delta = oversized).
+    // Ahead of the already-centred return below: an oversized window is
+    // left-aligned at the zone origin, which is usually where it already
+    // sits, so a report placed after that return never ran for the common
+    // oversized shape and a hint the client raised late went unreported.
+    //
+    // IMPORTANT: Only use the window's declared minSize() from the compositor.
+    // The frame geometry is the current size, which may be transiently larger
+    // during resize animations (Wayland configure round-trips) or media player
+    // loading. Reporting the frame geometry as the min-size creates a feedback
+    // loop: inflated min → expanded zone → window fills expanded zone →
+    // inflated min confirmed → ratio stuck.
+    //
+    // Previously, windows without a declared min-size fell back to
+    // targetZone.width() as a bounded hint. This caused the same feedback
+    // loop: the zone width became the stored min-size, which then prevented
+    // the algorithm from reducing the zone on subsequent retiles — even when
+    // the user adjusted the split ratio or a screen geometry change required
+    // reflow. The stale min-size persisted until the window was removed or
+    // unfloated (minimize+restore), making the ratio appear "stuck."
+    //
+    // Without the fallback, apps that don't declare a min-size simply won't
+    // get min-size enforcement from this path. They still get the initial
+    // min-size from the windowOpened D-Bus call (declaredMinSize at announce),
+    // and the centering code handles the visual placement correctly.
+    // declaredMinSize() carries the internal-window guard (KWin's
+    // InternalWindow::minSize() segfaults on a null backing QWindow, see
+    // discussion #511); internal windows never reach the autotile-centering
+    // pipeline, but the helper keeps the call site safe independently of the
+    // upstream eligibility filter.
+    // The whole declared pair, through the same change-gated cache as the
+    // batch poll (reportMinSizeIfChanged), so the two writers always agree.
+    if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+        const QSize declaredMin = declaredMinSize(w);
+        if (declaredMin.width() > 0 || declaredMin.height() > 0) {
+            reportMinSizeIfChanged(windowId, declaredMin);
+        }
+    }
+
+    // Already at the centered position — record and consume. The stamp keeps
+    // the centred FRAME beside the zone: the redundant-apply skip honours it
+    // only while the window still sits exactly there, so an in-zone change
+    // nothing re-centres (a client self-resize, a KWin or script move) cannot
+    // latch the window uncentred.
+    if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
+        m_centeredWaylandZones[windowId] = targetZone;
+        m_centeredWaylandFrames[windowId] = actual;
+        m_tileTargetZones.erase(it);
+        return;
+    }
+
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        // No KWin::Window — consume stale entry to prevent perpetual lookups
+        m_tileTargetZones.erase(it);
+        return;
+    }
+
+    qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
+                     << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
+
+    // Stamp and erase before the compositor call. The pass's own synchronous
+    // re-entry returns at the inGeometryApply gate (the moveResize below is
+    // bracketed), so this is not what stops recursion; it keeps the map settled
+    // before any re-entrant code runs, and `targetZone` is a reference into the
+    // erased node, so nothing below may read it.
+    m_centeredWaylandZones[windowId] = targetZone;
+    m_centeredWaylandFrames[windowId] = centered;
+    m_tileTargetZones.erase(it);
+    // A live leg (usually the tile apply's own, still running at the client's
+    // first ack) is RETARGETED onto the centred rect, not reaped: a reap jumped
+    // the window mid-leg, and a geometry-owning morph lost its progress source,
+    // fell to the expiry path and never ran its completion. PreservePosition
+    // keeps the pixels on screen and bends toward the new rect, and the morph
+    // is re-anchored at the same departure rect the animator now uses. Not
+    // routed through applyWindowGeometry: its dropCenteringTarget would erase
+    // the stamp just written.
+    if (m_effect->m_windowAnimator->hasAnimation(w)) {
+        const QRectF visualPos = m_effect->m_windowAnimator->currentValue(w, actual);
+        const auto retarget = m_effect->m_windowAnimator->retargetWithResult(
+            w, centered, PhosphorAnimation::RetargetPolicy::PreservePosition);
+        auto* mt = m_effect->m_shaderManager.findTransition(w);
+        if (retarget == PhosphorAnimation::RetargetResult::Accepted && mt && mt->cached
+            && mt->cached->iFromRectLoc >= 0) {
+            mt->fromGeometry = visualPos;
+            mt->toGeometry = centered;
+        }
+    }
+    // Bracketed like every other effect-issued commit: the synchronous frame
+    // change this emits must not reach the VS-crossing detector as an
+    // external move, and the pass's own re-entry returns at the gate above.
+    const auto applyGuard = m_effect->geometryApplyScope();
+    kw->moveResize(centered);
+}
+
+void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize& declared, bool force)
+{
+    // The ONE writer of windowMinSizeUpdated after announce, shared by the
+    // batch's change poll and the centring pass. It always sends the whole
+    // declared pair, because the daemon's store replaces the whole QSize and
+    // re-tiles on any change: a centring pass that sent only the oversized
+    // axis (0 in the other) flipped the stored minimum against the batch's
+    // full pair on every round, and each flip re-tiled, re-applied and
+    // re-centred the window, for as long as it stayed oversized. @p force
+    // skips the change gate when the engine may have dropped its copy (F911).
+    const auto lastIt = m_effect->m_lastReportedMinSize.constFind(windowId);
+    if (!force && lastIt != m_effect->m_lastReportedMinSize.constEnd() && *lastIt == declared) {
+        return;
+    }
+    // Gate like every other call in this handler: with no daemon registered
+    // the call only queues a D-Bus error, and the cache is left unwritten so
+    // the first batch after bring-up reports it.
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
+    m_effect->m_lastReportedMinSize.insert(windowId, declared);
+    qCDebug(lcEffect) << "Reporting min size for" << windowId << ":" << declared;
+    // Watched rather than fire-and-forget, purely for the rollback: this leg
+    // is change-gated, so a lost call would leave the cache recording a size
+    // the daemon never heard and the engine modelling the old minimum until
+    // the hints move AGAIN or the window closes — the "full-width game over a
+    // half-width model" failure the batch poll exists to fix. The announce
+    // sites roll back for the same reason.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
+                                                   QStringLiteral("windowMinSizeUpdated"),
+                                                   {windowId, declared.width(), declared.height()}),
+        m_effect);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId, declared](QDBusPendingCallWatcher* pw) {
+        pw->deleteLater();
+        if (!pw->isError()) {
+            return;
+        }
+        qCWarning(lcEffect) << "windowMinSizeUpdated failed for" << windowId << pw->error().message();
+        // Only roll back OUR value: a newer report may have landed while this
+        // call was in flight, and clearing that would cost a redundant
+        // re-report.
+        const auto cached = m_effect->m_lastReportedMinSize.constFind(windowId);
+        if (cached != m_effect->m_lastReportedMinSize.constEnd() && *cached == declared) {
+            m_effect->m_lastReportedMinSize.remove(windowId);
+        }
+    });
+}
+
+void TilingHandler::noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QString& windowId)
+{
+    // The batch's change poll would catch the new frame minimum too, but only
+    // on the window's next batch, and the engine needs it before then: the
+    // effect flips a title bar on the window's own batch (the decoration
+    // sweep at its end), after the poll ran.
+    if (!w || !m_effect->m_lastReportedMinSize.contains(windowId)) {
+        return;
+    }
+    // Not for the decoration a user's own maximize takes off (KWin's
+    // borderless maximized windows): the re-tile that report triggers clears
+    // the maximize (discussion #1182). The suppression counter covers the
+    // monocle arm's write on X11, where the decoration changes inside
+    // maximize() before the membership insert.
+    const KWin::Window* const kw = w->window();
+    const bool requestedMaximized = kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore;
+    const bool maximizeOwnedByTiling = isSuppressingMaximizeChanged() || m_monocleMaximizedWindows.contains(windowId)
+        || m_maximizedToEdgesWindows.contains(windowId);
+    if (!CentringDecisions::decorationChangeMovesTileMinimum(requestedMaximized, maximizeOwnedByTiling)) {
+        qCDebug(lcEffect) << "Decoration changed under a user maximize for" << windowId
+                          << "- keeping the tile's minimum";
+        return;
+    }
+    reportMinSizeIfChanged(windowId, declaredMinSize(w));
+}
+
+TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString& windowId, const QString& screenId,
+                                                                  const QRect& offered, const QSize& expected,
+                                                                  const QRect& committed)
+{
+    // The engine owns the column extent and only this side sees the commit,
+    // so a client whose settled answer differs from the column it was offered
+    // is reported (ScrollDecisions::shouldReportCommittedSize says when). The
+    // caller read the frame as an answer through the one predicate the
+    // centring shares (ScrollDecisions::readsAsColumnAnswer), which refuses
+    // the user's own resize: the resize drain reports that to the engine as a
+    // resize (notifyWindowResized), and a user move never resizes.
+    //
+    // Deferred, not dropped, while the daemon cannot hear it or its axis map
+    // has not landed: the answer stays owed, and the bring-up and the seed
+    // schedule the catch-up walk that reads it again, since no further commit
+    // need come (F138).
+    if (!m_effect->m_daemonGate.serviceRegistered || !m_scrollEffectBehaviourSeeded) {
+        return StripCommitReport::Deferred;
+    }
+    const bool vertical = scrollAxisForScreen(screenId) == PhosphorProtocol::ScrollAxis::Vertical;
+    // A park by its rect, or by the flag the strip recorded with its commanded
+    // rect: the rect test is against the CURRENT output union, so an output
+    // plugged in under an old park makes it fail, and the park's answer would
+    // then read as an ordinary match and leave the peek memory standing (F413,
+    // the same pairing isKWinMoveOfStripTile takes).
+    const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
+    const bool offerParked =
+        rectAtScrollPark(offered) || (commanded != m_effect->m_scrollCommandedRects.constEnd() && commanded->parked);
+    if (m_committedSizeReportUnsupported
+        || !ScrollDecisions::shouldReportCommittedSize(expected, committed.size(), vertical, offerParked)) {
+        return StripCommitReport::NothingToReport;
+    }
+    // An extent the client's hints allow it to take whole is reported as the
+    // offer's, the extent the engine laid out (F118).
+    const QSize reported = ScrollDecisions::reportedCommittedSize(offered.size(), expected, committed.size());
+    qCDebug(lcEffect) << "Reporting committed size for" << windowId << "offered=" << offered.size()
+                      << "committed=" << committed.size() << "reported=" << reported << "vertical=" << vertical;
+    // Watched rather than fire-and-forget, for the one error that is not a
+    // failure: a daemon older than the method answers UnknownMethod on every
+    // call, and is latched off for the rest of its session (F215).
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(
+            PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("reportCommittedSize"),
+            {windowId, offered.width(), offered.height(), reported.width(), reported.height()}),
+        m_effect);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, session = m_committedSizeReportSession, windowId, offered,
+             answered = committed.size()](QDBusPendingCallWatcher* pw) {
+                pw->deleteLater();
+                if (!pw->isError()) {
+                    return;
+                }
+                const QDBusError error = pw->error();
+                if (error.type() == QDBusError::UnknownMethod) {
+                    if (session == m_committedSizeReportSession && !m_committedSizeReportUnsupported) {
+                        m_committedSizeReportUnsupported = true;
+                        qCInfo(lcEffect) << "The daemon has no reportCommittedSize (it predates the method):"
+                                         << "committed sizes are not reported for the rest of its session";
+                    }
+                    return;
+                }
+                qCWarning(lcEffect) << "reportCommittedSize failed:" << error.message();
+                // The caller marked the answer Read when this went out, so a
+                // report that never arrived would be lost for good: the answer
+                // reads as heard and nothing reads it again (F288). Owed again,
+                // like the min-size writer rolls its cache back, but only while
+                // the entry still records THIS answer to THIS offer, so a newer
+                // offer or answer is left alone. Not re-sent from here: the
+                // window's next frame change, or the next catch-up walk, reads
+                // it again, which keeps a daemon that refuses every call from
+                // being asked again at reply rate.
+                if (session != m_committedSizeReportSession) {
+                    return;
+                }
+                const auto entry = m_effect->m_scrollOfferedColumn.find(windowId);
+                if (entry != m_effect->m_scrollOfferedColumn.end() && entry->rect == offered
+                    && entry->answer == ScrollDecisions::ColumnAnswer::Read && entry->answeredSize == answered) {
+                    entry->answer = ScrollDecisions::ColumnAnswer::Owed;
+                }
+            });
+    return StripCommitReport::Sent;
+}
+
+void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
+{
+    // KWin's quick tile (its Quick Tile shortcuts, a window rule, a script)
+    // on a strip tile: the strip owns the tile's rect, and KWin's tile is a
+    // second authority over it that nothing else hands back. The engine emits
+    // on change, so no batch comes for a tile the layout never asked for, and
+    // KWin re-asserts the tile rect whenever it re-checks the window's
+    // workspace position. Left standing, the requested tile also keeps the
+    // window's frame from ever reading as its answer to its column, which
+    // refuses both the committed-size report and the offered-column centring
+    // (F123). Cancel only, with no dispatch: the engine has no tile to
+    // express, the same reasoning cancelAxisOnlyMaximize gives for an axis
+    // maximize.
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    KWin::Window* const kw = w->window();
+    // Our own untile below lands here too, with nothing left to cancel.
+    if (!kw || !kw->requestedTile()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (!isScrollTiledWindow(windowId, w)) {
+        return;
+    }
+    // The user's gesture owns the frame, the guard cancelAxisOnlyMaximize
+    // takes: the geometry apply below defers during a drag or resize, so
+    // cancelling now would leave the window at whatever KWin restores under
+    // the pointer. The gesture end runs this again (windowFinishUserMovedResized),
+    // where a window the drag floated off the strip no longer qualifies. A
+    // dragged window the tracker still holds past KWin's own move is the
+    // drop's.
+    if (w->isUserMove() || w->isUserResize()
+        || (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+        return;
+    }
+    // KWin owns the frame of a window going fullscreen, and its exit lands on
+    // the restore rect the fullscreen arms seat.
+    if (kw->isRequestedFullScreen()) {
+        return;
+    }
+    qCInfo(lcEffect) << "Cancelling KWin's quick tile of strip tile" << windowId << "at"
+                     << QRectF(kw->moveResizeGeometry());
+    const auto geomGuard = m_effect->geometryApplyScope();
+    const KWinTileDrop drop = dropKWinTile(w);
+    // On every way out below, once the window has been placed: the tile's
+    // configure may still be acked at the tile's size, when it was sent before
+    // the drop. One KWin had only scheduled goes out carrying the column
+    // instead, and the answer armed for it then waits until something voids
+    // it (ScrollDecisions::droppedTileAckOutstanding).
+    const auto answerAck = qScopeGuard([this, w, drop] {
+        answerDroppedTileAck(w, drop);
+    });
+    // KWin's untile moves the window to a restore rect of its own, not
+    // necessarily where the strip has put the column since. The column goes
+    // back the way the counter-assert puts a commanded rect back. Not while a
+    // maximize is in flight against the mode the window rests in: where the
+    // tile un-maximized a column maximized to the edges, the interception
+    // claims that restore as an un-maximize request, and its answering batch
+    // places the column. Nor while the outputs change
+    // or the strip's output has moved since its batch: the rects are in the
+    // old coordinates, and the next batch re-places it.
+    const KWin::MaximizeMode modeAtRest =
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+    if (kw->requestedMaximizeMode() != modeAtRest || m_effect->m_screenChangeHandler->isScreenChangeInProgress()
+        || stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId))) {
+        return;
+    }
+    // The commanded rect where the counter-assert keeps one (an X11 column, a
+    // column maximized to the edges, one placed outside its output), else the
+    // column the strip offered the window.
+    const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
+    const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+    QRect column;
+    if (commanded != m_effect->m_scrollCommandedRects.constEnd()
+        && m_effect->m_daemonGate.commandStamps.isCurrent(w, commanded->commandStamp)) {
+        column = commanded->rect;
+    } else if (offer != m_effect->m_scrollOfferedColumn.constEnd()) {
+        column = offer->rect;
+    }
+    if (column.isEmpty()) {
+        return;
+    }
+    // Copied out of the hash nodes before the apply, which re-enters the frame
+    // slots synchronously on X11.
+    const bool hasOffer = offer != m_effect->m_scrollOfferedColumn.constEnd();
+    const QRect offeredColumn = hasOffer ? offer->rect : QRect();
+    // Putting the column back is not a new command, so the window keeps its
+    // stamp: a strip entry the next batch has already scheduled for it must
+    // still land.
+    const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
+    // Unanimated, unlike the batch that drops a tile the window carried in and
+    // was drawn on (tileDropOrigin in slotWindowsTileRequested). The tile
+    // answered here from requestedTileChanged has only just been requested:
+    // Window::requestTile moves the window onto it and emits the signal in
+    // the same call, and this runs on the next event-loop turn, so the window
+    // was last seen at the column and there is no motion to draw.
+    m_effect->applyWindowGeometry(w, column, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+    // A stale-ack answer the apply armed carries its stamp, which the
+    // reinstate below takes back; it follows the reinstated one, or the frame
+    // hook would find it superseded and drop it unanswered.
+    const quint64 applyStamp = m_effect->m_daemonGate.commandStamps.current(w);
+    m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
+    m_effect->m_daemonGate.commandStamps.carryStaleAck(w, applyStamp);
+    // The client was sent the tile's size and is now sent the column's, so
+    // whatever it commits next answers the column: a new offer when the two
+    // sizes differ, as a batch that sends a size is (recordStripOffer). That
+    // also supersedes the Foreign mark KWin's tile request may have left. A
+    // tile's configure the client has yet to ack is answered on the way out
+    // (answerDroppedTileAck), so its ack reads unsettled, not as this answer;
+    // where that configure was only scheduled it carries the column, and the
+    // client's ack of it is this answer. The tile's size is the one the drop
+    // read before KWin's untile replaced it, sized on its own like the
+    // batch's twin reads it, never through QRectF::toRect (F335).
+    if (hasOffer) {
+        m_effect->recordStripOffer(
+            w, windowId, offeredColumn,
+            ScrollDecisions::stripEntrySendsSize(drop.requested, QRectF(kw->moveResizeGeometry()).size().toSize(),
+                                                 !w->isWaylandClient()));
+    }
+}
+
+TilingHandler::KWinTileDrop TilingHandler::dropKWinTile(KWin::EffectWindow* w)
+{
+    KWinTileDrop drop;
+    KWin::Window* const kw = w && !w->isDeleted() ? w->window() : nullptr;
+    if (!kw || !kw->requestedTile()) {
+        return drop;
+    }
+    drop.dropped = true;
+    // Sizes on their own, not through QRectF::toRect: the tile and the frame
+    // sit in different places, and that rounding depends on where.
+    drop.requested = QRectF(kw->moveResizeGeometry()).size().toSize();
+    drop.committed = QRectF(w->frameGeometry()).size().toSize();
+    const auto geomGuard = m_effect->geometryApplyScope();
+    // KWin's own untile, as its shortcuts reach it: Window::setQuickTileMode
+    // with no flag resolves to no tile and unmanages the requested one, quick
+    // or custom alike (Tile::unmanage), which takes the window out of the
+    // tile's member list as well as clearing the request. A bare
+    // requestTile(nullptr) only clears the request: the tile keeps the window
+    // as a member, moveResizes it onto itself whenever its geometry or padding
+    // changes, and a switch back to its desktop requests it again
+    // (Workspace::updateWindowVisibilityAndActivateOnDesktopChange).
+    kw->setQuickTileModeAtCurrentPosition(KWin::QuickTileMode(KWin::QuickTileFlag::None));
+    // setQuickTileMode unmanages only a tile whose desktop its output shows.
+    // Any other is let go as a request, and KWin's re-request of it later
+    // raises requestedTileChanged, which cancels it again.
+    if (kw->requestedTile()) {
+        kw->requestTile(nullptr);
+    }
+    return drop;
+}
+
+void TilingHandler::answerDroppedTileAck(KWin::EffectWindow* w, const KWinTileDrop& drop)
+{
+    // Wayland only: an X11 configure is answered synchronously, so nothing of
+    // the tile's is left in flight to land later.
+    if (!drop.dropped || !w || w->isDeleted() || !w->isWaylandClient()) {
+        return;
+    }
+    KWin::Window* const kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const QRectF commanded(kw->moveResizeGeometry());
+    if (!ScrollDecisions::droppedTileAckOutstanding(drop.requested, drop.committed, commanded.size().toSize(),
+                                                    QRectF(w->frameGeometry()).size().toSize())) {
+        return;
+    }
+    // The answer the frame hook already gives a superseded configure's ack
+    // (WindowCommandStamps::StaleAck, Body -1.5): when the tile's size lands,
+    // the rect the window was placed at is re-issued once, which leaves the
+    // frame unsettled until the client acks it, so it is neither centred nor
+    // read as an answer. On the window's current command: the batch's apply,
+    // or the stamp a cancel reinstated. Armed also when KWin's configure was
+    // only scheduled, which nothing here can tell apart: that one goes out
+    // carrying the column, its ack moves nothing, and the answer waits on the
+    // command until a newer one, the user's gesture, an output move or a KWin
+    // request for another size voids it (ScrollDecisions::requestVoidsStaleAck).
+    m_effect->m_daemonGate.commandStamps.staleAcks.insert(
+        w, {commanded.toRect(), m_effect->m_daemonGate.commandStamps.current(w)});
+}
+
+bool TilingHandler::stripOutputMovedSinceBatch(const QString& screenId) const
+{
+    // KWin translates the windows of an output that moves outside any apply,
+    // so both re-asserts see frame changes then. The commanded and offered
+    // rects describe the strip where the batch put it; re-asserting them would
+    // put the windows where the output used to be until the daemon's next
+    // pass. No snapshot (no strip batch yet) reads as not moved.
+    const auto it = m_stripScreenRectAtBatch.constFind(screenId);
+    return it != m_stripScreenRectAtBatch.constEnd() && *it != stripScreenRect(screenId);
+}
+
+} // namespace PlasmaZones

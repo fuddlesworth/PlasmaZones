@@ -1,0 +1,862 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <QTest>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QScopeGuard>
+
+#include "config/configbackends.h"
+#include "config/configdefaults.h"
+#include "config/configmigration.h"
+#include "config/perscreenresolver.h"
+#include "helpers/IsolatedConfigGuard.h"
+
+using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+class TestJsonConfigBackend : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // =========================================================================
+    // Basic read/write
+    // =========================================================================
+
+    void testReadWriteString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Hello"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Hello"));
+        }
+    }
+
+    void testReadWriteInt()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeInt(QStringLiteral("Count"), 42);
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readInt(QStringLiteral("Count")), 42);
+        }
+    }
+
+    void testReadWriteBool()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+            g->writeBool(QStringLiteral("Disabled"), false);
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
+            QCOMPARE(g->readBool(QStringLiteral("Disabled")), false);
+        }
+    }
+
+    void testReadWriteDouble()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeDouble(QStringLiteral("Opacity"), 0.75);
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readDouble(QStringLiteral("Opacity")), 0.75);
+        }
+    }
+
+    void testReadWriteColor()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QColor original(128, 64, 255, 200);
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeColor(QStringLiteral("Highlight"), original);
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QColor read = g->readColor(QStringLiteral("Highlight"));
+            QCOMPARE(read.red(), original.red());
+            QCOMPARE(read.green(), original.green());
+            QCOMPARE(read.blue(), original.blue());
+            QCOMPARE(read.alpha(), original.alpha());
+        }
+    }
+
+    void testReadColorCommaFormat()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        // Manually write comma format (as if hand-edited)
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeString(QStringLiteral("Color"), QStringLiteral("255,128,0,200"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QColor c = g->readColor(QStringLiteral("Color"));
+            QCOMPARE(c.red(), 255);
+            QCOMPARE(c.green(), 128);
+            QCOMPARE(c.blue(), 0);
+            QCOMPARE(c.alpha(), 200);
+        }
+    }
+
+    // =========================================================================
+    // Default values
+    // =========================================================================
+
+    void testReadDefaultsForMissingKeys()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto g = backend->group(QStringLiteral("NonExistent"));
+        QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("fallback")), QStringLiteral("fallback"));
+        QCOMPARE(g->readInt(QStringLiteral("Missing"), 99), 99);
+        QCOMPARE(g->readBool(QStringLiteral("Missing"), true), true);
+        QCOMPARE(g->readDouble(QStringLiteral("Missing"), 1.5), 1.5);
+    }
+
+    // =========================================================================
+    // JSON native types — trigger list round-trip
+    // =========================================================================
+
+    void testWriteJsonArray_storesNative()
+    {
+        // writeJson persists the value as a native JSON array on disk so
+        // external tools (migration scripts, text editors) see the structure
+        // without a string-unescape step. writeString is always verbatim,
+        // so callers that want native storage must route through writeJson.
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QJsonArray arr;
+        QJsonObject entry;
+        entry[QLatin1String("modifier")] = 2;
+        entry[QLatin1String("mouseButton")] = 0;
+        arr.append(entry);
+        {
+            auto g = backend->group(QStringLiteral("Activation"));
+            g->writeJson(QStringLiteral("Triggers"), arr);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Activation"));
+            const QJsonValue got = g->readJson(QStringLiteral("Triggers"));
+            QVERIFY(got.isArray());
+            QCOMPARE(got.toArray().size(), 1);
+            QCOMPARE(got.toArray().at(0).toObject().value(QLatin1String("modifier")).toInt(), 2);
+        }
+    }
+
+    void testWriteJsonObject_storesNative()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QJsonObject obj;
+        QJsonObject bsp;
+        bsp[QLatin1String("splitRatio")] = 0.5;
+        obj[QLatin1String("bsp")] = bsp;
+        {
+            auto g = backend->group(QStringLiteral("Autotiling"));
+            g->writeJson(QStringLiteral("PerAlgorithm"), obj);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Autotiling"));
+            const QJsonValue got = g->readJson(QStringLiteral("PerAlgorithm"));
+            QVERIFY(got.isObject());
+            QCOMPARE(
+                got.toObject().value(QLatin1String("bsp")).toObject().value(QLatin1String("splitRatio")).toDouble(),
+                0.5);
+        }
+    }
+
+    // =========================================================================
+    // Persistence (sync + reparse)
+    // =========================================================================
+
+    void testSyncAndReparse()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Persist"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        backend->sync();
+
+        // Reparse from disk
+        backend->reparseConfiguration();
+        {
+            auto g = backend->group(QStringLiteral("Persist"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
+        }
+    }
+
+    void testSyncCreatesFile()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        backend->sync();
+        QVERIFY(QFile::exists(ConfigDefaults::configFilePath()));
+    }
+
+    void testSyncWritesValidJson()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeInt(QStringLiteral("Number"), 42);
+            g->writeBool(QStringLiteral("Flag"), true);
+        }
+        backend->sync();
+
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QJsonParseError err;
+        QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+        QCOMPARE(err.error, QJsonParseError::NoError);
+        QVERIFY(doc.isObject());
+    }
+
+    // =========================================================================
+    // Group operations
+    // =========================================================================
+
+    void testGroupList()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Alpha"));
+            g->writeString(QStringLiteral("K"), QStringLiteral("V"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Beta"));
+            g->writeInt(QStringLiteral("N"), 1);
+        }
+        QStringList groups = backend->groupList();
+        QVERIFY(groups.contains(QStringLiteral("Alpha")));
+        QVERIFY(groups.contains(QStringLiteral("Beta")));
+    }
+
+    void testDeleteGroup()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Doomed"));
+            g->writeString(QStringLiteral("K"), QStringLiteral("V"));
+        }
+        QVERIFY(backend->groupList().contains(QStringLiteral("Doomed")));
+        backend->deleteGroup(QStringLiteral("Doomed"));
+        QVERIFY(!backend->groupList().contains(QStringLiteral("Doomed")));
+    }
+
+    void testHasKeyAndDeleteKey()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("Exists"), QStringLiteral("Yes"));
+            QVERIFY(g->hasKey(QStringLiteral("Exists")));
+            QVERIFY(!g->hasKey(QStringLiteral("Nope")));
+        }
+        {
+            auto g = backend->group(QStringLiteral("G"));
+            g->deleteKey(QStringLiteral("Exists"));
+            QVERIFY(!g->hasKey(QStringLiteral("Exists")));
+        }
+    }
+
+    // =========================================================================
+    // Root-level keys
+    // =========================================================================
+
+    void testRootStringReadWrite()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        backend->writeRootString(QStringLiteral("RenderingBackend"), QStringLiteral("vulkan"));
+        QCOMPARE(backend->readRootString(QStringLiteral("RenderingBackend")), QStringLiteral("vulkan"));
+    }
+
+    void testRemoveRootKey()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        backend->writeRootString(QStringLiteral("Key"), QStringLiteral("Value"));
+        backend->removeRootKey(QStringLiteral("Key"));
+        QCOMPARE(backend->readRootString(QStringLiteral("Key"), QStringLiteral("gone")), QStringLiteral("gone"));
+    }
+
+    // =========================================================================
+    // Per-screen groups
+    // =========================================================================
+
+    void testPerScreenGroupReadWrite()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            g->writeInt(QStringLiteral("Position"), 3);
+            g->writeInt(QStringLiteral("MaxRows"), 5);
+        }
+        {
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QCOMPARE(g->readInt(QStringLiteral("Position")), 3);
+            QCOMPARE(g->readInt(QStringLiteral("MaxRows")), 5);
+        }
+    }
+
+    void testPerScreenGroupInGroupList()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("AutotileScreen:HDMI-1"));
+            g->writeString(QStringLiteral("Algorithm"), QStringLiteral("bsp"));
+        }
+        QStringList groups = backend->groupList();
+        QVERIFY(groups.contains(QStringLiteral("AutotileScreen:HDMI-1")));
+    }
+
+    void testDeletePerScreenGroup()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("SnappingScreen:DP-1"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        backend->deleteGroup(QStringLiteral("SnappingScreen:DP-1"));
+        QVERIFY(!backend->groupList().contains(QStringLiteral("SnappingScreen:DP-1")));
+    }
+
+    // =========================================================================
+    // JSON object roundtrip via group API (regression test for v2 config bug)
+    //
+    // writeString() promotes JSON object strings to native JSON objects on disk.
+    // readString() must serialize them back — this validates the roundtrip that
+    // loadState() depends on for PendingRestoreQueues, PreTileGeometries, etc.
+    // =========================================================================
+
+    void testReadStringRoundtripsJsonObject()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Simulate what saveState() does for PendingRestoreQueues:
+        // writes a JSON object string via writeString()
+        const QString original = QStringLiteral(R"({"firefox":[{"zoneIds":["{abc}"],"screen":"DP-2","desktop":1}]})");
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            g->writeString(QStringLiteral("PendingRestoreQueues"), original);
+        }
+        backend->sync();
+
+        // Read it back via the group API (what loadState() now uses)
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            QString readBack = g->readString(QStringLiteral("PendingRestoreQueues"));
+
+            // Parse both to compare structurally (key order may differ)
+            QJsonDocument origDoc = QJsonDocument::fromJson(original.toUtf8());
+            QJsonDocument readDoc = QJsonDocument::fromJson(readBack.toUtf8());
+            QVERIFY2(!readDoc.isNull(), "readString returned invalid JSON for promoted object");
+            QCOMPARE(readDoc.object(), origDoc.object());
+        }
+    }
+
+    void testReadStringRoundtripsJsonArray()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Simulate WindowZoneAssignmentsFull: a JSON array written via writeString()
+        const QString original =
+            QStringLiteral(R"([{"windowId":"firefox|abc","zoneIds":["{z1}"],"screen":"DP-2","desktop":1}])");
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            g->writeString(QStringLiteral("WindowZoneAssignmentsFull"), original);
+        }
+        backend->sync();
+
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            QString readBack = g->readString(QStringLiteral("WindowZoneAssignmentsFull"));
+
+            QJsonDocument origDoc = QJsonDocument::fromJson(original.toUtf8());
+            QJsonDocument readDoc = QJsonDocument::fromJson(readBack.toUtf8());
+            QVERIFY2(!readDoc.isNull(), "readString returned invalid JSON for promoted array");
+            QCOMPARE(readDoc.array(), origDoc.array());
+        }
+    }
+
+    // =========================================================================
+    // Bool string compatibility
+    // =========================================================================
+
+    void testReadBoolFromString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("A"), QStringLiteral("true"));
+            g->writeString(QStringLiteral("B"), QStringLiteral("false"));
+            g->writeString(QStringLiteral("C"), QStringLiteral("yes"));
+            g->writeString(QStringLiteral("D"), QStringLiteral("0"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("G"));
+            // Note: writeString with "true"/"false" may store as native JSON string,
+            // but readBool should handle both native bool and string representations
+            QCOMPARE(g->readBool(QStringLiteral("A")), true);
+            QCOMPARE(g->readBool(QStringLiteral("B")), false);
+            QCOMPARE(g->readBool(QStringLiteral("C")), true);
+            QCOMPARE(g->readBool(QStringLiteral("D")), false);
+        }
+    }
+
+    void testReadBoolFromDouble_onlyZeroAndOne()
+    {
+        IsolatedConfigGuard guard;
+        // Write raw JSON with numeric booleans (simulates hand-edited config)
+        const QString path = ConfigDefaults::configFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"G":{"zero":0,"one":1,"half":0.5}})");
+        f.close();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto g = backend->group(QStringLiteral("G"));
+        QCOMPARE(g->readBool(QStringLiteral("zero")), false);
+        QCOMPARE(g->readBool(QStringLiteral("one")), true);
+        // 0.5 is not a valid boolean representation — should return default
+        QCOMPARE(g->readBool(QStringLiteral("half"), false), false);
+        QCOMPARE(g->readBool(QStringLiteral("half"), true), true);
+    }
+
+    // =========================================================================
+    // Corrupt JSON recovery
+    // =========================================================================
+
+    void testCorruptJsonFile_loadsEmptyAndRefusesWrites()
+    {
+        IsolatedConfigGuard guard;
+        const QString path = ConfigDefaults::configFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        const QByteArray corrupt("{this is not valid json!!!");
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(corrupt);
+        }
+
+        // Loads with an empty root (no crash), reports the failure, and will
+        // not write that empty root over the user's unreadable file.
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY(backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("default")), QStringLiteral("default"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        QVERIFY(!backend->sync());
+        QVERIFY(!backend->commit());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), corrupt);
+    }
+
+    void testCorruptJsonFile_reparseKeepsLastGoodDocument()
+    {
+        IsolatedConfigGuard guard;
+        const QString path = ConfigDefaults::configFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        const auto writeFile = [&path](const QByteArray& bytes) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(bytes) == bytes.size();
+        };
+
+        QVERIFY(writeFile(R"({"TestGroup":{"Key":"Value"}})"));
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY(!backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
+        }
+
+        // A hand edit breaks the file mid-session. The reparse keeps the last
+        // readable document rather than resetting every key to its default,
+        // and refuses to write that document back over the broken file.
+        QVERIFY(writeFile("CORRUPT!"));
+        backend->reparseConfiguration();
+        QVERIFY(backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("gone")), QStringLiteral("Value"));
+            g->writeString(QStringLiteral("Other"), QStringLiteral("x"));
+        }
+        QVERIFY(!backend->commit());
+
+        // Once the file is repaired, a reparse reads it and writes land again.
+        QVERIFY(writeFile(R"({"TestGroup":{"Key":"Fixed"}})"));
+        backend->reparseConfiguration();
+        QVERIFY(!backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Fixed"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Written"));
+        }
+        QVERIFY(backend->commit());
+        auto reread = PlasmaZones::createDefaultConfigBackend();
+        auto g = reread->group(QStringLiteral("TestGroup"));
+        QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Written"));
+    }
+
+    /// session.json opts out of the write refusal: it is machine-written, and
+    /// refusing would only lose the daemon's shutdown save.
+    void testSessionBackend_overwritesUnreadableFile()
+    {
+        IsolatedConfigGuard guard;
+        const QString path = ConfigDefaults::sessionFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            f.write("{garbage");
+        }
+        auto backend = PlasmaZones::createSessionBackend();
+        QVERIFY(backend->loadFailed());
+        {
+            auto g = backend->group(QStringLiteral("TestGroup"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        QVERIFY(backend->commit());
+        auto reread = PlasmaZones::createSessionBackend();
+        QVERIFY(!reread->loadFailed());
+        QCOMPARE(reread->group(QStringLiteral("TestGroup"))->readString(QStringLiteral("Key")),
+                 QStringLiteral("Value"));
+    }
+
+    /// The layout editor and the settings app leave an unparseable config.json
+    /// where it is, so a daemon running on its last readable state is not
+    /// handed a fresh, nearly empty file by the next editor write. The daemon,
+    /// which keeps the default handling, still moves it aside at its start.
+    void testCorruptConfig_leaveInPlaceVersusQuarantine()
+    {
+        const QByteArray broken("{\"Snapping\": oops");
+        const auto writeBroken = [&broken]() {
+            const QString path = ConfigDefaults::configFilePath();
+            QDir().mkpath(QFileInfo(path).absolutePath());
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(broken) == broken.size();
+        };
+        const auto restoreDefault = qScopeGuard([]() {
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+        });
+
+        {
+            IsolatedConfigGuard guard;
+            QVERIFY(writeBroken());
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::LeaveInPlace);
+            QVERIFY(!ConfigMigration::ensureJsonConfig());
+            QFile f(ConfigDefaults::configFilePath());
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(f.readAll(), broken);
+            QVERIFY(!QFile::exists(ConfigDefaults::configFilePath() + QStringLiteral(".corrupt.bak")));
+        }
+        {
+            IsolatedConfigGuard guard;
+            QVERIFY(writeBroken());
+            ConfigMigration::setCorruptConfigHandling(ConfigMigration::CorruptConfigHandling::Quarantine);
+            ConfigMigration::ensureJsonConfig();
+            QFile bak(ConfigDefaults::configFilePath() + QStringLiteral(".corrupt.bak"));
+            QVERIFY(bak.open(QIODevice::ReadOnly));
+            QCOMPARE(bak.readAll(), broken);
+        }
+    }
+
+    // =========================================================================
+    // Per-screen helpers
+    // =========================================================================
+
+    void testIsPerScreenPrefix()
+    {
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("ZoneSelector:eDP-1")));
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("AutotileScreen:HDMI-1")));
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("SnappingScreen:DP-2")));
+        // Assignment groups are NOT per-screen
+        QVERIFY(!PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("Assignment:eDP-1:Desktop:1")));
+        QVERIFY(!PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("General")));
+    }
+
+    void testPrefixCategoryRoundTrip()
+    {
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("AutotileScreen")),
+                 QStringLiteral("Autotile"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("SnappingScreen")),
+                 QStringLiteral("Snapping"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("ZoneSelector")),
+                 QStringLiteral("ZoneSelector"));
+
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("Autotile")),
+                 QStringLiteral("AutotileScreen"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("Snapping")),
+                 QStringLiteral("SnappingScreen"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("ZoneSelector")),
+                 QStringLiteral("ZoneSelector"));
+    }
+
+    // =========================================================================
+    // Dot-path group operations
+    // =========================================================================
+
+    void testDotPathDeleteGroup_prunesEmptyParents()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write a value into a deeply nested dot-path group
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        backend->sync();
+
+        // Verify it was written
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
+        }
+
+        // Delete the leaf group
+        backend->deleteGroup(QStringLiteral("A.B.C"));
+        backend->sync();
+
+        // The leaf group should be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B.C")));
+
+        // Empty parents should be pruned — "A.B" and "A" should also be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B")));
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A")));
+    }
+
+    void testDotPathDeleteGroup_preservesSiblings()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write values into sibling dot-path groups
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child1"));
+            g->writeString(QStringLiteral("Key1"), QStringLiteral("V1"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            g->writeString(QStringLiteral("Key2"), QStringLiteral("V2"));
+        }
+        backend->sync();
+
+        // Delete one child
+        backend->deleteGroup(QStringLiteral("Parent.Child1"));
+
+        // Sibling should survive
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            QCOMPARE(g->readString(QStringLiteral("Key2")), QStringLiteral("V2"));
+        }
+        // Parent should survive (not empty — still has Child2)
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent")));
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent.Child2")));
+    }
+
+    void testGroupList_returnsNestedDotPaths()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write into nested groups
+        {
+            auto g = backend->group(QStringLiteral("Snapping"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Gaps"));
+            g->writeInt(QStringLiteral("Inner"), 8);
+        }
+        backend->sync();
+
+        const QStringList groups = backend->groupList();
+
+        // Should contain the intermediate and leaf groups
+        QVERIFY(groups.contains(QStringLiteral("Snapping")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior.ZoneSpan")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Gaps")));
+    }
+
+    // =========================================================================
+    // Dot-path depth limit
+    // =========================================================================
+
+    void testDotPathDepthLimit_withinLimit()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 8 segments is at the limit — should work fine
+        const QString deepGroup = QStringLiteral("A.B.C.D.E.F.G.H");
+        {
+            auto g = backend->group(deepGroup);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        {
+            auto g = backend->group(deepGroup);
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("value"));
+        }
+    }
+
+    void testDotPathDepthLimit_exceedsLimit_rejectsWrite()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 10 segments exceeds MaxDotPathDepth=8 — should be rejected (no-op)
+        const QString tooDeep = QStringLiteral("A.B.C.D.E.F.G.H.I.J");
+        {
+            auto g = backend->group(tooDeep);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        // The write should have been rejected — nothing stored at any path
+        {
+            auto g = backend->group(QStringLiteral("A.B.C.D.E.F.G.H"));
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
+        }
+        {
+            auto g = backend->group(tooDeep);
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
+        }
+    }
+
+    // =========================================================================
+    // Dot-path sync + reparse round-trip
+    // =========================================================================
+
+    void testDotPathSyncReparse_roundTrip()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write to a dot-path group
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+            g->writeString(QStringLiteral("Triggers"), QStringLiteral("[{\"modifier\":1,\"mouseButton\":0}]"));
+        }
+        backend->sync();
+
+        // Reparse from disk
+        backend->reparseConfiguration();
+
+        // Verify values survived the round-trip
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled"), false), true);
+            QVERIFY(g->readString(QStringLiteral("Triggers")).contains(QStringLiteral("modifier")));
+        }
+    }
+
+    // =========================================================================
+    // readString handles non-string JSON types
+    // =========================================================================
+
+    void testReadString_boolValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeBool(QStringLiteral("Flag"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            // readString on a bool should return "true", not the default
+            QCOMPARE(g->readString(QStringLiteral("Flag"), QStringLiteral("fallback")), QStringLiteral("true"));
+        }
+    }
+
+    void testReadString_numberValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeInt(QStringLiteral("Count"), 42);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Count"), QStringLiteral("fallback")), QStringLiteral("42"));
+        }
+    }
+    // =========================================================================
+    // writeString: non-JSON bracket string stays as string
+    // =========================================================================
+
+    void testWriteString_bracketNonJson_staysAsString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // "[Main Monitor]" starts with '[' but is not valid JSON — must stay as string
+        const QString value = QStringLiteral("[Main Monitor]");
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeString(QStringLiteral("Monitor"), value);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Monitor")), value);
+        }
+    }
+};
+
+QTEST_MAIN(TestJsonConfigBackend)
+#include "test_configbackend_json.moc"

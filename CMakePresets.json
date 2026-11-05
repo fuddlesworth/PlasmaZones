@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "BUILD_PHOSPHOR_SHELL": "ON",
+        "BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug (build/)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (build-release/)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "relwithdebinfo",
+      "displayName": "Optimized with debug info (build-relwithdebinfo/)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-relwithdebinfo",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
+    { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } }
+  ]
+}

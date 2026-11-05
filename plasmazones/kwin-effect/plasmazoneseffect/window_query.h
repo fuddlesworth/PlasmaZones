@@ -1,0 +1,140 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <PhosphorProtocol/WindowTypeEnum.h>
+#include <PhosphorRules/WindowQuery.h>
+
+#include <QSize>
+
+namespace KWin {
+class EffectWindow;
+class LogicalOutput;
+}
+
+namespace PlasmaZones {
+
+/// Map KWin's overlapping window-type predicates onto exactly one
+/// PhosphorProtocol::WindowType. Single source of truth for both the rule
+/// engine query (ruleQueryFor below) AND the daemon's window metadata
+/// push (window_identity.cpp::pushWindowMetadata casts the enum to its
+/// underlying int for D-Bus transport). Ordered most-specific-first because a
+/// window can satisfy several predicates at once (a modal dialog is both a
+/// dialog and modal — modality is orthogonal state, deliberately not a
+/// WindowType).
+PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
+
+/// True if @p w belongs to the transient family (dialog/utility/popup/menu/
+/// tooltip/splash) or has a transient parent. Single source of truth for the
+/// rule query's `isTransient` field AND the config-default appearance "normal"
+/// scope gate (Normal type AND not transient) in the KWin effect.
+bool windowIsTransient(KWin::EffectWindow* w);
+
+/// True if @p w is an override-redirect (unmanaged) X11 window OUTSIDE the
+/// transient family: a surface the window manager never manages and that
+/// declares no popup/menu type to explain itself. These are client plumbing,
+/// not application windows, rejected by the placement, animation and
+/// decoration gates alike. The live case is xembedsniproxy's 32x32 container
+/// for a legacy XEmbed tray icon (Wine / Proton apps such as Battle.net),
+/// which carries no _NET_WM_WINDOW_TYPE, so KWin reports it as neither
+/// special nor transient and every type-based reject misses it. A typed
+/// override-redirect popup (an X11 menu or dropdown) is deliberately NOT
+/// matched, so the user-toggleable transient filters stay the verdict there.
+bool windowIsBareOverrideRedirect(KWin::EffectWindow* w);
+
+/// Build a per-window PhosphorRules::WindowQuery from a live KWin window,
+/// populating every window-side field declared on `WindowQuery` so user-
+/// authored rules can match on any of them. The unified shape means a rule
+/// that passes the rule-override gate (hasAnyMatchFiltered) also resolves its slot
+/// in the per-event animation cascade.
+///
+/// Engagement contract (which fields get filled):
+///   - **Engaged on non-empty value** (`std::optional` stays disengaged when
+///     the source is empty so `Equals ""` / `Regex "^$"` foot-guns don't
+///     silently match): `appId`, `windowClass`, `title`, `windowRole`,
+///     `desktopFile`, `pid` (gated on `pid > 0` — KWin returns 0 for
+///     Wayland surfaces with no attached process and X11 windows missing
+///     `_NET_WM_PID`).
+///   - **Always engaged** when @p w is non-null: `windowType` (returns
+///     `Unknown` if no specific predicate matches — distinguishable from
+///     other types by a `WindowType Equals Unknown` predicate);
+///     `isMinimized`, `isFullscreen`, `isSticky`. `isMaximized` is engaged
+///     only when the underlying `KWin::Window*` exists (EffectWindow has
+///     no direct maximized accessor).
+///   - **Context fields** `screenId` / `virtualDesktop` / `activity`: these
+///     ARE matchable `MatchExpression` fields, so a window-domain rule may
+///     legitimately pin them (e.g. "no title bar + red border on monitor 2",
+///     "zero opacity on activity X"). `virtualDesktop` / `activity` are derived
+///     from the window itself (first desktop's x11 number; first activity UUID;
+///     0 / empty meaning all/unknown — matching the daemon-side
+///     `setWindowMetadata` derivation). `screenId` requires the effect's
+///     output→stable-id resolution, which is not available to this free
+///     helper, so the caller passes it via @p screenId (typically
+///     `getWindowScreenId(w)`). Unlike the window string fields, `screenId` is a
+///     non-optional context field that is always present; passing it empty
+///     resolves as the empty/unknown screen value (the all/unknown convention),
+///     not a disengaged optional. NOTE: a window
+///     query carrying a populated context only ENABLES context-pinned
+///     window-domain rules to match — it does not affect the windowless
+///     context cascade, which routes through `ContextRuleBridge`.
+///   - **Screen shape** `screenOrientation` / `screenWidth` / `screenHeight` /
+///     `screenAspectRatio`: stamped HERE only when @p screenId is empty, from
+///     the output nearest the frame centre (@ref centreScreenOutput). A caller
+///     that passes an id stamps them itself (the effect's ruleQuery funnel,
+///     through @ref stampScreenShape), because the centre answers the wrong
+///     monitor for a scroll strip's parked windows. An unknown shape engages
+///     unevenly: width and height stay disengaged optionals, while orientation
+///     and aspect ratio are plain strings and resolve as ENGAGED empty values,
+///     so a negated leaf on either matches a window whose screen shape is
+///     unknown.
+///
+/// PlasmaZones placement state (@p isFloating / @p isSnapped / @p zoneId) is
+/// supplied by the caller because it lives in the effect's runtime caches
+/// (NavigationHandler), not on the KWin window. The caller passes
+/// `isWindowFloating(wid)`, `isWindowSnapped(wid)`, `zoneForWindow(wid)`. These
+/// are REQUIRED (no defaults) so every call site is compiler-forced to supply
+/// them — a site that silently omitted them would leave IsFloating / IsSnapped /
+/// Zone unmatched in that resolver path only.
+///
+/// Confined to the effect translation unit so the LGPL phosphor-rules
+/// library never sees a KWin type.
+PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
+                                        bool isTiled, const QString& zoneId);
+
+/// The output at @p w's frame centre. KWin's screenAt answers the NEAREST
+/// output for a point outside them all, so this is null only for a null
+/// window or when there are no outputs at all.
+///
+/// This is the position-derived FALLBACK for the screen-shape fields: it is
+/// wrong for a scroll strip's off-screen parked windows (their centre lies
+/// outside every output, or inside the neighbour's), so a caller holding a
+/// resolved screen id should take the output from that id and use this only
+/// when the id resolves to no output.
+const KWin::LogicalOutput* centreScreenOutput(KWin::EffectWindow* w);
+
+/// @p output's current mode in device pixels, already rotated by its
+/// transform (KWin's LogicalOutput::pixelSize), or an empty size for a null
+/// output or KWin's placeholder output. The placeholder stands in while no
+/// physical output exists (every monitor off), and its mode describes no
+/// screen a rule could mean.
+QSize outputPixelSize(const KWin::LogicalOutput* output);
+
+/// Stamp the shape of a @p pixelSize screen onto @p query: the orientation
+/// ("portrait" when taller than wide, a square screen counting as landscape),
+/// the width and height, and the aspect-ratio token derived from them. A no-op
+/// for an empty size, which leaves all four fields unknown.
+///
+/// The size is what this effect reports to the daemon for each output
+/// (pushOutputPixelSizes), and a virtual screen's is its region's share of it
+/// (virtualScreenPixelSize). The daemon stamps context rules from that same
+/// report with the same derivations, so a window rule and a context rule read a
+/// screen alike once the daemon has accepted the report. It keeps a report
+/// pending until the report agrees with its own geometry for that output, and
+/// until then answers from the size it saved for that monitor last session,
+/// when it has one. A screen whose scale the daemon cannot measure (no geometry
+/// sensor) has nothing to check the report against, so it takes the report at
+/// once.
+void stampScreenShape(PhosphorRules::WindowQuery& query, const QSize& pixelSize);
+
+} // namespace PlasmaZones

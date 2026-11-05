@@ -1,0 +1,167 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# PhosphorSurfaces — managed Wayland layer-shell surface lifecycle.
+#
+# Builds on PhosphorLayer to provide:
+#   • Shared QQmlEngine with caller-supplied configurator callback
+#   • Vulkan keep-alive surface (prevents Qt global teardown)
+#   • Scope generation counter (prevents compositor rate-limiting)
+#   • Content-agnostic: callers bring their own QML and C++ types
+#
+# Depends on Qt6::Core, Qt6::Quick, PhosphorLayer::PhosphorLayer.
+
+cmake_minimum_required(VERSION 3.16)
+
+set(PHOSPHORSURFACES_VERSION "0.1.0")
+
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorSurfacesConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSURFACES_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSURFACES_QT_MIN "6.10.0")
+endif()
+
+if(NOT PROJECT_VERSION)
+    project(PhosphorSurfaces VERSION ${PHOSPHORSURFACES_VERSION} LANGUAGES CXX)
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_AUTOMOC ON)
+endif()
+
+include(GenerateExportHeader)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dependencies
+# ═══════════════════════════════════════════════════════════════════════════════
+
+find_package(Qt6 ${PHOSPHORSURFACES_QT_MIN} REQUIRED COMPONENTS Core Quick)
+
+# In-tree builds set up PhosphorShellPatterns::PhosphorShellPatterns via
+# add_subdirectory in the top-level CMakeLists; stand-alone builds need
+# find_package. Guard so the in-tree path is a no-op.
+if(NOT TARGET PhosphorShellPatterns::PhosphorShellPatterns)
+    find_package(PhosphorShellPatterns CONFIG REQUIRED)
+endif()
+
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the layer-shell transport the surfaces are presented through
+if(NOT TARGET PhosphorLayer::PhosphorLayer)
+    find_package(PhosphorLayer CONFIG REQUIRED)
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PhosphorSurfaces Library
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set(phosphorsurfaces_SRCS
+    src/surfacemanager.cpp
+)
+
+set(phosphorsurfaces_public_HDRS
+    include/PhosphorSurfaces/PhosphorSurfaces.h
+    include/PhosphorSurfaces/SurfaceManager.h
+    include/PhosphorSurfaces/SurfaceManagerConfig.h
+)
+
+add_library(PhosphorSurfaces SHARED
+    ${phosphorsurfaces_public_HDRS}
+    ${phosphorsurfaces_SRCS}
+)
+
+add_library(PhosphorSurfaces::PhosphorSurfaces ALIAS PhosphorSurfaces)
+
+generate_export_header(PhosphorSurfaces
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfaces/phosphorsurfaces_export.h
+    EXPORT_MACRO_NAME PHOSPHORSURFACES_EXPORT
+)
+
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
+target_include_directories(PhosphorSurfaces
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_features(PhosphorSurfaces PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorSurfaces
+    PUBLIC
+        Qt6::Core
+        Qt6::Quick
+        PhosphorLayer::PhosphorLayer
+        PhosphorShellPatterns::PhosphorShellPatterns
+)
+
+set_target_properties(PhosphorSurfaces PROPERTIES
+    VERSION ${PHOSPHORSURFACES_VERSION}
+    SOVERSION 0
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorSurfaces" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Install
+# ═══════════════════════════════════════════════════════════════════════════════
+
+install(TARGETS PhosphorSurfaces
+    EXPORT PhosphorSurfacesTargets
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+)
+
+install(FILES ${phosphorsurfaces_public_HDRS}
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorSurfaces
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfaces/phosphorsurfaces_export.h
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorSurfaces
+)
+
+install(EXPORT PhosphorSurfacesTargets
+    FILE PhosphorSurfacesTargets.cmake
+    NAMESPACE PhosphorSurfaces::
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorSurfaces
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhosphorSurfacesConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfacesConfig.cmake"
+    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorSurfaces
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfacesConfigVersion.cmake"
+    VERSION ${PHOSPHORSURFACES_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfacesConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSurfacesConfigVersion.cmake"
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorSurfaces
+)

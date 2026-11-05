@@ -1,0 +1,822 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <QTest>
+#include <QSignalSpy>
+#include <QGuiApplication>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QVector4D>
+#include <QSizeF>
+#include <QUrl>
+#include <QtNumeric>
+
+#include "daemon/rendering/zoneshaderitem.h"
+#include "daemon/rendering/zonelabeltexturebuilder.h"
+#include <PhosphorRendering/ZoneShaderCommon.h>
+#include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorRendering/ZoneLabelTexture.h>
+#include "config/configdefaults.h"
+#include "helpers/TestHelpers.h"
+
+#include <QImage>
+
+#include <algorithm>
+#include <cmath>
+
+using namespace PlasmaZones;
+
+/**
+ * @brief Unit tests for ZoneShaderItem
+ *
+ * Tests cover:
+ * - PhosphorZones::Zone data parsing and snapshot consistency (setZones / getZoneDataSnapshot)
+ * - Hovered zone index highlight-only update path
+ * - Shader source status transitions
+ * - Custom color / param application via setShaderParams
+ * - Audio spectrum fast path
+ * - Buffer scale clamping
+ * - Edge cases: empty zones, zero resolution, invalid shader source
+ *
+ * Note: ZoneShaderItem is a QQuickItem and requires QGuiApplication.
+ * We test the data layer (parseZoneData, snapshots, setters) without
+ * requiring a scene graph or GPU.
+ */
+class TestZoneShaderItem : public QObject
+{
+    Q_OBJECT
+
+private:
+    // Use shared makeZone helper from TestHelpers.h
+    static QVariantMap makeZone(float x, float y, float w, float h, int zoneNumber = 0, bool highlighted = false,
+                                const QString& id = QString())
+    {
+        return TestHelpers::makeZone(id, x, y, w, h, zoneNumber, highlighted);
+    }
+
+    // Helper: create a standard 4-zone layout (1920x1080 resolution)
+    static QVariantList makeFourZoneLayout()
+    {
+        QVariantList zones;
+        zones.append(makeZone(0, 0, 960, 540, 1, true));
+        zones.append(makeZone(960, 0, 960, 540, 2, false));
+        zones.append(makeZone(0, 540, 960, 540, 3, true));
+        zones.append(makeZone(960, 540, 960, 540, 4, false));
+        return zones;
+    }
+
+private Q_SLOTS:
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P0: Crash prevention
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneShaderItem_setZonesProducesConsistentSnapshot()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QVariantList zones = makeFourZoneLayout();
+        item.setZones(zones);
+
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+
+        // PhosphorZones::Zone count must match input
+        QCOMPARE(snapshot.zoneCount, 4);
+        // Rects, fill colors, border colors must all have matching sizes
+        QCOMPARE(snapshot.rects.size(), 4);
+        QCOMPARE(snapshot.fillColors.size(), 4);
+        QCOMPARE(snapshot.borderColors.size(), 4);
+        // Version must be non-zero after setting zones
+        QVERIFY(snapshot.version > 0);
+    }
+
+    void testZoneShaderItem_hoveredZoneIndexDoesNotReparseZones()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QVariantList zones = makeFourZoneLayout();
+        item.setZones(zones);
+
+        PhosphorRendering::ZoneDataSnapshot before = item.getZoneDataSnapshot();
+        const int versionBefore = before.version;
+
+        // Changing hoveredZoneIndex should update highlight flags but NOT reparse
+        // all zone data from scratch.
+        //
+        // The geometry and version assertions below CANNOT show that on their own,
+        // and used to be all this slot had: both paths bump the version exactly
+        // once (parseZoneData and updateHoveredHighlightOnly each do
+        // `version = ++m_dataVersion`), and a full reparse of an unchanged list
+        // reproduces the same geometry, so every one of them is satisfied by the
+        // behaviour this test exists to rule out. The spies are the discriminator:
+        // a reparse goes through setZones, which announces itself.
+        QSignalSpy zonesSpy(&item, &ZoneShaderItem::zonesChanged);
+        QSignalSpy countSpy(&item, &ZoneShaderItem::zoneCountChanged);
+
+        item.setHoveredZoneIndex(2);
+
+        QCOMPARE(zonesSpy.count(), 0);
+        QCOMPARE(countSpy.count(), 0);
+
+        PhosphorRendering::ZoneDataSnapshot after = item.getZoneDataSnapshot();
+
+        // Geometry must be unchanged (no reparse)
+        for (int i = 0; i < 4; ++i) {
+            QCOMPARE(after.rects[i].x, before.rects[i].x);
+            QCOMPARE(after.rects[i].y, before.rects[i].y);
+            QCOMPARE(after.rects[i].width, before.rects[i].width);
+            QCOMPARE(after.rects[i].height, before.rects[i].height);
+        }
+
+        // PhosphorZones::Zone 2 (index 2) should now be highlighted
+        QVERIFY(after.rects[2].highlighted);
+
+        // Version should have incremented by exactly 1 (lightweight update, not full reparse)
+        QCOMPARE(after.version, versionBefore + 1);
+    }
+
+    void testZoneShaderItem_zoneDataSnapshotConsistency()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(800, 600));
+
+        QVariantList zones;
+        zones.append(makeZone(0, 0, 400, 600, 1, false));
+        zones.append(makeZone(400, 0, 400, 600, 2, true));
+        item.setZones(zones);
+
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+
+        // All arrays must have the same count as zoneCount
+        QCOMPARE(snapshot.rects.size(), snapshot.zoneCount);
+        QCOMPARE(snapshot.fillColors.size(), snapshot.zoneCount);
+        QCOMPARE(snapshot.borderColors.size(), snapshot.zoneCount);
+    }
+
+    void testZoneShaderItem_shaderSourceChangeResetsStatus()
+    {
+        ZoneShaderItem item;
+
+        // Initially status should be Null
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Null);
+
+        QSignalSpy statusSpy(&item, &ZoneShaderItem::statusChanged);
+
+        // Setting a shader source should transition to Loading
+        item.setShaderSource(QUrl::fromLocalFile(QStringLiteral("/tmp/nonexistent_test.frag")));
+
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
+        QVERIFY(statusSpy.count() >= 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P1: Functional
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneShaderItem_parseZoneDataNormalization()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QVariantList zones;
+        zones.append(makeZone(960, 540, 480, 270, 1));
+        item.setZones(zones);
+
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        QCOMPARE(snapshot.rects.size(), 1);
+
+        const PhosphorRendering::ZoneRect& rect = snapshot.rects[0];
+
+        // 960/1920 = 0.5, 540/1080 = 0.5, 480/1920 = 0.25, 270/1080 = 0.25
+        QVERIFY(qFuzzyCompare(rect.x, 0.5f));
+        QVERIFY(qFuzzyCompare(rect.y, 0.5f));
+        QVERIFY(qFuzzyCompare(rect.width, 0.25f));
+        QVERIFY(qFuzzyCompare(rect.height, 0.25f));
+    }
+
+    void testZoneShaderItem_parseZoneDataHighlightCounting()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QVariantList zones;
+        zones.append(makeZone(0, 0, 480, 540, 1, true)); // highlighted
+        zones.append(makeZone(480, 0, 480, 540, 2, false)); // not highlighted
+        zones.append(makeZone(960, 0, 480, 540, 3, true)); // highlighted
+        zones.append(makeZone(1440, 0, 480, 540, 4, false)); // not highlighted
+        item.setZones(zones);
+
+        QCOMPARE(item.highlightedCount(), 2);
+
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        QCOMPARE(snapshot.highlightedCount, 2);
+    }
+
+    void testZoneShaderItem_setShaderParamsAppliesCustomColors()
+    {
+        ZoneShaderItem item;
+
+        // The default colour comes from ConfigDefaults::highlightFallbackColor(),
+        // which is the same expression the constructor passes to setCustomColor1.
+        // So this pins the WIRING and not the VALUE: a hardcoded literal default
+        // would fail it, a wrong ConfigDefaults value would not. The epsilon
+        // below is inherited from the push case and means nothing here, where
+        // both sides are one accessor read twice.
+        constexpr float kEpsilon = 0.002f;
+        QColor defaultColor = item.customColor1();
+        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightFallbackColor();
+        QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - static_cast<float>(expectedColor.redF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - static_cast<float>(expectedColor.greenF()))
+                < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.blueF()) - static_cast<float>(expectedColor.blueF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.alphaF()) - static_cast<float>(expectedColor.alphaF()))
+                < kEpsilon);
+
+        // Apply custom color via shaderParams
+        QVariantMap params;
+        params.insert(QStringLiteral("customColor1"), QColor(Qt::blue));
+        item.setShaderParams(params);
+
+        QColor newColor = item.customColor1();
+        // Blue: (0, 0, 1, 1)
+        QVERIFY(qAbs(static_cast<float>(newColor.redF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.greenF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.blueF()) - 1.0f) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.alphaF()) - 1.0f) < kEpsilon);
+    }
+
+    void testZoneShaderItem_setAudioSpectrumPreservesType()
+    {
+        ZoneShaderItem item;
+
+        QSignalSpy spectrumSpy(&item, &ZoneShaderItem::audioSpectrumChanged);
+
+        // Use the raw QVector<float> fast path
+        QVector<float> spectrum = {0.1f, 0.5f, 0.8f, 1.0f};
+        item.setAudioSpectrum(spectrum);
+
+        QCOMPARE(spectrumSpy.count(), 1);
+
+        // Verify the variant round-trip preserves QVector<float>
+        QVariant v = item.audioSpectrumVariant();
+        QVERIFY(v.metaType() == QMetaType::fromType<QVector<float>>());
+        QVector<float> retrieved = v.value<QVector<float>>();
+        QCOMPARE(retrieved.size(), 4);
+        QVERIFY(qFuzzyCompare(retrieved[0], 0.1f));
+        QVERIFY(qFuzzyCompare(retrieved[3], 1.0f));
+    }
+
+    void testZoneShaderItem_bufferScaleClamped()
+    {
+        ZoneShaderItem item;
+
+        // The default is the ceiling: a pack that declares no scale renders
+        // its buffers at full resolution.
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMaxBufferScale));
+
+        // Below the contract floor (PhosphorShaders::kMinBufferScale) should clamp.
+        // Keep this probe well under the floor: it was 0.01, which stopped being
+        // below it when the floor dropped to 1/128 for the blur-scale multiplier.
+        item.setBufferScale(0.001);
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMinBufferScale));
+
+        // Above the contract ceiling should clamp. Named, not the literal it
+        // happens to equal: the floor below already moved once.
+        item.setBufferScale(5.0);
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMaxBufferScale));
+
+        // Normal value should pass through
+        item.setBufferScale(0.5);
+        QVERIFY(qFuzzyCompare(item.bufferScale(), 0.5));
+    }
+
+    void testZoneShaderItem_halfFloatBuffersDefaultsTrue()
+    {
+        ZoneShaderItem item;
+
+        // Half-float buffers are the safe default: a pack that never declared
+        // the key keeps RGBA16F intermediates (HDR / signed-data / feedback
+        // safe). Only an explicit "halfFloatBuffers": false opts into RGBA8.
+        QCOMPARE(item.halfFloatBuffers(), true);
+
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(item.halfFloatBuffers(), false);
+
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(item.halfFloatBuffers(), true);
+
+        // COVERAGE LIMIT: this pins the item-side property contract only. The
+        // behaviour the flag exists for — ensureBufferTarget choosing RGBA8
+        // over RGBA16F and rebuilding the buffer targets on a flip — lives on
+        // the render node behind a live scene graph, reachable only through
+        // the opt-in GPU harness (PLASMAZONES_GPU_TESTS=1).
+    }
+
+    void testZoneShaderItem_halfFloatBuffersChangeGuard()
+    {
+        ZoneShaderItem item;
+
+        QSignalSpy spy(&item, &ZoneShaderItem::halfFloatBuffersChanged);
+        // Repeat of the current value must be suppressed ("emit only on
+        // change"), a genuine flip must emit exactly once. Same pattern the
+        // labelsTexture suppression test below establishes.
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(spy.count(), 0);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testZoneShaderItem_releaseIdleGraphicsResourcesWithoutWindow()
+    {
+        ZoneShaderItem item;
+        item.setShaderSource(QUrl(QStringLiteral("qrc:/does/not/matter.frag")));
+        const auto statusBefore = item.status();
+        const QString errorBefore = item.errorLog();
+
+        // The daemon's idle quiesce reaches this Q_INVOKABLE via the QML
+        // forwarder chain. Windowless (headless) it must be a clean no-op:
+        // the win guard returns before any render job is scheduled, and
+        // neither status nor errorLog moves.
+        item.releaseIdleGraphicsResources();
+
+        QCOMPARE(item.status(), statusBefore);
+        QCOMPARE(item.errorLog(), errorBefore);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P2: Edge cases
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneShaderItem_emptyZonesProducesEmptySnapshot()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        // Set zones then clear
+        item.setZones(makeFourZoneLayout());
+        QCOMPARE(item.zoneCount(), 4);
+
+        item.setZones(QVariantList());
+
+        QCOMPARE(item.zoneCount(), 0);
+        QCOMPARE(item.highlightedCount(), 0);
+
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        QCOMPARE(snapshot.zoneCount, 0);
+        QVERIFY(snapshot.rects.isEmpty());
+        QVERIFY(snapshot.fillColors.isEmpty());
+        QVERIFY(snapshot.borderColors.isEmpty());
+    }
+
+    void testZoneShaderItem_zeroResolutionDoesNotDivideByZero()
+    {
+        ZoneShaderItem item;
+        // Resolution is default (0x0 or unset) - parseZoneData should use fallback divisor
+
+        QVariantList zones;
+        zones.append(makeZone(100, 200, 300, 400, 1));
+        item.setZones(zones);
+
+        // Must not crash - fallback divisor is 1.0
+        PhosphorRendering::ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
+        QCOMPARE(snapshot.zoneCount, 1);
+
+        // With fallback divisor of 1.0, pixel coords pass through as-is
+        QVERIFY(qFuzzyCompare(snapshot.rects[0].x, 100.0f));
+        QVERIFY(qFuzzyCompare(snapshot.rects[0].y, 200.0f));
+        QVERIFY(qFuzzyCompare(snapshot.rects[0].width, 300.0f));
+        QVERIFY(qFuzzyCompare(snapshot.rects[0].height, 400.0f));
+    }
+
+    void testZoneShaderItem_shaderSourceTransitionsToLoadingInHeadlessMode()
+    {
+        // Renamed from the old misleading "SetsErrorStatus" — in headless
+        // tests there is no scene graph, so updatePaintNode never runs and
+        // setShaderSource's Loading state never advances to Error or Null.
+        // That's all this test can assert without a QQuickView on a live
+        // compositor.
+        ZoneShaderItem item;
+
+        // Setting a valid URL transitions to Loading (actual loading happens in updatePaintNode)
+        item.setShaderSource(QUrl::fromLocalFile(QStringLiteral("/nonexistent/path/shader.frag")));
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
+
+        // Setting an empty URL: setShaderSource unconditionally sets Loading on any
+        // source change. The Null transition only happens later in loadShader() which
+        // is called from updatePaintNode (scene graph), not available in headless mode.
+        item.setShaderSource(QUrl());
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
+    }
+
+    void testZoneShaderItem_unsupportedUrlSchemeIsFullyRefused()
+    {
+        // http:// / ftp:// / etc. can't be loaded by the RHI pipeline; the
+        // library rejects them at setShaderSource() (input-validation
+        // boundary) as a FULL refusal: no state changes at all, only a
+        // warning. Setting Status::Error while the previous shader kept
+        // rendering made status, the property value, and the on-screen
+        // output disagree (and reloadShader() then erased the error), so
+        // the contract is now "a refused write leaves everything as it
+        // was".
+        ZoneShaderItem item;
+
+        // "Leaves everything as it was" is only observable against a PRIOR state,
+        // and this slot used to run the refused write on a fresh item and assert
+        // status Null, an empty log and an empty source — which are the
+        // constructor's own defaults. It passed whether the write was refused,
+        // accepted, or ignored entirely. Accept one first so there is something
+        // to preserve.
+        const QUrl accepted(QStringLiteral("qrc:/zone-shader-item-test-does-not-exist.frag"));
+        item.setShaderSource(accepted);
+        QCOMPARE(item.shaderSource(), accepted);
+        const ZoneShaderItem::Status statusBefore = item.status();
+        const QString logBefore = item.errorLog();
+
+        item.setShaderSource(QUrl(QStringLiteral("http://example.com/shader.frag")));
+
+        QCOMPARE(item.shaderSource(), accepted);
+        QCOMPARE(item.status(), statusBefore);
+        QCOMPARE(item.errorLog(), logBefore);
+    }
+
+    /// setBufferScales, the per-pass list, had NO coverage anywhere in the tree
+    /// while the single-value setBufferScale beside it was covered. Its three
+    /// contracts are the per-entry clamp, the drop past the pass budget, and the
+    /// equal-list early return.
+    void testZoneShaderItem_bufferScalesClampedCappedAndDeduplicated()
+    {
+        ZoneShaderItem item;
+        QVERIFY(item.bufferScales().isEmpty());
+
+        QSignalSpy spy(&item, &PhosphorRendering::ShaderEffect::bufferScalesChanged);
+
+        item.setBufferScales(QVariantList{0.0001, 0.5, 5.0});
+        QCOMPARE(item.bufferScales().size(), 3);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), PhosphorShaders::kMinBufferScale);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.5);
+        QCOMPARE(item.bufferScales().at(2).toDouble(), PhosphorShaders::kMaxBufferScale);
+        QCOMPARE(spy.count(), 1);
+
+        // Re-pushing the SAME raw values must not re-emit. The stored list is
+        // already clamped, so this also proves the comparison is made against the
+        // clamped form rather than the raw one, which a QML binding re-evaluating
+        // every frame depends on.
+        item.setBufferScales(QVariantList{0.0001, 0.5, 5.0});
+        QCOMPARE(spy.count(), 1);
+
+        QVariantList tooMany;
+        for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 3; ++i) {
+            tooMany.append(0.5);
+        }
+        item.setBufferScales(tooMany);
+        QCOMPARE(item.bufferScales().size(), PhosphorShaders::kMaxBufferPasses);
+    }
+
+    /// The fourth contract of the same setter, and the one a bound would get
+    /// wrong: an entry that is not a finite number falls back to the PACK-WIDE
+    /// bufferScale, not to a bound.
+    ///
+    /// The pack-wide scale is set away from its 1.0 default first, because 1.0
+    /// is also kMaxBufferScale, and against the default the fallback and a clamp
+    /// to the maximum are indistinguishable. At 0.25 they are three different
+    /// answers: 0.25 is the fallback, kMinBufferScale is what qBound gives a
+    /// QVariant::toDouble of 0, and kMaxBufferScale is the other bound. Only the
+    /// first leaves the pass rendering at the size the pack asked for, instead of
+    /// at 1/128 of the canvas looking like a broken shader.
+    void testZoneShaderItem_bufferScalesNonFiniteEntryFallsBackToPackScale()
+    {
+        ZoneShaderItem item;
+        item.setBufferScale(0.25);
+
+        // Not parseable as a number at all: `ok` is false.
+        item.setBufferScales(QVariantList{QStringLiteral("half"), 0.5});
+        QCOMPARE(item.bufferScales().size(), 2);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.5);
+
+        // Parses, but is not finite. qBound on a NaN is unspecified, so this arm
+        // has to be taken before the clamp rather than inside it.
+        item.setBufferScales(QVariantList{qQNaN(), qInf(), -qInf()});
+        QCOMPARE(item.bufferScales().size(), 3);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(2).toDouble(), 0.25);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Additional: signals and setter behavior
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneShaderItem_setZonesEmitsSignals()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QSignalSpy zonesSpy(&item, &ZoneShaderItem::zonesChanged);
+        QSignalSpy countSpy(&item, &ZoneShaderItem::zoneCountChanged);
+
+        item.setZones(makeFourZoneLayout());
+
+        QCOMPARE(zonesSpy.count(), 1);
+        QCOMPARE(countSpy.count(), 1);
+    }
+
+    void testZoneShaderItem_setZonesSameDataNoSignal()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+
+        QVariantList zones = makeFourZoneLayout();
+        item.setZones(zones);
+
+        QSignalSpy zonesSpy(&item, &ZoneShaderItem::zonesChanged);
+
+        // Setting same data should not emit
+        item.setZones(zones);
+        QCOMPARE(zonesSpy.count(), 0);
+    }
+
+    void testZoneShaderItem_hoveredZoneIndexClamping()
+    {
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+        item.setZones(makeFourZoneLayout());
+
+        // Out of range positive index should clamp to -1
+        item.setHoveredZoneIndex(100);
+        QCOMPARE(item.hoveredZoneIndex(), -1);
+
+        // Negative index should clamp to -1
+        item.setHoveredZoneIndex(-5);
+        QCOMPARE(item.hoveredZoneIndex(), -1);
+
+        // Valid index should pass through
+        item.setHoveredZoneIndex(2);
+        QCOMPARE(item.hoveredZoneIndex(), 2);
+    }
+
+    void testZoneShaderItem_hoveredZoneIndexReDerivedOnZoneListChange()
+    {
+        // The two QML bindings (zones, hoveredZoneIndex) evaluate in an
+        // unspecified order, so setZones has to re-derive the effective hover
+        // from the last REQUESTED index in both directions.
+        ZoneShaderItem item;
+        item.setIResolution(QSizeF(1920, 1080));
+        item.setZones(makeFourZoneLayout());
+        item.setHoveredZoneIndex(3);
+        QCOMPARE(item.hoveredZoneIndex(), 3);
+
+        QSignalSpy hoverSpy(&item, &ZoneShaderItem::hoveredZoneIndexChanged);
+
+        // Shrink past the hovered index: it must drop, not stay stale.
+        QVariantList two;
+        two.append(makeZone(0, 0, 960, 1080, 1, false));
+        two.append(makeZone(960, 0, 960, 1080, 2, false));
+        item.setZones(two);
+        QCOMPARE(item.hoveredZoneIndex(), -1);
+        QCOMPARE(hoverSpy.count(), 1);
+        // Nothing is highlighted by hover any more, and neither test zone
+        // carries its own highlight flag.
+        QCOMPARE(item.highlightedCount(), 0);
+
+        // Grow again: the request that arrived while the list was short has to
+        // come back, or the highlight is lost until the cursor moves.
+        item.setZones(makeFourZoneLayout());
+        QCOMPARE(item.hoveredZoneIndex(), 3);
+        QCOMPARE(hoverSpy.count(), 2);
+    }
+
+    void testZoneShaderItem_setShaderParamsAppliesFloatSlots()
+    {
+        ZoneShaderItem item;
+
+        QVariantMap params;
+        params.insert(QStringLiteral("customParams1_x"), 0.42f);
+        params.insert(QStringLiteral("customParams1_y"), 0.99f);
+        item.setShaderParams(params);
+
+        QVector4D p1 = item.customParams1();
+        QVERIFY(qFuzzyCompare(p1.x(), 0.42f));
+        QVERIFY(qFuzzyCompare(p1.y(), 0.99f));
+    }
+
+    void testZoneShaderItem_bufferWrapNormalization()
+    {
+        ZoneShaderItem item;
+
+        // Default is "clamp"
+        QCOMPARE(item.bufferWrap(), QStringLiteral("clamp"));
+
+        // "repeat" is valid
+        item.setBufferWrap(QStringLiteral("repeat"));
+        QCOMPARE(item.bufferWrap(), QStringLiteral("repeat"));
+
+        // Invalid values should normalize to "clamp"
+        item.setBufferWrap(QStringLiteral("invalid"));
+        QCOMPARE(item.bufferWrap(), QStringLiteral("clamp"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Zone-label sparse payload (memory: full-screen image → sparse glyph tiles)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneLabelBuilder_producesSparseTilesNotFullScreen()
+    {
+        const QSize screen(1920, 1080);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+
+        QVERIFY(!labels.isEmpty());
+        // The payload is screen-addressed but carries one tile per numbered zone.
+        QCOMPARE(labels.size, screen);
+        QCOMPARE(labels.tiles.size(), 4);
+
+        const qint64 fullScreenBytes = qint64(screen.width()) * screen.height() * 4;
+        qint64 tileBytes = 0;
+        for (const PhosphorRendering::ZoneLabelTile& tile : labels.tiles) {
+            QVERIFY(!tile.image.isNull());
+            // Each tile is a small glyph region, far smaller than the screen.
+            QVERIFY(tile.image.width() < screen.width() / 2);
+            QVERIFY(tile.image.height() < screen.height() / 2);
+            // And it sits fully inside the texture.
+            const QRect r(tile.dest, tile.image.size());
+            QVERIFY(QRect(QPoint(0, 0), screen).contains(r));
+            tileBytes += qint64(tile.image.width()) * tile.image.height() * 4;
+        }
+        // The whole point: glyph tiles cost a tiny fraction of a full-screen image.
+        QVERIFY(tileBytes < fullScreenBytes / 10);
+    }
+
+    void testZoneLabelBuilder_rastersAtDeviceResolution()
+    {
+        // The labels texture is sampled by a shader whose iResolution is
+        // logical x devicePixelRatio (ShaderEffect reports
+        // requiresPhysicalResolution on the overlay path), so building it at
+        // logical resolution hands the GPU a texture it bilinearly upscales —
+        // soft glyphs at every HiDPI scale, and overlay packs whose
+        // 1.0/iResolution halo and edge-detect taps step less than one texel.
+        // 1.15 rather than 2.0 because a whole ratio hides rounding.
+        const QSize screen(1920, 1080);
+        const qreal dpr = 1.15;
+
+        const PhosphorRendering::ZoneLabelTexture logical =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+        const PhosphorRendering::ZoneLabelTexture device =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, dpr, Qt::white, /*showNumbers=*/true);
+
+        QVERIFY(!logical.isEmpty());
+        QVERIFY(!device.isEmpty());
+        // The payload is device-addressed: the node allocates the GPU texture
+        // at exactly this size.
+        QCOMPARE(device.size, QSize(qRound(screen.width() * dpr), qRound(screen.height() * dpr)));
+        QCOMPARE(device.tiles.size(), logical.tiles.size());
+
+        // Ink extent inside a tile, which is what actually distinguishes a
+        // glyph RASTERISED at the higher resolution from one merely allocated
+        // a bigger tile. A tile whose painter forgot the scale keeps its size
+        // and draws a logical-sized glyph into the corner of it.
+        const auto inkBounds = [](const QImage& image) {
+            int minX = image.width();
+            int minY = image.height();
+            int maxX = -1;
+            int maxY = -1;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    if (qAlpha(image.pixel(x, y)) > 0) {
+                        minX = std::min(minX, x);
+                        minY = std::min(minY, y);
+                        maxX = std::max(maxX, x);
+                        maxY = std::max(maxY, y);
+                    }
+                }
+            }
+            return maxX < 0 ? QRect() : QRect(QPoint(minX, minY), QPoint(maxX, maxY));
+        };
+
+        for (int i = 0; i < device.tiles.size(); ++i) {
+            const PhosphorRendering::ZoneLabelTile& lo = logical.tiles.at(i);
+            const PhosphorRendering::ZoneLabelTile& de = device.tiles.at(i);
+
+            // Still inside the texture it composites into.
+            QVERIFY(!de.image.isNull());
+            QVERIFY(QRect(QPoint(0, 0), device.size).contains(QRect(de.dest, de.image.size())));
+
+            const QRect loInk = inkBounds(lo.image);
+            const QRect deInk = inkBounds(de.image);
+            QVERIFY2(loInk.isValid(), "no ink in the logical-resolution tile: the glyph never rendered");
+            QVERIFY2(deInk.isValid(), "no ink in the device-resolution tile: the glyph never rendered");
+
+            // The glyph is drawn dpr times larger in device pixels, which is
+            // the whole point — same size on screen, more samples. Two pixels
+            // of slack for antialiasing and the outward tile alignment.
+            QVERIFY2(std::abs(deInk.width() - loInk.width() * dpr) <= 2.0,
+                     qPrintable(QStringLiteral("glyph %1 ink width %2, expected ~%3 at dpr %4")
+                                    .arg(i)
+                                    .arg(deInk.width())
+                                    .arg(loInk.width() * dpr)
+                                    .arg(dpr)));
+            QVERIFY2(std::abs(deInk.height() - loInk.height() * dpr) <= 2.0,
+                     "glyph ink height did not scale with the device pixel ratio");
+
+            // And it stays where it was: the tile's device origin is its
+            // logical origin scaled, so the number does not drift across the
+            // zone. Catches a transform composed in the wrong order, which
+            // scales the offset too and throws every glyph outward.
+            QVERIFY2(std::abs(de.dest.x() - lo.dest.x() * dpr) <= 3.0, "tile drifted horizontally");
+            QVERIFY2(std::abs(de.dest.y() - lo.dest.y() * dpr) <= 3.0, "tile drifted vertically");
+        }
+    }
+
+    void testZoneLabelBuilder_emptyWhenNumbersOff()
+    {
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/false);
+        QVERIFY(labels.isEmpty());
+        QVERIFY(labels.toImage().isNull());
+    }
+
+    void testZoneLabelTexture_toImageCompositesToFullSize()
+    {
+        const QSize screen(1920, 1080);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+
+        const QImage composited = labels.toImage();
+        QCOMPARE(composited.size(), screen);
+        QVERIFY(!composited.isNull());
+
+        // Some pixels must be non-transparent (the glyphs were painted in).
+        bool anyOpaque = false;
+        for (const PhosphorRendering::ZoneLabelTile& tile : labels.tiles) {
+            // Sample the centre of each tile's destination region.
+            const QPoint c = tile.dest + QPoint(tile.image.width() / 2, tile.image.height() / 2);
+            if (qAlpha(composited.pixel(c)) > 0) {
+                anyOpaque = true;
+                break;
+            }
+        }
+        QVERIFY(anyOpaque);
+    }
+
+    void testZoneShaderItem_labelsTexturePayloadRoundTrips()
+    {
+        ZoneShaderItem item;
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+
+        QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
+        item.setLabelsTexture(labels);
+        QCOMPARE(spy.count(), 1);
+
+        const PhosphorRendering::ZoneLabelTexture got = item.labelsTexture();
+        QCOMPARE(got.size, labels.size);
+        QCOMPARE(got.tiles.size(), labels.tiles.size());
+    }
+
+    void testZoneShaderItem_qImageConverterWrapsAsSingleTile()
+    {
+        // The settings shader preview still hands the labelsTexture
+        // property a full QImage; the ctor-registered converter must wrap it as
+        // a single full-size tile so that path keeps working unchanged.
+        ZoneShaderItem item; // ctor registers the QImage→ZoneLabelTexture converter
+
+        QImage img(64, 48, QImage::Format_ARGB32);
+        img.fill(Qt::red);
+
+        QVERIFY(item.setProperty("labelsTexture", QVariant::fromValue(img)));
+        const PhosphorRendering::ZoneLabelTexture got = item.labelsTexture();
+        QCOMPARE(got.size, img.size());
+        QCOMPARE(got.tiles.size(), 1);
+        QCOMPARE(got.tiles.first().dest, QPoint(0, 0));
+        QCOMPARE(got.tiles.first().image.size(), img.size());
+    }
+
+    void testZoneShaderItem_labelsTextureSamePayloadSuppressesSignal()
+    {
+        ZoneShaderItem item;
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+
+        item.setLabelsTexture(labels); // first set: genuine change from the empty default
+
+        QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
+        // Re-setting an equal payload must be suppressed by the operator== guard
+        // (the "emit only on change" rule). Without the guard this would fire.
+        item.setLabelsTexture(labels);
+        QCOMPARE(spy.count(), 0);
+
+        // A genuinely different payload (same geometry, different glyph color →
+        // different tile pixels) still emits.
+        const PhosphorRendering::ZoneLabelTexture other = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::red, /*showNumbers=*/true);
+        item.setLabelsTexture(other);
+        QCOMPARE(spy.count(), 1);
+    }
+};
+
+QTEST_MAIN(TestZoneShaderItem)
+#include "test_zone_shader_item.moc"

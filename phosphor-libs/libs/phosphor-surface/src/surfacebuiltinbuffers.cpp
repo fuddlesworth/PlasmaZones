@@ -1,0 +1,80 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QStandardPaths>
+
+namespace PhosphorSurfaceShaders {
+
+bool SurfaceShaderRegistry::isBuiltinBufferShader(const QString& token)
+{
+    return token.startsWith(QLatin1String("builtin:"));
+}
+
+QString SurfaceShaderRegistry::resolveBuiltinBufferShader(const QString& token, const QString& effectDir)
+{
+    // Fixed token→file whitelist. The mapped names are registry-owned
+    // constants, never author input, so resolving them against the shared
+    // dirs does not reopen the pack-dir traversal guard this function
+    // bypasses.
+    static const QHash<QString, QString> kBuiltinBufferShaders = {
+        {QStringLiteral("builtin:gaussian-h"), QStringLiteral("gaussian_h.frag")},
+        {QStringLiteral("builtin:gaussian-v"), QStringLiteral("gaussian_v.frag")},
+        // The dual Kawase pyramid the bundled blur family runs: four DOWN
+        // levels then three UP levels, declared together with the matching
+        // `bufferScales` (see data/surface/shared/surface_blur.glsl).
+        {QStringLiteral("builtin:kawase-down-0"), QStringLiteral("kawase_down_0.frag")},
+        {QStringLiteral("builtin:kawase-down-1"), QStringLiteral("kawase_down_1.frag")},
+        {QStringLiteral("builtin:kawase-down-2"), QStringLiteral("kawase_down_2.frag")},
+        {QStringLiteral("builtin:kawase-down-3"), QStringLiteral("kawase_down_3.frag")},
+        {QStringLiteral("builtin:kawase-up-0"), QStringLiteral("kawase_up_0.frag")},
+        {QStringLiteral("builtin:kawase-up-1"), QStringLiteral("kawase_up_1.frag")},
+        {QStringLiteral("builtin:kawase-up-2"), QStringLiteral("kawase_up_2.frag")},
+    };
+    const QString fileName = kBuiltinBufferShaders.value(token);
+    if (fileName.isEmpty()) {
+        return QString();
+    }
+    // System packs live at <root>/<pack> with the shared dir as a sibling of
+    // the pack dir; probe there first so a development tree (or a custom
+    // search path) resolves against its own shared dir rather than an
+    // installed copy.
+    if (!effectDir.isEmpty()) {
+        const QString sibling = QDir(effectDir).absoluteFilePath(QStringLiteral("../shared/") + fileName);
+        if (QFile::exists(sibling)) {
+            return QFileInfo(sibling).canonicalFilePath();
+        }
+    }
+    // No sibling shared dir, which is the usual case for a user pack under
+    // ~/.local/share/plasmazones/surface/<pack>. Fall back to the data dirs,
+    // mirroring how SurfaceShaderItem::surfaceIncludePaths() locates the
+    // shared includes. Canonicalize like the sibling branch so both paths
+    // return the same form (symlinks resolved).
+    //
+    // Neither step is a guarantee about WHICH copy wins, and the sibling probe
+    // above decides it for nearly everything. It is a plain existence check
+    // that runs FIRST, and the install ships the whole surface tree including
+    // shared/, so every BUNDLED pack resolves from its own system shared/
+    // sibling and never reaches this fallback. A user pack that ships its own
+    // ../shared/ is likewise served from it.
+    //
+    // This branch is for a pack whose own tree ships no shared/ sibling, which
+    // is the usual shape for a hand-installed user pack. There,
+    // QStandardPaths searches the user data dir before the system ones, so a
+    // file dropped in ~/.local/share/plasmazones/surface/shared/ is what such
+    // a pack resolves to. That is ordinary search-path precedence for
+    // user-installed content, not a hole — the builtin NAMES are a closed
+    // whitelist, it is only the file each resolves to that follows the search
+    // path, and it does not reach a pack that has a sibling of its own.
+    const QString located = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                   surfacePackDataSubdir() + QLatin1String("/shared/") + fileName);
+    return located.isEmpty() ? QString() : QFileInfo(located).canonicalFilePath();
+}
+
+} // namespace PhosphorSurfaceShaders

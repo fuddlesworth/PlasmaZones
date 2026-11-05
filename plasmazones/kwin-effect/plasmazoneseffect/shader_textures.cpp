@@ -1,0 +1,579 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "plasmazoneseffect.h"
+#include "kwincompat.h"
+#include "shader_internal.h"
+#include "compositor/effectlogging.h"
+
+#include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
+#include <effect/effecthandler.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
+#include <opengl/gltexture.h>
+
+#include <QByteArray>
+#include <QFile>
+#include <QFileInfo>
+#include <QImage>
+#include <QImageReader>
+#include <QLoggingCategory>
+#include <QPainter>
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QSvgRenderer>
+
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <unordered_set>
+#include <utility>
+
+namespace PlasmaZones {
+
+using ShaderInternal::injectKwinDefineAfterVersion;
+using ShaderInternal::kCustomColorsElementNames;
+using ShaderInternal::kCustomParamsElementNames;
+using ShaderInternal::kITextureResolutionKeys;
+using ShaderInternal::kUserTextureSamplerNames;
+using ShaderInternal::loadUserTextureImage;
+
+/// Load a user-texture file into a QImage. Mirrors the daemon-side path
+/// in `PhosphorRendering::ShaderEffect::setShaderParams`: PNG/JPG/etc.
+/// decode via `QImageReader`; `.svg` / `.svgz` rasterise via `QSvgRenderer` at
+/// the requested max-axis dimension (defaulting to 1024 to match
+/// ZoneShaderItem's pre-unification SVG size). The `QImage::Format_RGBA8888`
+/// conversion ensures `KWin::GLTexture::upload` always sees a consistent
+/// pixel layout regardless of the source file's native format. Returns
+/// a null QImage on any failure; the caller logs and skips the slot.
+///
+/// SVG rasterise target: `Format_ARGB32_Premultiplied` first, then
+/// convert to `Format_RGBA8888` for the GPU upload. QPainter's
+/// source-over compositing is defined for premultiplied targets;
+/// rendering an SVG with semi-transparent strokes/fills directly into
+/// `Format_RGBA8888` produces subtly wrong alpha at partial-cover paths.
+/// Matches the daemon path's behaviour exactly so the same SVG renders
+/// identically on both runtimes.
+QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+    // Mirrors ShaderEffect::kMaxSvgPixelBytes (RGBA8 at 2048 squared). Spelled out
+    // here rather than shared, because the effect does not link PhosphorRendering
+    // and must not start doing so for one constant. The two are held together by
+    // the parity claim in this function's doc, not by the compiler.
+    constexpr qint64 kMaxTexturePixelBytes = 16LL * 1024 * 1024;
+    const auto budgetedSize = [](QSize size) {
+        // Bounded per axis BEFORE the multiply. QImageReader::size() reports the
+        // header's DECLARED dimensions without allocating anything, so a hundred-byte
+        // PNG can claim two billion by two billion, and that product overflows qint64.
+        // Signed overflow is undefined, and an overflowed value can also land back
+        // under the budget and skip the downscale. The read would then fail its own
+        // allocation limit and return null, so nothing bad reached the GPU, but the
+        // arithmetic itself was the defect.
+        // The upper bound is the real guard; the lower one only turns a degenerate
+        // axis into 1 so the product below cannot be zero. That does mean a very
+        // elongated SVG whose aspect-preserving scale rounds an axis to 0 comes back
+        // CHANGED without having exceeded any budget, so the caller's
+        // changed-means-downscaled log reads oddly for it. Harmless, and preferable
+        // to rasterising at zero.
+        size = QSize(qBound(1, size.width(), 1 << 20), qBound(1, size.height(), 1 << 20));
+        const qint64 bytes = static_cast<qint64>(size.width()) * size.height() * 4;
+        if (bytes <= kMaxTexturePixelBytes) {
+            return size;
+        }
+        const double factor = std::sqrt(static_cast<double>(kMaxTexturePixelBytes) / static_cast<double>(bytes));
+        return QSize(qMax(1, static_cast<int>(size.width() * factor)),
+                     qMax(1, static_cast<int>(size.height() * factor)));
+    };
+    const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
+        || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+    if (isSvg) {
+        QSvgRenderer renderer(path);
+        if (!renderer.isValid()) {
+            return {};
+        }
+        QSize size = renderer.defaultSize();
+        if (!size.isEmpty()) {
+            size.scale(svgMaxDim, svgMaxDim, Qt::KeepAspectRatio);
+        } else {
+            size = QSize(svgMaxDim, svgMaxDim);
+        }
+        // The per-axis cap alone does not bound the allocation: a near-square doc
+        // at svgMaxDim on both axes is svgMaxDim squared times 4 bytes.
+        const QSize budgetedSvg = budgetedSize(size);
+        if (budgetedSvg != size) {
+            qCWarning(lcEffect) << "Pack texture SVG rasterise size" << size << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedSvg << "for" << path;
+            size = budgetedSvg;
+        }
+        QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
+        rasterised.fill(Qt::transparent);
+        QPainter painter(&rasterised);
+        renderer.render(&painter);
+        painter.end();
+        return rasterised.convertToFormat(QImage::Format_RGBA8888);
+    }
+    // Budget applied during DECODE. setScaledSize means an oversized file never
+    // materialises at full resolution, where a post-hoc QImage::scaled() would
+    // need the whole allocation first. A reader that cannot report size() up
+    // front answers an invalid QSize; decode unscaled then rather than guess.
+    // Deliberately NO setAutoTransform, matching the daemon: QImage(path) never
+    // applied EXIF orientation, and enabling it would silently rotate existing
+    // pack textures that carry an orientation tag.
+    QImageReader reader(path);
+    const QSize rasterSize = reader.size();
+    if (rasterSize.isValid() && !rasterSize.isEmpty()) {
+        const QSize budgetedRaster = budgetedSize(rasterSize);
+        if (budgetedRaster != rasterSize) {
+            qCWarning(lcEffect) << "Pack texture raster size" << rasterSize << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedRaster << "for" << path;
+            reader.setScaledSize(budgetedRaster);
+        }
+    }
+    return reader.read().convertToFormat(QImage::Format_RGBA8888);
+}
+
+void PlasmaZonesEffect::evictLruTextureIfOverBound(const ShaderTransition* pending)
+{
+    // Build the set of cache pointers currently referenced by any
+    // active transition's userTextures slots ONCE. Eviction skips
+    // every one of these — the transition holds a raw non-owning
+    // pointer that would dangle if we erased the entry. The set
+    // doesn't change between iterations because the eviction below
+    // only removes NON-in-flight entries; the set of in-flight
+    // pointers is invariant across the loop, so we hoist the build.
+    std::unordered_set<const CachedTexture*> inFlight;
+    for (const auto& [_, transition] : m_shaderManager.shaderTransitions()) {
+        for (CachedTexture* tex : transition.userTextures) {
+            if (tex) {
+                inFlight.insert(tex);
+            }
+        }
+    }
+    // The transition still being BUILT is not in shaderTransitions() yet (it is
+    // inserted once every slot is resolved), so the slots it has already filled would
+    // otherwise be evictable by the sweep its own next slot triggers — leaving it
+    // holding a dangling pointer. It survives today only by arithmetic: the soft bound
+    // is many times the slot count and every entry it touches carries the newest access
+    // tick, so it can never be the victim. That is a property of two constants, not a
+    // guarantee, and neither constant knows it is load-bearing.
+    if (pending) {
+        for (CachedTexture* tex : pending->userTextures) {
+            if (tex) {
+                inFlight.insert(tex);
+            }
+        }
+    }
+    while (m_shaderManager.m_textureCache.size() > ShaderTransitionManager::kTextureCacheSoftBound) {
+        // Find the cache entry with the smallest lastAccessTick that is
+        // NOT in-flight. If every entry is in flight (pathological;
+        // would require >ShaderTransitionManager::kTextureCacheSoftBound concurrent transitions
+        // each referencing a unique texture), break — the cache
+        // transiently exceeds the bound rather than tearing a live
+        // pointer. Self-heals on the next eviction once a transition
+        // ends.
+        auto evictIt = m_shaderManager.m_textureCache.end();
+        quint64 oldestTick = std::numeric_limits<quint64>::max();
+        for (auto it = m_shaderManager.m_textureCache.begin(); it != m_shaderManager.m_textureCache.end(); ++it) {
+            if (inFlight.count(&it->second) > 0) {
+                continue;
+            }
+            if (it->second.lastAccessTick < oldestTick) {
+                oldestTick = it->second.lastAccessTick;
+                evictIt = it;
+            }
+        }
+        if (evictIt == m_shaderManager.m_textureCache.end()) {
+            return; // every entry is in flight; no safe eviction this pass
+        }
+        qCDebug(lcEffect) << "evictLruTextureIfOverBound: evicting" << evictIt->first
+                          << "(lastAccessTick=" << evictIt->second.lastAccessTick
+                          << ", cache size=" << m_shaderManager.m_textureCache.size() << ")";
+        m_shaderManager.m_textureCache.erase(evictIt);
+    }
+}
+
+const CachedShader*
+PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
+                                                const PhosphorAnimationShaders::AnimationShaderEffect& eff)
+{
+    // KWin-specific default vertex stage, AnimationShaderRegistry::
+    // compositorVertexSource(). Built in rather than
+    // loaded from `data/animations/shared/animation.vert` because that
+    // file is shared with the daemon's RHI surface pipeline, which
+    // requires all uniforms to live in UBOs (default-block uniforms
+    // aren't supported under Qt-RHI/SPIR-V) and supplies vertex
+    // positions already in clip space — exactly the opposite of what
+    // KWin's classic-GL OffscreenEffect needs:
+    //
+    //   • Positions arrive in screen-pixel space (KWin's
+    //     `OffscreenData::paint` writes window-rect pixel coords into
+    //     the streaming buffer at `GLVertex2DLayout`'s position slot).
+    //   • The pixel→NDC projection lives in the
+    //     `modelViewProjectionMatrix` default-block uniform, which KWin
+    //     sets via `Mat4Uniform::ModelViewProjectionMatrix` (mapped to
+    //     uniform name `modelViewProjectionMatrix` per
+    //     `KWin::GLShader::resolveLocations` in
+    //     `<opengl/glshader.cpp>`). Skipping the multiplication leaves
+    //     the redirected quad at coords like (1920, 1080) — entirely
+    //     outside the [-1, 1] viewport — and the transition shader
+    //     runs but paints to nothing. Manifest: `tryBeginShader`
+    //     resolves, `beginShaderTransition` installs cleanly, no
+    //     compile warnings, but the user sees no visible animation.
+    //   • Attribute slot indices match `KWin::VA_Position` (0) and
+    //     `KWin::VA_TexCoord` (1) per `<opengl/glvertexbuffer.h>`;
+    //     explicit `layout(location = N)` decorations bypass KWin's
+    //     `bindAttributeLocation("position", ...)` lookup (which is
+    //     name-only and would mismatch our `texCoord` vs KWin's
+    //     `texcoord`).
+    //
+    // KWin 6.7 supplies bottom-up offscreen texcoords, while 6.8 supplies
+    // top-down texcoords. The shader contract expects `vTexCoord` Y-down
+    // (y = 0 at the top), so flip only the 6.7 input. The redirected window
+    // texture's sampler orientation also varies by KWin version. Shaders read
+    // it through `surfaceColor()` instead of sampling `uTexture0` directly —
+    // see the canonical header
+    // `data/animations/shared/animation_uniforms.glsl`. Without the
+    // normalisation, `vTexCoord` is Y-up on the 6.7 path and screen-space
+    // effects — matrix rain direction, directional wipes — render inverted.
+    // The other kwin-vs-daemon difference is `gl_Position`:
+    // KWin needs the modelViewProjectionMatrix to place the redirected
+    // quad, the daemon emits clip-space directly.
+    //
+    // Authors that ship a per-shader vertex stage via metadata's
+    // `vertexShader` field own the matrix / attribute contract
+    // themselves: call `animationScreenUv(texCoord)` under
+    // `#ifdef PLASMAZONES_KWIN` and multiply `position` by
+    // modelViewProjectionMatrix on the kwin path. See the canonical
+    // GLSL header (`data/animations/shared/animation_uniforms.glsl`).
+    auto cacheIt = m_shaderManager.m_shaderCache.find(effectId);
+    if (cacheIt == m_shaderManager.m_shaderCache.end()) {
+        // Diagnostic-once-per-compile: log multipass degradation when the
+        // shader is first compiled for this session, not on every transition
+        // install. Lifecycle events (window.move on a drag, window.focus on
+        // alt-tab) can fire beginShaderTransition many times in quick
+        // succession against an already-cached effect; a per-install log
+        // would flood the journal. Cache invalidation (effectsChanged →
+        // m_shaderManager.m_shaderCache.clear) re-fires the log at the next install, which
+        // is the right semantic for hot-reload.
+        if (eff.isMultipass) {
+            qCInfo(lcEffect) << "Animation effect" << effectId
+                             << "is multipass — compositor path runs single-pass only (buffer passes skipped)";
+        }
+
+        QFile shaderFile(eff.fragmentShaderPath);
+        if (!shaderFile.open(QIODevice::ReadOnly)) {
+            qCWarning(lcEffect) << "Failed to open shader file" << eff.fragmentShaderPath;
+            return nullptr;
+        }
+        const QString rawSource = QString::fromUtf8(shaderFile.readAll());
+        if (rawSource.isEmpty()) {
+            qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
+            return nullptr;
+        }
+        // Highest priority first, and through the registry's own helper so this
+        // runtime resolves a shared header from the same tree the daemon does.
+        // searchPaths() is registration order, which is the reverse of what
+        // include resolution wants; sharedIncludePaths() is the one place that
+        // is handled.
+        const QStringList animIncludePaths = m_shaderManager.m_animationShaderRegistry.sharedIncludePaths();
+        QString includeError;
+        const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
+        // T1.5: assemble an entry-only animation pack (pTransition / pIn+pOut,
+        // no main()) into a full translation unit BEFORE expansion — identical to
+        // the daemon's loadFragmentShader — so the prologue's `#include` resolves
+        // and the generated main() dispatches by direction. A traditional main()
+        // pack is returned unchanged. Same prologue + candidates the daemon uses,
+        // so both runtimes compile the same source.
+        const QString assembledSource = PhosphorShaders::assembleEntryPoint(
+            rawSource, PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
+            PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
+        QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir,
+                                                                                  animIncludePaths, &includeError);
+        if (expanded.isEmpty()) {
+            qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
+            return nullptr;
+        }
+
+        // T1.1: splice the generated named-param preamble (`#define p_<id> ...`)
+        // after `#version`, identically to the daemon's loadFragmentShader. The
+        // accessors it emits (`customParams[N].xyzw`, `customColors[N]`,
+        // `uTexture<N>`) are declared in BOTH branches of animation_uniforms.glsl
+        // — including the PLASMAZONES_KWIN default-block branch injected below —
+        // so the same preamble compiles on this GL path and the daemon RHI path.
+        // Done before injectKwinDefineAfterVersion so the KWIN define still lands
+        // first after `#version`; the preamble's defines are pure text macros,
+        // expanded only where used (after the UBO include), so ordering is safe.
+        expanded = PhosphorShaders::spliceAfterVersion(
+            expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
+
+        // HDR colour management. Installing this shader via
+        // OffscreenEffect::setShader REPLACES KWin's present shader, which
+        // normally carries the sRGB → output-colorspace conversion
+        // (ShaderTrait::TransformColorspace in KWin's own base.frag). Without
+        // it the transition writes sRGB verbatim into KWin's blending space —
+        // on an HDR output that space is gamma2.2 in the display's container
+        // colorimetry with 1.0 = peak luminance, so every window animation
+        // rendered dim and desaturated. Same bug class as the decoration
+        // present shader fix in decoration_render.cpp (kPresentFragment); the
+        // conversion below mirrors it, and KWin's base.frag, step for step:
+        // encoding → nits, colorimetry transform, tonemap, destination
+        // encoding.
+        //
+        // Deliberately NOT sourceEncodingToNitsInDestinationColorspace(): it
+        // folds doTonemapping() in at the end, which would tonemap twice — a
+        // double compression on HDR, precisely the case this exists for. No
+        // opacity modulate either: unlike the present shader, this path's
+        // window-rule opacity is folded into the sample by surfaceColor()
+        // (animation_uniforms.glsl), and this shader is compiled without the
+        // Modulate trait so KWin's TRAIT_MODULATE slot never applies.
+        //
+        // The override must be spliced AFTER expandIncludes ran above:
+        // colormanagement.glsl lives in KWin's `:/opengl/` resource, which
+        // KWin's GLShader::preprocess resolves for every source it compiles
+        // (custom ones included) — the phosphor include resolver would fail
+        // the whole expansion on it. The `#define` lands before the expanded
+        // animation_uniforms.glsl text, whose `#ifndef PZ_FINALIZE_COLOR`
+        // identity default then yields to this override; the generated entry
+        // main()s and bmw_compat's setOutputColor route their fragColor
+        // writes through the macro.
+        //
+        // The colorspace uniforms come free: KWin's OffscreenData::paint
+        // calls setColorspaceUniforms(sRGB, renderTarget.colorDescription(),
+        // Perceptual) on whatever shader setShader() installed. Do not push
+        // them from drawWindow — that is a redundant write KWin overwrites.
+        //
+        // On SDR this whole block is an exact no-op (identity colorimetry,
+        // round-tripping transfer functions, tonemap degrades to a clamp that
+        // cannot bite), so "SDR pixel-identical" is the regression test.
+        //
+        // The desktop-switch path (desktoptransitionmanager.cpp) deliberately
+        // does NOT get this splice: its capture FBOs inherit the output's
+        // colorDescription, so both blend inputs already live in the blending
+        // space and converting again would double-transform. It keeps the
+        // identity default.
+        expanded = PhosphorShaders::spliceAfterVersion(expanded, ShaderInternal::kwinFinalizeColorBlock());
+
+        // Selects the default-block branch in `animation_uniforms.glsl`.
+        // KWin's `KWin::GLShader` API addresses default-block uniforms only
+        // (no UBO bind path), so the canonical header's `#ifdef
+        // PLASMAZONES_KWIN` branch emits plain `uniform float iTime;`-style
+        // declarations instead of the daemon's `layout(std140, binding=0)
+        // uniform AnimationUniforms { ... };`. The macro must land AFTER the
+        // shader's `#version` line — the GLSL spec disallows tokens before
+        // `#version` other than whitespace and comments — so the helper
+        // below splices it between the version directive and the rest of
+        // the source.
+        const QString offscreenOrientationDefine =
+            KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN ? PhosphorShaders::kwinTopDownTexcoordsDefine() : QString();
+        const QByteArray fragWithKwinDefine =
+            injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment, offscreenOrientationDefine);
+
+        // Route the built-in default vertex source through the same injection
+        // as custom vertex stages so its layout(location) qualifiers are made
+        // legal for the dialect KWin compiles it in (desktop GLSL 140 on a 6.7
+        // desktop context, GLSL ES 300 on a GLES one — see
+        // PhosphorShaders::kwinDefineBlock and stripVaryingLocations).
+        QByteArray vertWithKwinDefine =
+            injectKwinDefineAfterVersion(PhosphorAnimationShaders::AnimationShaderRegistry::compositorVertexSource(),
+                                         PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
+        if (!eff.vertexShaderPath.isEmpty()) {
+            // Every failure below warns and keeps the default stage. That only
+            // degrades gracefully for a fragment that reads no varying beyond
+            // vTexCoord: a pack whose fragment reads one only its declared
+            // stage writes (vFold, vGenie and the like) cannot link against
+            // the default, and caches as a failed compile.
+            QFile vertFile(eff.vertexShaderPath);
+            if (!vertFile.open(QIODevice::ReadOnly)) {
+                qCWarning(lcEffect) << "Failed to open vertex shader" << eff.vertexShaderPath << "for effect"
+                                    << effectId << "— falling back to KWin default vertex stage";
+            } else {
+                const QString rawVert = QString::fromUtf8(vertFile.readAll());
+                if (rawVert.isEmpty()) {
+                    qCWarning(lcEffect) << "Vertex shader file is empty" << eff.vertexShaderPath << "for effect"
+                                        << effectId << "— falling back to KWin default vertex stage";
+                } else {
+                    const QString vertDir = QFileInfo(eff.vertexShaderPath).absolutePath();
+                    QString vertIncErr;
+                    const QString expandedVert = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+                        rawVert, vertDir, animIncludePaths, &vertIncErr);
+                    if (expandedVert.isEmpty()) {
+                        qCWarning(lcEffect) << "Failed to expand vertex shader includes for" << effectId << ":"
+                                            << vertIncErr << "— falling back to KWin default vertex stage";
+                    } else {
+                        // Same named-param preamble as the fragment stage: a
+                        // vertex-driven pack (wobble's velocity lag, the
+                        // pendulum swing) reads its `p_<id>` params in the
+                        // VERT, and the daemon bake already splices the
+                        // preamble into both stages — without this the GL
+                        // compile failed on the undefined identifiers and
+                        // the transition silently never installed.
+                        const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
+                            expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(
+                            vertWithParams, PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
+                    }
+                }
+            }
+        }
+
+        // TransformColorspace is DECLARATIVE ONLY here, exactly as on the
+        // decoration present shader (decoration_render.cpp): with a custom
+        // fragment source generateCustomShader uses the traits for nothing
+        // but listDefines, and colormanagement.glsl never reads
+        // TRAIT_TRANSFORM_COLORSPACE. The conversion is the explicit
+        // pzFinalizeColor splice above and runs with or without this flag; it
+        // is declared so the shader's traits describe what it actually does.
+        auto shader = KWin::ShaderManager::instance()->generateCustomShader(
+            KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace, vertWithKwinDefine,
+            fragWithKwinDefine);
+        // KWin 6.7 removed GLShader::isValid(); generateCustomShader now returns
+        // nullptr when compilation or linking fails, so a null check is the
+        // validity test.
+        if (!shader) {
+            qCWarning(lcEffect) << "Failed to compile shader transition" << effectId
+                                << "— caching the failure so subsequent transitions skip the recompile "
+                                   "until the next shader hot-reload.";
+            // Cache a null-shader sentinel. A failed compile must NOT be
+            // retried on every transition: without this the cache miss recurs
+            // each time and the full read+assemble+expand+compile re-runs on
+            // the compositor thread — a per-command stall (the same failure
+            // mode the GLSL #extension fix addressed for the morph shader).
+            // The sentinel is distinguishable from a live entry because a
+            // successful compile always emplaces a non-null shader. It is
+            // cleared by the effectsChanged handler's m_shaderCache.clear()
+            // (shader hot-reload / settings change), so a corrected shader
+            // recompiles on the next reload.
+            m_shaderManager.m_shaderCache.emplace(effectId, CachedShader{});
+            return nullptr;
+        }
+
+        CachedShader cached;
+        // Animation-shader contract — names sourced from
+        // `PhosphorAnimationShaders::AnimationShaderContract`. Both the
+        // daemon overlay-surface execution site and this compositor
+        // window-content execution site resolve the same names.
+        cached.iTimeLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITime);
+        cached.iResolutionLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIResolution);
+        cached.iTimeDeltaLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kITimeDelta);
+        cached.iFrameLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFrame);
+        cached.iDateLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIDate);
+        cached.iMouseLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMouse);
+        cached.iIsReversedLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIsReversed);
+        cached.iSurfaceScreenPosLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kISurfaceScreenPos);
+        cached.iAnchorSizeLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorSize);
+        cached.iAnchorPosInFboLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorPosInFbo);
+        cached.iAnchorRectInTextureLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorRectInTexture);
+        // Geometry-morph uniforms (snap / maximize / layout-switch
+        // cross-fade). -1 when the shader is not a morph shader (doesn't
+        // read them) — paintWindow guards on >= 0 so non-morph transitions
+        // pay nothing.
+        cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
+        cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
+        // Task-manager icon rect for minimize-to-icon packs (genie,
+        // phosphor-siphon). -1 for every pack that doesn't declare it —
+        // same pay-nothing guard.
+        cached.iIconRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIconRect);
+        cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
+        // Surface-layer-stack uniforms — every animation shader resolves these
+        // (declared in the shared header and read through surfaceColor()), so
+        // they are valid whenever the shader samples the window surface. The
+        // kwin-effect binds the layered surface + flag each frame; a window with
+        // no surface layers pushes the flag as 0 and the shader samples the bare
+        // uTexture0. See AnimationShaderContract::kUSurfaceLayer / kIHasSurfaceLayer.
+        cached.uSurfaceLayerLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUSurfaceLayer);
+        cached.iHasSurfaceLayerLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
+        cached.iHasOldWindowLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasOldWindow);
+        // Audio spectrum (opt-in audio.glsl module; -1 for non-audio packs).
+        cached.iAudioSpectrumSizeLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAudioSpectrumSize);
+        cached.uAudioSpectrumLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUAudioSpectrum);
+        cached.iMoveVelocityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity);
+        cached.iMoveOffsetLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveOffset);
+        cached.iMoveVelocity2Loc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity2);
+        cached.iMoveTrailLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveTrail);
+        cached.iMoveMeshLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveMesh);
+        cached.iLayerRectInTextureLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
+        // uTexture0 — for the transition-time composite retarget (see
+        // CachedShader::uTexture0Loc). The name is the contract's literal
+        // sampler identifier (animation_uniforms.glsl, both branches).
+        cached.uTexture0Loc = shader->uniformLocation("uTexture0");
+        // SetOpacity rule opacity — a separate concern from the morph uniforms
+        // above: applies to ALL shaders (compositor path only), so surfaceColor
+        // can dim the surface for a SetOpacity rule. See
+        // AnimationShaderContract::kIWindowOpacity.
+        cached.iWindowOpacityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIWindowOpacity);
+        // The old side's own opacity (old_content.glsl's oldColor multiply).
+        // Linked only by packs including that module; -1 elsewhere, exactly
+        // like iOldWindowLoc.
+        cached.iOldWindowOpacityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIOldWindowOpacity);
+        // Cache element locations for the per-effect declared parameter
+        // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
+        // bool params, and `customColors[0..kMaxCustomColors-1]` for color
+        // params. Each declared parameter lands in one of these slots —
+        // see `AnimationShaderRegistry::translateAnimationParams` for
+        // the exact mapping. `glGetUniformLocation` returns -1 for slots
+        // the shader didn't reference (e.g. a one-param effect that the
+        // GLSL compiler optimises away the unused tail of either array);
+        // the per-frame push loop in paintWindow guards against -1 to
+        // skip the setUniform call.
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+            // Pre-baked element-name table — no per-slot QByteArray
+            // alloc. Sized + static_asserted against the contract budget
+            // at the namespace-level definition.
+            cached.customParamsLoc[slot] = shader->uniformLocation(kCustomParamsElementNames[slot]);
+        }
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+            cached.customColorsLoc[slot] = shader->uniformLocation(kCustomColorsElementNames[slot]);
+        }
+        // User textures: resolve sampler + iTextureResolution[N] uniform
+        // locations only. The actual texture upload happens per-leg
+        // inside `beginShaderTransition`'s body below — keyed by the
+        // resolved path in `m_shaderManager.m_textureCache` so two legs with different
+        // override paths don't collide on the per-effect cache.
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
+            // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
+            // the redirected surface, not user-declared). Matches the
+            // overlay shader convention in data/overlays/shared/textures.glsl.
+            // Pre-baked from the file-scope `kUserTextureSamplerNames` array — no
+            // per-slot QByteArray alloc per shader install.
+            cached.userTextureLoc[slot] = shader->uniformLocation(kUserTextureSamplerNames[slot]);
+        }
+        // SEPARATE LOOP, because iTextureResolution is indexed by GLSL texture slot
+        // and not by pack slot: index 0 is uTexture0, the window's own content,
+        // which no pack declares. Sharing the loop above made the two arrays
+        // parallel and put pack slot 0's size on uTexture0's index.
+        for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+            cached.iTextureResolutionLoc[glslSlot] = shader->uniformLocation(kITextureResolutionKeys[glslSlot]);
+        }
+        cached.shader = std::move(shader);
+        cacheIt = m_shaderManager.m_shaderCache.emplace(effectId, std::move(cached)).first;
+    }
+    return &cacheIt->second;
+}
+
+} // namespace PlasmaZones

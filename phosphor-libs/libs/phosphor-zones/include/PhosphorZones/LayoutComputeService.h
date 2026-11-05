@@ -1,0 +1,71 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorZones/LayoutComputeTypes.h>
+#include <phosphorzones_export.h>
+#include <QHash>
+#include <QObject>
+#include <QPointer>
+#include <memory>
+
+class QThread;
+
+namespace PhosphorZones {
+
+class Layout;
+class LayoutRegistry;
+class LayoutWorker;
+
+class PHOSPHORZONES_EXPORT LayoutComputeService : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit LayoutComputeService(QObject* parent = nullptr);
+    ~LayoutComputeService() override;
+
+    void setLayoutManager(LayoutRegistry* manager);
+
+    /// @p screenScale is the output's logical scale, an input for a layout whose
+    /// fixed geometry counts device pixels; zero keeps the layout's last one.
+    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                            qreal screenScale = 0.0);
+    uint64_t currentGeneration(const QString& screenId) const;
+
+    /// Recalculate @p layout in place, on the calling (GUI) thread. Refuses an
+    /// invalid @p screenGeometry, as requestRecalculate does: an empty rect
+    /// would stamp a frame with no size and collapse every zone onto a point.
+    static void recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale = 0.0);
+
+Q_SIGNALS:
+    void requestCompute(const PhosphorZones::LayoutSnapshot& snapshot, uint64_t generation);
+    void geometriesComputedForGeneration(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout,
+                                         uint64_t generation);
+
+private:
+    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                                        qreal screenScale);
+    void applyResult(const LayoutComputeResult& result);
+    void onLayoutRemoved(const QUuid& layoutId);
+    void publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout, uint64_t generation);
+
+    QHash<QUuid, QPointer<Layout>> m_trackedLayouts;
+    /// Per-screen request generation. Never pruned — entries are one integer
+    /// per screenId ever requested, bounded by session screen/VS churn, and
+    /// pruning would reset a returning screen's counter under any in-flight
+    /// stale result.
+    QHash<QString, uint64_t> m_screenGeneration;
+    QPointer<LayoutRegistry> m_layoutManager;
+    QThread* m_thread = nullptr;
+    /// Owned here rather than by the thread's finished() → deleteLater: it is
+    /// reset in the destructor once the thread has stopped, on the one path
+    /// that also covers a worker thread that had to be terminated.
+    std::unique_ptr<LayoutWorker> m_worker;
+    /// Per-screen count of computes dispatched to the worker whose result has
+    /// not come back yet. An entry is removed when it drops to zero.
+    QHash<QString, int> m_inFlight;
+};
+
+} // namespace PhosphorZones

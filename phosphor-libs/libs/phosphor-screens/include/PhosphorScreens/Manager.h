@@ -1,0 +1,625 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include "PhosphorScreens/PhysicalScreen.h"
+#include "VirtualScreen.h"
+#include "phosphorscreensruntime_export.h"
+
+#include <QHash>
+#include <QMap>
+#include <QObject>
+#include <QPointer>
+#include <QSet>
+#include <QSize>
+#include <QTimer>
+#include <QVector>
+
+#include <optional>
+
+class QEvent;
+class QScreen;
+class QWindow;
+
+namespace PhosphorScreens {
+
+class IConfigStore;
+class IPanelSource;
+class IPhysicalScreenSource;
+
+/**
+ * @brief Construction-time wiring for ScreenManager.
+ *
+ * All members default-construct to a "nothing fancy" state:
+ *   - physicalScreenSource null → ScreenManager builds its own QtPhysicalScreenSource
+ *     (the live QGuiApplication-backed source). Inject a FakePhysicalScreenSource
+ *     to drive the add/remove/move/resize sequence from a test.
+ *   - panelSource null  → ScreenManager treats panel offsets as zero,
+ *     emits @ref ScreenManager::panelGeometryReady on the next event
+ *     loop turn.
+ *   - configStore null  → no VS subdivision support; cache stays empty.
+ *   - useGeometrySensors true → create layer-shell sensor windows for
+ *     real-time available-area tracking.
+ *
+ * Pointers are non-owning EXCEPT a null @ref physicalScreenSource, where the
+ * manager owns the QtPhysicalScreenSource it constructs. An injected physical
+ * screen source, panel source or config store must outlive the manager.
+ *
+ * Top-level (not nested in ScreenManager) so its in-class member
+ * initialisers are reachable at the @ref ScreenManager constructor's
+ * default-argument parse site — nested types' initialisers are not.
+ */
+struct ScreenManagerConfig
+{
+    IPhysicalScreenSource* physicalScreenSource = nullptr;
+    IPanelSource* panelSource = nullptr;
+    IConfigStore* configStore = nullptr;
+    bool useGeometrySensors = true;
+    int maxVirtualScreensPerPhysical = 8;
+};
+
+/**
+ * @brief Centralized screen-topology service.
+ *
+ * Owns:
+ *   • physical screen monitoring (via an injected IPhysicalScreenSource —
+ *     add/remove/geometry lifecycle, decoupled from QGuiApplication)
+ *   • virtual-screen subdivision cache (synced from an injected IConfigStore)
+ *   • per-screen available-geometry computation (panel offsets via an
+ *     injected IPanelSource + layer-shell sensor windows)
+ *   • effective-screen resolution (the unified VS-or-physical view consumed
+ *     by every PhosphorScreens client)
+ *
+ * NOT a singleton — the lib never owns process-global state. Consumers
+ * that need a process-wide ScreenManager (the Phosphor daemon does)
+ * provide their own thin service-locator outside this class.
+ *
+ * GUI THREAD ONLY. Every member, the const queries included, must be called
+ * on the thread that owns QGuiApplication: the queries fill lazy caches with
+ * no locking, and the sensor windows and QScreen reads behind them are GUI
+ * objects. Debug builds assert it on the hot accessors
+ * (PS_SCREEN_MANAGER_ASSERT_GUI_THREAD). ScreenIdentity carries the same
+ * constraint.
+ */
+class PHOSPHORSCREENSRUNTIME_EXPORT ScreenManager : public QObject
+{
+    Q_OBJECT
+public:
+    using Config = ScreenManagerConfig;
+
+    explicit ScreenManager(ScreenManagerConfig cfg = ScreenManagerConfig{}, QObject* parent = nullptr);
+    ~ScreenManager() override;
+
+    /**
+     * @brief Begin tracking screens.
+     *
+     * Connects to the screen source's add/remove/geometry signals,
+     * snapshots the current output set, attaches per-screen geometry
+     * sensors (when enabled), starts the panel source, and subscribes to
+     * the config store's @c changed signal for VS refresh.
+     */
+    void start();
+
+    /// Tear down everything @ref start() set up. Idempotent.
+    void stop();
+
+    // ─── Physical screen queries ─────────────────────────────────────────
+    //
+    // screens() / primaryScreen() / screenByName() reflect the screen
+    // source's LIVE output set. physicalScreenFor() and the
+    // screenGeometry() / screenAvailableGeometry() resolvers below instead
+    // read the TRACKED snapshot refreshed on each lifecycle signal — the two
+    // agree except transiently, inside a lifecycle slot mid-resync. Prefer
+    // the tracked resolvers for geometry work so a query stays consistent
+    // with the available-geometry cache.
+
+    QVector<PhysicalScreen> screens() const;
+    PhysicalScreen primaryScreen() const;
+    PhysicalScreen screenByName(const QString& name) const;
+
+    /// Maximum number of virtual screens per physical monitor this manager
+    /// will admit. Mirrors @ref ScreenManagerConfig::maxVirtualScreensPerPhysical
+    /// — exposed so callers (D-Bus adaptor, KCM validator) can pre-validate
+    /// incoming configs before handing them to @ref setVirtualScreenConfig
+    /// and surface a specific rejection reason on cap overflow.
+    int maxVirtualScreensPerPhysical() const
+    {
+        return m_cfg.maxVirtualScreensPerPhysical;
+    }
+
+    /**
+     * @brief Per-screen panel-aware available geometry.
+     *
+     * Reads from the live cache populated by sensor windows + panel-source
+     * data. Falls back to @c QScreen::availableGeometry() (or the full
+     * screen rect for a synthetic screen with no QScreen) when the cache
+     * has no entry for @p screen yet (e.g. before @ref panelGeometryReady
+     * fires). Returns an invalid QRect on an invalid PhysicalScreen.
+     *
+     * Was a static helper in the pre-extraction class; lives on the
+     * instance now so the cache no longer needs file-static storage.
+     */
+    QRect actualAvailableGeometry(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Bridge overload for consumers that still hold a live @c QScreen*.
+     *
+     * Resolves @p screen to a tracked @ref PhysicalScreen and delegates to
+     * the value-typed overload. Falls back to @c QScreen::availableGeometry()
+     * when the connector is not in the tracked set (e.g. a hotplug race),
+     * and to an invalid QRect when @p screen is null — so the caller never
+     * sees an empty rect for a screen Qt still considers live.
+     *
+     * The single conversion point for the @c QScreen* → @ref PhysicalScreen
+     * available-geometry path: prefer it over an ad-hoc
+     * @c actualAvailableGeometry(screenByName(...)) at the call site.
+     */
+    QRect actualAvailableGeometry(QScreen* screen) const;
+
+    /**
+     * @brief The compositor's LOGICAL scale for @p screen (1.15, 1.5, 2.0…).
+     *
+     * Read from the screen's layer-shell geometry sensor window, because on
+     * Wayland that is the only place a client can see the real number.
+     * @c QScreen::devicePixelRatio() reports the @c wl_output INTEGER buffer
+     * scale, which a compositor advertises as the ceiling of the true scale
+     * for the benefit of clients that cannot scale fractionally — KWin says
+     * 2 for a 1.15 output. @c QWindow::devicePixelRatio() instead carries the
+     * per-surface value Qt derives from @c wp_fractional_scale_v1, which is
+     * the 1.15 itself.
+     *
+     * Falls back to @c QScreen::devicePixelRatio() when the screen has no
+     * sensor (a synthetic test screen never gets one — see
+     * @c createGeometrySensor) or the sensor has not been mapped yet, and to
+     * 1.0 when there is no QScreen either. The fallback is the OLD, coarse
+     * answer, the integer ceiling on a fractional output. For a diagnostic
+     * reader that is only imprecise, but a reader that divides by the scale
+     * gets a wrong size from it (a device-pixel zone on a 1.15 output comes
+     * out at 1/2 of its pixels instead of 1/1.15). Such a reader must not
+     * cache a value read before the sensor maps. It must recompute on
+     * @ref logicalScaleChanged, which fires when the real number arrives and
+     * on every later change; the daemon's layout recalculation does.
+     *
+     * Placement works in logical coordinates throughout, and the compositor
+     * owns the conversion. The one placement reader is a layout that declares
+     * its fixed zone geometry in the OUTPUT's device pixels
+     * (PhosphorZones::Layout::fixedGeometryInDevicePixels), which divides by
+     * this to land in those logical coordinates. The getScreenInfo reply
+     * carries it too, as devicePixelRatio, and is no longer read for
+     * diagnostics only: the layout editor converts that unit with it,
+     * between the device pixels a layout stores and the logical ones it
+     * edits in. It also feeds the support report. Do not introduce another
+     * device-pixel calculation on the strength of this accessor without
+     * checking that the surface in question is actually scaled the same way.
+     */
+    qreal logicalScale(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Bridge overload for consumers holding a live @c QScreen*.
+     *
+     * Mirrors the @ref actualAvailableGeometry(QScreen*) convention: resolve
+     * through the tracked set so the sensor lookup is keyed the same way, and
+     * fall back to the QScreen's own (coarse, integer) ratio for a connector
+     * the manager does not track, which is a hotplug race. A null @p screen
+     * has no ratio to fall back to and answers 1.0.
+     */
+    qreal logicalScale(QScreen* screen) const;
+
+    /**
+     * @brief Has the panel source produced its first reading?
+     *
+     * Components that compute initial zone geometry at startup gate on this
+     * so they don't lay out windows against the unreserved screen rect.
+     * Always true when no panel source is configured (zero offsets are
+     * trivially "ready").
+     */
+    bool isPanelGeometryReady() const;
+
+    // ─── Virtual screen management ───────────────────────────────────────
+
+    /// Apply a single VS subdivision config. Use the @ref IConfigStore
+    /// for persistent writes; this method is for the refresh path only.
+    /// Production code should mutate via the store and let
+    /// @ref refreshVirtualConfigs apply the delta.
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+
+    /// Diff @p configs against the current cache and apply the delta.
+    /// Idempotent. Removals (entries in cache but absent from @p configs)
+    /// are processed before additions/changes.
+    void refreshVirtualConfigs(const QHash<QString, VirtualScreenConfig>& configs);
+
+    VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+    bool hasVirtualScreens(const QString& physicalScreenId) const;
+
+    // ─── Effective-screen queries ────────────────────────────────────────
+
+    QStringList effectiveScreenIds() const;
+    QStringList virtualScreenIdsFor(const QString& physicalScreenId) const;
+
+    QRect screenGeometry(const QString& screenId) const;
+    QRect screenAvailableGeometry(const QString& screenId) const;
+
+    /// The physical output a (physical or virtual) screen ID resolves to.
+    /// Returns an invalid PhysicalScreen when nothing tracked matches.
+    PhysicalScreen physicalScreenFor(const QString& screenId) const;
+    VirtualScreenDef::PhysicalEdges physicalEdgesFor(const QString& screenId) const;
+
+    QString virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const;
+    QString effectiveScreenAt(const QPoint& globalPos) const;
+
+    // ─── Panel re-query control ──────────────────────────────────────────
+
+    /// Schedule a one-shot panel re-query after @p delayMs. Forwards to
+    /// the panel source's @c requestRequery. Useful after applying
+    /// geometry updates so we pick up the settled panel state (e.g.
+    /// after the KDE panel editor closes). If called again before the
+    /// underlying timer fires, the timer restarts.
+    void scheduleDelayedPanelRequery(int delayMs);
+
+    // ─── Compositor-reported available geometry ──────────────────────────
+
+    /**
+     * @brief Record the authoritative per-screen available geometry as
+     *        reported by the compositor.
+     *
+     * The KWin effect queries @c KWin::clientArea(MaximizeArea) — the exact
+     * panel-excluded work area the compositor itself reserves for maximized
+     * windows, with correct per-edge strut attribution and correct
+     * auto-hide handling — and pushes it here over D-Bus.
+     *
+     * This is the highest-priority source in @ref calculateAvailableGeometry:
+     * when an entry exists for a screen it fully determines that screen's
+     * available rect, bypassing the layer-shell sensor + plasmashell D-Bus
+     * heuristic. That heuristic can only *guess* which edge a strut belongs
+     * to, and guesses wrong (attributes everything to the bottom edge) for
+     * top-panel layouts when the plasmashell D-Bus query returns no panels.
+     *
+     * Pass an invalid or empty rect to clear the override for @p screenName
+     * and fall back to the heuristic. Keyed by connector name. A redundant
+     * call (same rect already recorded) is a no-op.
+     */
+    void setCompositorAvailableGeometry(const QString& screenName, const QRect& available);
+
+    // ─── Screen size in device pixels ────────────────────────────────────
+
+    /**
+     * @brief Record an output's exact size in device pixels as reported by
+     *        the compositor, PENDING until the host accepts it.
+     *
+     * A Wayland client cannot read an output's mode: wl_output's mode event
+     * stays inside the QPA plugin, and QScreen::geometry() is the logical
+     * rect. The KWin effect reads the output's current mode size (already
+     * rotated) and pushes it here over D-Bus, the same way it pushes the
+     * work area to @ref setCompositorAvailableGeometry.
+     *
+     * Keyed by connector name. An invalid or empty size clears the pending
+     * entry for @p connectorName, which is what the effect sends when the
+     * output goes away. A redundant call (same pending state) is a no-op. A
+     * real change emits @ref compositorPixelSizeChanged.
+     *
+     * A pending report is not what @ref pixelSize answers. The report
+     * travels over D-Bus and the QScreen change it goes with over Wayland,
+     * in no fixed order, so it can describe a mode the tracked logical
+     * geometry does not show yet, or a monitor that replaced the tracked one
+     * on the same connector. The manager does not judge that. The host does,
+     * and calls @ref acceptCompositorPixelSize once the report agrees with
+     * the screen it tracks, which makes it the accepted size every reader
+     * sees. A host that does not gate reports accepts each one from its
+     * @ref compositorPixelSizeChanged handler.
+     *
+     * Unlike the work-area override, the pending entry is NOT dropped when
+     * the manager's own QScreen for the connector goes away. The compositor
+     * and the daemon see an output come and go in no fixed order (a KVM
+     * switch presents as unplug and replug), so a report can land before the
+     * QScreen it describes, and dropping it on the manager's removal would
+     * lose the report that arrived first. The effect is the only writer and
+     * clears what it no longer has. A fresh effect re-sends every output it
+     * has when it registers, which overwrites each entry it still describes,
+     * and @ref stop drops them all. An effect that goes away without its
+     * clears (unloaded, or the compositor restarted) leaves its entries
+     * behind, so until a fresh effect reports again, a different monitor
+     * plugged into the same connector finds the outgoing monitor's size
+     * pending there.
+     */
+    void setCompositorPixelSize(const QString& connectorName, const QSize& pixelSize);
+
+    /**
+     * @brief Seed a monitor's size in device pixels from the host's own record,
+     *        for use until a compositor report is accepted for it.
+     *
+     * Keyed by the physical screen's stable identifier, not the connector,
+     * because the host persists it across sessions and a connector name does
+     * not identify a monitor. Answers @ref pixelSize only for a screen whose
+     * connector has no accepted report. A pending report does not shadow it.
+     * An invalid or empty size drops the seed. A redundant call is a no-op.
+     * A change that alters what @ref pixelSize answers for a tracked screen
+     * emits @ref acceptedPixelSizeChanged and then
+     * @ref compositorPixelSizeChanged for its connector.
+     *
+     * Seeds follow an identifier flip the way the virtual-screen configs do
+     * (see @ref screenIdentifierChanged), and @ref stop leaves them in place.
+     */
+    void seedPixelSize(const QString& physicalScreenId, const QSize& pixelSize);
+
+    /**
+     * @brief A screen's size in device pixels, the one answer every reader
+     *        uses.
+     *
+     * @p screenId is a physical id (identifier or connector name) or a
+     * virtual one. A physical screen answers its connector's ACCEPTED
+     * compositor report (@ref acceptCompositorPixelSize), else the seed for
+     * its identifier (@ref seedPixelSize), else nothing. A report still
+     * pending is never the answer. A virtual screen answers its region's
+     * share of that size, computed as VirtualScreenDef::absoluteGeometry over
+     * the pixel rect, so its edges round exactly as the effect's own split of
+     * the same pixel rect does. An empty id, an untracked screen, and a
+     * virtual screen the manager does not know answer nothing.
+     */
+    std::optional<QSize> pixelSize(const QString& screenId) const;
+
+    /// True only when @ref pixelSize answers @p screenId from an accepted
+    /// compositor report rather than from a seed or not at all.
+    bool isPixelSizeReported(const QString& screenId) const;
+
+    /**
+     * @brief Promote @p connectorName's pending report to the accepted one.
+     *
+     * The pending report becomes what @ref pixelSize answers for the
+     * connector's screen, and a pending clear drops the accepted report, so
+     * the screen falls back to its seed. A no-op when the accepted state
+     * already matches the pending one. A real change emits
+     * @ref acceptedPixelSizeChanged. Accepting a report that confirms the
+     * seed is a change too: @ref pixelSize answers the same, but
+     * @ref isPixelSizeReported flips. A no-op too for a connector the
+     * manager does not track: its report stays pending.
+     *
+     * The accepted report is dropped, without a signal, when the manager's
+     * own QScreen for the connector goes away: it was accepted for the
+     * monitor that left, and nothing reads an untracked screen's size. The
+     * screen that next arrives on the connector answers its seed until the
+     * host accepts a report for it.
+     */
+    void acceptCompositorPixelSize(const QString& connectorName);
+
+    /// The report pending for @p connectorName (@ref setCompositorPixelSize),
+    /// for a host deciding whether to accept it. Nothing after a clear, and
+    /// for a connector the compositor never reported. The connector need not
+    /// be tracked.
+    std::optional<QSize> pendingPixelSize(const QString& connectorName) const;
+
+    /**
+     * @brief Whether @p screen has a geometry sensor, so @ref logicalScale
+     *        answers the compositor's fractional scale, or will once the
+     *        sensor maps.
+     *
+     * Until the sensor maps, @ref logicalScale answers the coarse QScreen
+     * fallback, and @ref logicalScaleChanged announces the real number when
+     * it arrives. False for a screen with no sensor at all (a synthetic
+     * screen, a manager built without sensors, or one whose layer surface
+     * could not be created): its @ref logicalScale stays the fallback for
+     * good, and no later signal improves it.
+     */
+    bool hasLogicalScaleSensor(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Whether @p screen's geometry sensor has mapped, so
+     *        @ref logicalScale answers the compositor's own scale for it.
+     *
+     * True from the sensor's first expose, which follows the compositor's
+     * first configure of its layer surface. KWin settles a layer surface's
+     * preferred scale when it creates the surface's window, ahead of that
+     * configure, so by the expose the sensor carries the real scale, on an
+     * integer output as on a fractional one. Before it, @ref logicalScale may still
+     * answer the coarse QScreen fallback, which a different monitor's mode
+     * can agree with. @ref logicalScaleSensorMapped announces the change.
+     * False for a screen with no sensor (@ref hasLogicalScaleSensor), and
+     * again once the sensor is destroyed.
+     */
+    bool isLogicalScaleSensorMapped(const PhysicalScreen& screen) const;
+
+Q_SIGNALS:
+    void screenAdded(const PhysicalScreen& screen);
+    void screenRemoved(const PhysicalScreen& screen);
+    void screenGeometryChanged(const PhysicalScreen& screen);
+    void availableGeometryChanged(const PhysicalScreen& screen, const QRect& availableGeometry);
+
+    /// @ref logicalScale has a different answer for @p screen than it did.
+    ///
+    /// Fires when the compositor tells the screen's sensor window its
+    /// per-surface scale, which is both the first time the real number is
+    /// knowable and every later change to it. It matters because the answer
+    /// before that point is the coarse @c QScreen fallback, so anything that
+    /// caches a scale read at startup is caching the wrong one until this
+    /// says otherwise.
+    void logicalScaleChanged(const PhysicalScreen& screen);
+
+    /// Fired once when @ref isPanelGeometryReady transitions to true.
+    /// Components that need accurate panel geometry (window restoration,
+    /// initial zone layout) should wait for this before performing
+    /// geometry-dependent work.
+    void panelGeometryReady();
+
+    /// Fired when a delayed panel re-query (@ref scheduleDelayedPanelRequery)
+    /// has settled. The daemon uses this to trigger reapply of window
+    /// geometries after a short delay.
+    void delayedPanelRequeryCompleted();
+
+    /// VS topology changed (added, removed, renamed). Handlers that depend
+    /// on the VS ID set listen here.
+    void virtualScreensChanged(const QString& physicalScreenId);
+
+    /// VS regions changed but the VS ID set is unchanged (swap, rotate,
+    /// boundary resize). Handlers that need to move windows to follow
+    /// the new VS geometry listen here; topology-aware handlers stay on
+    /// @ref virtualScreensChanged.
+    void virtualScreenRegionsChanged(const QString& physicalScreenId);
+
+    /// Emitted when a connected screen's identifier flips — e.g. a bare
+    /// EDID ID promotes to "base/CONNECTOR" form because a second same-
+    /// model monitor joined, or vice versa on removal. The manager has
+    /// already re-keyed its own internal @c m_virtualConfigs and its
+    /// pixel-size seeds by the time this fires; external consumers (SettingsConfigStore-backed
+    /// persistence) must re-key their own stores under @p newId so the
+    /// next @ref IConfigStore::loadAll agrees with the manager's cache.
+    /// Both IDs are physical (no @c /vs:N suffix).
+    void screenIdentifierChanged(const QString& oldId, const QString& newId);
+
+    /// The report pending for @p connectorName was recorded, changed or
+    /// cleared (@ref setCompositorPixelSize), or a seed change altered what
+    /// @ref pixelSize answers for that connector's screen: either way a host
+    /// that gates reports evaluates the connector again. A pending change
+    /// alone changes no @ref pixelSize answer. @p connectorName may name an
+    /// output the manager does not track yet.
+    void compositorPixelSizeChanged(const QString& connectorName);
+
+    /// What @ref pixelSize answers for @p connectorName's screen changed: an
+    /// accept moved the accepted report (@ref acceptCompositorPixelSize), or
+    /// a seed change altered the answer for a screen with no accepted
+    /// report. An accept that confirms the seed fires it too, because
+    /// @ref isPixelSizeReported has flipped.
+    void acceptedPixelSizeChanged(const QString& connectorName);
+
+    /// @p screen's geometry sensor mapped (@ref isLogicalScaleSensorMapped):
+    /// from now on @ref logicalScale answers the compositor's scale for it.
+    /// Fires once per sensor, whether or not the scale differs from the
+    /// fallback, so a host waiting on the real scale hears of an integer
+    /// output too, where @ref logicalScaleChanged may never fire. Appended
+    /// last among the signals.
+    void logicalScaleSensorMapped(const PhysicalScreen& screen);
+
+protected:
+    /// Watches the geometry sensors for @c QEvent::DevicePixelRatioChange,
+    /// which is the only notice Qt gives that a window's per-surface scale
+    /// moved — @c QWindow has no changed signal for it. Emits
+    /// @ref logicalScaleChanged for the sensor's screen. Also watches for the
+    /// sensor's first expose, and emits @ref logicalScaleSensorMapped then.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private Q_SLOTS:
+    void onSourceScreenAdded(const PhysicalScreen& screen);
+    void onSourceScreenRemoved(const PhysicalScreen& screen);
+    void onSourceScreenGeometryChanged(const PhysicalScreen& screen);
+
+private:
+    // Rebuild m_trackedScreens from the source's current output set.
+    // The source is authoritative — every lifecycle slot
+    // resyncs through this rather than mutating the vector incrementally.
+    void syncTrackedScreens();
+
+    // Tracked-screen lookups. Return a copy of the matching tracked screen,
+    // or an invalid PhysicalScreen when nothing matches. By value rather
+    // than a pointer-into-m_trackedScreens so a caller cannot dangle it
+    // across a syncTrackedScreens that re-assigns the vector.
+    PhysicalScreen trackedScreenByName(const QString& name) const;
+    PhysicalScreen trackedScreenFor(const QString& screenId) const;
+
+    // Geometry sensor (layer-shell) lifecycle. Keyed by connector name.
+    void createGeometrySensor(const PhysicalScreen& screen);
+    void destroyGeometrySensor(const QString& screenName);
+    void onSensorGeometryChanged(const QString& screenName);
+
+    // Reads sensor + IPanelSource offsets for @p screen, updates
+    // m_availableGeometryCache, fires availableGeometryChanged on diff.
+    void calculateAvailableGeometry(const PhysicalScreen& screen);
+
+    void onPanelOffsetsChanged(QScreen* screen);
+    void onPanelRequeryCompleted();
+
+    void onConfigStoreChanged();
+
+    Config m_cfg;
+
+    // The effective screen source — either the injected one or a
+    // QtPhysicalScreenSource the manager constructed (parented to `this`) when
+    // the config left it null.
+    IPhysicalScreenSource* m_physicalScreenSource = nullptr;
+
+    bool m_running = false;
+    bool m_panelGeometryReadyEmitted = false;
+
+    QVector<PhysicalScreen> m_trackedScreens;
+
+    // Layer-shell sensor windows (one per screen, keyed by connector name)
+    // — track live available area size from the compositor.
+    QHash<QString, QPointer<QWindow>> m_geometrySensors;
+
+    // Per-screen-name available-geometry cache (was file-static in
+    // pre-extraction class — instance state now to avoid singleton coupling).
+    //
+    // NOTE on the `mutable` accessor caches below (this one, the
+    // effective-ID cache, and the virtual-geometry cache): they're
+    // populated lazily by nominally-const accessors and not protected by
+    // any synchronisation. The class contract is GUI-thread-only (see
+    // class-level doc and ScreenIdentity.h for the same constraint) —
+    // callers on worker threads will race these caches. Don't add locks
+    // here without also re-auditing every const accessor to make sure
+    // the mutation isn't leaked via returned QString&/QRect& references.
+    mutable QHash<QString, QRect> m_availableGeometryCache;
+
+    // Authoritative per-screen available geometry pushed by the compositor
+    // bridge (the KWin effect's clientArea/MaximizeArea query). Keyed by
+    // connector name. When an entry exists for a screen it overrides the
+    // sensor/D-Bus heuristic entirely in calculateAvailableGeometry — see
+    // setCompositorAvailableGeometry. Cleared per-screen on screen removal
+    // (destroyGeometrySensor) and wholesale on stop().
+    QHash<QString, QRect> m_compositorAvailableGeometry;
+
+    // Virtual screen configurations, keyed by physical screen ID.
+    QHash<QString, VirtualScreenConfig> m_virtualConfigs;
+
+    mutable QStringList m_cachedEffectiveScreenIds;
+    mutable bool m_effectiveScreenIdsDirty = true;
+
+    mutable QHash<QString, QRect> m_virtualGeometryCache;
+
+    // Warn-once set for screenGeometry() virtual-screen cache misses. A stale
+    // "physId/vs:N" id that survives a VS-config change gets queried
+    // repeatedly (per cursor move, per snap commit) — warn once per id rather
+    // than flooding the journal. Pruned by invalidateVirtualGeometryCache and
+    // cleared on a successful resolve so a genuinely-new miss after a
+    // reconfigure still surfaces.
+    mutable QSet<QString> m_warnedVirtualGeometryMisses;
+
+    void invalidateVirtualGeometryCache(const QString& physicalScreenId = {}) const;
+    void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
+
+    QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
+                                      const PhysicalScreen& screen) const;
+
+    /// Detect identifier flips between @p oldIds (connector name → prior
+    /// identifier) and the current tracked identifiers, re-key
+    /// @c m_virtualConfigs in place, and emit @ref screenIdentifierChanged
+    /// so external stores can migrate too. Called from the add/remove
+    /// slots after @ref syncTrackedScreens has refreshed the tracked set.
+    void propagateIdentifierDrift(const QHash<QString, QString>& oldIds);
+
+    /// The shared body of @ref pixelSize and @ref isPixelSizeReported.
+    /// @p reported, when given, receives whether the answer came from a
+    /// compositor report.
+    std::optional<QSize> resolvePixelSize(const QString& screenId, bool* reported) const;
+
+    // Compositor-reported output sizes in device pixels still PENDING the
+    // host's accept, keyed by connector name. See setCompositorPixelSize for
+    // why the manager's own screen removal does not drop an entry. Cleared
+    // wholesale on stop().
+    QHash<QString, QSize> m_compositorPixelSizes;
+
+    // Host-provided last-session sizes, keyed by physical screen identifier.
+    // Re-keyed on identifier drift like m_virtualConfigs, and kept across
+    // stop()/start() for the same reason: the host's record is the source.
+    QHash<QString, QSize> m_seededPixelSizes;
+
+    // The compositor reports the host accepted (acceptCompositorPixelSize),
+    // keyed by connector name: what pixelSize answers ahead of a seed.
+    // Dropped per connector on the manager's own screen removal
+    // (destroyGeometrySensor) and wholesale on stop().
+    QHash<QString, QSize> m_acceptedPixelSizes;
+
+    // Connector names whose geometry sensor has mapped
+    // (isLogicalScaleSensorMapped). Set by eventFilter on the sensor's first
+    // expose, dropped with the sensor in destroyGeometrySensor.
+    QSet<QString> m_mappedScaleSensors;
+};
+
+} // namespace PhosphorScreens

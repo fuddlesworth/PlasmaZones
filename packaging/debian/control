@@ -105,12 +105,14 @@ Description: Window snapping, tiling and scrolling for KDE Plasma
  scrolling arranges them as columns on an endless strip.
  .
  Features include:
-  - Custom zone layout editor
+  - Drag windows into named zones, with a visual layout editor
   - Automatic tiling with a library of bundled Luau algorithms
   - Scrolling columns with width presets, tabs, and strip templates
+  - A mode per monitor, virtual desktop, and activity
+  - Multi-monitor support and virtual screen subdivision
   - KWin effect for visual feedback during window dragging
   - Keyboard navigation with rebindable shortcuts throughout
   - Per-application window rules
-  - Per-monitor, per-desktop, and per-activity layouts and modes
   - GLSL shader overlays, decoration packs, and window animations
   - System Settings integration (KCM)
+  - Wayland-native using Layer Shell

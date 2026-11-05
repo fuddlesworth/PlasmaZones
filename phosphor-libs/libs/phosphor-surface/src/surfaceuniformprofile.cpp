@@ -1,0 +1,168 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSurface/SurfaceUniformProfile.h>
+
+#include <cstddef>
+#include <cstring>
+#include <iterator>
+
+namespace PhosphorSurfaceShaders {
+
+namespace {
+
+// std140 byte offsets/sizes for the surface UBO upload regions, pinned by the
+// SurfaceUniforms static_asserts. The leading mat4 is its own region (it
+// carries the per-frame Y-flip / transform); everything from qt_Opacity to the
+// end of the struct is the "scene" region.
+constexpr int kMatrixOffset = 0;
+constexpr int kMatrixSize = 64; // mat4
+constexpr int kSceneOffset = static_cast<int>(offsetof(SurfaceUniforms, qt_Opacity)); // 64
+constexpr int kSceneSize = static_cast<int>(sizeof(SurfaceUniforms)) - kSceneOffset; // qt_Opacity..end
+
+} // namespace
+
+SurfaceUniformProfile::SurfaceUniformProfile()
+{
+    // Seed identity qt_Matrix + qt_Opacity=1.0, mirroring BaseUniformProfile's
+    // lead-in so the shared engine sees a sane transform before the first fill.
+    m_u.qt_Matrix[0] = 1.0f;
+    m_u.qt_Matrix[5] = 1.0f;
+    m_u.qt_Matrix[10] = 1.0f;
+    m_u.qt_Matrix[15] = 1.0f;
+    m_u.qt_Opacity = 1.0f;
+}
+
+void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
+{
+    // qt_Matrix: identity with the NDC Y-flip baked into the m11 slot (column-
+    // major index 5), same convention as the overlay profile.
+    std::memset(m_u.qt_Matrix, 0, sizeof(m_u.qt_Matrix));
+    m_u.qt_Matrix[0] = 1.0f;
+    m_u.qt_Matrix[5] = state.yUpInNDC ? -1.0f : 1.0f;
+    m_u.qt_Matrix[10] = 1.0f;
+    m_u.qt_Matrix[15] = 1.0f;
+
+    m_u.qt_Opacity = state.qtOpacity;
+    m_u.uSurfaceScale = state.surfaceScale;
+    m_u.uSurfaceFocused = state.surfaceFocused;
+    m_u.iTime = state.time;
+
+    m_u.uSurfaceSize[0] = state.surfaceSize[0];
+    m_u.uSurfaceSize[1] = state.surfaceSize[1];
+    m_u.uSurfaceFrameTopLeft[0] = state.surfaceFrameTopLeft[0];
+    m_u.uSurfaceFrameTopLeft[1] = state.surfaceFrameTopLeft[1];
+    m_u.uSurfaceFrameSize[0] = state.surfaceFrameSize[0];
+    m_u.uSurfaceFrameSize[1] = state.surfaceFrameSize[1];
+
+    // A daemon surface has no live scene behind it the way a compositor-side
+    // window does, but it CAN be handed a stand-in for one — the desktop
+    // wallpaper. When a host binds that, the node raises state.hasBackdrop and
+    // a needsBackdrop pack (the glass / blur family) samples it instead of
+    // falling back; when nothing is bound this stays 0 and the pack takes its
+    // documented fallback appearance exactly as before.
+    //
+    // Derived by the node from the live binding rather than passed down by a
+    // host, so this gate can never claim a backdrop the shader cannot sample.
+    m_u.uHasBackdrop = state.hasBackdrop;
+    // Which slice of that stand-in lies behind THIS surface. A daemon host
+    // binds one desktop-sized image to every surface it decorates, so without
+    // this each would sample the whole desktop squeezed into its own box. The
+    // host's default is the whole texture, which is what the compositor wants
+    // (its capture already covers this window's canvas) and what a host with no
+    // placement to offer degrades to.
+    for (std::size_t i = 0; i < std::size(m_u.uBackdropRect); ++i) {
+        m_u.uBackdropRect[i] = state.backdropRect[i];
+    }
+    // No rule opacity on the daemon — qt_Opacity carries host opacity.
+    m_u.uSurfaceOpacity = 1.0f;
+
+    // Loop bounds derive from the destination array extents (pinned by the
+    // SurfaceUniforms static_asserts) so they can't silently under-copy if the
+    // std140 layout ever grows.
+    for (std::size_t i = 0; i < std::size(m_u.customParams); ++i) {
+        m_u.customParams[i][0] = state.customParams[i][0];
+        m_u.customParams[i][1] = state.customParams[i][1];
+        m_u.customParams[i][2] = state.customParams[i][2];
+        m_u.customParams[i][3] = state.customParams[i][3];
+    }
+    for (std::size_t i = 0; i < std::size(m_u.customColors); ++i) {
+        m_u.customColors[i][0] = state.customColors[i][0];
+        m_u.customColors[i][1] = state.customColors[i][1];
+        m_u.customColors[i][2] = state.customColors[i][2];
+        m_u.customColors[i][3] = state.customColors[i][3];
+    }
+    for (std::size_t i = 0; i < std::size(m_u.iChannelResolution); ++i) {
+        m_u.iChannelResolution[i][0] = state.channelResolution[i][0];
+        m_u.iChannelResolution[i][1] = state.channelResolution[i][1];
+        m_u.iChannelResolution[i][2] = 0.0f;
+        m_u.iChannelResolution[i][3] = 0.0f;
+    }
+
+    // Audio spectrum bar count (0 when CAVA is off). The node uploads the
+    // spectrum texture (binding 10) via setAudioSpectrum; only the size crosses
+    // into the UBO. The pad stays zero from the m_u{} value-init.
+    m_u.iAudioSpectrumSize = state.audioSpectrumSize;
+
+    // Cursor position, already in device px (ShaderEffect scales its iMouse
+    // property by the dpr before pushing it to the node). SurfaceShaderItem
+    // seeds the inherited iMouse to (-1, -1), so a host that wires no hover
+    // source publishes the off-surface sentinel — which arrives here as
+    // (-dpr, -dpr) after that scale; still strictly negative, so the
+    // canonical `iMouse.x < 0.0` off-surface test holds, and .zw stays
+    // negative alongside it, matching the kwin branch's convention.
+    //
+    // Space assumption: .xy is the item-local position scaled to device px
+    // against the node's RESOLUTION, while surfaceSize is the host-pushed
+    // surface geometry. The two coincide because the decoration item covers
+    // the decorated surface 1:1; a host that wires a HoverHandler on a
+    // differently-sized item would desync .xy (and this .zw normalization)
+    // from the geometry uniforms and must map positions into surface space
+    // itself before pushing iMouse.
+    m_u.iMouse[0] = state.mouseX;
+    m_u.iMouse[1] = state.mouseY;
+    // The degenerate divisor passes the raw value through rather than writing
+    // zero. Zero reads as a hover at the top-left corner, and this branch is
+    // exactly the first frames of a fresh decoration item, before the host has
+    // pushed any geometry — so for a host that seeds the (-1, -1) sentinel (as
+    // SurfaceShaderItem does) .zw stays negative alongside .xy and a pack
+    // testing `iMouse.z < 0.0` still reads "off surface". A host that pushes no
+    // mouse at all leaves the UboFrameState default of 0, which this cannot
+    // improve on; the guarantee is only as good as the sentinel it is handed.
+    m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : state.mouseX;
+    m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : state.mouseY;
+
+    // User texture sizes (uTexture0..3, bindings 11-14) — the node resolves
+    // these live, same as the overlay profile. Four slots, not three: the
+    // surface family declares three USER textures (uTexture1..3) but the array
+    // is the base contract's, and slot 0 is uTexture0, the surface itself.
+    for (std::size_t i = 0; i < std::size(m_u.iTextureResolution); ++i) {
+        m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
+        m_u.iTextureResolution[i][1] = state.textureResolution[i][1];
+        m_u.iTextureResolution[i][2] = 0.0f;
+        m_u.iTextureResolution[i][3] = 0.0f;
+    }
+}
+
+PhosphorShaders::UboUploadRegionList
+SurfaceUniformProfile::dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags) const
+{
+    PhosphorShaders::UboUploadRegionList regions;
+
+    // The surface UBO has no app-fields region (hasAppFields() is false), so
+    // flags.appFields is deliberately NOT consulted — an appFields-only dirty
+    // signal carries no state this profile uploads. The matrix (transform /
+    // Y-flip) is its own granular region; everything else (opacity, geometry,
+    // time, params, colours, channel sizes) lives in the scene region. Any
+    // relevant dirty signal refreshes both — the surface UBO is small enough
+    // that the overlay's finer-grained time/timeHi split buys nothing here.
+    const bool anyDirty = flags.time || flags.timeHi || flags.sceneData;
+    if (anyDirty) {
+        regions.push(PhosphorShaders::UboUploadRegion{kMatrixOffset, kMatrixSize});
+        regions.push(PhosphorShaders::UboUploadRegion{kSceneOffset, kSceneSize});
+    }
+
+    return regions;
+}
+
+} // namespace PhosphorSurfaceShaders

@@ -1,0 +1,78 @@
+{
+    "id": "border-double",
+    "name": "Double Border",
+    "description": "Rounded corners with two concentric border lines separated by a clear gap, each with its own width and colour. The lines dim when the surface loses focus.",
+    "author": "PlasmaZones",
+    "version": "1.1",
+    "category": "Borders",
+    "providesBorder": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "outerWidth",
+            "name": "Outer width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 20,
+            "description": "Thickness of the outer line (px). At 0 that line is not drawn and the other one still is."
+        },
+        {
+            "id": "gapWidth",
+            "name": "Gap width",
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 12,
+            "description": "Clear space between the two lines (px)"
+        },
+        {
+            "id": "innerWidth",
+            "name": "Inner width",
+            "type": "int",
+            "default": 1,
+            "min": 0,
+            "max": 20,
+            "description": "Thickness of the inner line (px). At 0 that line is not drawn and the other one still is."
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 64,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in the chain that offers this setting follows one answer, so their bottom corners are all rounded or all square. Set it on any pack and the whole chain follows. Where two packs have it set differently, the one earliest in the chain wins."
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Anti-alias feather of both lines and the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
+        },
+        {
+            "id": "colorA",
+            "name": "Outer colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour of the outer line"
+        },
+        {
+            "id": "colorB",
+            "name": "Inner colour",
+            "type": "color",
+            "default": "#803daee9",
+            "description": "Colour of the inner line"
+        }
+    ]
+}

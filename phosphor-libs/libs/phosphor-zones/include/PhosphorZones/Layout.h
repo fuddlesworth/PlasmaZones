@@ -1,0 +1,663 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorZones/Zone.h>
+#include <phosphorzones_export.h>
+#include <QObject>
+#include <QVariantMap>
+#include <QVector>
+#include <QUuid>
+#include <QString>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <functional>
+#include <memory>
+
+namespace PhosphorZones {
+
+/**
+ * @brief Category for layout type
+ *
+ * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile,
+ * 2 = ScrollingTemplate.
+ */
+enum class LayoutCategory {
+    Manual = 0, ///< Traditional zone-based layout
+    Autotile = 1, ///< Dynamic auto-tiling algorithm
+    ScrollingTemplate = 2 ///< Native scrolling template (preview family only)
+};
+
+/**
+ * @brief Represents a collection of zones that form a layout
+ *
+ * Layouts can be assigned to specific monitors, virtual desktops,
+ * and activities. Supports both predefined templates and custom
+ * canvas-style layouts.
+ */
+class PHOSPHORZONES_EXPORT Layout : public QObject
+{
+    Q_OBJECT
+
+    Q_PROPERTY(QUuid id READ id CONSTANT)
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
+    Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
+    Q_PROPERTY(bool hasOuterGapOverride READ hasOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
+    Q_PROPERTY(
+        int overlayDisplayMode READ overlayDisplayMode WRITE setOverlayDisplayMode NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(bool hasOverlayDisplayModeOverride READ hasOverlayDisplayModeOverride NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
+    Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
+    Q_PROPERTY(bool isSystemLayout READ isSystemLayout NOTIFY sourcePathChanged)
+
+    // Auto-assign: new windows fill first empty zone
+    Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
+
+    // Geometry mode: use full screen or available (panel-excluded) geometry
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
+                   useFullScreenGeometryChanged)
+
+    // Aspect ratio classification
+    Q_PROPERTY(
+        int aspectRatioClass READ aspectRatioClassInt WRITE setAspectRatioClassInt NOTIFY aspectRatioClassChanged)
+    Q_PROPERTY(qreal minAspectRatio READ minAspectRatio WRITE setMinAspectRatio NOTIFY aspectRatioClassChanged)
+    Q_PROPERTY(qreal maxAspectRatio READ maxAspectRatio WRITE setMaxAspectRatio NOTIFY aspectRatioClassChanged)
+
+    // Visibility filtering
+    Q_PROPERTY(
+        bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
+    Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
+    Q_PROPERTY(QList<int> allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
+    Q_PROPERTY(
+        QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+
+    // Unit of fixed-geometry zones: device pixels (true) or logical ones (false).
+    // Last in the list so every older property keeps its metaobject index.
+    Q_PROPERTY(bool fixedGeometryInDevicePixels READ fixedGeometryInDevicePixels WRITE setFixedGeometryInDevicePixels
+                   NOTIFY fixedGeometryInDevicePixelsChanged)
+
+public:
+    explicit Layout(QObject* parent = nullptr);
+    explicit Layout(const QString& name, QObject* parent = nullptr);
+    ~Layout() override;
+
+    // A Layout is a QObject, so it is never copied or assigned. Duplication
+    // goes through clone(), which returns a heap object with an explicit owner
+    // the way every other Layout in the codebase is created.
+    Layout(const Layout&) = delete;
+    Layout& operator=(const Layout&) = delete;
+
+    /**
+     * @brief Deep-copy this layout into a new, independently owned Layout.
+     *
+     * The clone represents a distinct USER-owned layout: it gets a fresh id,
+     * and it deliberately carries over neither @c sourcePath nor
+     * @c systemSourcePath, so a clone of a system layout is a plain user layout
+     * and the "restore system original" path cannot mistake it for a user
+     * override of the same entry. Its zones are deep-copied (Zone::clone).
+     *
+     * @p parent is the clone's QObject owner and defaults to none. Pass the
+     * registry that will hold it, or leave it unparented and let the registry's
+     * addLayout() take ownership — do NOT pass the SOURCE's parent by reflex:
+     * the clone would appear as a child of a registry that never inserted it
+     * into its own layout list.
+     */
+    Layout* clone(QObject* parent = nullptr) const;
+
+    // Identification
+    QUuid id() const
+    {
+        return m_id;
+    }
+    QString name() const
+    {
+        return m_name;
+    }
+    void setName(const QString& name);
+
+    QString description() const
+    {
+        return m_description;
+    }
+    void setDescription(const QString& description);
+
+    // Layout settings (per-layout gap overrides, -1 = use global setting)
+    int zonePadding() const
+    {
+        return m_zonePadding;
+    }
+    void setZonePadding(int padding);
+    bool hasZonePaddingOverride() const
+    {
+        return m_zonePadding >= 0;
+    }
+    void clearZonePaddingOverride();
+
+    int outerGap() const
+    {
+        return m_outerGap;
+    }
+    void setOuterGap(int gap);
+    bool hasOuterGapOverride() const
+    {
+        return m_outerGap >= 0;
+    }
+    void clearOuterGapOverride();
+
+    // Per-side outer gap overrides (-1 = use global setting)
+    bool usePerSideOuterGap() const
+    {
+        return m_usePerSideOuterGap;
+    }
+    void setUsePerSideOuterGap(bool enabled);
+    int outerGapTop() const
+    {
+        return m_outerGapTop;
+    }
+    void setOuterGapTop(int gap);
+    int outerGapBottom() const
+    {
+        return m_outerGapBottom;
+    }
+    void setOuterGapBottom(int gap);
+    int outerGapLeft() const
+    {
+        return m_outerGapLeft;
+    }
+    void setOuterGapLeft(int gap);
+    int outerGapRight() const
+    {
+        return m_outerGapRight;
+    }
+    void setOuterGapRight(int gap);
+    bool hasPerSideOuterGapOverride() const
+    {
+        return m_usePerSideOuterGap
+            && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+    }
+    /**
+     * @brief Raw per-side gap overrides. Values may be -1 (use global).
+     * Callers should use GeometryUtils::getEffectiveOuterGaps() instead
+     * for resolved pixel values.
+     */
+    ::PhosphorLayout::EdgeGaps rawOuterGaps() const
+    {
+        return {m_outerGapTop, m_outerGapBottom, m_outerGapLeft, m_outerGapRight};
+    }
+
+    bool showZoneNumbers() const
+    {
+        return m_showZoneNumbers;
+    }
+    void setShowZoneNumbers(bool show);
+
+    int overlayDisplayMode() const
+    {
+        return m_overlayDisplayMode;
+    }
+    void setOverlayDisplayMode(int mode);
+    bool hasOverlayDisplayModeOverride() const
+    {
+        return m_overlayDisplayMode >= 0;
+    }
+    void clearOverlayDisplayModeOverride();
+
+    // Source path tracking - determines if layout is from system or user directory
+    QString sourcePath() const
+    {
+        return m_sourcePath;
+    }
+    void setSourcePath(const QString& path);
+
+    // Returns true if layout was loaded from a system directory (not user's .local)
+    // This determines whether the layout can be edited/deleted in place
+    bool isSystemLayout() const;
+
+    // Original system layout path — set when a user override replaces a system layout.
+    // Persisted in user JSON so deletion can restore the system original without scanning.
+    QString systemSourcePath() const
+    {
+        return m_systemSourcePath;
+    }
+    void setSystemSourcePath(const QString& path)
+    {
+        m_systemSourcePath = path;
+    }
+    bool hasSystemOrigin() const
+    {
+        return !m_systemSourcePath.isEmpty();
+    }
+
+    // Aspect ratio classification
+    ::PhosphorLayout::AspectRatioClass aspectRatioClass() const
+    {
+        return m_aspectRatioClass;
+    }
+    void setAspectRatioClass(::PhosphorLayout::AspectRatioClass cls);
+    int aspectRatioClassInt() const
+    {
+        return static_cast<int>(m_aspectRatioClass);
+    }
+    void setAspectRatioClassInt(int cls);
+    qreal minAspectRatio() const
+    {
+        return m_minAspectRatio;
+    }
+    void setMinAspectRatio(qreal ratio);
+    qreal maxAspectRatio() const
+    {
+        return m_maxAspectRatio;
+    }
+    void setMaxAspectRatio(qreal ratio);
+
+    /**
+     * @brief Check if this layout is suitable for a screen with the given aspect ratio
+     *
+     * Uses explicit min/max bounds if set, otherwise falls back to class matching.
+     */
+    bool matchesAspectRatio(qreal screenAspectRatio) const;
+
+    // Visibility filtering
+    bool hiddenFromSelector() const
+    {
+        return m_hiddenFromSelector;
+    }
+    void setHiddenFromSelector(bool hidden);
+    QStringList allowedScreens() const
+    {
+        return m_allowedScreens;
+    }
+    void setAllowedScreens(const QStringList& screens);
+    QList<int> allowedDesktops() const
+    {
+        return m_allowedDesktops;
+    }
+    void setAllowedDesktops(const QList<int>& desktops);
+    QStringList allowedActivities() const
+    {
+        return m_allowedActivities;
+    }
+    void setAllowedActivities(const QStringList& activities);
+
+    // Auto-assign: new windows fill first empty zone
+    bool autoAssign() const
+    {
+        return m_autoAssign;
+    }
+    void setAutoAssign(bool enabled);
+
+    // Geometry mode: when true, zones span the full screen including panel/taskbar areas
+    bool useFullScreenGeometry() const
+    {
+        return m_useFullScreenGeometry;
+    }
+    void setUseFullScreenGeometry(bool enabled);
+
+    /// Whether this layout's fixed-geometry zones count DEVICE pixels. Off (the
+    /// default, and every layout written before the option existed), a fixed
+    /// zone's numbers are logical pixels like every other size in the desktop,
+    /// so the zone scales with the display. On, they are the output's own
+    /// pixels and are divided by its scale when resolved, so a zone keeps its
+    /// size on the panel whatever scaling the display runs at.
+    bool fixedGeometryInDevicePixels() const
+    {
+        return m_fixedGeometryInDevicePixels;
+    }
+    void setFixedGeometryInDevicePixels(bool enabled);
+
+    /// What a fixed geometry is divided by on an output whose logical scale is
+    /// @p screenScale: that scale when fixedGeometryInDevicePixels() is on and
+    /// the scale is usable, 1.0 otherwise. The single definition every
+    /// resolver shares, so a fixed zone cannot be read in two units, and
+    /// Zone::fixedGeometryToLogical() applies it.
+    ///
+    /// The scale is taken as given: a non-positive one is "no scale" and
+    /// answers 1.0. Zone::fixedGeometryDivisor() differs on purpose, because it
+    /// reads a zero scale as "the scale of the last recalculation" and asks
+    /// this function with that one instead.
+    qreal fixedGeometryDivisor(qreal screenScale) const
+    {
+        return (m_fixedGeometryInDevicePixels && screenScale > 0.0) ? screenScale : 1.0;
+    }
+
+    /// Returns true if any zone uses fixed (pixel) geometry mode
+    bool hasFixedGeometryZones() const;
+
+    /// Bounding box of all fixed-geometry zones, anchored at (0, 0), in the
+    /// LOGICAL units of the last recalculation: device-pixel geometry is divided
+    /// by lastRecalcScale() so the box compares with lastRecalcGeometry(). Empty
+    /// rect if no fixed-geometry zones exist.
+    QRectF fixedZoneBoundingBox() const;
+
+    /// Reference geometry suitable for normalizing fixed-pixel zones to
+    /// 0–1 relative coordinates. Returns @c lastRecalcGeometry() when it
+    /// accommodates @c fixedZoneBoundingBox(), with less than one logical
+    /// pixel of slack so a device-pixel box that exactly fills the screen
+    /// still fits after the division by a fractional scale. Falls back to the
+    /// bounding box in exactly two cases: the fixed zones overflow the last
+    /// recalculation rect, or no rect is known yet. It does not detect a
+    /// stale rect that still happens to hold the box. Empty rect when the
+    /// layout has no fixed-geometry zones.
+    QRectF fixedZoneReferenceGeometry() const;
+
+    /// Sentinel for "no explicit default order set" on @c defaultOrder.
+    ///
+    /// Ordering is ascending (lower sorts first), so an unset layout has to sort
+    /// after every ordered one. This is a large value rather than a negative one
+    /// for that reason. Unset layouts are also omitted from toJson, so the key is
+    /// absent rather than written out as a magic number.
+    static constexpr int DefaultOrderUnset = 999;
+
+    // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
+    int defaultOrder() const
+    {
+        return m_defaultOrder;
+    }
+    void setDefaultOrder(int order)
+    {
+        m_defaultOrder = order;
+    }
+
+    // Zone management
+    int zoneCount() const
+    {
+        return m_zones.size();
+    }
+    QVector<Zone*> zones() const
+    {
+        return m_zones;
+    }
+    Zone* zone(int index) const;
+    Zone* zoneById(const QUuid& id) const;
+    Zone* zoneByNumber(int number) const;
+    /// First zone (in zone-number order) whose name equals @p name after
+    /// trimming, compared case-insensitively. Zone names are not unique, so a
+    /// duplicate name resolves to the lowest-numbered zone. Returns nullptr for
+    /// a blank @p name or no match.
+    Zone* zoneByName(const QString& name) const;
+
+    Q_INVOKABLE void addZone(Zone* zone);
+    Q_INVOKABLE void removeZone(Zone* zone);
+    Q_INVOKABLE void removeZoneAt(int index);
+    Q_INVOKABLE void clearZones();
+    Q_INVOKABLE void moveZone(int fromIndex, int toIndex);
+
+    // Zone detection
+    Q_INVOKABLE Zone* zoneAtPoint(const QPointF& point) const;
+    Q_INVOKABLE Zone* nearestZone(const QPointF& point, qreal maxDistance = -1) const;
+    Q_INVOKABLE QVector<Zone*> zonesInRect(const QRectF& rect) const;
+    Q_INVOKABLE QVector<Zone*> adjacentZones(const QPointF& point, qreal threshold = 20) const;
+
+    // Geometry calculations
+    Q_INVOKABLE void renumberZones();
+    QRectF lastRecalcGeometry() const
+    {
+        return m_lastRecalcGeometry;
+    }
+    /// Stamps the rect, and a positive @p screenScale as the scale with it.
+    void setLastRecalcGeometry(const QRectF& geom, qreal screenScale = 0.0)
+    {
+        m_lastRecalcGeometry = geom;
+        if (screenScale > 0.0) {
+            m_lastRecalcScale = screenScale;
+        }
+    }
+    /// The complete staleness predicate recalculateZoneGeometries() gates on:
+    /// the screen rect changed OR the zone geometry inputs changed since the
+    /// last pass (m_zoneGeometryDirty: a zone-set edit or a flip of the
+    /// fixed-geometry unit). Callers that skip work when a recalc "already
+    /// happened" MUST use this, not a bare lastRecalcGeometry() comparison —
+    /// the rect alone reads as fresh after a zone add/remove at unchanged
+    /// screen geometry, leaving the new zones with no absolute geometry.
+    ///
+    /// The output's logical scale @p screenScale is an input too, because a
+    /// device-pixel layout resolves its fixed zones differently at the same
+    /// logical rect once the scale moves (and the scale settles only after an
+    /// output's sensor maps, with the rect unchanged). A layout whose fixed
+    /// geometry is logical, or that has no fixed zone at all, ignores the
+    /// scale, since it cannot change anything for it. Zero (the default) asks
+    /// about the rect and the inputs alone.
+    bool needsRecalc(const QRectF& screenGeometry, qreal screenScale = 0.0) const
+    {
+        return screenGeometry != m_lastRecalcGeometry || m_zoneGeometryDirty
+            || (screenScale > 0.0 && fixedGeometryDivisor(screenScale) != fixedGeometryDivisor(m_lastRecalcScale)
+                && hasFixedGeometryZones());
+    }
+    /// The newest output scale a recalculation was asked for (1.0 until a scale
+    /// is known). A recalculation asked with a positive scale stamps it, the
+    /// ones that find nothing to recompute included, so a reader that divides
+    /// by it (the bounding box, the serialized relative hint, the variant
+    /// lists) holds the output's current scale even on a layout the scale
+    /// cannot move. A call with scale zero keeps the last one, and an async
+    /// result a later sync recalculation superseded stamps nothing.
+    qreal lastRecalcScale() const
+    {
+        return m_lastRecalcScale;
+    }
+    /// Bumped when the zone set changes (a zone added, removed or replaced) or
+    /// the fixed-geometry unit flips, each of which also sets the dirty bit
+    /// needsRecalc() reads. A per-zone setter on an existing zone does not
+    /// bump it. The async compute path carries it through the
+    /// worker, so a result computed from an older zone set is never mistaken
+    /// for one that covers the current zones, even when the zone ids match.
+    quint64 zoneGeometryEpoch() const
+    {
+        return m_zoneGeometryEpoch;
+    }
+    /// Bumped by every recalculateZoneGeometries() call, including one that
+    /// finds nothing to recompute, because each call records the frame its
+    /// caller wants now. An async result whose snapshot was taken before the
+    /// bump was asked for earlier, so it must not overwrite that frame.
+    quint64 syncRecalcEpoch() const
+    {
+        return m_syncRecalcEpoch;
+    }
+    /// Full-recalc bookkeeping for external appliers (the async worker path):
+    /// stamps the rect AND clears the dirty bit, exactly as
+    /// recalculateZoneGeometries() does internally. Use only when the applied
+    /// geometries were computed from the layout's current inputs, that is at
+    /// the current zoneGeometryEpoch(). A positive @p screenScale is stamped as
+    /// the scale too; zero keeps the last one.
+    void markRecalculated(const QRectF& geom, qreal screenScale = 0.0)
+    {
+        m_lastRecalcGeometry = geom;
+        m_zoneGeometryDirty = false;
+        if (screenScale > 0.0) {
+            m_lastRecalcScale = screenScale;
+        }
+    }
+
+    // Serialization
+    QJsonObject toJson() const;
+    static Layout* fromJson(const QJsonObject& json, QObject* parent = nullptr);
+
+    /// Screen-id resolver. Install a callback that maps a legacy connector
+    /// name (e.g. "DP-2") to the application's stable screen identifier
+    /// (EDID-based, "LG:Model:Serial"). The library calls it for every
+    /// entry in `allowedScreens` during @c fromJson so in-memory layouts
+    /// hold normalized IDs regardless of what the file stores.
+    ///
+    /// The callback typically requires a live QGuiApplication (to enumerate
+    /// connected QScreens). Install from the daemon / editor / settings
+    /// processes only; leave unset for headless / test code, in which case
+    /// strings are stored verbatim.
+    ///
+    /// Passing a default-constructed function clears the resolver.
+    using ScreenIdResolver = std::function<QString(const QString&)>;
+    static void setScreenIdResolver(ScreenIdResolver resolver);
+    /// Returns a copy of the currently-installed resolver (empty if none).
+    /// Returning a copy rather than a reference keeps readers race-free
+    /// against a concurrent setScreenIdResolver on another thread — the
+    /// resolver itself is guarded internally, and the returned copy can
+    /// be invoked without holding the lock.
+    static ScreenIdResolver screenIdResolver();
+
+    // Predefined layouts (templates)
+    static Layout* createColumnsLayout(int columns, QObject* parent = nullptr);
+    static Layout* createRowsLayout(int rows, QObject* parent = nullptr);
+    static Layout* createGridLayout(int columns, int rows, QObject* parent = nullptr);
+    static Layout* createPriorityGridLayout(QObject* parent = nullptr);
+    static Layout* createFocusLayout(QObject* parent = nullptr);
+
+    // Dirty tracking for copy-on-write saving
+    bool isDirty() const
+    {
+        return m_dirty;
+    }
+    void markDirty()
+    {
+        m_dirty = true;
+    }
+    void clearDirty()
+    {
+        m_dirty = false;
+    }
+    void beginBatchModify();
+    void endBatchModify();
+
+Q_SIGNALS:
+    void nameChanged();
+    void descriptionChanged();
+    void zonePaddingChanged();
+    void outerGapChanged();
+    void showZoneNumbersChanged();
+    void overlayDisplayModeChanged();
+    void sourcePathChanged();
+    void aspectRatioClassChanged();
+    void hiddenFromSelectorChanged();
+    void allowedScreensChanged();
+    void allowedDesktopsChanged();
+    void allowedActivitiesChanged();
+    void autoAssignChanged();
+    void useFullScreenGeometryChanged();
+    void zonesChanged();
+    void zoneAdded(Zone* zone);
+    void zoneRemoved(Zone* zone);
+    void layoutModified();
+    void fixedGeometryInDevicePixelsChanged();
+
+public:
+    /// Recalculate every zone's absolute geometry against @p screenGeometry.
+    ///
+    /// Public, and nothing restricts who calls it. Daemon code goes through
+    /// LayoutComputeService::recalculateSync by convention, and the editor
+    /// calls it directly on a temporary layout it owns. A direct call on a
+    /// layout the compute service also tracks is safe: it bumps
+    /// syncRecalcEpoch(), and the service will not let an async result asked
+    /// for before the call overwrite the frame it stamps. Call it on the GUI
+    /// thread only, as with every other Layout member.
+    ///
+    /// @p screenScale is the logical scale of the output @p screenGeometry
+    /// belongs to, which a device-pixel layout divides its fixed geometries by.
+    /// Zero (the default) keeps the scale of the last recalculation.
+    void recalculateZoneGeometries(const QRectF& screenGeometry, qreal screenScale = 0.0);
+
+private:
+    void emitModifiedIfNotBatched();
+    /// The zone geometry inputs changed under an unchanged screen frame: set
+    /// the dirty bit and bump zoneGeometryEpoch() together, so neither is
+    /// written without the other.
+    void markZoneGeometryDirty()
+    {
+        m_zoneGeometryDirty = true;
+        ++m_zoneGeometryEpoch;
+    }
+
+    /// Populate this layout in-place from a JSON object. Called by
+    /// @c fromJson after constructing a blank Layout; keeps the raw
+    /// member pokes confined to the class's own implementation so
+    /// the serialization TU isn't a friend of every Q_PROPERTY.
+    /// Use @c addZone for zone insertion so @c zoneAdded / @c zonesChanged
+    /// fire naturally during deserialization.
+    void initFromJson(const QJsonObject& json);
+
+    QUuid m_id;
+    QString m_name;
+    QString m_description;
+    int m_zonePadding = -1; // -1 = use global setting
+    int m_outerGap = -1; // -1 = use global setting
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = -1; // -1 = use global setting
+    int m_outerGapBottom = -1;
+    int m_outerGapLeft = -1;
+    int m_outerGapRight = -1;
+    bool m_showZoneNumbers = true;
+    int m_overlayDisplayMode = -1; // -1 = use global setting
+    QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
+    QString m_systemSourcePath; // Original system path if this is a user override of a system layout
+    int m_defaultOrder = DefaultOrderUnset; // Optional: lower values appear first when choosing default
+    QVector<Zone*> m_zones;
+
+    // Auto-assign: new windows fill first empty zone
+    bool m_autoAssign = false;
+
+    // Geometry mode: zones use full screen (true) or available area excluding panels (false)
+    bool m_useFullScreenGeometry = false;
+
+    // Aspect ratio classification
+    ::PhosphorLayout::AspectRatioClass m_aspectRatioClass = ::PhosphorLayout::AspectRatioClass::Any;
+    qreal m_minAspectRatio = 0.0; // 0 = not set (use class matching)
+    qreal m_maxAspectRatio = 0.0; // 0 = not set (use class matching)
+
+    // Visibility filtering
+    bool m_hiddenFromSelector = false;
+    QStringList m_allowedScreens; // empty = all screens
+    QList<int> m_allowedDesktops; // empty = all desktops
+    QStringList m_allowedActivities; // empty = all activities
+
+    // Screen rect the zone geometries were last recalculated against. Empty
+    // means "no screen known yet". Doubles as the reference frame the derived
+    // relativeGeometry is defined over — see fixedZoneReferenceGeometry.
+    QRectF m_lastRecalcGeometry;
+
+    // Set when the zone geometry inputs change under an unchanged screen: the
+    // zone SET (add / remove / clear) or the fixed-geometry unit. Either edit
+    // leaves the recalculated absolute geometries stale, but it does not move
+    // the layout to another screen, so the rect above stays valid as a
+    // reference and only the recompute is owed. Keeping these two facts apart
+    // is what lets a serialization that follows a zone swap still normalize
+    // against the screen instead of silently falling back to the fixed-zone
+    // bounding box. Written through markZoneGeometryDirty, which also bumps
+    // m_zoneGeometryEpoch.
+    bool m_zoneGeometryDirty = false;
+
+    // Cached classification derived from m_sourcePath. Recomputed in
+    // setSourcePath so isSystemLayout() is O(1) — QStandardPaths lookups add
+    // up on hot paths like QML preview rebuilds.
+    bool m_isSystemLayout = false;
+
+    // Dirty tracking for copy-on-write saving
+    bool m_dirty = false;
+    int m_batchModifyDepth = 0;
+
+    // Fixed-geometry unit: device pixels (true) or logical pixels (false).
+    bool m_fixedGeometryInDevicePixels = false;
+
+    // The newest output scale a recalculation was asked for, the other half of
+    // the reference frame a device-pixel layout's fixed geometry resolves in.
+    qreal m_lastRecalcScale = 1.0;
+
+    // See zoneGeometryEpoch() and syncRecalcEpoch().
+    quint64 m_zoneGeometryEpoch = 0;
+    quint64 m_syncRecalcEpoch = 0;
+
+    // Whether anything inside the current outermost batch marked the layout
+    // modified, so endBatchModify emits layoutModified for an edit made in
+    // that batch and not for a dirty bit left by an earlier, unsaved one.
+    bool m_batchModified = false;
+};
+
+} // namespace PhosphorZones

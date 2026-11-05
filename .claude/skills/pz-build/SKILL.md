@@ -20,18 +20,27 @@ because that failure mode is invisible.
 Check what a dir actually is before trusting a green result from it:
 
 ```bash
-grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD):" build*/CMakeCache.txt
+grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD|CMAKE_GENERATOR):" build*/CMakeCache.txt
 ```
 
 | dir | testing | shell tier | unity | use for |
 |---|---|---|---|---|
-| `build` | ON | **OFF** | ON | day-to-day app/daemon/effect work |
-| `build-noshell` | ON | OFF | ON | confirming a shell-tier change still builds shell-OFF |
-| `build-nounity` | ON | **ON** | OFF | shell tier, packager parity, and the clangd compile database |
+| `build` | ON | **ON** | ON | day-to-day work, including the shell tier |
+| `build-release` | ON | ON | ON | the release preset, optimized |
+| `build-off` | ON | **OFF** | ON | confirming a shell-tier change still builds shell-OFF |
+| `build-nounity` | ON | ON | OFF | packager parity and the clangd compile database |
+| `build-make` | ON | **OFF** | ON | Unix Makefiles generator parity; tools OFF too, so a green ctest here covers neither the shell tier nor the tools |
 
-`build` has `BUILD_PHOSPHOR_SHELL=OFF`. Anything under `libs/phosphor-shell*`,
-the bar, control center, launcher, power or popout libraries is **not built
-there and its tests do not run**. Use `build-nounity` for shell work.
+`build` is what `cmake --preset debug` produces, and `CMakePresets.json` sets
+`BUILD_TESTING`, `BUILD_PHOSPHOR_SHELL` and `BUILD_TOOLS` all ON there, so the
+shell tier IS built and its tests DO run. Every moon task configures through
+that preset. A dir configured by hand without those flags is the one that runs
+nothing, which is what the grep above is for.
+
+The dirs that still need care are the shell-OFF ones, `build-off` and
+`build-make` (which is tools-OFF as well): a shell-tier change has to be
+confirmed there, because `BUILD_PHOSPHOR_SHELL` defaults OFF for anyone
+configuring without a preset.
 
 ## Configure
 
@@ -44,9 +53,17 @@ cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
   `USE_KDE_FRAMEWORKS=ON` (the default); those libraries need KF6 Kirigami for
   icon rendering and have no Qt-only fallback.
 - `BUILD_TOOLS=ON` adds `shader-render` and friends.
-- The `shader_validate_animations` and `shader_validate_pointer` gates shell out
-  to `glslangValidator` (or `glslang`) and **hard-fail when neither is on PATH**
-  rather than skipping. Install the distro glslang package before running ctest.
+- The `shader_validate_animations`, `shader_validate_surface` and
+  `shader_validate_pointer` gates shell out to `glslangValidator` (or `glslang`)
+  and **hard-fail when neither is on PATH** rather than skipping. On x86-64 the
+  configure fetches the glslang release `cmake/PhosphorDependencies.cmake` pins
+  and puts it on those tests' PATH, so only another architecture needs the
+  distro glslang package.
+- The first configure of a fresh tree downloads the pinned Luau, valijson and
+  glslang archives with CPM into `.cache/cpm`, which every build dir shares.
+  With no network, pass `-DPHOSPHOR_DEPS_ARCHIVES=<dir>` holding the archives,
+  filled beforehand with
+  `cmake -DPHOSPHOR_DEPS_FETCH=<dir> -P cmake/PhosphorDependencies.cmake`.
 
 ## Build
 
@@ -83,12 +100,14 @@ ctest --test-dir build --output-on-failure
 ```
 
 Test targets carry a `TEST_LAUNCHER` of
-`dbus-run-session --config-file=tests/unit/test-session-bus.conf --`. That conf
+`dbus-run-session --config-file=cmake/test-session-bus.conf --`. That conf
 declares **no** service dirs on purpose: a stock `dbus-run-session` still reads
 the standard service dirs, so the installed `plasmazonesd` gets activated on the
 private bus, reparents when the bus dies, holds the test's stdout pipe open, and
-**ctest hangs after the test passes**. New tests must be added ABOVE that block
-in `tests/unit/CMakeLists.txt`, alongside the shared `ENVIRONMENT` block.
+**ctest hangs after the test passes**. New tests must be added ABOVE the
+directory sweep at the bottom of `plasmazones/tests/unit/CMakeLists.txt`, so the
+`phosphor_apply_directory_test_isolation()` sweep there picks them up. A test registered
+below that line gets no launcher and no XDG sandbox.
 
 Never `pkill -f plasmazonesd`; that kills the user's real desktop daemon. Kill
 only `build/bin/` test binaries.
@@ -112,13 +131,18 @@ engine, effect, or shell sources:
 cmake --build build-nounity --parallel 6
 ```
 
+Test sources have a second hole of the same kind: every test target reuses one
+shared precompiled header (`cmake/PhosphorTestPch.cmake`), so a test can use a
+QtCore or standard header it never included. Configure the non-unity tree with
+`-DENABLE_PCH=OFF` as well when a change touches tests.
+
 The nastiest shape is not a missing include but a genuine cross-TU dependency on
 a function with internal linkage (a `static` in an anonymous namespace), which
 only ever links under unity.
 
 Shell-tier changes need **both** a shell-ON and a shell-OFF configure
-(`build-nounity` and `build-noshell`). The Makefile generator rejects ninja's
-`-k 0`.
+(`build-nounity` and `build-off`). Both of those are Ninja trees; `build-make`
+is the only Unix Makefiles one, and that generator rejects ninja's `-k 0`.
 
 ## Conventions gate
 
@@ -126,8 +150,10 @@ Shell-tier changes need **both** a shell-ON and a shell-OFF configure
 python3 scripts/check-conventions.py
 ```
 
-Stdlib only, runs on the whole tree in about a second, and also runs in CI and
-on pre-commit. See `--list-rules`.
+Stdlib only. A whole-tree run is around 13 seconds on an idle machine, and
+noticeably longer while a build is running, so measure it idle before
+concluding it is slow. A staged subset is near instant, which is the form
+pre-commit uses (`--staged`). CI runs it whole-tree. See `--list-rules`.
 
 ## Green does not mean it works
 

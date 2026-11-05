@@ -26,16 +26,21 @@ needs no logout.
 scripts/nested-kwin/run-nested.sh [output-count] [width height] [scale]
 ```
 
-- `width/height/scale` apply to **every** virtual output; kwin_wayland's flags
-  are global. Genuinely mixed per-output scale needs a seeded
+- `width/height` apply to **every** virtual output; kwin_wayland's flags are
+  global. `scale` is passed only to the visible window: the headless
+  `--virtual` backend multiplies the MODE by `--scale` and keeps scale 1
+  (1600x900 at 1.25 comes up 2000x1125), so the script leaves it off there and
+  warns. Scale a headless output once the session is up, from a shell that
+  sourced env.sh: `kscreen-doctor output.Virtual-0.scale.1.25`. The same
+  command per output gives mixed scales, as does a seeded
   `kwinoutputconfig.json` in the nested config home.
 - `PZ_NESTED_VISIBLE=1` runs it as a window on the host desktop instead of
   headless, so you can watch and drive it with pointer and keyboard. Defaults to
   1600x900 when no size is given.
 - `PZ_NESTED_XWAYLAND=1` for X11 test clients.
-- `PZ_NESTED_BUILD` selects a configure dir other than `build/`. Use
-  `build-nounity` for anything in the shell tier, since `build/` has
-  `BUILD_PHOSPHOR_SHELL=OFF`.
+- `PZ_NESTED_BUILD` selects a configure dir other than `build/`. `build/` is the
+  `debug` preset, which turns the shell tier ON, so it is fine for shell work;
+  reach for `build-nounity` when you also want the non-unity gate.
 - `PZ_NESTED_KEEP_STATE=1` keeps the previous run's XDG homes instead of
   wiping them, including the nested `kwinrc` that carries the desktop count.
   The only way to probe session restore: `daemon.sh` restarts the daemon but

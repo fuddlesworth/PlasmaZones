@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Every Arch package a CI job in .github/workflows/ci.yml needs, in one place.
+# .github/ci/Dockerfile bakes this list into the CI image, and
+# .github/ci/sync-packages.sh installs whatever a job's checkout lists that the
+# image it runs in does not, so a pull request that adds a dependency here is
+# built with it before the image is rebuilt.
+#
+# One package per line; `#` starts a comment. The draft-PKGBUILD job does not
+# read this: makepkg resolves the real dependencies from packaging/.
+#
+# The shell tier (BUILD_PHOSPHOR_SHELL) is not built in CI, so its
+# configure-time requirements (libpipewire, polkit-qt6, pam, ddcutil) are not
+# here.
+
+# Toolchain
+base-devel
+git
+ccache
+mold
+cmake
+ninja
+extra-cmake-modules
+
+# Qt 6
+qt6-base
+qt6-declarative
+qt6-tools
+qt6-shadertools
+qt6-svg
+qt6-wayland
+
+# Wayland
+wayland
+plasma-wayland-protocols
+wayland-protocols
+
+# KDE Frameworks and KWin (the USE_KDE_FRAMEWORKS=ON leg)
+kwin
+kconfig
+kconfigwidgets
+kcmutils
+kglobalaccel
+kcolorscheme
+kirigami
+plasma-activities
+
+# Rendering
+vulkan-headers
+vulkan-icd-loader
+
+# Test-time tools: xvfb and mesa (llvmpipe) for the tests that need a display
+# or a real GL context, cava and ffmpeg for phosphor-audio. The shader tests'
+# glslang is not here: on x86-64 the configure fetches the release
+# cmake/PhosphorDependencies.cmake pins and puts it on those tests' PATH.
+xorg-server-xvfb
+mesa
+cava
+ffmpeg
+
+# Lint: clang ships clang-format; qmlformat comes with qt6-declarative.
+clang
