@@ -94,6 +94,7 @@ class WindowTrackingAdaptor;
 class WindowDragAdaptor;
 class RuleAdaptor;
 class UnifiedLayoutController;
+class WorkspaceController;
 class TilingAdaptor;
 class AutotileAdaptor;
 class ScrollingAdaptor;

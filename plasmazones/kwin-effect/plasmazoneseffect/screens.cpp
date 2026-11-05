@@ -191,7 +191,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, con
     return result;
 }
 
-void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop)
+void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop, bool force)
 {
     if (screenId.isEmpty() || desktop < 1) {
         return;
@@ -201,7 +201,8 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     // registered yet; the bringup re-sync (daemon_bringup.cpp) re-pushes every
     // screen's authoritative desktop after (re)registration, so a missed live
     // report here is recovered there.
-    if (m_lastScreenDesktop.value(screenId, -1) == desktop) {
+    const bool changed = m_lastScreenDesktop.value(screenId, -1) != desktop;
+    if (!changed && !force) {
         return;
     }
     m_lastScreenDesktop.insert(screenId, desktop);
@@ -209,8 +210,12 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("screenDesktopChanged"), {screenId, desktop});
         // The daemon switches this output's context and announces it; a batch
-        // for the context it left must not untile the incoming one (F793).
-        m_tilingHandler->noteContextSwitched(screenId);
+        // for the context it left must not untile the incoming one (F793). A
+        // forced report of an unchanged desktop switches nothing, so it does
+        // not mark one.
+        if (changed) {
+            m_tilingHandler->noteContextSwitched(screenId);
+        }
     }
 }
 

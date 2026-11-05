@@ -122,6 +122,16 @@ inline constexpr QLatin1StringView RouteToScreen{"routeToScreen"};
 /// open-path placement actions. Sticky (on-all-desktops) windows are left alone.
 /// Daemon-consumed on the open path. Domain Window.
 inline constexpr QLatin1StringView RouteToDesktop{"routeToDesktop"};
+/// Route a matched window to a NAMED dynamic workspace on open. Carries the
+/// declared workspace name (`ActionParam::TargetWorkspaceName`); the daemon
+/// resolves it against the live named-workspace declarations and moves the
+/// window to whichever desktop (and monitor) currently realizes that name —
+/// a no-op when the name is undeclared or dynamic workspaces are off.
+/// Sticky (on-all-desktops) windows are left alone, as with RouteToDesktop.
+/// Distinct from RouteToDesktop's positional number: the name survives
+/// renumbering, pinning changes and monitor moves. Daemon-consumed on the
+/// open path. Domain Window.
+inline constexpr QLatin1StringView RouteToWorkspace{"routeToWorkspace"};
 inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
 /// Per-window override of the decoration surface-pack chain (border-sweep /
 /// glow / frosted-glass, ...). Carries an ordered pack-id array

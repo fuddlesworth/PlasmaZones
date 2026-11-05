@@ -35,6 +35,14 @@ QtObject {
     /// matching MonitorStatePage's `_noLayoutToken` convention.
     readonly property string noLayoutToken: "none"
 
+    /// The three routing-target pickers (RouteToScreen / RouteToDesktop /
+    /// RouteToWorkspace), which moved to their own file when this one reached
+    /// the file-size ceiling. ActionRow reaches them through
+    /// `paramEditors.pickers._…Editor`; they take the same `row` handle.
+    property ActionParamPickers pickers: ActionParamPickers {
+        row: editors.row
+    }
+
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -552,90 +560,6 @@ QtObject {
             Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-    }
-
-    // Monitor picker for RouteToScreen. Mirrors the ScreenId match-condition
-    // editor (MatchLeafEditor's screenValueEditor): the user picks a friendly
-    // label while the wire value stays the canonical screen id. A stored id whose
-    // monitor is offline still surfaces (so the user sees what the rule pins to).
-    property Component _screenIdEditor: Component {
-        WideComboBox {
-            id: screenCombo
-
-            readonly property var _param: parent.modelData
-            readonly property var _screens: (row.appSettings && row.appSettings.screens) || []
-            model: _screens.map(function (s) {
-                var label = s.displayLabel || s.name || "";
-                if (s.isPrimary)
-                    // Composed inside one i18nc so translators control the
-                    // order and the separator survives RTL bidi runs.
-                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
-                return {
-                    "label": label,
-                    "name": s.name
-                };
-            })
-            textRole: "label"
-            valueRole: "name"
-            currentIndex: {
-                var target = row.action[_param.key] || "";
-                for (var i = 0; i < screenCombo._screens.length; ++i) {
-                    if (screenCombo._screens[i].name === target)
-                        return i;
-                }
-                return -1;
-            }
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a monitor…"))
-            Accessible.name: _param.label
-            onActivated: function (index) {
-                if (currentValue !== row.action[_param.key])
-                    row.actionEdited(row._withParam(_param.key, currentValue));
-            }
-        }
-    }
-
-    // Virtual-desktop picker for RouteToDesktop. Lists 1..virtualDesktopCount,
-    // labelled with the desktop name when KWin reports one. The wire value is the
-    // 1-based desktop number. A stored desktop beyond the current count still
-    // surfaces its number so the rule's target stays legible.
-    property Component _virtualDesktopEditor: Component {
-        WideComboBox {
-            id: desktopCombo
-
-            readonly property var _param: parent.modelData
-            readonly property int _count: row.appSettings && row.appSettings.virtualDesktopCount > 0 ? row.appSettings.virtualDesktopCount : 1
-            readonly property var _names: (row.appSettings && row.appSettings.virtualDesktopNames) || []
-            model: {
-                var items = [];
-                for (var i = 1; i <= desktopCombo._count; ++i) {
-                    var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
-                    items.push({
-                        // Composed inside one i18nc so translators control the
-                        // order and the separator, matching the monitor picker
-                        // above and the match-side desktop picker.
-                        "label": name && name.length > 0 ? i18nc("virtual desktop number, then its name", "%1: %2", i, name) : ("" + i),
-                        "value": i
-                    });
-                }
-                return items;
-            }
-            textRole: "label"
-            valueRole: "value"
-            currentIndex: {
-                var target = Number(row.action[_param.key]);
-                for (var i = 0; i < desktopCombo.model.length; ++i) {
-                    if (desktopCombo.model[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] ? ("" + row.action[_param.key]) : i18n("Choose a desktop…"))
-            Accessible.name: _param.label
-            onActivated: function (index) {
-                if (currentValue !== row.action[_param.key])
-                    row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
     }

@@ -575,6 +575,17 @@ private:
     /// seed-all ordering).
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
+    /// Construct + wire the dynamic-workspaces controller behind its gate
+    /// (workspacesEnabled setting AND KWin per-output mode). No-op otherwise —
+    /// feature off leaves current behavior byte-identical.
+    void initializeWorkspaces();
+    /// Symmetric teardown for initializeWorkspaces, called from stop(). Severs
+    /// the wiring, drops the adhoc named chords AND their id list, destroys
+    /// the controller (whose dtor writes the final state file), clears the
+    /// adaptor's workspace payload and route resolver, and hands KWin back the
+    /// desktop-switch chords the takeover stole. Idempotent: a stop() with the
+    /// feature off, or a second stop(), does nothing.
+    void teardownWorkspaces();
     void connectLayoutSignals();
     void connectOverlaySignals();
     void finalizeStartup();
@@ -1374,6 +1385,23 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+    /// Dynamic per-monitor workspaces. Null unless the feature gate passed
+    /// (initializeWorkspaces); its existence IS the runtime gate the
+    /// desktopCountChanged prune consults.
+    std::unique_ptr<WorkspaceController> m_workspaceController;
+    /// One-time guard for the settings connects that re-enter
+    /// initializeWorkspaces on a runtime enable (lambdas cannot use
+    /// Qt::UniqueConnection).
+    bool m_workspaceRearmConnected = false;
+    /// Lifetime anchor for EVERY connection initializeWorkspaces makes beyond
+    /// the rearm pair: all of them use this object as the receiver context, so
+    /// a runtime disable (or re-enable) severs them wholesale by resetting it.
+    /// Without this, verb lambdas outlive m_workspaceController (null deref on
+    /// the next chord) and a re-enable duplicates every connection.
+    std::unique_ptr<QObject> m_workspaceWiring;
+    /// Adhoc named-workspace shortcut ids currently registered, so a runtime
+    /// disable can unregister them (their lambdas capture the controller).
+    QStringList m_workspaceNamedShortcutIds;
 
     // Scripted algorithm loader (file watcher for user-defined Luau algorithms).
     // m_algorithmRegistry is declared up at the top of the member block with

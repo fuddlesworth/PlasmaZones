@@ -217,6 +217,13 @@ public:
     void focusColumnLast(const QString& screenId);
     void moveColumnToFirst(const QString& screenId);
     void moveColumnToLast(const QString& screenId);
+    /// The focused column's window ids on this screen's current strip, in
+    /// tile order (empty when the screen has no state or no active column).
+    /// Read-only; the dynamic-workspaces move-column-to-workspace verb
+    /// enumerates the group it relocates through this, and addresses it with
+    /// a PHYSICAL output id, so @p screenId is resolved through
+    /// scrollingScreenForPhysical rather than looked up verbatim.
+    QStringList focusedColumnWindows(const QString& screenId) const;
     void consumeWindowIntoColumn(const QString& screenId);
     void expelWindowFromColumn(const QString& screenId);
     /// delta -1 = towards the strip's start, +1 = towards its end (niri consume-or-expel-window-left/right).
@@ -1158,6 +1165,14 @@ private:
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
+    /// The live scrolling screen belonging to the same PHYSICAL output as
+    /// @p screenId, or empty when none does. Unlike resolveOperationScreen
+    /// there is NO active-screen fallback: this answers for the output named
+    /// or not at all. When that output carries SEVERAL scrolling virtual
+    /// sub-screens, the active screen wins if it is one of them; otherwise the
+    /// call is REFUSED (empty), because any tie-break would be a guess and the
+    /// verbs built on this act on whatever it names.
+    QString scrollingScreenForPhysical(const QString& screenId) const;
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);

@@ -99,6 +99,12 @@ QString actionDescription(const QString& type)
     if (type == ActionType::RouteToDesktop) {
         return PhosphorI18n::tr("Moves matching windows to a chosen virtual desktop when they open.");
     }
+    if (type == ActionType::RouteToWorkspace) {
+        return PhosphorI18n::tr(
+            "Moves matching windows to a named workspace when they open. The name follows the "
+            "workspace wherever it lives, and the rule waits quietly while no workspace carries "
+            "it.");
+    }
     if (type == ActionType::RestorePosition) {
         return PhosphorI18n::tr(
             "Controls whether a matching floated window returns to its remembered position and "

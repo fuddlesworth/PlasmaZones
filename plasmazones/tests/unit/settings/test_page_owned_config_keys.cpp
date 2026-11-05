@@ -210,6 +210,18 @@ private Q_SLOTS:
             ConfigDefaults::snappingBehaviorGroup(),
             ConfigDefaults::snappingBehaviorZoneSpanGroup(),
             ConfigDefaults::tilingBehaviorGroup(),
+            // The three Workspaces schema groups joined with dynamic per-monitor
+            // workspaces. Workspaces.Behavior holds the gate scalars,
+            // Workspaces.Named the named-entry list and Workspaces.Slots one
+            // target key per quick slot; all of them are owned by the
+            // workspaces pages. Sweeping the groups keeps a tenth slot, or
+            // another behaviour scalar, from shipping ownerless the way
+            // Rendering.Gpu did. The slots' own chords are Shortcuts.Global
+            // keys, not Workspaces.Slots ones, so they are outside this sweep
+            // by design.
+            ConfigDefaults::workspacesBehaviorGroup(),
+            ConfigDefaults::workspacesNamedGroup(),
+            ConfigDefaults::workspacesSlotsGroup(),
         };
         const QString editorPrefix = ConfigDefaults::editorGroup() + QLatin1Char('.');
         for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
@@ -273,11 +285,12 @@ private Q_SLOTS:
         QVERIFY2(stale.isEmpty(), qPrintable(stale.join(QLatin1String("; "))));
     }
 
-    /// The reset-exemption contract for the mode enable master switches:
+    /// The reset-exemption contract for the feature enable master switches:
     /// every exempt key must be manifest-owned (a dangling exemption means the
-    /// dirty-tracking fix regressed back to unowned), and all three placement
-    /// switches must be exempt (an enable key missing here would let a page
-    /// Reset flip its mode off).
+    /// dirty-tracking fix regressed back to unowned), and all four switches
+    /// must be exempt (an enable key missing here would let a page Reset turn
+    /// its feature off). Workspaces is the outlier of the four: its enable
+    /// lives under the Behavior group rather than a mode root group.
     void resetExemptEnableKeysAreOwnedAndComplete()
     {
         QSet<QString> owned;
@@ -289,10 +302,10 @@ private Q_SLOTS:
         }
 
         const auto& exempt = SettingsController::resetExemptModeEnableKeys();
-        QCOMPARE(exempt.size(), 3);
+        QCOMPARE(exempt.size(), 4);
         QSet<QString> exemptQualified;
         // Collect-then-assert, matching the rest of this file: a single
-        // dangling exemption must not hide the state of the other two.
+        // dangling exemption must not hide the state of the others.
         QStringList dangling;
         for (const auto& gk : exempt) {
             const QString qualified = qualify(gk.first, gk.second);
@@ -306,6 +319,8 @@ private Q_SLOTS:
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::snappingGroup(), ConfigDefaults::enabledKey())));
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::tilingGroup(), ConfigDefaults::enabledKey())));
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey())));
+        QVERIFY(
+            exemptQualified.contains(qualify(ConfigDefaults::workspacesBehaviorGroup(), ConfigDefaults::enabledKey())));
     }
 
     /// Same contract for the cross-page default selections: both keys must be

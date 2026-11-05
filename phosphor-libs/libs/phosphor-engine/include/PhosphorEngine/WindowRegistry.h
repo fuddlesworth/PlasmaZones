@@ -187,6 +187,13 @@ public:
     /// at the head, so this is not arrival order: callers that need a FIFO
     /// sequence must order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
+    /// Every instance holding a METADATA RECORD, unordered. Canonical-only
+    /// instances (a canonical id frozen before any metadata push arrived) are
+    /// NOT listed: they carry no context to seed from, which is what every
+    /// consumer of this wants (the dynamic-workspaces population census seeds
+    /// derived per-window state at attach time rather than replaying history).
+    /// Use contains() for the same record-backed question about one id.
+    QStringList instanceIds() const;
     bool contains(const QString& instanceId) const;
     int size() const;
     /// Remove every record and canonical mapping, firing windowDisappeared

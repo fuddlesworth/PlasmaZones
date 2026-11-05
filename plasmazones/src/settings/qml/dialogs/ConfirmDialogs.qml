@@ -115,7 +115,8 @@ Item {
         ]
     }
 
-    // Confirm dialog for the sidebar's inline snapping/tiling toggle when
+    // Confirm dialog for the sidebar's inline feature toggle (snapping,
+    // tiling, scrolling, workspaces) when
     // the relevant page has unsaved edits. Disabling the section through
     // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
     // whatever the page has staged dirty — without this gate the user
@@ -130,10 +131,10 @@ Item {
         property bool pendingValue: false
 
         title: i18n("Discard unsaved changes?")
-        // Each arm names its own section rather than letting one of the three
+        // Each arm names its own section rather than letting one of the four
         // be the else branch, so a pendingSection this dialog does not handle
         // cannot show the wrong feature's wording.
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : (pendingSection === "scrolling" ? i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?") : i18n("Disabling this will discard your unsaved changes. Continue?")))
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : (pendingSection === "scrolling" ? i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?") : (pendingSection === "workspaces" ? i18n("Disabling Workspaces will discard your unsaved Workspaces changes. Continue?") : i18n("Disabling this will discard your unsaved changes. Continue?"))))
         standardButtons: Kirigami.Dialog.NoButton
         customFooterActions: [
             Kirigami.Action {
@@ -147,8 +148,8 @@ Item {
                     // enable flag — otherwise the inline beginExternalEdit /
                     // endExternalEdit pair would surface the still-staged edits
                     // alongside the disable. discardPage("snapping" / "tiling"
-                    // / "scrolling") reverts every manifest-backed leaf under
-                    // that mode back to
+                    // / "scrolling" / "workspaces") reverts every
+                    // manifest-backed leaf under that feature back to
                     // the committed baseline (the framework PageAdapter.discard()
                     // for these virtual parents is a no-op, so the old
                     // registry.controller(section).discard() call did nothing).
@@ -160,6 +161,8 @@ Item {
                         appSettings.autotileEnabled = value;
                     else if (section === "scrolling")
                         appSettings.scrollingEnabled = value;
+                    else if (section === "workspaces")
+                        appSettings.workspacesEnabled = value;
                     settingsController.endExternalEdit();
                 }
             },
@@ -179,7 +182,7 @@ Item {
         id: daemonStopConfirm
 
         title: i18n("Stop daemon?")
-        subtitle: i18n("Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.")
+        subtitle: i18n("Stopping the PlasmaZones daemon disables window snapping, tiling, scrolling and dynamic workspaces until you start it again.")
         standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {

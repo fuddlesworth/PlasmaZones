@@ -828,6 +828,7 @@ add_test(NAME test_snap_gap_tracker COMMAND test_snap_gap_tracker)
 add_library(pz_test_shortcut_manager OBJECT
     ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_adhoc.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_table.cpp
 )
 target_link_libraries(pz_test_shortcut_manager
     PUBLIC Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)

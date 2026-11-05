@@ -324,6 +324,26 @@ private Q_SLOTS:
     void slotActivateWindowRequested(const QString& windowId);
     void slotFullscreenHandBackRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
+    /// Same move, with the desktop named by its stable id. The daemon sends
+    /// this for a named-workspace route, where a position resolved before the
+    /// D-Bus hop can be renumbered by the time it lands here.
+    void slotWindowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId);
+
+private:
+    /// Shared tail of both desktop-move slots, so the two agree on the sticky
+    /// carve-out, the recovery restore for a desktop that does not exist (a
+    /// null @p target), and the membership write.
+    void applyDesktopMove(KWin::EffectWindow* w, KWin::VirtualDesktop* target, const QString& windowId);
+
+private Q_SLOTS:
+    void slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
+    /// Cache the dynamic-workspaces ownership map (daemon stream + replay).
+    /// Consumer stub: the future overview renders from this; nothing else
+    /// reads it yet.
+    void slotWorkspaceMapChanged(const QString& mapJson);
+    /// Per-output desktop switch (dynamic workspaces focus verbs and
+    /// owner-wins snap-back): effects->setCurrentDesktop(desktop, output).
+    void slotSetScreenDesktopRequested(const QString& screenId, int desktop);
     void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
                                       const QString& sourceScreenId);
 
@@ -915,7 +935,12 @@ private:
     /// Report a screen's current virtual desktop to the daemon (Plasma 6.7
     /// per-output virtual desktops). Deduplicates against m_lastScreenDesktop and
     /// only fires when the daemon service is registered.
-    void reportScreenDesktop(const QString& screenId, int desktop);
+    ///
+    /// @param force skips the dedup. The dynamic-workspaces reconciler treats
+    /// the resulting screenDesktopChanged as the ACK that retires a SetCurrent
+    /// ledger entry, so the path answering a daemon setScreenDesktopRequested
+    /// must report even when the value did not change.
+    void reportScreenDesktop(const QString& screenId, int desktop, bool force = false);
 
     /// What this effect last told the daemon each screen's desktop is.
     ///
@@ -927,6 +952,9 @@ private:
     {
         return m_lastScreenDesktop;
     }
+    /// Push the compositor's live per-output-virtual-desktops mode. Sent at
+    /// bringup and on every runtime change; the daemon change-gates it.
+    void reportPerOutputDesktopsMode();
     QString getWindowScreenId(KWin::EffectWindow* w) const;
     /// getWindowScreenId for a caller that has already resolved the window id.
     /// The engine-authoritative scroll override is keyed on the window id, so
@@ -3864,6 +3892,30 @@ private:
     PixelSizeDecisions::Ledger m_pixelSizeLedger;
     // A flushOutputPixelSizes is queued for the end of this event-loop turn.
     bool m_outputPixelSizeFlushQueued = false;
+    /// Last dynamic-workspaces map payload from the daemon (see
+    /// slotWorkspaceMapChanged). The effect is a validated ingest point for
+    /// this stream: it parses, orders and caches the payload but has no
+    /// consumer yet. The consumer will be the workspace overview, which reads
+    /// the cached map to lay out its desktop thumbnails without a round trip.
+    /// Empty until the feature streams.
+    QString m_workspaceMapJson;
+    quint64 m_workspaceMapGeneration = 0; ///< ordering guard for the cache above
+    /// Monotonic epoch bumped on every slotWorkspaceMapChanged push. The
+    /// generation above cannot order a bringup workspaceMap() reply against a
+    /// live push from the SAME daemon cycle: the empty-payload arm floors the
+    /// generation to 0 (deliberately, so a re-enable's restarted counter is
+    /// accepted), after which an in-flight reply carrying the map the daemon
+    /// just disabled is accepted by the empty-cache arm, and the bridge
+    /// generation is unchanged. Queries capture this and drop a stale reply.
+    quint64 m_workspaceMapEpoch = 0;
+    /// Set for the duration of a setCurrentDesktop() issued to satisfy a daemon
+    /// setScreenDesktopRequested, and consumed by the desktop.switch blend
+    /// connection: an owner-wins snap-back is not a switch the user asked for.
+    /// KWin delivers desktopChanged from inside setCurrentDesktop on the paths
+    /// that emit it at all, so a scope guard clears the flag as the call
+    /// returns; were the signal ever queued the flag is already down and the
+    /// blend simply runs, as it does today.
+    bool m_programmaticDesktopSwitch = false;
 
     // Last effective screen ID reported to daemon (physical or virtual).
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual

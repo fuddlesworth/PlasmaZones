@@ -430,7 +430,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
     if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
         return;
     }
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_service) {
         return;
     }
     // Delegate to service
@@ -541,6 +541,16 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         if (windowId != shadowId) {
             m_ruleEvaluator->evictCached(windowId);
         }
+    }
+    // The open-path RouteToWorkspace answer is keyed the same way (the raw id
+    // its emitter was handed), and is normally consumed within the open round
+    // trip. Drop both spellings so a window that opened with a workspace route
+    // and closed before anything read it back cannot leak an entry.
+    m_workspaceRoutedDesktop.remove(shadowId);
+    m_workspaceRoutedScreen.remove(shadowId);
+    if (windowId != shadowId) {
+        m_workspaceRoutedDesktop.remove(windowId);
+        m_workspaceRoutedScreen.remove(windowId);
     }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
@@ -836,6 +846,29 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
 void WindowTrackingAdaptor::setInteractiveDragWindow(const QString& windowId)
 {
     m_interactiveDragWindow = windowId.isEmpty() ? QString() : shadowWindowId(windowId);
+}
+
+void WindowTrackingAdaptor::setWorkspaceMapPayload(const QString& mapJson)
+{
+    if (m_lastWorkspaceMap == mapJson) {
+        return;
+    }
+    m_lastWorkspaceMap = mapJson;
+    Q_EMIT workspaceMapChanged(mapJson);
+}
+
+QString WindowTrackingAdaptor::workspaceMap() const
+{
+    return m_lastWorkspaceMap;
+}
+
+void WindowTrackingAdaptor::reportPerOutputDesktopsMode(bool enabled)
+{
+    if (m_perOutputDesktopsMode.has_value() && *m_perOutputDesktopsMode == enabled) {
+        return;
+    }
+    m_perOutputDesktopsMode = enabled;
+    Q_EMIT m_lifecycleRelay->perOutputDesktopsModeReported(enabled);
 }
 
 bool WindowTrackingAdaptor::isInteractiveDragWindow(const QString& windowId) const

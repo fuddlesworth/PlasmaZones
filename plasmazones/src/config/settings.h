@@ -390,6 +390,17 @@ public:
     Q_PROPERTY(int scrollingDragInsertGraceMs READ scrollingDragInsertGraceMs WRITE setScrollingDragInsertGraceMs NOTIFY
                    scrollingDragInsertGraceMsChanged)
 
+    // Workspaces Settings (Workspaces.Behavior) — dynamic per-monitor workspaces
+    Q_PROPERTY(bool workspacesEnabled READ workspacesEnabled WRITE setWorkspacesEnabled NOTIFY workspacesEnabledChanged)
+    Q_PROPERTY(bool workspacesManageKWinPerOutput READ workspacesManageKWinPerOutput WRITE
+                   setWorkspacesManageKWinPerOutput NOTIFY workspacesManageKWinPerOutputChanged)
+    Q_PROPERTY(bool workspacesSnapBackOsdHint READ workspacesSnapBackOsdHint WRITE setWorkspacesSnapBackOsdHint NOTIFY
+                   workspacesSnapBackOsdHintChanged)
+    Q_PROPERTY(QVariantList workspacesNamedEntries READ workspacesNamedEntries WRITE setWorkspacesNamedEntries NOTIFY
+                   workspacesNamedEntriesChanged)
+    Q_PROPERTY(bool workspacesRebindKWinShortcuts READ workspacesRebindKWinShortcuts WRITE
+                   setWorkspacesRebindKWinShortcuts NOTIFY workspacesRebindKWinShortcutsChanged)
+
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
@@ -1398,13 +1409,69 @@ public:
     void setScrollingDragInsertGraceMs(int ms) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling Settings (IScrollSettings + Scrolling group)
+    // Workspaces Settings (Workspaces.* + the Shortcuts.Global chord leaves)
+    //
+    // Dynamic per-monitor workspaces. Store-backed like the scrolling block
+    // below; the five gate/declaration accessors carry Q_PROPERTYs, while the
+    // ten verb chords and the three indexed slot families do not — see
+    // snapshotWorkspaceKeyFamilies() for how those still participate in
+    // load / overlay / per-page reset change detection.
     // ═══════════════════════════════════════════════════════════════════════════
+    bool workspacesEnabled() const;
+    void setWorkspacesEnabled(bool enabled);
+    bool workspacesManageKWinPerOutput() const;
+    void setWorkspacesManageKWinPerOutput(bool enabled);
+    bool workspacesSnapBackOsdHint() const;
+    void setWorkspacesSnapBackOsdHint(bool enabled);
+    QVariantList workspacesNamedEntries() const;
+    void setWorkspacesNamedEntries(const QVariantList& entries);
+    bool workspacesRebindKWinShortcuts() const;
+    void setWorkspacesRebindKWinShortcuts(bool enabled);
+    QString workspaceFocusUpShortcut() const;
+    void setWorkspaceFocusUpShortcut(const QString& shortcut);
+    QString workspaceFocusDownShortcut() const;
+    void setWorkspaceFocusDownShortcut(const QString& shortcut);
+    QString workspaceMoveWindowUpShortcut() const;
+    void setWorkspaceMoveWindowUpShortcut(const QString& shortcut);
+    QString workspaceMoveWindowDownShortcut() const;
+    void setWorkspaceMoveWindowDownShortcut(const QString& shortcut);
+    QString workspaceMoveColumnUpShortcut() const;
+    void setWorkspaceMoveColumnUpShortcut(const QString& shortcut);
+    QString workspaceMoveColumnDownShortcut() const;
+    void setWorkspaceMoveColumnDownShortcut(const QString& shortcut);
+    QString workspaceReorderUpShortcut() const;
+    void setWorkspaceReorderUpShortcut(const QString& shortcut);
+    QString workspaceReorderDownShortcut() const;
+    void setWorkspaceReorderDownShortcut(const QString& shortcut);
+    QString workspaceMoveToMonitorLeftShortcut() const;
+    void setWorkspaceMoveToMonitorLeftShortcut(const QString& shortcut);
+    QString workspaceMoveToMonitorRightShortcut() const;
+    void setWorkspaceMoveToMonitorRightShortcut(const QString& shortcut);
+    /// Workspace quick-shortcut slots (0-based index over nine slots, stored
+    /// as WorkspaceMoveSlotN; defaults unset — the quick-layout-slot
+    /// convention). Q_INVOKABLE so the Quick Shortcuts page reads/writes them
+    /// without nine Q_PROPERTYs; any change emits the shared
+    /// workspaceSlotShortcutsChanged.
+    Q_INVOKABLE QString workspaceMoveSlotShortcut(int index) const;
+    Q_INVOKABLE void setWorkspaceMoveSlotShortcut(int index, const QString& shortcut);
+    /// Focus-slot family (WorkspaceFocusSlotN): daemon-registered verbs bound
+    /// via KDE's Shortcuts settings, not surfaced on the app's Quick
+    /// Shortcuts page. Same index contract as the move slots.
+    Q_INVOKABLE QString workspaceFocusSlotShortcut(int index) const;
+    Q_INVOKABLE void setWorkspaceFocusSlotShortcut(int index, const QString& shortcut);
+    /// Quick-slot targets (Workspaces.Slots): the named workspace slot
+    /// `index`+1 sends the active window to; empty = unassigned.
+    Q_INVOKABLE QString workspaceSlotTarget(int index) const;
+    Q_INVOKABLE void setWorkspaceSlotTarget(int index, const QString& workspaceName);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Settings (IScrollSettings + Scrolling group)
+    //
     // Store-backed scalars; the enum int values rely on the schema
     // validators (validIntOr), like every other stored scalar. The width
     // VALUE is the exception: its clamp is kind-aware and lives in the
     // hand-written setter below.
+    // ═══════════════════════════════════════════════════════════════════════════
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
@@ -2213,10 +2280,12 @@ public:
     /// plus editorSettingsChanged() once if any moved, and
     /// animationProfileChanged() when the Profile blob moved.
     ///
-    /// SCOPE: it does NOT re-emit the per-mode disable-list signals
-    /// (disabled*Changed) or the per-screen signals (perScreen*SettingsChanged)
-    /// load() also fires. No page manifest owns a disable-list or per-screen
-    /// key today; a page that ever does needs this extended to re-emit those.
+    /// SCOPE: re-emits the Q_PROPERTY NOTIFY signals plus the workspace verb /
+    /// slot family signals (+ settingsChanged). It does NOT re-emit the
+    /// per-mode disable-list signals (disabled*Changed) or the per-screen
+    /// signals (perScreen*SettingsChanged) load() also fires. No page manifest
+    /// owns a disable-list or per-screen key today; a page that ever does needs
+    /// this extended to re-emit those.
     void discardKeys(const ConfigKeyList& keys);
 
     /// Per-page Reset: set each key to its schema default. Same NOTIFY /
@@ -2429,6 +2498,19 @@ private:
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
+    // ── The same machinery for the non-Q_PROPERTY workspace key families ────
+    // The ten workspace verb chords and the three indexed slot families (focus
+    // chord, move chord, target) are reached through plain getters and
+    // Q_INVOKABLEs, so the metaobject walk above cannot see them. These two
+    // capture and diff those keys' stored values with the same before/after
+    // contract, and are called from the same four places: load(),
+    // applyConfigOverlayStaged(), discardKeys() and resetKeys(). Without them a
+    // reload or a staged profile whose only delta was a chord fired no signal,
+    // so ShortcutManager (whose rebind rides settingsChanged) stayed bound to
+    // the previous chords. Defined in settings/workspaces.cpp beside the
+    // accessors they mirror.
+    QVector<QString> snapshotWorkspaceKeyFamilies() const;
+    bool emitChangedWorkspaceKeyFamilies(const QVector<QString>& before);
     /// The Editor.* twin of the pair above. Those settings have no Q_PROPERTY,
     /// so the meta-object loop cannot see them; a table in settings.cpp pairs
     /// each one's getter with its signal. The emit half fires each moved
@@ -2553,7 +2635,8 @@ private:
     /// Reparse the backend from disk IF it holds no pending writes.
     /// Called by every composite-value setter (animation Profile blob,
     /// shader/decoration profile trees, autotile per-algorithm map,
-    /// snapping and tiling trigger lists including the zoneSpan pair)
+    /// snapping and tiling trigger lists including the zoneSpan pair, and
+    /// the named-workspace declaration list)
     /// before its stale-sensitive read; see the definition for the
     /// cross-process coherence rationale.
     void refreshCleanBackendFromDisk();

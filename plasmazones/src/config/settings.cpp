@@ -259,6 +259,12 @@ void Settings::reloadFromDisk(bool preserveLocalEdits)
     // operator== will silently miscompare here.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
+    // The workspace verb chords and the three indexed slot families are not
+    // Q_PROPERTYs either (plain getters and Q_INVOKABLEs), so the snapshot
+    // above misses them. Capture them here, under the same before-the-reparse
+    // ordering constraint, so a reload whose only delta is a chord still fires
+    // the family signals — ShortcutManager's rebind rides settingsChanged.
+    const QVector<QString> workspaceSnapshot = snapshotWorkspaceKeyFamilies();
     // The animation Profile blob is not a Q_PROPERTY either, and unlike the
     // per-mode lists below it is not merely a stale-reader problem: the daemon
     // picks the registry layer for the global profile from its explicit-ness,
@@ -415,6 +421,7 @@ void Settings::reloadFromDisk(bool preserveLocalEdits)
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    const bool anyWorkspaceChanged = emitChangedWorkspaceKeyFamilies(workspaceSnapshot);
     emitAnimationProfileChangeIfMoved(animProfileSnapshot);
 
     // Per-mode disable lists: emit one signal per Mode whose list changed.
@@ -457,12 +464,13 @@ void Settings::reloadFromDisk(bool preserveLocalEdits)
     // on settingsChanged: see ISettings::editorSettingsChanged.
     emitChangedEditorSettings(editorSnapshot);
 
-    // Aggregate signal: fires when any Q_PROPERTY, any per-mode disable list
-    // or any per-screen override map changed. Each of those has its own
-    // signal above, and the aggregate keeps a cross-process write (daemon
-    // shortcut, D-Bus call) consistent with the direct setter path, which
-    // always ends in settingsChanged (`writeDisableEntries` included).
-    if (anyChanged || anyDisableChanged || perScreenChanged)
+    // Aggregate signal: fires when any Q_PROPERTY, any workspace chord or slot
+    // family, any per-mode disable list or any per-screen override map
+    // changed. Each of those has its own signal above, and the aggregate keeps
+    // a cross-process write (daemon shortcut, D-Bus call) consistent with the
+    // direct setter path, which always ends in settingsChanged
+    // (`writeDisableEntries` included).
+    if (anyChanged || anyWorkspaceChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
 
     // The store now mirrors disk, so refresh the committed baseline that
@@ -509,6 +517,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
         ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — animation gating + blur density
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
+        ConfigDefaults::workspacesGroup(), // "Workspaces" — covers Workspaces.Behavior + Workspaces.Named +
+                                           // Workspaces.Slots
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
         ConfigDefaults::overlaysGroup(), // "Overlays" — per-layout zone-overlay shader tree (OverlayShaderTree blob)
@@ -889,6 +899,11 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // palette on every call, so staged sentinel values track the current
     // theme immediately.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
+    // Same reason as in load(): a profile whose delta is a workspace chord or
+    // slot target moves keys no Q_PROPERTY covers, and without this the
+    // activated profile would stage them silently — the page keeps painting
+    // the old chords and the daemon keeps the old grabs.
+    const QVector<QString> workspaceSnapshot = snapshotWorkspaceKeyFamilies();
     const AnimationProfileState animProfileSnapshot = animationProfileState();
     const QVector<QVariant> editorSnapshot = snapshotEditorSettings();
 
@@ -913,9 +928,10 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     normalizeScrollingColumnWidthValue();
 
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    const bool anyWorkspaceChanged = emitChangedWorkspaceKeyFamilies(workspaceSnapshot);
     emitAnimationProfileChangeIfMoved(animProfileSnapshot);
     emitChangedEditorSettings(editorSnapshot);
-    if (anyChanged)
+    if (anyChanged || anyWorkspaceChanged)
         Q_EMIT settingsChanged();
     return true;
 }
@@ -1025,6 +1041,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
 {
     const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
+    const QVector<QString> workspaceBefore = snapshotWorkspaceKeyFamilies();
     const QVector<QVariant> editorBefore = snapshotEditorSettings();
     for (const ConfigKey& gk : keys) {
         // Only keys captured in the committed baseline (i.e. schema-declared) can
@@ -1045,8 +1062,12 @@ void Settings::discardKeys(const ConfigKeyList& keys)
     }
     normalizeScrollingColumnWidthValue();
     emitAnimationProfileChangeIfMoved(animProfileBefore);
+    // Both halves must run before the aggregate decision: || would
+    // short-circuit the second and swallow its signals.
     emitChangedEditorSettings(editorBefore);
-    if (emitChangedNotifyProperties(before))
+    const bool propsChanged = emitChangedNotifyProperties(before);
+    const bool workspacesChanged = emitChangedWorkspaceKeyFamilies(workspaceBefore);
+    if (propsChanged || workspacesChanged)
         Q_EMIT settingsChanged();
 }
 
@@ -1054,6 +1075,7 @@ void Settings::resetKeys(const ConfigKeyList& keys)
 {
     const AnimationProfileState animProfileBefore = animationProfileState();
     const QVector<QVariant> before = snapshotNotifyProperties();
+    const QVector<QString> workspaceBefore = snapshotWorkspaceKeyFamilies();
     const QVector<QVariant> editorBefore = snapshotEditorSettings();
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
@@ -1061,7 +1083,9 @@ void Settings::resetKeys(const ConfigKeyList& keys)
     normalizeScrollingColumnWidthValue();
     emitAnimationProfileChangeIfMoved(animProfileBefore);
     emitChangedEditorSettings(editorBefore);
-    if (emitChangedNotifyProperties(before))
+    const bool propsChanged = emitChangedNotifyProperties(before);
+    const bool workspacesChanged = emitChangedWorkspaceKeyFamilies(workspaceBefore);
+    if (propsChanged || workspacesChanged)
         Q_EMIT settingsChanged();
 }
 
@@ -1196,6 +1220,10 @@ bool Settings::reset()
     // bindings kept painting the old ones until the app was restarted — the
     // user-visible shape of that bug is "Reset to Defaults did nothing".
     const QVector<QVariant> propsBeforeReset = snapshotNotifyProperties();
+    // The workspace chord / slot families need the same pre-clear snapshot for
+    // the same reason: load()'s own capture happens after the groups are gone,
+    // so it would diff defaults against defaults and announce nothing.
+    const QVector<QString> workspacesBeforeReset = snapshotWorkspaceKeyFamilies();
     // The two non-Q_PROPERTY families load() announces, for the same reason:
     // the Editor.* settings and the animation Profile blob (whose
     // explicitness the daemon keys the global profile's registry layer on).
@@ -1247,7 +1275,9 @@ bool Settings::reset()
         // changed on disk meanwhile).
         emitAnimationProfileChangeIfMoved(animProfileBeforeReset);
         emitChangedEditorSettings(editorBeforeReset);
-        if (emitChangedNotifyProperties(propsBeforeReset)) {
+        const bool propsRestored = emitChangedNotifyProperties(propsBeforeReset);
+        const bool workspacesRestored = emitChangedWorkspaceKeyFamilies(workspacesBeforeReset);
+        if (propsRestored || workspacesRestored) {
             Q_EMIT settingsChanged();
         }
         return false;
@@ -1339,6 +1369,9 @@ bool Settings::reset()
     emitAnimationProfileChangeIfMoved(animProfileBeforeReset);
     emitChangedEditorSettings(editorBeforeReset);
     bool anyDisableChanged = emitChangedNotifyProperties(propsBeforeReset);
+    if (emitChangedWorkspaceKeyFamilies(workspacesBeforeReset)) {
+        anyDisableChanged = true;
+    }
     for (const Mode mode : PhosphorZones::allModes()) {
         if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);

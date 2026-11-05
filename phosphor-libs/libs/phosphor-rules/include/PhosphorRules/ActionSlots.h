@@ -81,6 +81,11 @@ inline constexpr QLatin1StringView Placement{"placement"};
 /// or routed with no zone (just moved to the monitor / desktop).
 inline constexpr QLatin1StringView RouteScreen{"route-screen"};
 inline constexpr QLatin1StringView RouteDesktop{"route-desktop"};
+/// Open-path routing to a named dynamic workspace. Its own slot, NOT shared
+/// with RouteDesktop: a cascade may legitimately carry both (a specific rule
+/// naming a workspace over a broad rule naming a number), and the daemon
+/// applies the workspace route with priority when both resolve.
+inline constexpr QLatin1StringView RouteWorkspace{"route-workspace"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // Per-window restore-policy overrides (one slot each). Filled by

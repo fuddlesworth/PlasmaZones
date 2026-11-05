@@ -49,8 +49,14 @@ endif()
 add_library(PhosphorWorkspaces SHARED
     include/PhosphorWorkspaces/VirtualDesktopManager.h
     include/PhosphorWorkspaces/ActivityManager.h
+    include/PhosphorWorkspaces/WorkspaceMap.h
+    include/PhosphorWorkspaces/WorkspaceReconciler.h
     src/VirtualDesktopManager.cpp
     src/ActivityManager.cpp
+    src/WorkspaceMap.cpp
+    src/WorkspaceReconciler.cpp
+    src/WorkspaceReconcilerNamed.cpp
+    src/WorkspaceReconcilerScreens.cpp
 )
 add_library(PhosphorWorkspaces::PhosphorWorkspaces ALIAS PhosphorWorkspaces)
 
@@ -154,10 +160,10 @@ install(FILES
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWorkspaces
 )
 
-# The only suite drives ActivityManager against a fake activity service, so it
-# has nothing to test in a build without the activities library.
-if((CMAKE_PROJECT_NAME STREQUAL "PhosphorWorkspaces" OR BUILD_TESTING)
-   AND (TARGET Plasma::Activities OR TARGET KF6::Activities))
+# The workspace-map and reconciler suites need nothing beyond Qt, so the tree is
+# entered unconditionally. The ActivityManager suite inside it gates itself on
+# the activities library.
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorWorkspaces" OR BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
 endif()

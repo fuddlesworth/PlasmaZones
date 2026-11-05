@@ -448,7 +448,7 @@ private Q_SLOTS:
         QVERIFY(resolved.fillSlot(QString(PhosphorRules::ActionSlot::RouteDesktop), desk));
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        QVERIFY2(m_wta->emitRouteToDesktopIfMatched(resolved, QStringLiteral("deskapp|inst")),
+        QVERIFY2(m_wta->emitOpenRoutingIfMatched(resolved, QStringLiteral("deskapp|inst")),
                  "a matched rule with an unusable target still owns this window's desktop");
         QCOMPARE(desktopSpy.count(), 0);
     }
@@ -459,7 +459,7 @@ private Q_SLOTS:
         // every window would have its remembered desktop suppressed.
         PhosphorRules::ResolvedActions resolved;
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        QVERIFY(!m_wta->emitRouteToDesktopIfMatched(resolved, QStringLiteral("deskapp|inst")));
+        QVERIFY(!m_wta->emitOpenRoutingIfMatched(resolved, QStringLiteral("deskapp|inst")));
         QCOMPARE(desktopSpy.count(), 0);
     }
 

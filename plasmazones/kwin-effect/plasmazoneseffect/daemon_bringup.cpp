@@ -297,6 +297,61 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         qCDebug(lcEffect) << "Re-sent screen desktop:" << screenId << "->" << desktop;
     }
 
+    // Report the compositor's ACTUAL per-output-desktops mode (dynamic
+    // workspaces' authoritative gate arm — the daemon's kwinrc read can
+    // disagree with the running compositor when the file changed without a
+    // reconfigure). Read straight off VirtualDesktopManager, whose
+    // perOutputVirtualDesktopsChanged the effect also watches for the runtime
+    // edge; the desktop re-sync above goes through the public EffectsHandler
+    // API instead and shares nothing with this.
+    reportPerOutputDesktopsMode();
+
+    // Replay the dynamic-workspaces map: an effect that loads after the map
+    // last changed would otherwise wait for the next change-gated push.
+    {
+        // Generation-guarded like the registerBridge watcher: serviceUnregistered
+        // bumps the counter and clears the map cache, so a reply still in flight
+        // from the dead daemon must not re-seed the cache (and with it the
+        // generation floor) behind the successor's own replay.
+        const quint64 replayGeneration = m_daemonGate.bridgeRegistrationGeneration;
+        // Epoch-guarded as well: a live push from the SAME daemon cycle
+        // supersedes this reply, and the bridge generation cannot see that.
+        // The retraction case is the one that matters — the empty-payload arm
+        // clears the cache and floors the payload generation to 0, after which
+        // this reply's map (for a feature the daemon just disabled) is accepted
+        // by the empty-cache arm and cached as current.
+        const quint64 replayEpoch = m_workspaceMapEpoch;
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("workspaceMap")),
+            this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, replayGeneration, replayEpoch](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    if (m_daemonGate.bridgeRegistrationGeneration != replayGeneration) {
+                        qCInfo(lcEffect) << "workspaceMap replay reply from a superseded daemon cycle — ignoring";
+                        return;
+                    }
+                    if (m_workspaceMapEpoch != replayEpoch) {
+                        qCInfo(lcEffect) << "workspaceMap replay superseded by a live push — ignoring";
+                        return;
+                    }
+                    QDBusPendingReply<QString> reply = *w;
+                    if (!reply.isValid()) {
+                        // Its siblings (getFloatingWindows, getPendingRestoreGeometries)
+                        // warn on the same shape; this path was silent, and the effect
+                        // then holds no workspace map until the daemon's next
+                        // change-gated push.
+                        qCWarning(lcEffect) << "workspaceMap replay failed at bringup:" << reply.error().message()
+                                            << "— no map until the next daemon push";
+                        return;
+                    }
+                    if (!reply.value().isEmpty()) {
+                        slotWorkspaceMapChanged(reply.value());
+                    }
+                });
+    }
+
     // Re-notify active window (gives daemon lastActiveScreenName).
     // Hand KWin's RAW active window to notifyWindowActivated and let ITS
     // filter decide — that filter carries the fullscreen-on-a-scrolling-
@@ -338,12 +393,21 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // session would persist in the effect, causing isWindowFloating() to return true
     // for windows that are no longer floating.
     {
+        // Generation-guarded like the workspaceMap replay: the clear below is
+        // UNCONDITIONAL, so a superseded cycle's (typically error) reply landing
+        // after the successor's own bringup would wipe the FRESH cycle's float
+        // set with no re-seed, leaving every window reading as non-floating.
+        const quint64 floatGeneration = m_daemonGate.bridgeRegistrationGeneration;
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getFloatingWindows")),
             this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, floatGeneration](QDBusPendingCallWatcher* w) {
             w->deleteLater();
+            if (m_daemonGate.bridgeRegistrationGeneration != floatGeneration) {
+                qCInfo(lcEffect) << "getFloatingWindows reply from a superseded daemon cycle — ignoring";
+                return;
+            }
             QDBusPendingReply<QStringList> reply = *w;
             // Clear the stale local float set unconditionally. This reply lands
             // during daemon bringup, so the freshly-registered daemon's float
@@ -768,6 +832,36 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
 
+    // The same move naming the desktop by its stable id, for the
+    // named-workspace route. Separate signal rather than a wider one: the
+    // directional verbs genuinely mean "the desktop at that position", and
+    // only the route holds an identity worth preserving across the hop.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowDesktopMoveByIdRequested"), this,
+                                          SLOT(slotWindowDesktopMoveByIdRequested(QString, QString)));
+
+    // Output move with no engine handoff (untracked/floating windows on the
+    // workspace verbs); windowToScreen, no-op when already there.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowOutputMoveRequested"), this,
+                                          SLOT(slotWindowOutputMoveRequested(QString, QString)));
+
+    // Dynamic-workspaces ownership map stream (change-gated daemon push; the
+    // workspaceMap() replay query covers an effect that loads after the map
+    // last changed — pulled in the registration path).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("workspaceMapChanged"), this,
+                                          SLOT(slotWorkspaceMapChanged(QString)));
+
+    // Per-output desktop switch command (workspace focus verbs + snap-back).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("setScreenDesktopRequested"), this,
+                                          SLOT(slotSetScreenDesktopRequested(QString, int)));
+
     // Daemon-initiated cross-output move: the daemon already migrated its
     // tiling state and reflowed both outputs; record the window so the
     // autotile handler's reactive outputChanged path updates bookkeeping only
@@ -896,6 +990,66 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // here would be a build-order bug, not a runtime condition. Worded as
     // "wired", not "connected", because the returns are not checked.
     qCDebug(lcEffect) << "Navigation D-Bus signal subscriptions wired";
+}
+
+void PlasmaZonesEffect::reportPerOutputDesktopsMode()
+{
+    auto* vdm = KWin::VirtualDesktopManager::self();
+    if (!vdm || !m_daemonGate.serviceRegistered) {
+        // Nothing is lost while the daemon is away: continueDaemonReadySetup
+        // calls this again as part of every (re)registration, so the first
+        // thing the successor hears is the current mode.
+        return;
+    }
+    const bool perOutput = vdm->isPerOutputVirtualDesktops();
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("reportPerOutputDesktopsMode"), {perOutput},
+                                                   QStringLiteral("reportPerOutputDesktopsMode"));
+    qCDebug(lcEffect) << "Reported per-output desktops mode:" << perOutput;
+}
+
+void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
+{
+    // Every push moves the epoch, whatever the payload turns out to be. The
+    // bringup replay captures it beside the bridge generation and drops its
+    // reply when it has moved: a reply in flight from the SAME daemon cycle
+    // carries a map the daemon may since have retracted, and neither the
+    // bridge generation (unchanged) nor the payload generation (floored to 0
+    // by the empty arm below) can order it.
+    ++m_workspaceMapEpoch;
+    // Consumer stub: cached for the future overview. The payload is already
+    // change-gated daemon-side, but ORDERING is not guaranteed here: the
+    // bringup replay is an async query whose reply can land after a live
+    // push — the payload's generation counter decides which is newer, and an
+    // older map never overwrites a newer one.
+    if (mapJson.isEmpty()) {
+        // Not malformed: the interface promises an empty payload while
+        // dynamic workspaces are off or not yet adopted, and the daemon sends
+        // exactly that on a runtime disable (daemon/workspaces.cpp, the
+        // stop arm). Drop the cache AND the generation floor so a later
+        // re-enable — which restarts its counter from a fresh controller — is
+        // accepted by the empty-cache arm below instead of being rejected as
+        // older than the dead cycle's last generation.
+        m_workspaceMapJson.clear();
+        m_workspaceMapGeneration = 0;
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(mapJson.toUtf8());
+    if (!doc.isObject()) {
+        // Caching an unparseable payload verbatim would publish it as the
+        // current map AND floor the generation at 0, so the next well-formed
+        // push could only ever be accepted by the empty-cache arm below.
+        qCWarning(lcEffect) << "workspaceMapChanged: non-object payload — ignoring";
+        return;
+    }
+    // toVariant().toULongLong(), not toDouble(): the generation is an integer
+    // counter and the double round-trip loses exactness past 2^53.
+    const quint64 generation = doc.object().value(QLatin1String("generation")).toVariant().toULongLong();
+    if (!m_workspaceMapJson.isEmpty() && generation < m_workspaceMapGeneration) {
+        return;
+    }
+    m_workspaceMapGeneration = generation;
+    m_workspaceMapJson = mapJson;
 }
 
 } // namespace PlasmaZones

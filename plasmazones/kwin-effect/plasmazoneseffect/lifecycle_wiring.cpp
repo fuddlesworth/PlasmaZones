@@ -612,6 +612,21 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 }
             });
 
+    // Live per-output-desktops mode. The bringup report samples this once, but
+    // the compositor property is writable at runtime (System Settings, or the
+    // daemon's own consented kwinrc write followed by a reconfigure). The
+    // daemon's self-heal arm keys off a reported `false` to re-apply that
+    // write, so without this connection the one scenario it exists for stays
+    // invisible until the next daemon restart. The daemon change-gates the
+    // value, so a repeat costs nothing. The connection is made once (this
+    // wiring runs once per effect) and torn down with the effect by QObject's
+    // receiver-side auto-disconnect.
+    if (auto* vdm = KWin::VirtualDesktopManager::self()) {
+        connect(vdm, &KWin::VirtualDesktopManager::perOutputVirtualDesktopsChanged, this, [this] {
+            reportPerOutputDesktopsMode();
+        });
+    }
+
     // The strip view spring is per-OUTPUT while scroll state is
     // per-(screen, desktop, activity), so a desktop switch orphans any
     // residual offset: it belongs to the desktop being LEFT, and carrying
@@ -694,6 +709,16 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
                    KWin::LogicalOutput* output) {
                 if (!oldDesktop || !newDesktop) {
+                    return;
+                }
+                // Skip the blend for a switch the effect issued itself to
+                // satisfy a daemon setScreenDesktopRequested. The owner-wins
+                // snap-back is a corrective bounce the user did not ask for,
+                // and blending it costs two output-sized GLTexture captures per
+                // output on top of the switch that provoked it. The daemon
+                // reporting, decoration, strip and client-area arms all keep
+                // firing — those are correctness arms, this one is decoration.
+                if (m_programmaticDesktopSwitch) {
                     return;
                 }
                 // Honour the global animations master toggle, exactly as the two

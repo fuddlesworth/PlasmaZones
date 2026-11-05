@@ -116,7 +116,7 @@ void VirtualDesktopManager::subscribeToKWin()
 
     QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                           QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                          QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
+                                          QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated(QString)));
 
     // Renames and position moves. KWin leaves `count` untouched for
     // these, so without this subscription a stale desktop name would
@@ -127,7 +127,7 @@ void VirtualDesktopManager::subscribeToKWin()
 
     QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                           QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                          QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
+                                          QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved(QString)));
 
     // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
     // the desktop count, so it fires neither countChanged nor created/removed
@@ -216,10 +216,13 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
 
     QStringList newIds;
     QStringList newNames;
+    QStringList newRawNames;
     newIds.reserve(desktops.size());
     newNames.reserve(desktops.size());
+    newRawNames.reserve(desktops.size());
     for (const auto& desktop : desktops) {
         newIds.append(desktop.id);
+        newRawNames.append(desktop.name);
         newNames.append(desktop.name.isEmpty() ? fallbackDesktopName(desktop.position + 1) : desktop.name);
     }
 
@@ -244,7 +247,8 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // greater than the count would make activeIndex read past the end.
     newCurrent = qBound(1, newCurrent, qMax(1, newCount));
 
-    const bool listChanged = (newIds != m_desktopIds || newNames != m_desktopNames);
+    const bool listChanged = (newIds != m_desktopIds || newNames != m_desktopNames || newRawNames != m_rawDesktopNames);
+    const bool idsChanged = (newIds != m_desktopIds);
     const bool currentChanged = (newCurrent != m_currentDesktop);
     const bool countChanged = (newCount != m_desktopCount);
 
@@ -264,10 +268,21 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
 
     m_desktopIds = newIds;
     m_desktopNames = newNames;
+    m_rawDesktopNames = newRawNames;
     m_desktopCount = newCount;
     m_desktopRows = rows;
     m_currentDesktop = newCurrent;
 
+    // The settled id list FIRST, ahead of every signal below that carries a
+    // desktop NUMBER. clampScreenDesktopsToCount emits screenDesktopChanged,
+    // and the dynamic-workspaces reconciler resolves those numbers against the
+    // id list it last settled: announcing the list after them would have it
+    // resolve each report against the previous list, so an externally removed
+    // desktop made a report name the wrong id, which reads as a foreign switch
+    // and drives a snap-back onto a desktop the screen was never on.
+    if (idsChanged) {
+        Q_EMIT desktopListChanged(m_desktopIds);
+    }
     // Change-gated: a refresh runs on create, remove, and every rename, and
     // most of those leave this data untouched. An unconditional emit would
     // reset a pager's model on unrelated events.
@@ -441,16 +456,18 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
     Q_EMIT currentDesktopChanged(m_currentDesktop);
 }
 
-void VirtualDesktopManager::onKWinDesktopCreated()
+void VirtualDesktopManager::onKWinDesktopCreated(const QString& desktopId)
 {
+    Q_EMIT kwinDesktopCreated(desktopId);
     // No count emit here: this signal carries no count, and KWin's countChanged
     // right after it commits the grown one (onNumberOfDesktopsChanged).
     // applyDesktopListReply commits the rest of the snapshot.
     announceDesktopListChange();
 }
 
-void VirtualDesktopManager::onKWinDesktopRemoved()
+void VirtualDesktopManager::onKWinDesktopRemoved(const QString& desktopId)
 {
+    Q_EMIT kwinDesktopRemoved(desktopId);
     // Neither the clamp nor the emit belongs here: refreshFromKWin is
     // asynchronous once started, so both would run against the OLD count
     // and the clamp would be a no-op. applyDesktopListReply does both when
@@ -504,9 +521,9 @@ void VirtualDesktopManager::stop()
     const std::array<std::pair<const char*, const char*>, 6> subscriptions{{
         {"currentChanged", SLOT(onKWinCurrentChanged(QString))},
         {"countChanged", SLOT(onNumberOfDesktopsChanged(uint))},
-        {"desktopCreated", SLOT(onKWinDesktopCreated())},
+        {"desktopCreated", SLOT(onKWinDesktopCreated(QString))},
         {"desktopDataChanged", SLOT(onKWinDesktopDataChanged())},
-        {"desktopRemoved", SLOT(onKWinDesktopRemoved())},
+        {"desktopRemoved", SLOT(onKWinDesktopRemoved(QString))},
         {"rowsChanged", SLOT(onKWinDesktopRowsChanged())},
     }};
     for (const auto& [signalName, slotSpec] : subscriptions) {
@@ -577,6 +594,38 @@ void VirtualDesktopManager::updateScreenDesktop(const QString& screenId, int des
 void VirtualDesktopManager::removeScreenDesktop(const QString& screenId)
 {
     m_screenDesktops.remove(screenId);
+}
+
+bool VirtualDesktopManager::hasScreenDesktopReport(const QString& screenId) const
+{
+    if (m_screenDesktops.contains(screenId)) {
+        return true;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return m_screenDesktops.contains(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    }
+    return false;
+}
+
+void VirtualDesktopManager::renameScreen(const QString& oldId, const QString& newId)
+{
+    if (oldId.isEmpty() || newId.isEmpty() || oldId == newId) {
+        return;
+    }
+    const auto from = m_screenDesktops.constFind(oldId);
+    if (from == m_screenDesktops.constEnd()) {
+        return; // nothing recorded under the dead id
+    }
+    const int desktop = from.value();
+    m_screenDesktops.remove(oldId);
+    // A live-id row already exists: it is a fresher report than the one we
+    // would carry over, so it stands and the carried value is discarded. The
+    // value under newId did not change, so nothing is emitted.
+    if (m_screenDesktops.contains(newId)) {
+        return;
+    }
+    m_screenDesktops.insert(newId, desktop);
+    Q_EMIT screenDesktopChanged(newId, desktop);
 }
 
 void VirtualDesktopManager::seedScreenDesktop(const QString& screenId, int desktop)
@@ -788,6 +837,48 @@ QStringList VirtualDesktopManager::desktopIds() const
     // switch made against it. An empty list says "no stable ids here",
     // which a caller can act on.
     return m_desktopIds;
+}
+
+void VirtualDesktopManager::createDesktop(uint position, const QString& name)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("createDesktop"), position, name);
+}
+
+void VirtualDesktopManager::removeDesktop(const QString& desktopId)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface || desktopId.isEmpty()) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("removeDesktop"), desktopId);
+}
+
+void VirtualDesktopManager::setDesktopName(const QString& desktopId, const QString& name)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface || desktopId.isEmpty()) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("setDesktopName"), desktopId, name);
+}
+
+QString VirtualDesktopManager::desktopIdAt(int desktop) const
+{
+    if (desktop < 1 || desktop > m_desktopIds.size()) {
+        return QString();
+    }
+    return m_desktopIds.at(desktop - 1);
+}
+
+int VirtualDesktopManager::desktopIndexOf(const QString& desktopId) const
+{
+    return m_desktopIds.indexOf(desktopId) + 1;
+}
+
+QStringList VirtualDesktopManager::rawDesktopNames() const
+{
+    return m_useKWinDBus ? m_rawDesktopNames : QStringList();
 }
 
 } // namespace PhosphorWorkspaces

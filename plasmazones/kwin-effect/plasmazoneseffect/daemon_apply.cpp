@@ -111,6 +111,31 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
     }
 }
 
+namespace {
+/// Resolve a 1-based desktop NUMBER to its VirtualDesktop by matching
+/// x11DesktopNumber(), not by position in effects->desktops().
+///
+/// The daemon derives every desktop number it sends from x11DesktopNumber()
+/// (the bringup re-sync and the per-screen desktop reports both read it), so a
+/// positional `at(desktop - 1)` is only equivalent while the list order and the
+/// numbering agree. Matching the number the sender actually meant is correct
+/// either way and costs one short walk. Returns nullptr when no desktop carries
+/// that number.
+KWin::VirtualDesktop* desktopByNumber(int desktop)
+{
+    if (desktop < 1 || !KWin::effects) {
+        return nullptr;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* vd : all) {
+        if (vd && static_cast<int>(vd->x11DesktopNumber()) == desktop) {
+            return vd;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
 void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
 {
     // Instance-exact: every producer names a live window it just resolved
@@ -123,26 +148,80 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
         return;
     }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    // Lower bound as well as upper: `desktop` arrives over a D-Bus signal, and
+    // the indexing below is `all.at(desktop - 1)`, so a 0 or negative value is
+    // an out-of-bounds read rather than a refusal. 0 is not a hypothetical
+    // value either: it is WindowPlacement::virtualDesktop's own sentinel for
+    // "on all desktops / unknown". The in-tree emitters mostly gate on `> 0`
+    // themselves, but this slot is the authoritative bound. A number out of
+    // range reaches applyDesktopMove as no target, which routes it to the
+    // recovery restore.
+    KWin::VirtualDesktop* const target = (desktop >= 1 && desktop <= all.size()) ? all.at(desktop - 1) : nullptr;
+    if (!target) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range (have" << all.size()
+                          << "desktops) for" << windowId;
+    }
+    applyDesktopMove(w, target, windowId);
+}
+
+void PlasmaZonesEffect::slotWindowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId)
+{
+    if (windowId.isEmpty() || desktopId.isEmpty() || !KWin::effects) {
+        return;
+    }
+    // Instance-exact, for the reason the numbered variant gives.
+    KWin::EffectWindow* w = findWindowByInstanceId(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: window not found" << windowId;
+        return;
+    }
+    // Matched on the STABLE id, which is the whole point of this variant: a
+    // position resolved before the D-Bus hop can name a different desktop by
+    // the time it arrives, because the workspace feature renumbers alongside
+    // its own moves. An id that is gone means the desktop was reaped in the
+    // meantime, and there is nowhere to put the window: applyDesktopMove
+    // places it where it is instead.
+    KWin::VirtualDesktop* target = nullptr;
+    const auto desktops = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* d : desktops) {
+        if (d && d->id() == desktopId) {
+            target = d;
+            break;
+        }
+    }
+    if (!target) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: no desktop with id" << desktopId << "for" << windowId;
+    }
+    applyDesktopMove(w, target, windowId);
+}
+
+void PlasmaZonesEffect::applyDesktopMove(KWin::EffectWindow* w, KWin::VirtualDesktop* target, const QString& windowId)
+{
+    if (!w || !KWin::effects || !m_snapHandler) {
+        return;
+    }
     // A sticky (on-all-desktops) window is already present on the target; pinning
     // it to a single desktop here would silently un-sticky it. Directional
-    // cross-desktop move is meaningless for an everywhere window — leave it.
-    // Checked BEFORE the range arm below: a sticky window is present on every
+    // cross-desktop move is meaningless for an everywhere window, so leave it.
+    // Checked BEFORE the no-target arm below: a sticky window is present on every
     // desktop, so it was never displaced, and driving the recovery restore at
     // it (for a 0 "all desktops" sentinel, say) would re-place a window that
     // went nowhere.
     if (w->isOnAllDesktops()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        qCDebug(lcEffect) << "desktop move: window is on all desktops, ignoring" << windowId;
         return;
     }
     // Refusing the move is not the end of it. On the open path a RouteToDesktop
     // rule emits this ahead of the same round trip's resolve, and the snap
     // engine then pins the window's float residence to the ROUTED desktop.
     // If the move never happens, the window sits on its spawn desktop with
-    // its state filed under another, so each refusal below hands it to the
-    // arrival restore instead, which re-drives the resolve for the desktop
-    // it is actually on (returning at the engine's already-placed guards
-    // when the residence is already right). The concrete case: a user who
-    // removed a virtual desktop has rules naming one that no longer exists.
+    // its state filed under another, so a refusal hands it to the arrival
+    // restore instead, which re-drives the resolve for the desktop it is
+    // actually on (returning at the engine's already-placed guards when the
+    // residence is already right). The concrete cases: a user who removed a
+    // virtual desktop has rules naming one that no longer exists, and a named
+    // workspace's desktop reaped between the daemon's resolve and this slot.
     // An open's own continuation (a RouteToDesktop rule, asked for inside the
     // open's resolve) still owes the window its first placement; any other
     // move only re-applies the zone it holds where it lands (F415).
@@ -150,28 +229,14 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         return m_snapHandler->openResolveInFlight(getWindowId(w)) ? DesktopArrivalParks::Cause::OpenContinuation
                                                                   : DesktopArrivalParks::Cause::ReapplyOnly;
     };
-    const auto placeWhereItIs = [this, w, parkCause]() {
+    if (!target) {
+        qCDebug(lcEffect) << "desktop move: no such desktop, placing" << windowId << "where it is instead";
         m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
         m_snapHandler->slotDesktopChangedRestoreArrivals();
-    };
-
-    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
-    // Lower bound as well as upper: `desktop` arrives over a D-Bus signal, and
-    // the indexing below is `all.at(desktop - 1)`, so a 0 or negative value is
-    // an out-of-bounds read rather than a refusal. 0 is not a hypothetical
-    // value either — it is WindowPlacement::virtualDesktop's own sentinel for
-    // "on all desktops / unknown". The in-tree emitters mostly gate on `> 0`
-    // themselves, but this slot is the authoritative bound. Routed to the
-    // same recovery as the out-of-range arm, for the reason given above.
-    if (desktop < 1 || desktop > all.size()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range (have" << all.size()
-                          << "desktops) — placing" << windowId << "where it is instead";
-        placeWhereItIs();
         return;
     }
-    // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
-    // (not on-all-desktops) so the window genuinely moves to the target.
-    KWin::VirtualDesktop* target = all.at(desktop - 1);
+    // Single-desktop membership (not on-all-desktops) so the window genuinely
+    // moves to the target.
     const bool wasActive = KWin::effects->activeWindow() == w;
     KWin::effects->windowToDesktops(w, {target});
     // An open's RouteToDesktop names the desktop its placement keeps: the
@@ -214,6 +279,87 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
                 ws->activateNextWindow(kw);
             }
         }
+    }
+}
+
+void PlasmaZonesEffect::slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId)
+{
+    if (windowId.isEmpty() || targetScreenId.isEmpty()) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowOutputMoveRequested: window not found" << windowId;
+        return;
+    }
+    KWin::LogicalOutput* output = outputForScreenId(targetScreenId);
+    if (!output) {
+        qCDebug(lcEffect) << "slotWindowOutputMoveRequested: unknown screen" << targetScreenId;
+        return;
+    }
+    // windowOutput, not w->screen(): KWin can name the WRONG one of two
+    // identical-model outputs (Discussion #724, see windowOutput's comment),
+    // and the rest of the effect resolves a window's monitor by frame-centre
+    // containment. Deciding "already there" from w->screen() early-returns on a
+    // genuinely needed move, and the daemon's floating-rider leg that follows
+    // this call then silently never happens.
+    if (windowOutput(w) == output) {
+        return; // already there (the common tracked-window case never gets here)
+    }
+    KWin::effects->windowToScreen(w, output);
+}
+
+void PlasmaZonesEffect::slotSetScreenDesktopRequested(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    KWin::LogicalOutput* output = outputForScreenId(screenId);
+    if (!output) {
+        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: unknown screen" << screenId;
+        return;
+    }
+    KWin::VirtualDesktop* target = desktopByNumber(desktop);
+    if (!target) {
+        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: no desktop numbered" << desktop;
+        return;
+    }
+    // Per-output switch (Plasma 6.7): only THIS output changes desktop.
+    //
+    // Suppress the full-screen desktop.switch blend for the duration of the
+    // call: this is a corrective bounce the daemon asked for (owner-wins
+    // snap-back), not a switch the user made, and blending it costs two
+    // output-sized GLTexture captures per output. KWin emits desktopChanged
+    // from inside setCurrentDesktop on the paths that emit it at all, so the
+    // scope guard drops the flag the instant the call returns; if the signal
+    // were ever queued instead, the flag is already down and the blend runs as
+    // it does today. EffectsHandler::setCurrentDesktop returns void, so there
+    // is no status to inspect here — the report below is what makes the
+    // outcome observable.
+    m_programmaticDesktopSwitch = true;
+    {
+        const auto restoreSwitchFlag = qScopeGuard([this] {
+            m_programmaticDesktopSwitch = false;
+        });
+        KWin::effects->setCurrentDesktop(target, output);
+    }
+
+    // FORCED report, and unconditional. The daemon's reconciler retires this
+    // screen's SetCurrent ledger entry on the next screenDesktopChanged for it
+    // and allows only one SetCurrent per screen in flight, so an ALREADY
+    // SATISFIED request — which produces no desktopChanged at all — would
+    // otherwise leave the entry pending until the daemon-side timeout, blocking
+    // that screen's workspace switching and suppressing evaluateForeign for the
+    // same window. Read the live value back rather than echoing `desktop`: a
+    // switch KWin declined must report what actually happened, and that is the
+    // only diagnosis anyone gets for the daemon's expiry warning.
+    if (auto* live = KWin::effects->currentDesktop(output)) {
+        const int liveDesktop = static_cast<int>(live->x11DesktopNumber());
+        if (liveDesktop != desktop) {
+            qCWarning(lcEffect) << "slotSetScreenDesktopRequested: setCurrentDesktop to" << desktop << "on" << screenId
+                                << "left the output on" << liveDesktop;
+        }
+        reportScreenDesktop(outputScreenId(output), liveDesktop, /*force=*/true);
     }
 }
 
@@ -458,11 +604,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
 void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries,
                                                  const QString& action)
 {
-    qCInfo(lcEffect) << "applyGeometriesBatch:" << action;
-
     if (geometries.isEmpty()) {
         return;
     }
+    qCInfo(lcEffect) << "applyGeometriesBatch:" << action;
 
     struct PendingApply
     {
