@@ -317,8 +317,9 @@ public:
     /// means no batch is coming, so the effect puts KWin's bit back.
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
-    /// Equal shares of the viewport for every fully visible column
-    /// (Karousel equalize). Refuses with fewer than two.
+    /// Equal shares of the viewport for every column intersecting it, clipped
+    /// ones included (Karousel equalize; ScrollStrip carries the contract).
+    /// Refuses with fewer than two.
     void equalizeVisibleColumnWidths(const QString& screenId);
     /// The focused column at the smallest preset (Karousel minimize-width).
     /// The strip falls back to the engine floor when the vocabulary is
@@ -363,8 +364,8 @@ public:
     /// variants; niri has no equivalent). Positive is forward along the strip,
     /// negative is back, clamped at both ends, and the view stays where it
     /// lands: the strip's centering policy hands the view over to the pan
-    /// until the next focus change or centering verb takes it back (see
-    /// ScrollStrip's View detachment section). A percent that rounds to fewer
+    /// until something re-attaches it (ScrollStrip's View detachment section
+    /// lists what does). A percent that rounds to fewer
     /// than one pixel reports no_movement; a pan already pinned at the end it
     /// is asked to move toward reports no_target. The OSD names the two
     /// refusals differently. Takes a percent rather than pixels because

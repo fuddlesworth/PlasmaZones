@@ -734,8 +734,8 @@ void ScrollStrip::reanchorForDropCommit(int oldViewOffset, const ScrollLayoutPar
     // latch buys is every LATER pass — a work-area change, a neighbour
     // closing, any relayout that leaves the column no longer fully visible
     // would otherwise re-apply the policy and undo the drop's position under
-    // a user who has not touched the strip since. The next focus change
-    // re-attaches through reanchorAfterFocusChange, same as any pan.
+    // a user who has not touched the strip since. Whatever re-attaches a pan
+    // re-attaches this too (the class doc lists it).
     m_viewDetached = true;
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there): every arm below would write garbage over the persisted anchor.
@@ -876,7 +876,7 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // FULLY visible columns only (niri center-visible-columns): a partially
     // clipped edge column is exactly what the verb pushes out of the way, so
     // it must not drag the span. The ONE spelling of that walk, shared with
-    // the width-distribution verbs — zero-extent (fully minimized) columns
+    // expandActiveColumnToAvailableWidth — zero-extent (fully minimized) columns
     // carry no strip position and are skipped there the same way
     // stripExtentPx skips them.
     const QVector<int> visible = fullyVisibleColumnIndices(params);
@@ -951,8 +951,8 @@ bool ScrollStrip::scrollViewBy(int delta, const ScrollLayoutParams& params)
     }
     m_viewAnchor = anchor;
     // The view is now where the USER put it, so take it out of the centering
-    // policy's hands until a focus change or a centering verb gives it back
-    // (class doc). Set only on a real move: a refusal at either end must not
+    // policy's hands until something re-attaches it (the class doc's View
+    // detachment section lists what does). Set only on a real move: a refusal at either end must not
     // detach a view the policy still owns, or holding a scroll key against the
     // strip's end would silently change what the next layout pass does.
     m_viewDetached = true;

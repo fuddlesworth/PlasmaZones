@@ -460,8 +460,8 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollEqualizeColumnWidths, kScrollColumnWidthCategory.label.source, kScrollColumnWidthCategory.order,
             "scrolling", kScrollColumnWidthCategory.label.comment, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Gives every column fully on screen an equal share of the screen. Columns "
-                              "clipped at an edge are left alone."));
+                              "Gives every column on screen an equal share of the screen. A column "
+                              "clipped at an edge comes fully into view."));
         // ── Window height ──
         add(kIdScrollIncreaseWindowHeight, kScrollWindowHeightCategory.label.source, kScrollWindowHeightCategory.order,
             "scrolling", kScrollWindowHeightCategory.label.comment, nullptr,

@@ -59,6 +59,7 @@ private Q_SLOTS:
     void maximizeToEdgesRestoreIsJustTheStoredIntentAgain();
     void widthAndHeightVerbsClearMaximizeToEdges();
     void equalizeClearsTheActiveColumnsMaximizeToEdges();
+    void equalizeClearsAMaximizedNeighboursOverride();
     void maximizeToEdgesIgnoresCenteringAndRestoresTheHeightIntent();
     void maximizeToEdgesLandsOnTheRawAreaUnderMainAxisCentering();
     void maximizeToEdgesLandsOnTheRawAreaWhenFocusArrivesFromTheTrailingSide();
@@ -303,14 +304,12 @@ void TestScrollStripMaximize::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
 // four of them left deleting the clear from the other eight green. That is not
 // hypothetical — the three whole-size height verbs were added without being
 // added here, and the maximize toggle among them shipped an equality-gated
-// clear that refused forever on a column this slot would have caught. The one
-// site this fixture cannot reach is the per-member drop inside
-// equalizeVisibleColumnWidths' write loop: the fixture sets a 20px outer gap,
-// so a flagged column renders at the RAW main extent, fills the viewport
-// alone, and the verb's two-fully-visible-columns gate refuses before the loop
-// runs. It IS reachable with zero outer gap, where the raw extent equals the
-// viewport (see scrollstrip_sizing.cpp's note on that loop). The
-// active-column drop above it is covered below.
+// clear that refused forever on a column this slot would have caught. The
+// fixture holds ONE column, so the two equalize sites, which need a group of
+// two, have slots of their own below: the active column's early drop
+// (equalizeClearsTheActiveColumnsMaximizeToEdges) and the write loop's
+// per-member drop for a maximized neighbour
+// (equalizeClearsAMaximizedNeighboursOverride).
 //
 // Each step asserts the GEOMETRY as well as the verdict, this file's rule: the
 // fixture gives the raw area a 20px outer gap on every side, so a column that
@@ -464,33 +463,74 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
 }
 
 // The active column's drop inside equalizeVisibleColumnWidths, which is a
-// separate site from the loop's per-member one: without it a flagged column
-// measures at the raw extent, never appears among the fully visible columns,
-// and the verb refused outright instead of equalizing.
+// separate site from the loop's per-member one. Without it the flagged active
+// column measures at the raw extent and pushes the columns after it along the
+// strip, out of the group the user asked to share the screen with. The loop's
+// per-member drop would still clear the flag afterwards, so the flag alone
+// cannot tell the two apart: the group's SIZE is the discriminator.
 void TestScrollStripMaximize::equalizeClearsTheActiveColumnsMaximizeToEdges()
 {
     ScrollLayoutParams params = defaultParams();
     params.rawWorkArea = params.workArea;
     params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+    QCOMPARE(Ax::mainLen(params.workArea), 1160);
 
-    // Two columns narrow enough that both sit ENTIRELY inside the gapped
-    // viewport, which is what equalize measures over.
+    // Three 300px columns at strip positions 0, 310 and 620, with b focused
+    // and then maximized to edges. The layout pass the engine runs after the
+    // toggle puts the maximized b at its one correct position, the lead edge,
+    // which leaves a wholly before it. Flagged, b is the raw 1200 and c
+    // starts at 1210, out of view; measured at its stored 300, c is back at
+    // 310..610 and in the group.
     ScrollStrip strip;
-    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    for (const char* id : {"a", "b", "c"}) {
+        QVERIFY(
+            strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    }
+    QVERIFY(strip.focusColumn(1, params));
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    strip.updateViewForFocus(params);
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({1}));
 
     QVERIFY2(strip.equalizeVisibleColumnWidths(params), "equalize must not refuse a maximized active column");
     for (const Column& col : strip.columns()) {
         QVERIFY2(!col.maximizedToEdges, "no column may still be maximized to edges after an equalize");
     }
-    // And the verb did its own job as well as the drop: the two columns end at
-    // the same extent, both inside the gapped work area.
+    // b and c share 1160 - 10 = 1150: 575 each, and a, off screen, keeps its
+    // width. Measured against the flagged b instead, b would be alone in the
+    // group and the verb would refuse.
+    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(300));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(575));
+    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(575));
+}
+
+// The write loop's per-member drop: a maximized NEIGHBOUR of the active
+// column. Drawn at the raw extent it is wider than the gapped viewport, so it
+// can only ever be part way on screen and joins the group as a clipped
+// column. Each fixture step asserts the geometry as well as the flag, this
+// file's rule.
+void TestScrollStripMaximize::equalizeClearsAMaximizedNeighboursOverride()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+
+    // a (400) focused at the lead edge, b (300) maximized to edges beside it:
+    // b starts at 410 and runs the raw 1200 past the trailing edge.
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.toggleMaximizeToEdgesForWindow(QStringLiteral("b"), params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), Ax::mainLen(params.rawWorkArea));
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({0, 1}));
+
+    QVERIFY(strip.equalizeVisibleColumnWidths(params));
+    QVERIFY2(!strip.columns().at(1).maximizedToEdges, "the neighbour's override must drop with the equalize");
+    // (1160 - 10) / 2 = 575 each, and b renders at its share, not the raw
+    // extent a standing flag would still draw.
     const ResolvedStrip resolved = strip.relayout(params);
-    const int aMain = Ax::mainLen(rectOf(resolved, QStringLiteral("a")));
-    const int bMain = Ax::mainLen(rectOf(resolved, QStringLiteral("b")));
-    QCOMPARE(aMain, bMain);
-    QVERIFY(aMain <= Ax::mainLen(params.workArea));
+    QCOMPARE(Ax::mainLen(rectOf(resolved, QStringLiteral("a"))), 575);
+    QCOMPARE(Ax::mainLen(rectOf(resolved, QStringLiteral("b"))), 575);
 }
 
 // The centre-short-columns policy, whose whole surface is the cross-axis

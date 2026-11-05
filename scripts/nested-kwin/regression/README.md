@@ -190,7 +190,7 @@ one whose daemon died or was replaced.
 | fdrag-float-keeps-size | 1, FS | with column width and window height on "Window decides", a resized floating window drag-inserted into the strip with the trigger held is a column at its size on both axes (the drop indicator, the popup drop and the adopted arm are not staged) |
 | fsplash-sibling-size-scroll / -tile / -snap | 1, S | a splash under the minimum window size that closes before its app's main window opens does not hand the main window its frame: on scrolling and tiling it is a column or a tile, on snapping it opens at its own size |
 | fresize-centred-edge | 1, FS | under Center focused column Always, two Meta+right drags of a lone column's left edge each land that edge at the release and grow the column by twice the drag; with Center short columns on, a drag of its bottom edge up and one of its top edge down each land that edge at the release and shrink the column by twice the drag |
-| fresize-then-width-verbs | 1, FS | after a Meta+right drag widens one of two columns and pushes the other part way past the edge, equalize puts both back at the even split, and so does the scrolling reset |
+| fresize-then-width-verbs | 1, FS | after a Meta+right drag widens one of two columns and pushes the other part way past the edge, equalize puts the widened one back at the even split and brings the other back inside the output; the scrolling reset doing the same is the control |
 | fscale-fixed-device-pixels | 1, S | at scale 1.25, a layout whose fixed zones count device pixels snaps a window to the zone divided by the scale; the same zones counted in logical pixels are the control |
 
 ## Follow-up probes (pr1125-followups)
