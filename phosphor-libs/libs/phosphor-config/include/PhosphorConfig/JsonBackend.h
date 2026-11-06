@@ -110,14 +110,24 @@ private:
 class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
 {
 public:
-    /// Construct a backend backed by @p filePath. The file is loaded
-    /// immediately. A missing file, or one that holds only white space,
-    /// starts with an empty root object and accepts writes. An unreadable one (open failure, parse error, a
+    /// When the constructor reads the file.
+    enum class Load {
+        Now, ///< In the constructor, logging a file it cannot read.
+        /// Not until reparseConfiguration() or reload(): for a caller that
+        /// reloads at once and reports problems itself, so the file is read
+        /// once. Until then the backend is empty and refuses writes.
+        Deferred,
+    };
+
+    /// Construct a backend backed by @p filePath. The file is loaded now,
+    /// or with @p load Deferred at the first reload. A missing file, or one
+    /// that holds only white space, starts with an empty root object and
+    /// accepts writes. An unreadable one (open failure, parse error, a
     /// non-object root) also starts empty but reports @c loadFailed() and
     /// refuses writes (unless @c setOverwriteUnreadable), with a warning
     /// logged. A flush also refuses when the file has been rewritten since
     /// this backend last read or wrote it and no longer reads.
-    explicit JsonBackend(QString filePath);
+    explicit JsonBackend(QString filePath, Load load = Load::Now);
     ~JsonBackend() override;
 
     // IBackend interface
@@ -137,6 +147,11 @@ public:
     /// file's stamp, so the next flush compares against this read.
     QString reload();
     bool loadFailed() const override;
+    /// The most recent load found a file of only white space, which reads
+    /// as an empty document. An editor that saves in place empties the file
+    /// before it writes, so a caller can keep its settings rather than take
+    /// that for a file with no settings.
+    bool blankFile() const;
 
     /// Let writes replace an unreadable file instead of refusing. For a file
     /// only machines write, such as session state, where an unreadable copy

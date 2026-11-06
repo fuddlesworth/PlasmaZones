@@ -548,6 +548,57 @@ private Q_SLOTS:
                  QStringLiteral("again"));
     }
 
+    /// Load::Deferred reads nothing until the first reload, so a caller that
+    /// reloads at once reads and reports the file one time. Until then the
+    /// root is not the file, so a write must not replace it.
+    void deferredLoad_readsAtTheFirstReloadAndRefusesWritesBefore()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"file"}})")));
+        JsonBackend b(m_path, JsonBackend::Load::Deferred);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k"), QStringLiteral("none")), QStringLiteral("none"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("early"));
+        }
+        QVERIFY(!b.commit());
+        QVERIFY(readFile(m_path).contains("file"));
+        QCOMPARE(b.reload(), QString());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k")), QStringLiteral("file"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("late"));
+        }
+        QVERIFY(b.commit());
+        QVERIFY(readFile(m_path).contains("late"));
+    }
+
+    void deferredLoad_refusesWritesEvenWhenOverwritingUnreadable()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"file"}})")));
+        JsonBackend b(m_path, JsonBackend::Load::Deferred);
+        b.setOverwriteUnreadable(true);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("early"));
+        }
+        QVERIFY(!b.commit());
+        QVERIFY(readFile(m_path).contains("file"));
+    }
+
+    /// blankFile() tells a file of only white space from one that holds {}.
+    void blankFile_tellsWhiteSpaceFromAnEmptyObject()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(" \n")));
+        JsonBackend b(m_path);
+        QVERIFY(b.blankFile());
+        QVERIFY(writeFile(m_path, QByteArray("{}")));
+        QCOMPARE(b.reload(), QString());
+        QVERIFY(!b.blankFile());
+        QVERIFY(QFile::remove(m_path));
+        QCOMPARE(b.reload(), QString());
+        QVERIFY(!b.blankFile());
+    }
+
     /// reload() is the reparse for a caller that reports problems itself: it
     /// returns the reason, and a clean read ends the refusal that the first
     /// load set. Afterglow reloads this way, and without the second half every
