@@ -13,6 +13,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **An empty config file no longer blocks saving**: a config.json that held nothing, for example after `touch`, counted as unreadable, so every save was refused until it was deleted. An empty file now reads as one with no settings, the same as a missing file.
+- **Autotiling and the KWin effect work on NixOS**: nixpkgs renames KWin's `kwin_wayland_wrapper` to `.kwin_wayland_wrapper-wrapped` and puts a script in its place. PlasmaZones only trusted the KWin effect when the compositor ran under the original name, so on NixOS it refused the effect. Windows then opened untiled and every feature that needs the effect did nothing. The renamed wrapper is now trusted as well. ([#1209](https://github.com/phosphor-works/PlasmaZones/issues/1209))
 - **A curve with a typo in its values is reported**: a curve such as `spring:22` or `bezier:junk` named a known curve type with values that could not be read. It was accepted and drew the library's default curve of that type, with no warning. Such a curve is now refused, the same as an unknown curve name.
 
 ## [3.5.5] - 2026-11-04

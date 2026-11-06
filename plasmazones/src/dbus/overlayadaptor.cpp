@@ -440,6 +440,21 @@ void OverlayAdaptor::setCompositorResolverForTesting(CompositorResolver resolver
     m_compositorResolver = std::move(resolver);
 }
 
+bool OverlayAdaptor::isKwinWaylandWrapper(QStringView executable)
+{
+    static constexpr QLatin1StringView Wrapper("kwin_wayland_wrapper");
+    // wrapProgram's hidden name for the binary is "." + name + "-wrapped".
+    // A second wrap appends "_" to the name it moves the first script to,
+    // but that file is a script, and the binary keeps the first name.
+    static constexpr QLatin1StringView NixPrefix(".");
+    static constexpr QLatin1StringView NixSuffix("-wrapped");
+    if (executable == Wrapper) {
+        return true;
+    }
+    return executable.size() == NixPrefix.size() + Wrapper.size() + NixSuffix.size() && executable.startsWith(NixPrefix)
+        && executable.endsWith(NixSuffix) && executable.sliced(NixPrefix.size(), Wrapper.size()) == Wrapper;
+}
+
 OverlayAdaptor::Compositor OverlayAdaptor::compositor()
 {
     if (m_compositorResolver) {
@@ -451,8 +466,7 @@ OverlayAdaptor::Compositor OverlayAdaptor::compositor()
         m_compositorDisplay = display;
         m_compositorFd = fd;
         m_compositor.pid = peerPid(fd);
-        m_compositor.trustsChildren =
-            m_compositor.pid != 0 && executableName(m_compositor.pid) == QLatin1String("kwin_wayland_wrapper");
+        m_compositor.trustsChildren = m_compositor.pid != 0 && isKwinWaylandWrapper(executableName(m_compositor.pid));
         qCDebug(lcDbus) << "compositor: pid" << m_compositor.pid << "trusts its children"
                         << m_compositor.trustsChildren;
     }
