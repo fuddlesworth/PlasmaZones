@@ -111,8 +111,8 @@ class PHOSPHORCONFIG_EXPORT JsonBackend : public IBackend
 {
 public:
     /// Construct a backend backed by @p filePath. The file is loaded
-    /// immediately. A missing file starts with an empty root object and
-    /// accepts writes. An unreadable one (open failure, parse error, a
+    /// immediately. A missing file, or one that holds only white space,
+    /// starts with an empty root object and accepts writes. An unreadable one (open failure, parse error, a
     /// non-object root) also starts empty but reports @c loadFailed() and
     /// refuses writes (unless @c setOverwriteUnreadable), with a warning
     /// logged. A flush also refuses when the file has been rewritten since
@@ -130,6 +130,12 @@ public:
     /// document this backend read or wrote successfully (empty if none), and
     /// @c loadFailed() turns on until a later reparse reads the file cleanly.
     void reparseConfiguration() override;
+    /// Reloads the file as @c reparseConfiguration does, for a caller that
+    /// reports problems itself: nothing is logged, and the reason the file
+    /// could not be read is returned (empty when it could). A clean read ends
+    /// the refusal that an earlier unreadable load or flush set, and takes the
+    /// file's stamp, so the next flush compares against this read.
+    QString reload();
     bool loadFailed() const override;
 
     /// Let writes replace an unreadable file instead of refusing. For a file
@@ -301,7 +307,9 @@ public:
 private:
     friend class JsonGroup;
 
-    void loadFromDisk();
+    /// @p problem, when given, gets the reason for an unreadable file instead
+    /// of the log.
+    void loadFromDisk(QString* problem = nullptr);
     void markDirty();
     /// Synchronous inner flush used by @c sync() (Synchronous policy),
     /// @c flushPending(), the deferred-sync timer callback, and the

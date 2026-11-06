@@ -117,9 +117,12 @@ document it read or wrote cleanly (empty on a first load), and `sync()`,
 `commit()` and `applyMigration()` refuse rather than write over the user's
 file. `flushNow` also re-checks the file's size and mtime against the last
 load, so a file broken by hand after it was read is refused too. The overlay
-stays on top of the fallback document. A later `reparseConfiguration()` that
-reads the file cleanly clears the flag. A machine-written file with nothing
-worth keeping opts out with `setOverwriteUnreadable(true)`.
+stays on top of the fallback document. A later `reparseConfiguration()` or
+`reload()` that reads the file cleanly clears the flag. `reload()` is the same
+reload for a caller that reports problems itself: it logs nothing and returns
+the reason the file could not be read. A file that holds only white space reads
+as an empty document, as a missing one does. A machine-written file with
+nothing worth keeping opts out with `setOverwriteUnreadable(true)`.
 
 ## Design notes
 
