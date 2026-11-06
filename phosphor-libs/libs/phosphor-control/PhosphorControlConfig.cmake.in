@@ -11,7 +11,11 @@ find_dependency(Qt6 @PHOSPHORCONTROL_QT_MIN@ COMPONENTS Core DBus Gui Qml Quick)
 # the exported targets file references it and a consumer must resolve it.
 find_dependency(PhosphorAnimation)
 find_dependency(PhosphorRegistry)
+# FacetContext::configBackend hands modules a PhosphorConfig::IBackend.
+find_dependency(PhosphorConfig)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorControlTargets.cmake")
+# phosphor_add_facet_module_metadata(), for building Facet modules.
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorFacetModule.cmake")
 
 check_required_components(PhosphorControl)

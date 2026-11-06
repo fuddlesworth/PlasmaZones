@@ -5,6 +5,7 @@
 
 #include "PhosphorControl/ApplicationController.h"
 #include "PhosphorControl/FacetHost.h"
+#include "PhosphorControl/ISearchProvider.h"
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/PageRegistry.h"
 #include "PhosphorControl/StagingDomain.h"
@@ -15,6 +16,10 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QPluginLoader>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -49,6 +54,86 @@ int countResults(StagingDomain* domain, Signal signal, void (StagingDomain::*tri
     return count;
 }
 
+// The search entries of the module's providers that do not resolve.
+QStringList checkSearchProviders(const FacetHost& host, const QString& moduleId, const FacetModuleMetadata& metadata)
+{
+    QStringList problems;
+    QSet<QString> extended;
+    for (const FacetExtensionMetadata& extension : metadata.extensions) {
+        extended.insert(extension.target);
+    }
+    for (const ISearchProvider* provider : host.searchProviders(moduleId)) {
+        const QVector<SearchEntry> entries = provider->searchEntries();
+        for (const SearchEntry& entry : entries) {
+            if (entry.kind == SearchEntry::Kind::Action) {
+                continue;
+            }
+            const QString where =
+                entry.anchor.isEmpty() ? entry.pageId : entry.pageId + QLatin1Char('#') + entry.anchor;
+            const bool ownPage = entry.pageId.startsWith(moduleId + QLatin1Char(':'))
+                && metadata.page(entry.pageId.mid(moduleId.size() + 1));
+            if (!ownPage && !extended.contains(entry.pageId)) {
+                problems.append(QStringLiteral("search entry %1 (%2) is not on one of the module's pages or a page "
+                                               "it extends")
+                                    .arg(entry.title, where));
+                continue;
+            }
+            const bool anchored = entry.kind == SearchEntry::Kind::Setting || entry.kind == SearchEntry::Kind::Section;
+            if (ownPage && anchored && !entry.anchor.isEmpty()
+                && !metadata.page(entry.pageId.mid(moduleId.size() + 1))->anchors.contains(entry.anchor)) {
+                problems.append(QStringLiteral("search entry %1 (%2) names an anchor its page does not list in "
+                                               "\"Anchors\"")
+                                    .arg(entry.title, where));
+            }
+        }
+    }
+    return problems;
+}
+
+// Every page and anchor of the previous release that is gone without a bump
+// of its page's anchors version.
+QStringList checkAnchors(const QString& path, const FacetModuleMetadata& metadata)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {QStringLiteral("cannot read the previous anchors %1: %2").arg(path, file.errorString())};
+    }
+    const QJsonObject previous = QJsonDocument::fromJson(file.readAll()).object();
+    if (previous.value(QLatin1String("Module")).toString() != metadata.id) {
+        return {QStringLiteral("the previous anchors %1 are for module %2, not %3")
+                    .arg(path, previous.value(QLatin1String("Module")).toString(), metadata.id)};
+    }
+    QStringList problems;
+    const QJsonObject pages = previous.value(QLatin1String("Pages")).toObject();
+    for (auto it = pages.constBegin(); it != pages.constEnd(); ++it) {
+        const FacetPageMetadata* const page = metadata.page(it.key());
+        if (!page) {
+            problems.append(
+                QStringLiteral("page %1 of the previous release is gone; other modules may extend it").arg(it.key()));
+            continue;
+        }
+        const int was = it.value().toObject().value(QLatin1String("Version")).toInt(1);
+        const int now = metadata.slotVersion(page->id, QStringLiteral("top"));
+        if (now < was) {
+            problems.append(QStringLiteral("page %1's anchors version went down from %2 to %3")
+                                .arg(page->id, QString::number(was), QString::number(now)));
+            continue;
+        }
+        if (now > was) {
+            continue; // extensions built for the old anchors are refused, as they should be
+        }
+        const QJsonArray anchors = it.value().toObject().value(QLatin1String("Anchors")).toArray();
+        for (const QJsonValue& anchor : anchors) {
+            if (!page->anchors.contains(anchor.toString())) {
+                problems.append(QStringLiteral("anchor %1 of page %2 is gone, but the page's anchors version is "
+                                               "still %3; raise the \"anchors\" extension point's version")
+                                    .arg(anchor.toString(), page->id, QString::number(now)));
+            }
+        }
+    }
+    return problems;
+}
+
 } // namespace
 
 FacetTestHost::FacetTestHost(QString modulePath)
@@ -59,6 +144,16 @@ FacetTestHost::FacetTestHost(QString modulePath)
 void FacetTestHost::setResultTimeoutMs(int ms)
 {
     m_resultTimeoutMs = ms > 0 ? ms : 2000;
+}
+
+void FacetTestHost::addTargetModule(const QString& modulePath)
+{
+    m_targetPaths.append(modulePath);
+}
+
+void FacetTestHost::setPreviousAnchors(const QString& anchorsPath)
+{
+    m_previousAnchorsPath = anchorsPath;
 }
 
 QStringList FacetTestHost::run()
@@ -77,11 +172,20 @@ QStringList FacetTestHost::run()
     const QFileDevice::Permissions mode = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
         | QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::ExeOther;
     QFile::setPermissions(searchPath, mode);
-    const QString staged = searchPath + QLatin1Char('/') + QFileInfo(m_modulePath).fileName();
-    if (!QFile::copy(m_modulePath, staged)) {
-        return {QStringLiteral("cannot copy %1 into the test search path").arg(m_modulePath)};
+    for (const QString& path : QStringList{m_modulePath} + m_targetPaths) {
+        const QString staged = searchPath + QLatin1Char('/') + QFileInfo(path).fileName();
+        if (!QFile::copy(path, staged)) {
+            return {QStringLiteral("cannot copy %1 into the test search path").arg(path)};
+        }
+        QFile::setPermissions(staged, mode);
     }
-    QFile::setPermissions(staged, mode);
+    // The module under test, by the id in its embedded metadata.
+    const QString moduleId = QPluginLoader(m_modulePath)
+                                 .metaData()
+                                 .value(QLatin1String("MetaData"))
+                                 .toObject()
+                                 .value(QLatin1String("Id"))
+                                 .toString();
 
     ApplicationController controller;
     FacetHost host(&controller);
@@ -93,14 +197,12 @@ QStringList FacetTestHost::run()
     for (const PhosphorRegistry::RefusedPlugin& refused : host.refusedModules()) {
         problems.append(QStringLiteral("refused: %1").arg(refused.reason));
     }
-    const QStringList modules = host.moduleIds();
-    if (modules.isEmpty()) {
+    if (!host.moduleIds().contains(moduleId)) {
         if (problems.isEmpty()) {
             problems.append(QStringLiteral("no Facet module found in %1").arg(m_modulePath));
         }
         return problems;
     }
-    const QString moduleId = modules.first();
 
     QString error;
     if (!host.loadModule(moduleId, &error)) {
@@ -109,6 +211,16 @@ QStringList FacetTestHost::run()
     }
 
     const std::optional<FacetModuleMetadata> metadata = host.metadata(moduleId);
+    problems.append(checkSearchProviders(host, moduleId, *metadata));
+    const QString ownPrefix = moduleId + QLatin1Char(':');
+    for (const FacetHost::RefusedExtension& refused : host.refusedExtensions()) {
+        if (refused.id.startsWith(ownPrefix)) {
+            problems.append(QStringLiteral("extension %1 is refused: %2").arg(refused.id, refused.reason));
+        }
+    }
+    if (!m_previousAnchorsPath.isEmpty()) {
+        problems.append(checkAnchors(m_previousAnchorsPath, *metadata));
+    }
     QList<QPointer<StagingDomain>> domains;
     for (const FacetPageMetadata& page : metadata->pages) {
         PageController* const pageController = controller.registry()->controller(FacetHost::pageId(moduleId, page.id));

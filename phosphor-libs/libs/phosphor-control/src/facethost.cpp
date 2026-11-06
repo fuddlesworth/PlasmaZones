@@ -8,6 +8,8 @@
 #include "PhosphorControl/FacetModule.h"
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/PageRegistry.h"
+#include "PhosphorControl/SearchController.h"
+#include "PhosphorControl/SearchEntry.h"
 #include "facetplaceholderpage_p.h"
 
 #include <PhosphorConfig/IBackend.h>
@@ -71,6 +73,7 @@ struct FacetHost::Module
     bool nodeRegistered = false;
     QStringList boundPages;
     QList<QPointer<StagingDomain>> domains;
+    QList<ISearchProvider*> searchProviders;
     struct Extension
     {
         QPointer<StagingDomain> domain;
@@ -145,6 +148,15 @@ void FacetHost::setLocale(const QLocale& locale)
 void FacetHost::setLiveReload(bool enabled)
 {
     m_catalog->setLiveReload(enabled);
+}
+
+void FacetHost::setSearchController(SearchController* search)
+{
+    if (m_started) {
+        qCWarning(lcFacetHost) << "FacetHost: setSearchController() after start() is ignored";
+        return;
+    }
+    m_search = search;
 }
 
 void FacetHost::start()
@@ -265,6 +277,17 @@ void FacetHost::start()
     m_controller->setExtensionProvider([this](const QString& pageId, const QString& slot) {
         return extensionsFor(pageId, slot);
     });
+    for (const auto& module : std::as_const(m_modules)) {
+        indexModule(*module);
+    }
+    indexExtensions();
+    if (m_search) {
+        connect(m_search.data(), &SearchController::queryChanged, this, [this]() {
+            if (!m_search->query().isEmpty()) {
+                loadSearchProviders();
+            }
+        });
+    }
 
     connect(m_catalog.get(), &PhosphorRegistry::PluginCatalog::pluginAdded, this, &FacetHost::addModule);
     connect(m_catalog.get(), &PhosphorRegistry::PluginCatalog::pluginRemoved, this, [](const QString& id) {
@@ -303,8 +326,17 @@ void FacetHost::addModule(const QString& moduleId)
     }
     ensureCategoryNode(module->metadata.category);
     registerPlaceholders(*module);
+    indexModule(*module);
     const QStringList before = m_extensionsByPage.keys();
     resolveExtensions();
+    indexExtensions();
+    if (m_searchProvidersLoaded && module->metadata.searchProviders) {
+        QString error;
+        if (!loadModule(moduleId, &error)) {
+            qCWarning(lcFacetHost).noquote()
+                << "FacetHost: module" << moduleId << "has search providers but did not load -" << error;
+        }
+    }
     QSet<QString> touched(before.cbegin(), before.cend());
     for (auto it = m_extensionsByPage.cbegin(); it != m_extensionsByPage.cend(); ++it) {
         touched.insert(it.key());
@@ -495,6 +527,7 @@ bool FacetHost::loadModule(const QString& moduleId, QString* errorString)
         }
     }
     module->domains = context.m_domains;
+    module->searchProviders = context.m_searchProviders;
     if (!context.m_errors.isEmpty()) {
         const QString reason = context.m_errors.join(QStringLiteral("; "));
         setFailed(*module, reason);
@@ -557,6 +590,84 @@ void FacetHost::addDomain(StagingDomain* domain)
 void FacetHost::addExtension(Module& module, const QString& localId, StagingDomain* domain, const QUrl& qmlSource)
 {
     module.extensions.insert(localId, Module::Extension{domain, qmlSource});
+}
+
+void FacetHost::addSearchProvider(ISearchProvider* provider)
+{
+    if (m_search) {
+        m_search->registerProvider(provider);
+    }
+}
+
+void FacetHost::indexModule(const Module& module)
+{
+    if (!m_search || !module.nodeRegistered) {
+        return;
+    }
+    // The module's own keywords find every one of its pages.
+    for (const FacetPageMetadata& page : module.metadata.pages) {
+        m_search->setPageKeywords(pageId(module.metadata.id, page.id), page.keywords + module.metadata.keywords);
+    }
+    for (const FacetSearchEntryMetadata& item : module.metadata.search) {
+        SearchEntry entry;
+        entry.kind = item.section ? SearchEntry::Kind::Section : SearchEntry::Kind::Setting;
+        entry.pageId = pageId(module.metadata.id, item.page);
+        entry.anchor = item.anchor;
+        entry.title = item.title;
+        entry.keywords = item.keywords;
+        entry.advancedOnly = item.advancedOnly;
+        m_search->addEntry(entry);
+    }
+}
+
+void FacetHost::indexExtensions()
+{
+    if (!m_search) {
+        return;
+    }
+    // An extension is found as a section of the page it is on, at an anchor
+    // that is its scoped id. Extensions only become active, never inactive,
+    // while Facet runs, so each is added once.
+    for (auto it = m_extensionsByPage.cbegin(); it != m_extensionsByPage.cend(); ++it) {
+        for (const auto& active : it.value()) {
+            const QString scoped = pageId(active->moduleId, active->localId);
+            if (m_indexedExtensions.contains(scoped)) {
+                continue;
+            }
+            m_indexedExtensions.insert(scoped);
+            const FacetExtensionMetadata* const declared =
+                m_modules.value(active->moduleId)->metadata.extension(active->localId);
+            SearchEntry entry;
+            entry.kind = SearchEntry::Kind::Section;
+            entry.pageId = it.key();
+            entry.anchor = scoped;
+            entry.title = active->name;
+            entry.keywords = declared ? declared->keywords : QStringList();
+            m_search->addEntry(entry);
+        }
+    }
+}
+
+void FacetHost::loadSearchProviders()
+{
+    if (m_searchProvidersLoaded) {
+        return;
+    }
+    m_searchProvidersLoaded = true;
+    // Collected first: loading a module can add modules to the map.
+    QStringList withProviders;
+    for (auto it = m_modules.cbegin(); it != m_modules.cend(); ++it) {
+        if (it.value()->metadata.searchProviders && it.value()->state == ModuleState::Available) {
+            withProviders.append(it.key());
+        }
+    }
+    for (const QString& moduleId : std::as_const(withProviders)) {
+        QString error;
+        if (!loadModule(moduleId, &error)) {
+            qCWarning(lcFacetHost).noquote()
+                << "FacetHost: module" << moduleId << "has search providers but did not load -" << error;
+        }
+    }
 }
 
 void FacetHost::resolveExtensions()
@@ -758,6 +869,12 @@ PhosphorConfig::IBackend* FacetHost::configBackend(const QString& path) const
     const QString key = configFileKey(path);
     const auto existing = m_configBackends.constFind(key);
     return existing != m_configBackends.cend() ? existing->get() : nullptr;
+}
+
+QList<ISearchProvider*> FacetHost::searchProviders(const QString& moduleId) const
+{
+    const std::shared_ptr<Module> module = m_modules.value(moduleId);
+    return module ? module->searchProviders : QList<ISearchProvider*>();
 }
 
 QStringList FacetHost::boundPages(const QString& moduleId) const

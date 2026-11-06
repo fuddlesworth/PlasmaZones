@@ -57,7 +57,8 @@ library provides:
 | `PhosphorControl::FacetModuleMetadata`    | A module's embedded metadata (id, name, icon, category, parent module, pages and their anchors, extension points, extensions), parsed and validated per locale |
 | `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, its headless staging domains, and the domain and QML of each section it adds to another module's page. It also hands out one config backend per file, shared by every module that writes it |
 | `PhosphorControl::FacetHost`              | Finds Facet modules through a `PhosphorRegistry::PluginCatalog`, fills the page registry with placeholders, resolves extensions against their target pages, and loads a module the first time one of its pages, or a page it extends, is opened |
-| `PhosphorControl::FacetTestHost`          | Loads one module headless and lists every way it breaks the contract, for the module's own CI |
+| `PhosphorControl::FacetTestHost`          | Loads one module headless and lists every way it breaks the contract, for the module's own CI: registration, staging, search providers, extension targets and anchor stability |
+| `phosphor-facet-metadata`                 | Build tool behind `phosphor_add_facet_module_metadata()`: validates a module's metadata, adds `Key[<lang>]` translations from its `.ts` files, and writes its anchor list and lupdate strings |
 
 ## Typical use
 
@@ -153,6 +154,37 @@ FacetSlot {
     slot: "after:drag-modifier"
 }
 ```
+
+**Building a module.** A module embeds generated metadata rather than its
+source file, so the build can validate it and add translations:
+
+```cmake
+qt_add_plugin(facet_module_mine)
+target_sources(facet_module_mine PRIVATE mymodule.cpp)
+phosphor_add_facet_module_metadata(facet_module_mine
+    METADATA metadata.json
+    TS_FILES translations/facet-module-mine_de.ts translations/facet-module-mine_fr.ts)
+```
+
+```cpp
+Q_PLUGIN_METADATA(IID PhosphorFacetModule_iid FILE "facet_metadata.json")
+```
+
+Invalid metadata fails the build. The generated `anchors.json` (the target's
+`FACET_ANCHORS_FILE`) goes with each release, and the next release's CI passes
+it to `FacetTestHost::setPreviousAnchors()`, which fails when an anchor other
+modules may extend disappears without a bump of the page's `anchors`
+version. `FACET_STRINGS_FILE` holds the metadata's strings for `lupdate`, in
+context `FacetModule`.
+
+**Search before loading.** Facet indexes every module from its metadata at
+start (`FacetHost::setSearchController`): each page with its `Keywords` and the
+module's, each `Search` entry (a setting or section at one of the page's
+`Anchors`), and each active extension as a section of the page it is on, at
+the anchor `<module>:<extension>`. A module with content only code can list
+registers an `ISearchProvider` through `FacetContext::registerSearchProvider`
+and declares `"SearchProviders": true`; Facet loads it the first time the
+query is not empty.
 
 Modules that keep settings in one file share its backend:
 `FacetContext::configBackend(path, create)` creates the backend for the first

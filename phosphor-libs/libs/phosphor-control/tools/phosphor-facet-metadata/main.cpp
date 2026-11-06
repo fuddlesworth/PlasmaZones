@@ -1,0 +1,304 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Build-time generator for a Facet module's metadata, run by
+// phosphor_add_facet_module_metadata() (PhosphorFacetModule.cmake):
+//
+//   phosphor-facet-metadata strings  <metadata.json> <out.cpp>
+//       The translatable strings as QT_TRANSLATE_NOOP calls in context
+//       "FacetModule", for lupdate. Not compiled.
+//   phosphor-facet-metadata localize <metadata.json> <out.json> [<file.ts>...]
+//       The metadata with `Key[<lang>]` added for every string a catalog
+//       translates, which is what the module embeds.
+//   phosphor-facet-metadata anchors  <metadata.json> <out.json>
+//       Each page's anchors and the version of its `anchors` extension point,
+//       for FacetTestHost's check against the previous release.
+//
+// Every command first validates the metadata with FacetModuleMetadata::parse
+// and fails the build on a problem, unless --allow-invalid is given (the
+// test fixtures that are invalid on purpose).
+
+#include <PhosphorControl/FacetModuleMetadata.h>
+
+#include <QCommandLineParser>
+#include <QCoreApplication>
+#include <QFile>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSaveFile>
+#include <QXmlStreamReader>
+
+#include <cstdio>
+#include <functional>
+
+using PhosphorControl::FacetModuleMetadata;
+
+namespace {
+
+const QString Context = QStringLiteral("FacetModule");
+
+void fail(const QString& message)
+{
+    std::fprintf(stderr, "phosphor-facet-metadata: %s\n", qPrintable(message));
+}
+
+bool readJson(const QString& path, QJsonObject* out)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        fail(QStringLiteral("cannot read %1: %2").arg(path, file.errorString()));
+        return false;
+    }
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (!document.isObject()) {
+        fail(QStringLiteral("%1 is not a JSON object: %2").arg(path, error.errorString()));
+        return false;
+    }
+    *out = document.object();
+    return true;
+}
+
+bool write(const QString& path, const QByteArray& bytes)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+        fail(QStringLiteral("cannot write %1: %2").arg(path, file.errorString()));
+        return false;
+    }
+    return true;
+}
+
+// One translatable field: an object, its key, and whether it holds a list.
+struct Field
+{
+    QString where;
+    QString key;
+    bool list = false;
+};
+
+// Visit every translatable field, as (object path for comments, object,
+// field). The visitor may modify the object.
+void forEachField(QJsonObject& root, const std::function<void(QJsonObject&, const Field&)>& visit)
+{
+    visit(root, {QStringLiteral("module"), QStringLiteral("Name"), false});
+    visit(root, {QStringLiteral("module"), QStringLiteral("Description"), false});
+    visit(root, {QStringLiteral("module"), QStringLiteral("Keywords"), true});
+    const auto eachIn = [&](const QString& arrayKey, const QString& label, const QList<Field>& fields) {
+        QJsonArray array = root.value(arrayKey).toArray();
+        for (qsizetype i = 0; i < array.size(); ++i) {
+            QJsonObject object = array.at(i).toObject();
+            const QString id = object.value(QLatin1String("Id"))
+                                   .toString(object.value(QLatin1String("Page")).toString() + QLatin1Char('#')
+                                             + object.value(QLatin1String("Anchor")).toString());
+            for (const Field& field : fields) {
+                visit(object, {label + QLatin1Char(' ') + id, field.key, field.list});
+            }
+            array.replace(i, object);
+        }
+        if (!array.isEmpty()) {
+            root.insert(arrayKey, array);
+        }
+    };
+    eachIn(QStringLiteral("Categories"), QStringLiteral("category"), {{QString(), QStringLiteral("Name"), false}});
+    eachIn(QStringLiteral("Pages"), QStringLiteral("page"),
+           {{QString(), QStringLiteral("Name"), false}, {QString(), QStringLiteral("Keywords"), true}});
+    eachIn(QStringLiteral("Extensions"), QStringLiteral("extension"),
+           {{QString(), QStringLiteral("Name"), false}, {QString(), QStringLiteral("Keywords"), true}});
+    eachIn(QStringLiteral("Search"), QStringLiteral("search entry"),
+           {{QString(), QStringLiteral("Title"), false}, {QString(), QStringLiteral("Keywords"), true}});
+}
+
+QString cString(const QString& text)
+{
+    QString escaped = text;
+    escaped.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+    escaped.replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    escaped.replace(QLatin1Char('\n'), QStringLiteral("\\n"));
+    return QLatin1Char('"') + escaped + QLatin1Char('"');
+}
+
+bool strings(QJsonObject root, const QString& source, const QString& out)
+{
+    QString text = QStringLiteral(
+                       "// Generated by phosphor-facet-metadata from %1. Not compiled: lupdate reads "
+                       "it.\n// clang-format off\n")
+                       .arg(source);
+    QSet<QString> seen;
+    forEachField(root, [&](QJsonObject& object, const Field& field) {
+        QStringList values;
+        if (field.list) {
+            for (const QJsonValue& item : object.value(field.key).toArray()) {
+                values.append(item.toString());
+            }
+        } else {
+            values.append(object.value(field.key).toString());
+        }
+        for (const QString& value : std::as_const(values)) {
+            if (value.isEmpty() || seen.contains(value)) {
+                continue;
+            }
+            seen.insert(value);
+            const QString kind = field.list ? QStringLiteral("a search keyword") : field.key.toLower();
+            text += QStringLiteral("//: Facet module metadata: %1 of %2\nQT_TRANSLATE_NOOP(%3, %4)\n")
+                        .arg(kind, field.where, cString(Context), cString(value));
+        }
+    });
+    return write(out, text.toUtf8());
+}
+
+// language -> (source -> translation), for context FacetModule, finished
+// translations only.
+using Catalogs = QHash<QString, QHash<QString, QString>>;
+
+bool readCatalog(const QString& path, Catalogs* catalogs)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        fail(QStringLiteral("cannot read %1: %2").arg(path, file.errorString()));
+        return false;
+    }
+    QXmlStreamReader xml(&file);
+    QString language;
+    QString context;
+    QString source;
+    QString translation;
+    bool finished = false;
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const auto name = xml.name();
+            if (name == QLatin1String("TS")) {
+                language = xml.attributes().value(QLatin1String("language")).toString();
+            } else if (name == QLatin1String("name")) {
+                context = xml.readElementText();
+            } else if (name == QLatin1String("message")) {
+                source.clear();
+                translation.clear();
+                finished = false;
+            } else if (name == QLatin1String("source")) {
+                source = xml.readElementText();
+            } else if (name == QLatin1String("translation")) {
+                const auto type = xml.attributes().value(QLatin1String("type"));
+                finished = type.isEmpty();
+                translation = xml.readElementText();
+            }
+        } else if (xml.isEndElement() && xml.name() == QLatin1String("message")) {
+            if (context == Context && finished && !source.isEmpty() && !translation.isEmpty()) {
+                (*catalogs)[language].insert(source, translation);
+            }
+        }
+    }
+    if (xml.hasError()) {
+        fail(QStringLiteral("%1: %2").arg(path, xml.errorString()));
+        return false;
+    }
+    if (language.isEmpty()) {
+        fail(QStringLiteral("%1 has no language attribute on <TS>").arg(path));
+        return false;
+    }
+    return true;
+}
+
+bool localize(QJsonObject root, const QStringList& tsFiles, const QString& out)
+{
+    Catalogs catalogs;
+    for (const QString& path : tsFiles) {
+        if (!readCatalog(path, &catalogs)) {
+            return false;
+        }
+    }
+    forEachField(root, [&](QJsonObject& object, const Field& field) {
+        for (auto it = catalogs.cbegin(); it != catalogs.cend(); ++it) {
+            const QString localizedKey = field.key + QLatin1Char('[') + it.key() + QLatin1Char(']');
+            if (field.list) {
+                QJsonArray translated;
+                bool any = false;
+                for (const QJsonValue& item : object.value(field.key).toArray()) {
+                    const QString text = it.value().value(item.toString());
+                    any = any || !text.isEmpty();
+                    translated.append(text.isEmpty() ? item.toString() : text);
+                }
+                if (any) {
+                    object.insert(localizedKey, translated);
+                }
+            } else {
+                const QString text = it.value().value(object.value(field.key).toString());
+                if (!text.isEmpty()) {
+                    object.insert(localizedKey, text);
+                }
+            }
+        }
+    });
+    return write(out, QJsonDocument(root).toJson(QJsonDocument::Indented));
+}
+
+bool anchors(const FacetModuleMetadata& metadata, const QString& out)
+{
+    QJsonObject pages;
+    for (const auto& page : metadata.pages) {
+        QJsonObject entry;
+        entry.insert(QLatin1String("Version"), metadata.slotVersion(page.id, QStringLiteral("top")));
+        entry.insert(QLatin1String("Anchors"), QJsonArray::fromStringList(page.anchors));
+        pages.insert(page.id, entry);
+    }
+    QJsonObject root;
+    root.insert(QLatin1String("Module"), metadata.id);
+    root.insert(QLatin1String("Pages"), pages);
+    return write(out, QJsonDocument(root).toJson(QJsonDocument::Indented));
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    QCoreApplication app(argc, argv);
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("Generates a Facet module's metadata at build time."));
+    parser.addHelpOption();
+    const QCommandLineOption allowInvalid(QStringLiteral("allow-invalid"),
+                                          QStringLiteral("Do not fail on invalid metadata (test fixtures)."));
+    parser.addOption(allowInvalid);
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("strings, localize or anchors"));
+    parser.addPositionalArgument(QStringLiteral("metadata"), QStringLiteral("The module's metadata.json"));
+    parser.addPositionalArgument(QStringLiteral("output"), QStringLiteral("The file to write"));
+    parser.addPositionalArgument(QStringLiteral("catalogs"), QStringLiteral("localize: the module's .ts files"),
+                                 QStringLiteral("[file.ts...]"));
+    parser.process(app);
+
+    const QStringList args = parser.positionalArguments();
+    if (args.size() < 3) {
+        parser.showHelp(2);
+    }
+    const QString& command = args.at(0);
+    const QString& source = args.at(1);
+    const QString& output = args.at(2);
+
+    QJsonObject root;
+    if (!readJson(source, &root)) {
+        return 1;
+    }
+    QStringList errors;
+    const FacetModuleMetadata metadata = FacetModuleMetadata::parse(root, QLocale::c(), &errors);
+    if (!errors.isEmpty() && !parser.isSet(allowInvalid)) {
+        for (const QString& error : std::as_const(errors)) {
+            fail(QStringLiteral("%1: %2").arg(source, error));
+        }
+        return 1;
+    }
+
+    bool ok = false;
+    if (command == QLatin1String("strings") && args.size() == 3) {
+        ok = strings(root, source, output);
+    } else if (command == QLatin1String("localize")) {
+        ok = localize(root, args.mid(3), output);
+    } else if (command == QLatin1String("anchors") && args.size() == 3) {
+        ok = anchors(metadata, output);
+    } else {
+        fail(QStringLiteral("unknown command or wrong arguments: %1").arg(args.join(QLatin1Char(' '))));
+        return 2;
+    }
+    return ok ? 0 : 1;
+}

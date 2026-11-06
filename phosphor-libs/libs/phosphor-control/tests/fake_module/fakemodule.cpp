@@ -15,6 +15,10 @@
 //   7  also open the config file $FAKE_CONFIG_PATH and register a domain
 //      that writes ["Fake"][<module id>] = "applied" there on apply()
 //   8  open a config file by a relative path
+//   9  also register a search provider with an entity entry and a setting
+//      entry on the first page, at its first anchor
+//  10  also register a search provider with an entry on a page that is not
+//      the module's
 //
 // A domain that is not a page is dirty while its dynamic property
 // "fakeDirty" is true, so a test can dirty an extension's section with
@@ -24,6 +28,7 @@
 
 #include <PhosphorControl/FacetContext.h>
 #include <PhosphorControl/FacetModule.h>
+#include <PhosphorControl/ISearchProvider.h>
 #include <PhosphorControl/PageController.h>
 #include <PhosphorControl/StagingDomain.h>
 
@@ -33,6 +38,8 @@
 #include <QEvent>
 #include <QObject>
 #include <QUrl>
+
+#include <memory>
 
 namespace {
 
@@ -136,12 +143,28 @@ private:
     QString m_key;
 };
 
+class FakeProvider : public PhosphorControl::ISearchProvider
+{
+public:
+    explicit FakeProvider(QVector<PhosphorControl::SearchEntry> entries)
+        : m_entries(std::move(entries))
+    {
+    }
+    QVector<PhosphorControl::SearchEntry> searchEntries() const override
+    {
+        return m_entries;
+    }
+
+private:
+    QVector<PhosphorControl::SearchEntry> m_entries;
+};
+
 } // namespace
 
 class FakeFacetModule : public QObject, public PhosphorControl::IFacetModule
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID PhosphorFacetModule_iid FILE "metadata.json")
+    Q_PLUGIN_METADATA(IID PhosphorFacetModule_iid FILE "facet_metadata.json")
     Q_INTERFACES(PhosphorControl::IFacetModule)
 
 public:
@@ -186,11 +209,33 @@ public:
                 context.registerDomain(domain);
             }
         }
+        if (FAKE_MODE == 9 || FAKE_MODE == 10) {
+            using PhosphorControl::SearchEntry;
+            QVector<SearchEntry> entries;
+            const auto& first = context.metadata().pages.first();
+            SearchEntry entity;
+            entity.kind = SearchEntry::Kind::Entity;
+            entity.pageId = FAKE_MODE == 9 ? context.pageId(first.id) : QStringLiteral("elsewhere:page");
+            entity.anchor = QStringLiteral("rule:42");
+            entity.title = QStringLiteral("Dynamic entity");
+            entries.append(entity);
+            SearchEntry setting;
+            setting.kind = SearchEntry::Kind::Setting;
+            setting.pageId = context.pageId(first.id);
+            setting.anchor = first.anchors.value(0);
+            setting.title = QStringLiteral("Dynamic setting");
+            entries.append(setting);
+            m_provider = std::make_unique<FakeProvider>(entries);
+            context.registerSearchProvider(m_provider.get());
+        }
         if (FAKE_MODE == 6) {
             context.registerExtension(QStringLiteral("undeclared"), new FakeDomain(this), QUrl());
             context.registerExtension(extensions.first().id, new FakeDomain(this), QUrl());
         }
     }
+
+private:
+    std::unique_ptr<FakeProvider> m_provider;
 };
 
 #include "fakemodule.moc"

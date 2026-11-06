@@ -78,9 +78,11 @@ phosphorcontrol_add_test(test_sidebar_rows)
 set(PHOSPHOR_CONTROL_FIXTURE_DIR ${CMAKE_CURRENT_BINARY_DIR}/fixtures)
 set(phosphorcontrol_fixture_targets "")
 
-# phosphorcontrol_add_fake_module(<variant> MODE <n> METADATA <json>)
+# phosphorcontrol_add_fake_module(<variant> MODE <n> METADATA <json> [TS_FILES <ts>...] [INVALID])
+# The metadata goes through phosphor_add_facet_module_metadata like a real
+# module's; INVALID lets it through when it is invalid on purpose.
 function(phosphorcontrol_add_fake_module variant)
-    cmake_parse_arguments(ARG "" "MODE;METADATA" "" ${ARGN})
+    cmake_parse_arguments(ARG "INVALID" "MODE;METADATA" "TS_FILES" ${ARGN})
     set(target phosphor_control_fixture_${variant})
     set(configDir ${CMAKE_CURRENT_BINARY_DIR}/fixture-config/${variant})
     set(FAKE_MODE ${ARG_MODE})
@@ -88,6 +90,10 @@ function(phosphorcontrol_add_fake_module variant)
                    ${configDir}/fake_module_config.h @ONLY)
     file(WRITE ${configDir}/metadata.json.tmp "${ARG_METADATA}\n")
     configure_file(${configDir}/metadata.json.tmp ${configDir}/metadata.json COPYONLY)
+    set(invalid "")
+    if(ARG_INVALID)
+        set(invalid ALLOW_INVALID)
+    endif()
     add_library(${target} MODULE ${CMAKE_CURRENT_SOURCE_DIR}/fake_module/fakemodule.cpp)
     target_include_directories(${target} PRIVATE ${configDir})
     target_link_libraries(${target} PRIVATE PhosphorControl::PhosphorControl Qt6::Core)
@@ -98,6 +104,7 @@ function(phosphorcontrol_add_fake_module variant)
         AUTOMOC ON
         UNITY_BUILD OFF
     )
+    phosphor_add_facet_module_metadata(${target} METADATA ${configDir}/metadata.json TS_FILES ${ARG_TS_FILES} ${invalid})
     set(phosphorcontrol_fixture_targets ${phosphorcontrol_fixture_targets} ${target} PARENT_SCOPE)
 endfunction()
 
@@ -124,9 +131,9 @@ phosphorcontrol_add_fake_module(wrongid MODE 3 METADATA
     "{ \"Id\": \"wrongid\", \"ApiVersion\": 1, \"Name\": \"Wrong Id\",${_good_pages} }")
 phosphorcontrol_add_fake_module(doubleresult MODE 4 METADATA
     "{ \"Id\": \"doubleresult\", \"ApiVersion\": 1, \"Name\": \"Double Result\",${_good_pages} }")
-phosphorcontrol_add_fake_module(wrongapi MODE 0 METADATA [=[{
+phosphorcontrol_add_fake_module(wrongapi MODE 0 INVALID METADATA [=[{
     "Id": "wrongapi", "ApiVersion": 2, "Name": "Wrong Api", "Pages": [] }]=])
-phosphorcontrol_add_fake_module(badmetadata MODE 0 METADATA [=[{
+phosphorcontrol_add_fake_module(badmetadata MODE 0 INVALID METADATA [=[{
     "Id": "badmetadata", "ApiVersion": 1,
     "Pages": [ { "Id": "a:b", "Name": "Colon" } ] }]=])
 
@@ -166,7 +173,29 @@ phosphorcontrol_add_fake_module(sharerb MODE 7 METADATA [=[{ "Id": "sharerb", "A
 phosphorcontrol_add_fake_module(relativeconfig MODE 8 METADATA
     [=[{ "Id": "relativeconfig", "ApiVersion": 1, "Name": "Relative Config" }]=])
 
+# Metadata localized from a catalog at build time, with a search entry.
+phosphorcontrol_add_fake_module(translated MODE 0
+    TS_FILES ${CMAKE_CURRENT_SOURCE_DIR}/fake_module/translated_de.ts
+    METADATA [=[{
+    "Id": "translated", "ApiVersion": 1, "Name": "Translated", "Keywords": ["module-word"],
+    "Pages": [ { "Id": "speed", "Name": "Speed", "Keywords": ["fast", "quick"], "Anchors": ["pointer"] } ],
+    "Search": [ { "Page": "speed", "Anchor": "pointer", "Title": "Pointer speed", "Keywords": ["fast"] } ] }]=])
+
+# Dynamic search providers: one well-behaved, one pointing elsewhere, and one
+# registered without the metadata flag.
+set(_provider_pages [=[ "Pages": [ { "Id": "rules", "Name": "Rules", "Anchors": ["list"] } ] ]=])
+phosphorcontrol_add_fake_module(providers MODE 9 METADATA
+    "{ \"Id\": \"providers\", \"ApiVersion\": 1, \"Name\": \"Providers\", \"SearchProviders\": true,${_provider_pages} }")
+phosphorcontrol_add_fake_module(strayprovider MODE 10 METADATA
+    "{ \"Id\": \"strayprovider\", \"ApiVersion\": 1, \"Name\": \"Stray\", \"SearchProviders\": true,${_provider_pages} }")
+phosphorcontrol_add_fake_module(undeclaredprovider MODE 9 METADATA
+    "{ \"Id\": \"undeclaredprovider\", \"ApiVersion\": 1, \"Name\": \"Undeclared\",${_provider_pages} }")
+
 phosphorcontrol_add_test(test_facet_module_metadata)
+phosphorcontrol_add_test(test_facet_metadata_tool)
+target_compile_definitions(test_facet_metadata_tool PRIVATE
+    PHOSPHOR_FACET_METADATA_TOOL="$<TARGET_FILE:phosphor-facet-metadata>")
+add_dependencies(test_facet_metadata_tool phosphor-facet-metadata)
 phosphorcontrol_add_test(test_facet_host)
 phosphorcontrol_add_test(test_facet_test_host)
 
