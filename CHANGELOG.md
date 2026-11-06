@@ -10,6 +10,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **An empty config file no longer blocks saving**: a config.json that held nothing, for example after `touch`, counted as unreadable, so every save was refused until it was deleted. An empty file now reads as one with no settings, the same as a missing file.
+- **A curve with a typo in its values is reported**: a curve such as `spring:22` or `bezier:junk` named a known curve type with values that could not be read. It was accepted and drew the library's default curve of that type, with no warning. Such a curve is now refused, the same as an unknown curve name.
+
 ## [3.5.5] - 2026-11-04
 
 ### Added
