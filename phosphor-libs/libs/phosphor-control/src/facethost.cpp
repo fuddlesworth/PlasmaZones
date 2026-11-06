@@ -9,6 +9,8 @@
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/PageRegistry.h"
 
+#include <PhosphorConfig/IBackend.h>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -49,6 +51,16 @@ public:
         Q_EMIT discardResult(true, QString());
     }
 };
+
+// The file may not exist yet, so the key is its cleaned absolute path with
+// the directory's symlinks resolved when the directory exists, rather than
+// the file's canonical path.
+QString configFileKey(const QString& path)
+{
+    const QFileInfo info(QDir::cleanPath(path));
+    const QString directory = QFileInfo(info.absolutePath()).canonicalFilePath();
+    return directory.isEmpty() ? info.absoluteFilePath() : directory + QLatin1Char('/') + info.fileName();
+}
 
 QList<FacetCategoryMetadata> baseCategories()
 {
@@ -715,6 +727,31 @@ QList<StagingDomain*> FacetHost::moduleDomains(const QString& moduleId) const
         }
     }
     return domains;
+}
+
+PhosphorConfig::IBackend*
+FacetHost::sharedConfigBackend(const QString& path,
+                               const std::function<std::unique_ptr<PhosphorConfig::IBackend>(const QString&)>& create)
+{
+    const QString key = configFileKey(path);
+    const auto existing = m_configBackends.constFind(key);
+    if (existing != m_configBackends.cend()) {
+        return existing->get();
+    }
+    std::unique_ptr<PhosphorConfig::IBackend> created = create ? create(key) : nullptr;
+    if (!created) {
+        return nullptr;
+    }
+    PhosphorConfig::IBackend* const backend = created.get();
+    m_configBackends.insert(key, std::shared_ptr<PhosphorConfig::IBackend>(std::move(created)));
+    return backend;
+}
+
+PhosphorConfig::IBackend* FacetHost::configBackend(const QString& path) const
+{
+    const QString key = configFileKey(path);
+    const auto existing = m_configBackends.constFind(key);
+    return existing != m_configBackends.cend() ? existing->get() : nullptr;
 }
 
 QStringList FacetHost::boundPages(const QString& moduleId) const

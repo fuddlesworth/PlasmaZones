@@ -54,6 +54,7 @@ SCHEMA_MAP: dict[str, list[str]] = {
     "phosphor-libs/data/schemas/surface-metadata.schema.json": ["plasmazones/data/surface/*/metadata.json"],
     "phosphor-libs/data/schemas/pointer-metadata.schema.json": ["plasmazones/data/pointer/*/metadata.json"],
     "plasmazones/data/schemas/whatsnew.schema.json": ["plasmazones/data/whatsnew.json"],
+    "phosphor-libs/data/schemas/host-descriptor.schema.json": ["plasmazones/data/placement-hosts/*.json"],
 }
 
 # The one dialect this gate speaks. Draft7Validator is used unconditionally

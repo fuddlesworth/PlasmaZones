@@ -1,0 +1,8 @@
+{
+    "Id": "plasmazones",
+    "Name": "PlasmaZones",
+    "BusName": "org.phosphor_works.Placement",
+    "Backend": "json",
+    "ConfigPath": "$XDG_CONFIG_HOME/plasmazones/config.json",
+    "Desktops": ["KDE"]
+}

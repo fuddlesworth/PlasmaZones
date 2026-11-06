@@ -12,6 +12,9 @@
 //   5  skip the last declared extension
 //   6  also register an extension the metadata does not declare, and the
 //      first declared extension a second time
+//   7  also open the config file $FAKE_CONFIG_PATH and register a domain
+//      that writes ["Fake"][<module id>] = "applied" there on apply()
+//   8  open a config file by a relative path
 //
 // A domain that is not a page is dirty while its dynamic property
 // "fakeDirty" is true, so a test can dirty an extension's section with
@@ -23,6 +26,9 @@
 #include <PhosphorControl/FacetModule.h>
 #include <PhosphorControl/PageController.h>
 #include <PhosphorControl/StagingDomain.h>
+
+#include <PhosphorConfig/IBackend.h>
+#include <PhosphorConfig/JsonBackend.h>
 
 #include <QEvent>
 #include <QObject>
@@ -108,6 +114,28 @@ private:
     bool m_wasDirty = false;
 };
 
+// Writes its module's key into a shared config file on apply().
+class ConfigDomain : public FakeDomain
+{
+public:
+    ConfigDomain(PhosphorConfig::IBackend* backend, QString key, QObject* parent)
+        : FakeDomain(parent)
+        , m_backend(backend)
+        , m_key(std::move(key))
+    {
+    }
+    void apply() override
+    {
+        m_backend->group(QStringLiteral("Fake"))->writeString(m_key, QStringLiteral("applied"));
+        m_backend->commit();
+        FakeDomain::apply();
+    }
+
+private:
+    PhosphorConfig::IBackend* m_backend;
+    QString m_key;
+};
+
 } // namespace
 
 class FakeFacetModule : public QObject, public PhosphorControl::IFacetModule
@@ -145,6 +173,18 @@ public:
             domain->setObjectName(local);
             context.registerExtension(local, domain,
                                       QUrl(QStringLiteral("qrc:/fake/extension/") + local + QStringLiteral(".qml")));
+        }
+        if (FAKE_MODE == 7 || FAKE_MODE == 8) {
+            const QString path =
+                FAKE_MODE == 7 ? qEnvironmentVariable("FAKE_CONFIG_PATH") : QStringLiteral("relative.json");
+            PhosphorConfig::IBackend* const backend = context.configBackend(path, [](const QString& file) {
+                return std::make_unique<PhosphorConfig::JsonBackend>(file);
+            });
+            if (backend) {
+                auto* domain = new ConfigDomain(backend, context.moduleId(), this);
+                domain->setObjectName(QStringLiteral("config"));
+                context.registerDomain(domain);
+            }
         }
         if (FAKE_MODE == 6) {
             context.registerExtension(QStringLiteral("undeclared"), new FakeDomain(this), QUrl());

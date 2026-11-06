@@ -14,6 +14,7 @@
 #include "rendering/vulkansupport.h"
 #include "waylandsessioncheck.h"
 
+#include <PhosphorConfig/HostDirectory.h>
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
@@ -469,6 +470,14 @@ int main(int argc, char* argv[])
             return 0;
         }
     }
+
+    // Record this daemon as the user's placement host, so Facet's placement
+    // module edits this file, and asks this process to reload, even after a
+    // later session starts with the daemon stopped. The id is the one in
+    // data/placement-hosts/plasmazones.json, which the package installs.
+    PhosphorConfig::HostDirectory(QString(PhosphorProtocol::Service::HostApi))
+        .writeRecord(QStringLiteral("plasmazones"), PlasmaZones::ConfigDefaults::configFilePath(),
+                     QCoreApplication::applicationPid());
 
     // Set up signal handling for clean shutdown.
     //

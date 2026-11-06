@@ -7,6 +7,10 @@
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/StagingDomain.h"
 
+#include <PhosphorConfig/IBackend.h>
+
+#include <QDir>
+
 namespace PhosphorControl {
 
 FacetContext::FacetContext(FacetHost* host, const FacetModuleMetadata& metadata)
@@ -96,6 +100,19 @@ bool FacetContext::registerExtension(const QString& localExtensionId, StagingDom
     m_host->addExtension(*m_host->m_modules.value(m_metadata.id), localExtensionId, domain, qmlSource);
     m_registeredExtensions.insert(localExtensionId);
     return true;
+}
+
+PhosphorConfig::IBackend* FacetContext::configBackend(const QString& path, const ConfigBackendFactory& create)
+{
+    if (!QDir::isAbsolutePath(path)) {
+        m_errors.append(QStringLiteral("opened config file %1, which is not an absolute path").arg(path));
+        return nullptr;
+    }
+    PhosphorConfig::IBackend* const backend = m_host->sharedConfigBackend(path, create);
+    if (!backend) {
+        m_errors.append(QStringLiteral("could not open config file %1").arg(path));
+    }
+    return backend;
 }
 
 } // namespace PhosphorControl

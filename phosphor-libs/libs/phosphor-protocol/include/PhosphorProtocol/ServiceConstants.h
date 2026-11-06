@@ -19,6 +19,10 @@ namespace PhosphorProtocol::Service {
  */
 inline constexpr QLatin1String Name("org.phosphor_works.Placement");
 inline constexpr QLatin1String ObjectPath("/org/phosphor_works/Placement");
+/// The API name host descriptors and the host record are filed under
+/// (PhosphorConfig::HostDirectory): `<datadir>/phosphor-works/placement-hosts/`
+/// and `$XDG_STATE_HOME/phosphor-works/placement-host.json`.
+inline constexpr QLatin1String HostApi("placement");
 
 /// Quick-layout slots are numbered 1..QuickLayoutSlotCount. Protocol-level
 /// because the daemon validates the bound on the D-Bus boundary while the

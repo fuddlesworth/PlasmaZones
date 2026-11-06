@@ -55,7 +55,7 @@ library provides:
 | `PhosphorControl::LocalizedContext`       | QML i18n context routing `i18n()`/`i18nc()`/`i18np()` through Qt translation, for Qt-only consumers without KF6 |
 | `PhosphorControl::IFacetModule`           | The interface a Facet module's root object implements (`registerInto(FacetContext&)`), IID `org.phosphor_works.Facet.Module/1` |
 | `PhosphorControl::FacetModuleMetadata`    | A module's embedded metadata (id, name, icon, category, parent module, pages and their anchors, extension points, extensions), parsed and validated per locale |
-| `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, its headless staging domains, and the domain and QML of each section it adds to another module's page |
+| `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, its headless staging domains, and the domain and QML of each section it adds to another module's page. It also hands out one config backend per file, shared by every module that writes it |
 | `PhosphorControl::FacetHost`              | Finds Facet modules through a `PhosphorRegistry::PluginCatalog`, fills the page registry with placeholders, resolves extensions against their target pages, and loads a module the first time one of its pages, or a page it extends, is opened |
 | `PhosphorControl::FacetTestHost`          | Loads one module headless and lists every way it breaks the contract, for the module's own CI |
 
@@ -153,6 +153,15 @@ FacetSlot {
     slot: "after:drag-modifier"
 }
 ```
+
+Modules that keep settings in one file share its backend:
+`FacetContext::configBackend(path, create)` creates the backend for the first
+module that opens the file and hands the same one to every later module, so
+one Apply writes every module's keys into one document and no module
+overwrites another's. Each module wraps the backend in its own
+`PhosphorConfig::Store` or settings object. A module whose settings belong to
+a host that may not be running finds the file with
+`PhosphorConfig::HostDirectory`.
 
 The full design is `DESIGN-facet-extensions.md` in the phosphor-works
 workspace.

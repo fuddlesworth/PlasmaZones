@@ -42,6 +42,7 @@ pre-commit:
         - "phosphor-libs/data/schemas/*.json"
         - "plasmazones/data/schemas/*.json"
         - "plasmazones/data/whatsnew.json"
+        - "plasmazones/data/placement-hosts/*.json"
       # Hard gate: when a schema-governed data file or a schema itself is
       # staged, validate the whole mapped set against the committed JSON
       # Schemas (the same files runtime validation compiles) and fail the

@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:phosphor-works:schema:host-descriptor",
+    "title": "Settings API host descriptor",
+    "description": "One host of a settings API, installed at <datadir>/phosphor-works/<api>-hosts/<id>.json and read by PhosphorConfig::HostDirectory, which checks the same rules at run time.",
+    "type": "object",
+    "required": ["Id", "Name", "BusName", "Backend", "ConfigPath"],
+    "additionalProperties": false,
+    "properties": {
+        "Id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "Name": { "type": "string", "minLength": 1 },
+        "BusName": { "type": "string", "minLength": 1 },
+        "Backend": { "type": "string", "enum": ["json"] },
+        "ConfigPath": {
+            "type": "string",
+            "pattern": "^\\$(XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME|HOME)(/.*)?$",
+            "description": "The settings file, starting with one of the listed variables. A .. segment is refused at run time."
+        },
+        "Desktops": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "XDG_CURRENT_DESKTOP entries the host serves, compared ignoring case."
+        }
+    }
+}

@@ -160,6 +160,12 @@ phosphorcontrol_add_fake_module(missingextension MODE 5 METADATA
 phosphorcontrol_add_fake_module(extraextension MODE 6 METADATA
     "{ \"Id\": \"extraextension\", \"ApiVersion\": 1, \"Name\": \"Extra Extension\",${_two_extensions} }")
 
+# Two modules writing one config file, and one opening it by a relative path.
+phosphorcontrol_add_fake_module(sharera MODE 7 METADATA [=[{ "Id": "sharera", "ApiVersion": 1, "Name": "Sharer A" }]=])
+phosphorcontrol_add_fake_module(sharerb MODE 7 METADATA [=[{ "Id": "sharerb", "ApiVersion": 1, "Name": "Sharer B" }]=])
+phosphorcontrol_add_fake_module(relativeconfig MODE 8 METADATA
+    [=[{ "Id": "relativeconfig", "ApiVersion": 1, "Name": "Relative Config" }]=])
+
 phosphorcontrol_add_test(test_facet_module_metadata)
 phosphorcontrol_add_test(test_facet_host)
 phosphorcontrol_add_test(test_facet_test_host)

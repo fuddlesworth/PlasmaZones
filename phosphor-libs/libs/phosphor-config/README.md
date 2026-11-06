@@ -39,6 +39,7 @@ library provides:
 | `PhosphorConfig::Schema`            | Declarative struct: groups of `KeyDef` (default + expected type + validator), version, migration chain |
 | `PhosphorConfig::MigrationRunner`   | Runs the schema's `MigrationStep` chain, one step per schema bump |
 | `PhosphorConfig::IGroupPathResolver`| Group-name to backend-key mapping |
+| `PhosphorConfig::HostDirectory`     | Which host's settings file a settings module edits, when several hosts can serve one API: their installed descriptors, the record the running host writes, and the choice between them |
 
 ## Typical use
 
@@ -120,6 +121,33 @@ load, so a file broken by hand after it was read is refused too. The overlay
 stays on top of the fallback document. A later `reparseConfiguration()` that
 reads the file cleanly clears the flag. A machine-written file with nothing
 worth keeping opts out with `setOverwriteUnreadable(true)`.
+
+## Hosts of a settings API
+
+Some settings are served by more than one host. The placement settings are
+PlasmaZones' on KWin and the Phosphor compositor's in its own session, and each
+keeps them in its own file. A settings module edits the right file whether or
+not the host runs:
+
+- Each host's package installs a descriptor at
+  `<datadir>/phosphor-works/<api>-hosts/<id>.json` with its name, bus name,
+  backend, config path (starting with `$XDG_CONFIG_HOME` or another XDG
+  variable) and the desktops it serves. `HostDirectory::descriptors()` reads
+  them, a per-user one overriding a system one with the same id.
+- A host calls `writeRecord(id, configPath, pid)` when it starts, at
+  `$XDG_STATE_HOME/phosphor-works/<api>-host.json`. The record stays after the
+  host stops.
+- `HostDirectory::resolve()` chooses: the record when the process that wrote it
+  owns the bus name now, else the record when nothing owns it, else the one
+  descriptor matching `XDG_CURRENT_DESKTOP`. When several match, it lists them
+  so the module can ask the user and record the answer with pid 0.
+
+```cpp
+const PhosphorConfig::HostDirectory hosts(QStringLiteral("placement"));
+const qint64 owner = QDBusConnection::sessionBus().interface()->servicePid(busName);
+const auto chosen = PhosphorConfig::HostDirectory::resolve(hosts.descriptors(), hosts.record(), owner,
+                                                           PhosphorConfig::HostDirectory::currentDesktops());
+```
 
 ## Design notes
 

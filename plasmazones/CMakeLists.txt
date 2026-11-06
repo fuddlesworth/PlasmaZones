@@ -64,6 +64,13 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# The descriptor that tells Facet's placement module, while plasmazonesd is
+# not running, that on KDE the placement settings live in PlasmaZones' file
+# (PhosphorConfig::HostDirectory).
+install(FILES data/placement-hosts/plasmazones.json
+    DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-works/placement-hosts
+)
+
 # Install bundled scrolling templates
 install(DIRECTORY data/scrolling-templates/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/scrolling-templates

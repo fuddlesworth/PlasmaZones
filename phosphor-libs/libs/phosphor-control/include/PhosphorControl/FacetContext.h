@@ -13,6 +13,13 @@
 #include <QUrl>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <functional>
+#include <memory>
+
+namespace PhosphorConfig {
+class IBackend;
+}
+
 namespace PhosphorControl {
 
 class FacetHost;
@@ -52,6 +59,20 @@ public:
     /// the page's FacetSlot shows. Every declared extension must be
     /// registered, whether or not its target is installed.
     bool registerExtension(const QString& localExtensionId, StagingDomain* domain, const QUrl& qmlSource);
+
+    using ConfigBackendFactory = std::function<std::unique_ptr<PhosphorConfig::IBackend>(const QString& path)>;
+    /// The config backend for the file at @p path, shared by every module
+    /// that opens the same file, so one Apply writes each module's keys into
+    /// one in-memory document and no module overwrites another's. The first
+    /// module to open a file creates its backend with @p create; later ones
+    /// get that backend and @p create is not called, so modules sharing a
+    /// file must set its backend up alike. Each module wraps the backend in
+    /// its own PhosphorConfig::Store or settings object.
+    ///
+    /// The backend lives as long as the FacetHost. Do not use it from a
+    /// destructor. Returns null, and records a module error, when @p path is
+    /// not absolute or @p create returns null.
+    PhosphorConfig::IBackend* configBackend(const QString& path, const ConfigBackendFactory& create);
 
 private:
     friend class FacetHost;

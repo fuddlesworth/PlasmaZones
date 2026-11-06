@@ -5,9 +5,13 @@
 #include <PhosphorControl/FacetHost.h>
 #include <PhosphorControl/PageController.h>
 #include <PhosphorControl/PageRegistry.h>
+#include <PhosphorControl/StagingDomain.h>
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -206,6 +210,8 @@ private Q_SLOTS:
             << QStringLiteral("missingextension") << QStringLiteral("did not register extension second");
         QTest::newRow("registers an undeclared extension")
             << QStringLiteral("extraextension") << QStringLiteral("registered extension undeclared");
+        QTest::newRow("opens a config file by a relative path")
+            << QStringLiteral("relativeconfig") << QStringLiteral("relative.json, which is not an absolute path");
         QTest::newRow("registers an extension twice")
             << QStringLiteral("extraextension") << QStringLiteral("registered extension first twice");
     }
@@ -397,6 +403,43 @@ private Q_SLOTS:
         QVERIFY2(h.host->loadModule(QStringLiteral("extender"), &error), qPrintable(error));
         QVERIFY(h.host->refusedExtensions().isEmpty());
         QVERIFY(h.host->extensionsOn(QStringLiteral("good:general")).isEmpty());
+    }
+
+    void modulesWritingOneFileShareItsBackend()
+    {
+        Harness h({QStringLiteral("sharera"), QStringLiteral("sharerb")});
+        const QString path = h.root.filePath(QStringLiteral("shared/config.json"));
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        qputenv("FAKE_CONFIG_PATH", path.toUtf8());
+        h.host->start();
+        // Both load before either applies, so separate backends would each
+        // hold a document without the other's key and the last write would win.
+        QString error;
+        QVERIFY2(h.host->loadModule(QStringLiteral("sharera"), &error), qPrintable(error));
+        QVERIFY2(h.host->loadModule(QStringLiteral("sharerb"), &error), qPrintable(error));
+        QVERIFY(h.host->configBackend(path));
+        // The same file by another spelling is the same backend.
+        QCOMPARE(h.host->configBackend(h.root.filePath(QStringLiteral("shared/../shared/config.json"))),
+                 h.host->configBackend(path));
+
+        for (const QString& module : {QStringLiteral("sharera"), QStringLiteral("sharerb")}) {
+            for (StagingDomain* domain : h.host->moduleDomains(module)) {
+                if (domain->objectName() == QLatin1String("config")) {
+                    domain->setProperty("fakeDirty", true);
+                }
+            }
+        }
+        QSignalSpy done(&h.controller, &ApplicationController::applyAllComplete);
+        h.controller.applyAllAsync();
+        QVERIFY(done.count() == 1 || done.wait());
+        QVERIFY(done.first().first().toBool());
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject fake =
+            QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("Fake")).toObject();
+        QCOMPARE(fake.value(QStringLiteral("sharera")).toString(), QStringLiteral("applied"));
+        QCOMPARE(fake.value(QStringLiteral("sharerb")).toString(), QStringLiteral("applied"));
     }
 
     void attachingToAnUnknownPageIsRefused()

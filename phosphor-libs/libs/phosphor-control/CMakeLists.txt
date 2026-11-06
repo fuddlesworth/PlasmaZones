@@ -230,6 +230,9 @@ target_link_libraries(PhosphorControl
         # PUBLIC: FacetHost.h exposes PluginSeam, PluginSearchPath and
         # RefusedPlugin, the shared plugin catalog's types.
         PhosphorRegistry::PhosphorRegistry
+        # PUBLIC: FacetContext::configBackend hands modules a
+        # PhosphorConfig::IBackend.
+        PhosphorConfig::PhosphorConfig
     PRIVATE
         # Qt6::Gui is PRIVATE: moc-generated code on the implementation
         # side may reference QColor/QPalette/etc. through Qt5 compat
