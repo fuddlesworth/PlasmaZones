@@ -24,26 +24,27 @@ once per UI seam.
   `registry.registerFactory(...)` for every built-in. No static-init magic,
   no global pending list. Same pattern for plugins (the `PluginLoader`
   calls the same `registerFactory`).
-- **Plugins are .so + `manifest.json` bundles** under
-  `~/.local/share/phosphor/plugins/<id>/`. The `PluginLoader` scans the
-  directory, validates each manifest's ABI version, loads the `.so` via
-  `QLibrary`, resolves a fixed C entry point, and registers the returned
-  factory.
+- **One plugin mechanism for the suite.** `PluginCatalog` finds the
+  plugins of one seam (a kind of plugin: Facet modules, bar widgets),
+  reads each one's metadata without loading it, and loads one only when
+  asked. A plugin is a Qt plugin (`qt_add_plugin` + `Q_PLUGIN_METADATA`)
+  whose IID is the seam's and whose metadata carries `"Id"` and
+  `"ApiVersion"`. `PluginLoader` is the bar-widget seam on top of it.
+- **Search order.** Highest priority first: each directory in
+  `PHOSPHOR_WORKS_PLUGIN_PATH` (development, a build tree's plugin
+  output) plus `/<seam>`, then `$XDG_DATA_HOME/phosphor-works/plugins/<seam>`,
+  then each Qt library path plus `/phosphor-works/<seam>` (where packages
+  install). An earlier plugin overrides a later one with the same id, and
+  the override is logged.
 - **Hot-reload on disk change.** A `WatchedDirectorySet` (from
-  phosphor-fsloader) watches the plugin root with a debounced
-  rescan. Added plugin directories load, and removed directories
-  unregister. In-place `.so` replacement (writing new bytes to the
-  same path) is NOT honoured today because POSIX `dlopen`
-  refcounts loads by path. Reloading the same path returns the
-  prior mapping. Plugin authors iterating in development rename the
-  plugin directory or restart the process. Removed plugins keep
-  their `.so` mapping pinned for the loader's lifetime so widgets
-  the old factory created keep working until they destruct
-  naturally. A versioned-path scheme plus refcounted safe-unload
-  is a future addition alongside the sandbox.
+  phosphor-fsloader) watches every search path with a debounced rescan.
+  A new plugin is offered and a removed one is withdrawn. Nothing is ever
+  unloaded: a removed plugin's library stays mapped so objects it created
+  keep working, and a loaded plugin whose file changes runs the old code
+  until the process restarts, because the dynamic linker keeps one mapping
+  per path.
 - **Capabilities are advisory for now.** Each factory declares a
-  `capabilities()` list (also mirrored into the plugin manifest). An
-  enforcement layer is a future addition.
+  `capabilities()` list. An enforcement layer is a future addition.
 
 ## Key types
 
@@ -58,8 +59,9 @@ once per UI seam.
 | `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*) -> ILauncherProvider*`. Consumed by `phosphor-shell-libs/libs/phosphor-shell-launcher`, over the registry `phosphor-shell/src/LauncherController` populates. |
 | `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future OSD surface. |
 | `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future desktop-widget surface. |
-| `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file, and `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
-| `PhosphorRegistry::PluginLoader` | Scans a plugin root, loads each plugin's `.so` + manifest, registers in a `Registry<IBarWidgetFactory>`. Hot-reloads on filesystem change. |
+| `PhosphorRegistry::PluginCatalog` | Finds the plugins of one `PluginSeam` across the search paths, offers their `PluginMetadata` without loading them, records `RefusedPlugin`s with the reason, and loads one on `load(id)`. Hot-reloads on filesystem change. |
+| `PhosphorRegistry::IBarWidgetPlugin` | The interface a bar-widget plugin's root object implements: `createFactory() -> std::unique_ptr<IBarWidgetFactory>`. |
+| `PhosphorRegistry::PluginLoader` | The bar-widget seam (`barWidgetSeam()`): loads every bar-widget plugin as soon as it is found and registers its factory in a `Registry<IBarWidgetFactory>`, unregistering it when the plugin's file goes away. |
 
 ## Typical use
 
@@ -79,7 +81,7 @@ barRegistry.registerFactory(std::make_shared<WorkspacesFactory>());
 barRegistry.registerFactory(std::make_shared<MediaFactory>());
 
 // Plugins (loaded asynchronously into the same registry):
-PluginLoader loader(&barRegistry);  // defaults to ~/.local/share/phosphor/plugins/
+PluginLoader loader(&barRegistry);  // searches PluginCatalog::defaultSearchPaths("bar-widget")
 loader.scanAndLoad();
 
 QObject::connect(barRegistry.notifier(), &RegistryNotifier::factoryRegistered,
@@ -175,36 +177,40 @@ The bar refreshes automatically when plugins load or unload because
 `factoryIdsChanged` re-evaluates the Repeater's `model` binding. See
 `phosphor-shell-libs/examples/phosphor-registry-demo/` for the in-process variant and
 `phosphor-shell-libs/examples/phosphor-registry-plugin-demo/` for the same pattern with a
-third widget loaded from a separate `.so`.
+third widget loaded from a separate plugin.
 
-**Plugin author side**: a plugin is a `.so` exporting one extern "C"
-entry point alongside a `manifest.json`.
+**Plugin author side**: a plugin is a Qt plugin whose root object
+implements `IBarWidgetPlugin`, installed in a `bar-widget` directory on the
+search path.
 
 ```cpp
-// in my-plugin/myplugin.cpp
-#include <PhosphorRegistry/IBarWidgetFactory.h>
+// myplugin.cpp
+#include <PhosphorRegistry/IBarWidgetPlugin.h>
 
-class MyPluginFactory : public PhosphorRegistry::IBarWidgetFactory { /* ... */ };
+class MyFactory : public PhosphorRegistry::IBarWidgetFactory { /* id() returns "my-plugin" */ };
 
-extern "C" Q_DECL_EXPORT PhosphorRegistry::IBarWidgetFactory*
-phosphor_registry_create_factory()
+class MyPlugin : public QObject, public PhosphorRegistry::IBarWidgetPlugin
 {
-    return new MyPluginFactory();
-}
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID PhosphorRegistryBarWidgetPlugin_iid FILE "metadata.json")
+    Q_INTERFACES(PhosphorRegistry::IBarWidgetPlugin)
+public:
+    std::unique_ptr<PhosphorRegistry::IBarWidgetFactory> createFactory() override
+    {
+        return std::make_unique<MyFactory>();
+    }
+};
 ```
 
 ```json
-// in my-plugin/manifest.json: same directory as the .so
 {
-    "id": "my-plugin",
-    "displayName": "My Plugin",
-    "abi": 1,
-    "capabilities": ["bar.widget"]
+    "Id": "my-plugin",
+    "ApiVersion": 1
 }
 ```
 
-The plugin directory's basename must equal the manifest's `id`. The
-loader enforces this so on-disk layout and registry keys stay aligned.
+Build it with `qt_add_plugin(my-plugin MODULE ...)` and install the library
+into `${KDE_INSTALL_PLUGINDIR}/phosphor-works/bar-widget/`.
 
 ## Arbitration / lifecycle
 
@@ -212,33 +218,33 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   registry is a no-op + qWarning (the first registration wins). The
   plugin loader hits the same path for any plugin whose id collides
   with an existing one.
-- **Factory id must match manifest id.** The loader cross-checks the
-  factory's `id()` against the manifest's `id` field, and a mismatch is a
-  refused load with a clear log message. This prevents a renamed
-  plugin from quietly taking over another's slot.
-- **Symlinks are not followed.** Plugin subdirectories and `.so` files
-  are enumerated with `QDir::NoSymLinks`, so a symlinked entry pointing
-  outside the (user-writable) plugin root cannot smuggle a plugin tree
-  or shared object past the basename-equals-id containment rule.
-- **Group/world-writable plugins refused.** Before `dlopen`, the loader
-  refuses any `.so` (or plugin directory) that is group- or
+- **Factory id must match the metadata's `"Id"`.** The loader
+  cross-checks the factory's `id()` against the plugin's metadata, and a
+  mismatch is a refused load with a clear log message. This prevents a
+  renamed plugin from quietly taking over another's slot.
+- **Symlinks are not followed.** Plugin files are enumerated with
+  `QDir::NoSymLinks`, so a symlink in a search path cannot point the
+  loader at code outside it.
+- **Group/world-writable plugins refused.** Before reading a plugin, the
+  catalog refuses any plugin file (or its directory) that is group- or
   world-writable, the same StrictModes discipline OpenSSH and sudo
   apply to files they trust. A permissive mode would let another local
   process overwrite the code the shell is about to run. Signature /
   origin verification is reserved for a future sandbox.
-- **Unload is registry-drop only.** Removing a plugin from
-  disk unregisters its factory from the registry but pins the `QLibrary`
-  mapping for the loader's lifetime. Widgets the now-gone plugin
-  produced keep working until they destruct naturally. A future
-  sandbox revisits this with refcounted safe-unload.
-- **ABI mismatch rejected at load.** Manifests declaring `"abi"` other
-  than `PhosphorRegistry::PluginAbiVersion` (currently `1`) are refused
-  with a clear log message. Bumping the ABI version is reserved for
-  changes to the C entry point signature, the factory vtable layout,
-  or the manifest schema.
+- **Wrong seam or version refused before loading.** A plugin whose IID is
+  not the seam's, whose metadata has no valid `"Id"`, or whose
+  `"ApiVersion"` is not the seam's is refused from its metadata alone,
+  logged once and listed in `PluginCatalog::refused()` with the reason. Its
+  library is never mapped. Bump a seam's `apiVersion` (and its IID's
+  `/N`) for any change to its interface or metadata a plugin relies on.
+- **Unload is registry-drop only.** Removing a plugin from disk
+  unregisters its factory from the registry. The library stays mapped for
+  the process lifetime, so widgets the now-gone plugin produced keep
+  working until they destruct naturally. A future sandbox revisits this
+  with refcounted safe-unload.
 - **Capabilities are advisory.** The `capabilities()` list ships in
-  every factory and every manifest, but the loader does not enforce
-  them yet. A future sandbox uses the same metadata slot.
+  every factory, but the loader does not enforce it yet. A future sandbox
+  uses the same slot.
 
 ## Dependencies
 
@@ -254,7 +260,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 - `phosphor-shell-libs/examples/phosphor-registry-demo/`: toy bar with two built-in widgets
   registered explicitly. Proves the registry seam.
 - `phosphor-shell-libs/examples/phosphor-registry-plugin-demo/`: same toy bar plus a third
-  widget loaded from a separate `.so`. Proves the plugin ABI and
+  widget loaded from a separate plugin. Proves the plugin seam and
   hot-reload.
 - `phosphor-layout-api/ILayoutSourceFactory`: the pre-existing
   registry pattern this library generalises.

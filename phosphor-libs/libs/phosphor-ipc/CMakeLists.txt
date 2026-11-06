@@ -28,8 +28,7 @@ endif()
 # protocol. The constant is exported as PHOSPHOR_IPC_PROTOCOL_VERSION
 # so the static_assert in IpcProtocol.h can cross-check this CMake
 # value against the header constant at compile time. Bumped whenever
-# the JSON shape on the wire changes incompatibly; mirrors
-# PluginAbiVersion's CMake-↔-header link in phosphor-registry.
+# the JSON shape on the wire changes incompatibly.
 set(PHOSPHOR_IPC_PROTOCOL_VERSION 1)
 
 if(NOT PROJECT_VERSION)

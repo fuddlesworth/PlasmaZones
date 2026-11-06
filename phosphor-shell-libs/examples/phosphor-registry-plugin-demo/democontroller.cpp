@@ -26,22 +26,25 @@ DemoController::DemoController(QString pluginRoot, QObject* parent)
 
     registerBuiltins();
 
-    m_loader = std::make_unique<PluginLoader>(m_registry.get(), m_pluginRoot);
-    // PluginLoader resolves an empty input to the XDG default; sync
-    // the final resolved path back into m_pluginRoot so the QML
-    // pluginRoot Q_PROPERTY reflects the path the loader is actually
-    // scanning. CONSTANT-property contract holds because no QML
-    // engine has been wired up yet (setEngine() is called from
-    // main() AFTER ctor returns); QML only sees the post-resolution
-    // value.
-    m_pluginRoot = m_loader->pluginRoot();
-    // scanAndLoad already drives an initial synchronous scan via
-    // WatchedDirectorySet::registerDirectory. The previous code
-    // followed it with an explicit rescanNow() to "force a sync
-    // first paint" — but the registerDirectory call is itself
-    // synchronous, so the double-call was a redundant second sweep
-    // of the same plugin root. One call is enough.
+    // A given root is searched alone, as a development root. Without one
+    // the loader searches the standard paths.
+    QList<PluginSearchPath> searchPaths;
+    if (!m_pluginRoot.isEmpty()) {
+        searchPaths.append(
+            {m_pluginRoot + QLatin1Char('/') + PluginLoader::barWidgetSeam().name, PluginOrigin::Development});
+    }
+    m_loader = std::make_unique<PluginLoader>(m_registry.get(), searchPaths);
+    // scanAndLoad runs the first scan synchronously, so the bar has every
+    // plugin widget on its first paint.
     m_loader->scanAndLoad();
+    // Show the directories actually searched. The CONSTANT property holds
+    // because QML is wired up only after the constructor returns.
+    QStringList searched;
+    const QList<PluginSearchPath> actual = m_loader->catalog().searchPaths();
+    for (const PluginSearchPath& path : actual) {
+        searched.append(path.directory);
+    }
+    m_pluginRoot = searched.join(QStringLiteral(", "));
 }
 
 DemoController::~DemoController() = default;

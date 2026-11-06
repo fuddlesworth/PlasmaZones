@@ -22,13 +22,6 @@ if(DEFINED QT_MIN_VERSION)
 else()
     set(PHOSPHORREGISTRY_QT_MIN "6.10.0")
 endif()
-# Plugin ABI version. Mirrors PhosphorRegistry::PluginAbiVersion in
-# Manifest.h. Exported as a compile definition so headers can
-# static_assert the two stay in sync, and consumed by test fixture
-# manifests via configure_file so they bump in lockstep with the
-# header constant.
-set(PHOSPHOR_PLUGIN_ABI_VERSION 1)
-
 if(NOT PROJECT_VERSION)
     project(PhosphorRegistry VERSION ${PHOSPHORREGISTRY_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -98,7 +91,8 @@ set(phosphorregistry_public_HDRS
     include/PhosphorRegistry/ILauncherProviderFactory.h
     include/PhosphorRegistry/IOSDFactory.h
     include/PhosphorRegistry/IDesktopWidgetFactory.h
-    include/PhosphorRegistry/Manifest.h
+    include/PhosphorRegistry/IBarWidgetPlugin.h
+    include/PhosphorRegistry/PluginCatalog.h
     include/PhosphorRegistry/PluginLoader.h
     include/PhosphorRegistry/MetadataPackLoader.h
     include/PhosphorRegistry/PathKeyedOverrides.h
@@ -106,7 +100,7 @@ set(phosphorregistry_public_HDRS
 
 set(phosphorregistry_SRCS
     src/registrynotifier.cpp
-    src/manifest.cpp
+    src/plugincatalog.cpp
     src/pluginloader.cpp
 )
 
@@ -137,11 +131,6 @@ target_include_directories(PhosphorRegistry
 )
 
 target_compile_features(PhosphorRegistry PUBLIC cxx_std_20)
-
-target_compile_definitions(PhosphorRegistry
-    PUBLIC
-        PHOSPHOR_PLUGIN_ABI_VERSION=${PHOSPHOR_PLUGIN_ABI_VERSION}
-)
 
 target_link_libraries(PhosphorRegistry
     PUBLIC

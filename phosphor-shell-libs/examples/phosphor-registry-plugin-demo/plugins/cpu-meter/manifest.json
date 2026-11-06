@@ -1,6 +1,0 @@
-{
-    "id": "cpu-meter",
-    "displayName": "CPU Meter",
-    "abi": 1,
-    "capabilities": ["bar.widget", "system.read"]
-}
