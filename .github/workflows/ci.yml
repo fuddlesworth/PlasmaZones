@@ -993,7 +993,7 @@ jobs:
           pkgrel=1
           pkgdesc="PlasmaZones draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
           arch=('x86_64')
-          url="https://github.com/fuddlesworth/PlasmaZones"
+          url="https://github.com/phosphor-works/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
@@ -1089,7 +1089,7 @@ jobs:
           pkgrel=1
           pkgdesc="PlasmaZones draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
           arch=('x86_64')
-          url="https://github.com/fuddlesworth/PlasmaZones"
+          url="https://github.com/phosphor-works/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'

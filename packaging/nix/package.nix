@@ -297,7 +297,7 @@ stdenv.mkDerivation (finalAttrs: {
       over D-Bus. The settings app (plasmazones-settings) and layout editor are
       standalone Qt applications.
     '';
-    homepage = "https://github.com/fuddlesworth/PlasmaZones";
+    homepage = "https://github.com/phosphor-works/PlasmaZones";
     # GPL-3.0-or-later for the app, daemon, editor, settings and KCM;
     # LGPL-2.1-or-later for the bundled Phosphor component libraries.
     # MIT and BSD-2-Clause for the bundled Luau runtime and valijson headers, which

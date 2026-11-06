@@ -6,7 +6,7 @@
 
 set -e
 
-REPO="fuddlesworth/PlasmaZones"
+REPO="phosphor-works/PlasmaZones"
 ARTIFACT_PATTERN="linux-x86_64.tar.gz"
 
 echo "Finding latest release for $REPO..."

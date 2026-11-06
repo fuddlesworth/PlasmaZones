@@ -69,9 +69,9 @@ Build-Depends:
  qt6-wayland-private-dev (>= 6.10.0),
  plasma-activities-dev | libplasmaactivities-dev,
 Standards-Version: 4.6.2
-Homepage: https://github.com/fuddlesworth/PlasmaZones
-Vcs-Git: https://github.com/fuddlesworth/PlasmaZones.git
-Vcs-Browser: https://github.com/fuddlesworth/PlasmaZones
+Homepage: https://github.com/phosphor-works/PlasmaZones
+Vcs-Git: https://github.com/phosphor-works/PlasmaZones.git
+Vcs-Browser: https://github.com/phosphor-works/PlasmaZones
 Rules-Requires-Root: no
 
 Package: plasmazones

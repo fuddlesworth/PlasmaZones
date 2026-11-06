@@ -148,7 +148,7 @@ if [ -f "$BUILD_ENV_FILE" ]; then
             echo "  Fedora Atomic/Kinoite:  add the COPR .repo file, then rpm-ostree install plasmazones"
             echo "  Debian, openSUSE:       the OBS repository"
             echo "  Arch:                   yay -S plasmazones"
-            echo "Instructions for each: https://github.com/fuddlesworth/PlasmaZones#install"
+            echo "Instructions for each: https://github.com/phosphor-works/PlasmaZones#install"
             echo "Building from source also works, because it uses the Qt and KWin you have."
             echo ""
         } >&2

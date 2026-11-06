@@ -394,5 +394,5 @@ Cross-cutting traps that each cost audit passes or a whole session. A trap owned
 
 ## Support
 - Documentation: https://phosphor-works.github.io/plasmazones/
-- Repository: https://github.com/fuddlesworth/PlasmaZones
-- Issues: https://github.com/fuddlesworth/PlasmaZones/issues
+- Repository: https://github.com/phosphor-works/PlasmaZones
+- Issues: https://github.com/phosphor-works/PlasmaZones/issues

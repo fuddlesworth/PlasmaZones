@@ -12,7 +12,7 @@ pkgver=3.0.0.r0.g0000000
 pkgrel=1
 pkgdesc="Window snapping, tiling and scrolling for KDE Plasma (git version)"
 arch=('x86_64')
-url="https://github.com/fuddlesworth/PlasmaZones"
+url="https://github.com/phosphor-works/PlasmaZones"
 license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
 
 # KWin: minimum version, NOT an exact pin. The kwin-effect plugin's IID embeds

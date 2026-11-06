@@ -33,7 +33,7 @@ Summary:        Window snapping, tiling and scrolling for KDE Plasma
 # compatible, and the DEP-5 file agrees, so the tag follows the identifier. 0BSD is
 # absent because packaging/arch/LICENSE is not installed.
 License:        GPL-3.0-or-later AND LGPL-2.1-or-later AND MIT AND BSD-2-Clause AND CC0-1.0
-URL:            https://github.com/fuddlesworth/PlasmaZones
+URL:            https://github.com/phosphor-works/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
 # Luau and valijson: the release archives pinned (version, URL and SHA-256) in

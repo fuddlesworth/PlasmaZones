@@ -18,7 +18,7 @@ inline constexpr int VERSION_PATCH = @PROJECT_VERSION_PATCH@;
 inline const QString VERSION_STRING = QStringLiteral("@PROJECT_VERSION@");
 
 // GitHub repository for update checks
-inline const QString GITHUB_REPO = QStringLiteral("fuddlesworth/PlasmaZones");
-inline const QString GITHUB_RELEASES_URL = QStringLiteral("https://github.com/fuddlesworth/PlasmaZones/releases");
+inline const QString GITHUB_REPO = QStringLiteral("phosphor-works/PlasmaZones");
+inline const QString GITHUB_RELEASES_URL = QStringLiteral("https://github.com/phosphor-works/PlasmaZones/releases");
 
 } // namespace PlasmaZones
