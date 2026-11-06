@@ -40,7 +40,7 @@ WU=$(uuid w)
 WID=$(grep -oh "[A-Za-z0-9._-]*|$WU" "$NEST/daemon.log" "$LOG" | head -1)
 [ -n "$WID" ] || WID="org.pz.plain|$WU"
 echo "w ($CLIENT) id: $WID; in the strip: $(frame w)"
-echo "toggleMaximizeToEdges: $(PZ org.plasmazones.Scrolling.toggleMaximizeToEdges Virtual-0 "$WID")"
+echo "toggleMaximizeToEdges: $(PZ org.phosphor_works.Placement.Scrolling.toggleMaximizeToEdges Virtual-0 "$WID")"
 sleep 2
 case "$(frame w)" in *"@Virtual-0 max=3") ;; *) stage_fail "w's column did not maximize ($(frame w))" ;; esac
 activate w

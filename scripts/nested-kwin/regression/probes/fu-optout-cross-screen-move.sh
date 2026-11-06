@@ -36,7 +36,7 @@ W2U=$(uuid w2)
 [ -n "$WU" ] && [ -n "$W2U" ] || stage_fail "w or w2 never mapped"
 W="org.pz.plain|$WU"
 W2="org.pz.plain|$W2U"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 floatkey w
 floatkey w2
@@ -44,7 +44,7 @@ echo "staged: w $(wstat w "$W") | w2 $(wstat w2 "$W2")"
 [ "$(floating "$W")" = true ] || stage_fail "w is not snap-floating on Virtual-1"
 [ "$(floating "$W2")" = true ] || stage_fail "the float shortcut did not float the never-snapped w2"
 MON="$NEST/fu-optout-move-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 for c in w w2; do
     id="$W"
     u="$WU"

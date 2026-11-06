@@ -34,7 +34,7 @@ Z2=$(zoneid "$COLS3" 2)
 Z3=$(zoneid "$COLS3" 3)
 [ -n "$Z1" ] && [ -n "$Z2" ] && [ -n "$Z3" ] || stage_fail "COLS3 zone ids not read ($Z1 $Z2 $Z3)"
 R1='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555551130}","match":{"all":[{"field":"title","op":"equals","value":"l"},{"field":"isSnapped","op":"equals","value":true}]},"name":"probe F1130 snapped","priority":50}'
-RA=$(PZ org.plasmazones.Rules.addRule "$R1")
+RA=$(PZ org.phosphor_works.Placement.Rules.addRule "$R1")
 echo "addRule: $RA"
 [ "$RA" = true ] || stage_fail "the IsSnapped rule was not added ($RA)"
 sleep 1
@@ -51,7 +51,7 @@ GL=$(geo l)
 echo "staged: l (...${LU: -8}) $GL zone='$(zoneof "$L")' | s (...${SU: -8}) $(geo s)"
 [ "$(nbof "$GL")" = false ] || stage_fail "l already has no border before the act ($GL)"
 MON="$NEST/f1130-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowStateChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowStateChanged'"
 mmark "$MON"
 dmark
 echo "== s focused; daemon frozen; snap and restore of s queued; s closed"
@@ -59,9 +59,9 @@ SPID=$(cpid s) || stage_fail "no client pid for s"
 activate s
 [ "$(activecap)" = s ] || stage_fail "s did not take focus ($(activecap))"
 dstop || stage_fail "the daemon could not be frozen"
-dsend org.plasmazones.Snap.moveWindowToZone "string:$S" "string:$Z1"
+dsend org.phosphor_works.Placement.Snap.moveWindowToZone "string:$S" "string:$Z1"
 sleep 0.5
-dsend org.plasmazones.Snap.restoreWindowSize
+dsend org.phosphor_works.Placement.Snap.restoreWindowSize
 sleep 0.5
 kill "$SPID"
 sleep 1.5
@@ -82,7 +82,7 @@ case "$DZ" in "{"*) stage_fail "the daemon holds l in a zone ($DZ); l would be s
 note "l moved by the stale apply: $(rect "$GL") -> $(rect "$AL")"
 check "l's noBorder after the stale notices" "$(nbof "$AL")" = false
 echo "== control (F1111): l snapped into zone 2, s2 snapped into zone 3, then s2 unsnapped as it closes"
-PZ org.plasmazones.Snap.moveWindowToZone "$L" "$Z2" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$L" "$Z2" >/dev/null
 sleep 2
 GL2=$(geo l)
 echo "  l $GL2 zone=$(zoneof "$L")"
@@ -93,7 +93,7 @@ ids
 S2U=$(uuid s2)
 [ -n "$S2U" ] || stage_fail "s2 never mapped"
 S2="org.pz.plain|$S2U"
-PZ org.plasmazones.Snap.moveWindowToZone "$S2" "$Z3" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$S2" "$Z3" >/dev/null
 sleep 2
 echo "  s2 $(geo s2) zone=$(zoneof "$S2")"
 case "$(zoneof "$S2")" in "{"*) ;; *) stage_fail "s2 did not snap into zone 3" ;; esac
@@ -102,7 +102,7 @@ activate s2
 [ "$(activecap)" = s2 ] || stage_fail "s2 did not take focus ($(activecap))"
 mmark "$MON"
 dstop || stage_fail "the daemon could not be frozen"
-dsend org.plasmazones.Snap.restoreWindowSize
+dsend org.phosphor_works.Placement.Snap.restoreWindowSize
 sleep 0.5
 kill "$S2PID"
 sleep 1.5

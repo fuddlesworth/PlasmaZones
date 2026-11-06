@@ -55,6 +55,8 @@ WRAPPER_VALUES = {
 UNKNOWN = object()
 
 DBUS_TOOLS = {'qdbus', 'qdbus6', 'qdbus-qt6', 'qdbus-qt5', 'busctl', 'dbus-send', 'gdbus'}
+# The root of every PlasmaZones bus name: the daemon's placement API, the settings app and the editor.
+DAEMON_BUS_NAMES = ('org.phosphor_works',)
 # systemctl verbs that stop, restart or disable a unit
 SYSTEMCTL_DISRUPT = {
     'stop', 'restart', 'try-restart', 'reload', 'reload-or-restart', 'try-reload-or-restart', 'kill', 'disable',
@@ -91,7 +93,7 @@ MSG_INSTALL = (
     '(--prefix /tmp/... or DESTDIR=/tmp/...) is allowed.'
 )
 MSG_HOST_DBUS = (
-    "This D-Bus call reaches org.plasmazones on the user's own session bus, which drives the daemon of their real "
+    "This D-Bus call reaches PlasmaZones (org.phosphor_works.*) on the user's own session bus, which drives the daemon of their real "
     'desktop. Run it in the nested session: source its env first (`. "$XDG_RUNTIME_DIR/pz-nested/env.sh"; qdbus6 '
     '...`, see pz-verify-live), or give the bus address explicitly. If the user asked about their live desktop, ask '
     'them to run the command with `! <command>`.'
@@ -464,7 +466,7 @@ def check_bash(command, cwd=None, nested=False):
             return MSG_SUDO
         if is_install(word, args, command):
             return MSG_INSTALL
-        if word in DBUS_TOOLS and any('org.plasmazones' in a for a in args) and not (
+        if word in DBUS_TOOLS and any(name in a for a in args for name in DAEMON_BUS_NAMES) and not (
                 nested or own_bus(wrappers, word, args)):
             return MSG_HOST_DBUS
         if disrupts_desktop(word, args) and not inner_nested:

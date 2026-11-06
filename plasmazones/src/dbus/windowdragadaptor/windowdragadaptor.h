@@ -57,7 +57,7 @@ class WindowTrackingAdaptor;
 /**
  * @brief D-Bus adaptor for window drag handling
  *
- * Provides D-Bus interface: org.plasmazones.WindowDrag
+ * Provides D-Bus interface: org.phosphor_works.Placement.WindowDrag
  *
  * Receives the KWin effect's drag reports (beginDrag, updateDragCursor,
  * endDrag) and handles:
@@ -77,7 +77,7 @@ class WindowTrackingAdaptor;
 class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.WindowDrag")
 
 public:
     explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
@@ -324,7 +324,7 @@ public Q_SLOTS:
      * (`ClientHelpers::sendOneWay(...WindowDrag, "clearForCompositorReconnect")`,
      * lifecycle.cpp) so the daemon drops stale drag/overlay state the
      * moment the effect tears down, not just on the next re-registration.
-     * It is NOT listed in `org.plasmazones.WindowDrag.xml` (the XML is
+     * It is NOT listed in `org.phosphor_works.Placement.WindowDrag.xml` (the XML is
      * hand-maintained doc, not adaptor-generating), so the bus surface for
      * this method comes solely from its `Q_SLOTS` placement: moving it to a
      * plain `public:` member would silently remove it from the wire and the
@@ -347,7 +347,7 @@ public:
      * scriptable slot on the bus regardless of what the hand-maintained
      * XML lists. Keeping this in `public Q_SLOTS` would re-expose
      * `WindowDrag.handleWindowClosed` on the wire even after removing
-     * it from `org.plasmazones.WindowDrag.xml`. Plain member-function
+     * it from `org.phosphor_works.Placement.WindowDrag.xml`. Plain member-function
      * placement keeps the in-process function-pointer-`connect()`
      * target reachable while the bus surface truly matches the XML.
      *
@@ -417,7 +417,7 @@ Q_SIGNALS:
      * Emitted when the zone geometry under the cursor changes during drag.
      * NO in-tree subscriber exists today: the effect and DaemonClient
      * subscribe only to restoreSizeDuringDragChanged. The signal stays on
-     * the published D-Bus surface (org.plasmazones.WindowDrag.xml) for a
+     * the published D-Bus surface (org.phosphor_works.Placement.WindowDrag.xml) for a
      * snap-on-hover consumer; removing it from the wire contract is a
      * maintainer decision, not a doc fix.
      */

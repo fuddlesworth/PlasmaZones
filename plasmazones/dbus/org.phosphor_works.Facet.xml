@@ -9,18 +9,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
         SettingsApp single-instance D-Bus interface.
 
         Hosted by plasmazones-settings at:
-            service: org.plasmazones.Settings.App
-            path:    /SettingsApp
+            service: org.phosphor_works.Facet
+            path:    /org/phosphor_works/Facet
 
         A second plasmazones-settings launcher forwards a "page" launch request here
         so the existing settings window can navigate to the requested page
         instead of spawning a parallel process. The running instance does NOT
-        attempt to raise its own window — see org.plasmazones.EditorApp.xml
+        attempt to raise its own window — see org.phosphor_works.PlasmaZones.Editor.xml
         for the Wayland focus-steal rationale.
 
         Mirror interface: EditorApp.
     -->
-    <interface name="org.plasmazones.SettingsController">
+    <interface name="org.phosphor_works.Facet">
         <annotation name="org.gtk.GDBus.DocString"
                     value="Single-instance launch forwarding for plasmazones-settings."/>
         <method name="setActivePage">

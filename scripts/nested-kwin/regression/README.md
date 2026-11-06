@@ -55,7 +55,7 @@ Copy `probes/f1022-new-desktop-move.sh`: SPDX header, a comment with Runner, Sta
 then `NEST="$1"`, `LOG="$2"`, `. "$(dirname "$0")/../lib.sh"`. Stage with the lib helpers, gate the
 staging with `stage_fail`, assert with `check DESC ACTUAL OP WANT` and end with `finish`. Add a row
 to `TABLE` in run.sh. `lib.sh` documents every helper. The daemon is only ever signalled through its
-gated pid (`dpid`: the owner of org.plasmazones on the nested bus, with comm plasmazonesd and a
+gated pid (`dpid`: the owner of org.phosphor_works.Placement on the nested bus, with comm plasmazonesd and a
 dbus-run-session bus in its environment), never by name.
 
 run.sh blocks D-Bus activation on the nested bus before it starts the daemon with `daemon.sh`, and

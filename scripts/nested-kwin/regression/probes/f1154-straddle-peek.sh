@@ -57,7 +57,7 @@ rd() {
 # width CAPTION PROPORTION: focus CAPTION and set its column to PROPORTION of the work area
 width() {
     activate "$1"
-    PZ org.plasmazones.Scrolling.setColumnWidthProportion Virtual-0 "$2" >/dev/null
+    PZ org.phosphor_works.Placement.Scrolling.setColumnWidthProportion Virtual-0 "$2" >/dev/null
     sleep 2
 }
 width b 0.5
@@ -111,7 +111,7 @@ for _ in $(seq 10); do
     sleep 1
     SCR=$(screens)
     read -r OX OY OW OH <<< "$(scr Virtual-0)"
-    DSCALE=$(PZ org.plasmazones.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
+    DSCALE=$(PZ org.phosphor_works.Placement.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
     [ "$OW" = "$WANTW" ] && [ "$OH" = "$WANTH" ] && [ "$DSCALE" = 1.25 ] && break
 done
 echo "Virtual-0 $OX,$OY ${OW}x$OH, daemon scale $DSCALE"

@@ -59,7 +59,7 @@ tells you both, because it is the same engine that cut it.
 | Vertical bar | 24 × 14 px | | Always drawn in the screen's real orientation; a vertical bar stacks a small landscape map. |
 
 The map has no frame. Its outer edge is the screen edge, drawn as a 1 px line at 14 %
-`Theme.on_surface`. The work area (`org.plasmazones.Screen.getAvailableGeometry`) is what
+`Theme.on_surface`. The work area (`org.phosphor_works.Placement.Screen.getAvailableGeometry`) is what
 is subdivided; the bar's own exclusive strip shows as a 1 px dead band at the top of the
 map, so the map honestly contains itself.
 
@@ -88,7 +88,7 @@ position: **white** for focus and **white pulse plus rail thickening** for urgen
 
 ### 1.3 What is drawn, per mode
 
-The mode comes from `org.plasmazones.LayoutRegistry.getScreenStates()` (per-screen
+The mode comes from `org.phosphor_works.Placement.LayoutRegistry.getScreenStates()` (per-screen
 `mode` 0/1/2 with the resolved `layoutId` / `algorithmId` / `scrollingTemplateId`),
 refreshed on `screenLayoutChanged`, `activeLayoutForScreenChanged` and
 `assignmentChangesApplied`. Assignments resolve per (screen, desktop, activity), so a
@@ -100,7 +100,7 @@ desktop switch re-reads the same call. There is no separate "mode changed" signa
   each zone's `relativeGeometry` (0..1 of the work area) becomes a cell rect. Fixed-mode
   zones (`geometryMode`, `fixedGeometry`) are scaled by the map's px-per-screen-px.
   Overlapping zones draw the later zone's outline over the earlier zone's fill at 50 %.
-- Occupancy: `org.plasmazones.WindowTracking.getAllWindowStates()` seeded once, then
+- Occupancy: `org.phosphor_works.Placement.WindowTracking.getAllWindowStates()` seeded once, then
   `windowStateChanged(windowId, WindowStateEntry{zoneId, zoneIds, isFloating, ...})`.
   A zone with ≥ 1 non-floating window is filled. Multi-zone spans (`zoneIds` with more
   than one entry) fill every listed zone and merge them into one shape (shared edges
@@ -116,7 +116,7 @@ desktop switch re-reads the same call. There is no separate "mode changed" signa
 
 #### Tiling
 
-- Geometry: the last `org.plasmazones.Tiling.windowsTileRequested(TileRequestList)`
+- Geometry: the last `org.phosphor_works.Placement.Tiling.windowsTileRequested(TileRequestList)`
   batch naming this `screenId`; absolute `x,y,width,height` normalised against
   `Screen.getScreenGeometry(screenId)`. `floating=true` entries dropped;
   `monocle=true` entries share the full rect and draw as one cell with a stack count.
@@ -137,7 +137,7 @@ desktop switch re-reads the same call. There is no separate "mode changed" signa
   overflow gutter; columns beyond an edge pack into their gutter at 1 px each, in their
   own hue, so the gutter reads as a compressed slice of the gradient (§7 for 40
   columns). Vertical strips rotate the drawing 90°.
-- Data today: `org.plasmazones.Scrolling.visibleStripJson(screenId)` gives visible
+- Data today: `org.phosphor_works.Placement.Scrolling.visibleStripJson(screenId)` gives visible
   tiles only (0..1 rects with `zoneNumber`). Enough for the lens, not for overflow or
   for the hue axis (which needs `stripExtentPx`).
 - **[NEW]** `Scrolling.stripModelJson(screenId)` →

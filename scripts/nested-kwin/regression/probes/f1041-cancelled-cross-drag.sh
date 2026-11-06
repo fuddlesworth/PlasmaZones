@@ -33,7 +33,7 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
 sleep 2
 Z=$(zoneof "$W")
 G=$(geo w)

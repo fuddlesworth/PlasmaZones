@@ -43,7 +43,7 @@ activate w
 echo "staged: $(wstat w "$W")"
 [ "$(floating "$W")" = false ] || stage_fail "w reads floating before any verb"
 MON="$NEST/fu-optout-verbs-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='navigationFeedback'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='navigationFeedback'"
 echo "== a. the float shortcut"
 dmark
 mmark "$MON"
@@ -70,14 +70,14 @@ check "b. 'Restore shortcut: ignored' lines for w" \
 check "b. w's frame after the restore shortcut" "$(rect "$(geo w)")" = "$G0"
 echo "== c. WindowTracking.setWindowFloating(w, true)"
 dmark
-echo "  reply: '$(PZ org.plasmazones.WindowTracking.setWindowFloating "$W" true)'"
+echo "  reply: '$(PZ org.phosphor_works.Placement.WindowTracking.setWindowFloating "$W" true)'"
 sleep 1.5
 check "c. 'nothing floats there' lines for w" \
     "$(dlog "setWindowFloatingForScreen: [^ ]*$WU[^ ]* is on the tiling opt-out.*nothing floats there" | wc -l)" -ge 1
 check "c. isWindowFloating w" "$(floating "$W")" = false
 echo "== d. Snap.toggleFloatForWindow(w, Virtual-0)"
 dmark
-echo "  reply: '$(PZ org.plasmazones.Snap.toggleFloatForWindow "$W" Virtual-0)'"
+echo "  reply: '$(PZ org.phosphor_works.Placement.Snap.toggleFloatForWindow "$W" Virtual-0)'"
 sleep 1.5
 check "d. 'refused: snapping does not run' lines for w" \
     "$(dlog "Bus float of [^ ]*$WU[^ ]* refused: snapping does not run" | wc -l)" -ge 1

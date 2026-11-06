@@ -40,8 +40,8 @@ for c in c1 x1; do
     rid="{11111111-2222-4333-8444-5555555f9891}"
     [ "$c" = x1 ] && rid="{11111111-2222-4333-8444-5555555f9892}"
     R='{"actions":[{"event":"window.movement.placeIn","durationMs":'"$PIN"',"type":"overrideAnimationTiming"},{"event":"window.movement.placeOut","durationMs":'"$POUT"',"type":"overrideAnimationTiming"}],"enabled":true,"id":"'"$rid"'","match":{"all":[{"field":"title","op":"equals","value":"'"$c"'"}]},"name":"probe F989 '"$c"'","priority":50}'
-    [ "$(PZ org.plasmazones.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the $c timing rule"
-    on_exit "PZ org.plasmazones.Rules.removeRule '$rid' >/dev/null"
+    [ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the $c timing rule"
+    on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$rid' >/dev/null"
 done
 sleep 1.5
 echo "Virtual-0 strip: c1 $(geo c1) | x1 $(geo x1)"

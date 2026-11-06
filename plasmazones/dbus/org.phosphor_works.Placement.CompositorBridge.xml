@@ -5,8 +5,8 @@ SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
-    <interface name="org.plasmazones.CompositorBridge">
-        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: the registration handshake, and modifier and gesture reporting. The bus name that registers is the identity every compositor-only method on the daemon admits, not only the reports here. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, ...)."/>
+    <interface name="org.phosphor_works.Placement.CompositorBridge">
+        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: the registration handshake, and modifier and gesture reporting. The bus name that registers is the identity every compositor-only method on the daemon admits, not only the reports here. Window manipulation commands flow over org.phosphor_works.Placement.WindowTracking (applyGeometryRequested, applyGeometriesBatch, ...)."/>
 
         <!-- Bridge registration (compositor → daemon) -->
         <method name="registerBridge">

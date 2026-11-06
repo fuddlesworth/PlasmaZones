@@ -83,7 +83,7 @@ snap)
     W1U=$(uuid w1)
     [ -n "$W1U" ] || stage_fail "w1 never mapped"
     W1="org.pz.plain|$W1U"
-    PZ org.plasmazones.Control.snapWindowToZone "$W1" 1 Virtual-1 >/dev/null
+    PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W1" 1 Virtual-1 >/dev/null
     sleep 2
     activate w1
     shortcut toggle_window_float

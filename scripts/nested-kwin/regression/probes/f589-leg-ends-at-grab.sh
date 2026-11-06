@@ -30,8 +30,8 @@ ROUT="{11111111-2222-4333-8444-5555555e1602}"
 for pair in "$RIN window.movement.placeIn" "$ROUT window.movement.placeOut"; do
     read -r rid ev <<< "$pair"
     R='{"actions":[{"event":"'"$ev"'","durationMs":2500,"type":"overrideAnimationTiming"}],"enabled":true,"id":"'"$rid"'","match":{"all":[{"field":"title","op":"equals","value":"e16"}]},"name":"probe F589 '"$ev"'","priority":50}'
-    [ "$(PZ org.plasmazones.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the $ev timing rule"
-    on_exit "PZ org.plasmazones.Rules.removeRule '$rid' >/dev/null"
+    [ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the $ev timing rule"
+    on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$rid' >/dev/null"
 done
 sleep 1.5
 # ranon TO: "yes" when, since emark, a completion at TO, a retarget or a replace comes before any
@@ -54,13 +54,13 @@ gate() {
 }
 
 echo "== part 1: F589, a move grab during a placeOut leg"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 sleep 3.5
 Z=$(zoneof "$P1")
 echo "p1 snapped: $(geo e16) zone=$Z"
 case "$Z" in "{"*) ;; *) stage_fail "p1 did not snap ($Z)" ;; esac
 emark
-PZ org.plasmazones.Snap.setWindowFloat "$P1" true >/dev/null
+PZ org.phosphor_works.Placement.Snap.setWindowFloat "$P1" true >/dev/null
 LEG=$(firstleg)
 echo "float leg: $LEG"
 gate "$LEG" placeOut
@@ -76,7 +76,7 @@ sleep 1
 
 echo "== part 2: F589, a resize grab during a placeIn leg"
 emark
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 LEG=$(firstleg)
 echo "snap leg: $LEG"
 gate "$LEG" placeIn
@@ -90,13 +90,13 @@ check "part 2: the placeIn leg ran on after the resize grab" "$(ranon "$TO" | ta
 sleep 1
 
 echo "== part 3: F674, a maximize during a placeOut leg"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 sleep 3.5
 Z=$(zoneof "$P1")
 echo "p1 snapped: $(geo e16) zone=$Z"
 case "$Z" in "{"*) ;; *) stage_fail "p1 did not snap again before part 3 ($Z)" ;; esac
 emark
-PZ org.plasmazones.Snap.setWindowFloat "$P1" true >/dev/null
+PZ org.phosphor_works.Placement.Snap.setWindowFloat "$P1" true >/dev/null
 LEG=$(firstleg)
 echo "float leg: $LEG"
 gate "$LEG" placeOut

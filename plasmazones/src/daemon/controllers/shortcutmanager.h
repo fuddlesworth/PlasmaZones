@@ -139,7 +139,7 @@ public:
      * ordering, but no family folding, so a consumer that places chords
      * spatially (the Phosphor shell cheatsheet drawn on the placement map)
      * sees move_window_left and move_window_right as two rows with their
-     * own triggers. Served over org.plasmazones.Control.getShortcutsJson.
+     * own triggers. Served over org.phosphor_works.Placement.Control.getShortcutsJson.
      */
     QVariantList shortcutCatalog() const;
 

@@ -32,7 +32,7 @@ ids
 DW=$(uuid dw)
 [ -n "$DW" ] || stage_fail "dw never mapped"
 ID="org.pz.plain|$DW"
-PZ org.plasmazones.Snap.moveWindowToZone "$ID" "$Z2" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$ID" "$Z2" >/dev/null
 sleep 2
 G=$(geo dw)
 echo "dw in zone 2 on desktop 3: $G zone=$(zoneof "$ID")"
@@ -41,7 +41,7 @@ echo "dw in zone 2 on desktop 3: $G zone=$(zoneof "$ID")"
 R=$(rect "$G")
 desk 1
 MON="$NEST/f763r-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowDesktopMoveRequested'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowDesktopMoveRequested'"
 mmark "$MON"
 dmark
 ID2=$(deskid 2)

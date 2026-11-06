@@ -96,7 +96,7 @@ shortcut-only today, `ShortcutManager::scrollMaximizeColumnRequested` →
 `ScrollEngine::toggleMaximizeColumn` (`plasmazones/src/daemon/daemon/scrolling_init.cpp:162`,
 `engine_verbs.cpp`). Add:
 
-- method in `plasmazones/dbus/org.plasmazones.Scrolling.xml`
+- method in `plasmazones/dbus/org.phosphor_works.Placement.Scrolling.xml`
 - slot on `ScrollingAdaptor`, forwarding to the same `ScrollEngine` entry
   point the shortcut uses, with the same wire-boundary input validation as
   `clearWindowedFullscreen` (`scrollingadaptor.cpp`)

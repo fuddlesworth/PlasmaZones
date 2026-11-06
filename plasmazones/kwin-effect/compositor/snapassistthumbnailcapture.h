@@ -46,7 +46,7 @@ namespace PlasmaZones {
  *
  * The DEFAULT is the zero-copy GPU path: the rendered FBO texture is
  * exported as a single-plane dma-buf and the fd shipped via
- * @c org.plasmazones.Overlay.setWindowThumbnailDmabuf, so the pixels never
+ * @c org.phosphor_works.Placement.Overlay.setWindowThumbnailDmabuf, so the pixels never
  * cross the session bus. Captures on this path run as one batch per show,
  * paying the settle delay and the GL-context window once for every queued
  * candidate. Setting @c PLASMAZONES_DMABUF_THUMBNAILS=0 pins the session to
@@ -60,7 +60,7 @@ namespace PlasmaZones {
  * mirroring the throttling the daemon's previous ScreenShot2 path needed
  * (concurrent CaptureWindow calls could starve KWin's screenshot queue), and
  * each completed image is posted via
- * @c org.plasmazones.Overlay.setSnapAssistThumbnail as raw ARGB32
+ * @c org.phosphor_works.Placement.Overlay.setSnapAssistThumbnail as raw ARGB32
  * (non-premultiplied) bytes plus dimensions — no PNG encode, no base64. The
  * daemon validates the buffer shape and copies the bytes into a QImage that
  * lands in its bounded LRU cache.

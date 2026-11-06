@@ -31,7 +31,7 @@ ids
 P1U=$(uuid p1)
 [ -n "$P1U" ] || stage_fail "p1 never mapped"
 P1="org.pz.plain|$P1U"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
 sleep 1.5
 echo "p1 snapped in Virtual-1 zone 1: $(wstat p1 "$P1")"
 case "$(zoneof "$P1")" in "{"*) ;; *) stage_fail "p1 did not snap on Virtual-1" ;; esac
@@ -65,7 +65,7 @@ sleep 4
 echo "p1 after the second settle: $(wstat p1 "$P1")"
 check "p1 floating after the second settle" "$(floating "$P1")" = true
 MON="$NEST/f670-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='navigationFeedback'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='navigationFeedback'"
 mmark "$MON"
 activate p1
 shortcut toggle_window_float

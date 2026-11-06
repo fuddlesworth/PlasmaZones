@@ -152,7 +152,7 @@ public:
     /// Replace the set of `rules.json` rules that carry any
     /// effect-consumed action (admitted via
     /// `ActionRegistry::hasTag(type, Tag::Effect)`). The effect refreshes this on the
-    /// `org.plasmazones.Rules.rulesChanged` D-Bus signal so a new
+    /// `org.phosphor_works.Placement.Rules.rulesChanged` D-Bus signal so a new
     /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
     /// changes — a no-op rewrite keeps the evaluator's match cache warm.
@@ -452,7 +452,7 @@ private:
     // Rules from rules.json that carry any effect-consumed action
     // (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
     // authoritative list in ruleaction.cpp). Refreshed
-    // from the daemon's org.plasmazones.Rules interface on every
+    // from the daemon's org.phosphor_works.Placement.Rules interface on every
     // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
     QList<PhosphorRules::Rule> m_ruleAnimationRules;

@@ -3,7 +3,7 @@
 
 /**
  * @file test_rule_adaptor.cpp
- * @brief Behaviour of RuleAdaptor, the org.plasmazones.Rules surface.
+ * @brief Behaviour of RuleAdaptor, the org.phosphor_works.Placement.Rules surface.
  *
  * The contract-sync test covers the XML's SHAPE only. What it cannot check is
  * whether the slots honour their DocStrings, and RuleAdaptor is the adaptor

@@ -174,8 +174,8 @@ void DaemonController::refreshEnabledState()
 void DaemonController::setAutostart(bool enabled, std::function<void()> onComplete)
 {
     // Disable-only (the historical behavior) is insufficient: the D-Bus
-    // service file `org.plasmazones.service` carries `SystemdService=plasmazones.service`,
-    // so any client D-Bus call to org.plasmazones (e.g. the KWin effect's
+    // service file `org.phosphor_works.Placement.service` carries `SystemdService=plasmazones.service`,
+    // so any client D-Bus call to org.phosphor_works.Placement (e.g. the KWin effect's
     // per-window-move snapping query) triggers systemd auto-activation
     // regardless of whether the unit is enabled at login. The user toggled
     // the daemon off and expected it to stay off; instead it silently

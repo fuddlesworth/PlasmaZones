@@ -38,23 +38,23 @@ endif()
 # dbus/*.xml on disk, third-party clients (and qdbus-qt6 introspection)
 # resolve interfaces against these files post-install.
 install(FILES
-    dbus/org.plasmazones.Autotile.xml
-    dbus/org.plasmazones.CompositorBridge.xml
-    dbus/org.plasmazones.Control.xml
-    dbus/org.plasmazones.EditorApp.xml
-    dbus/org.plasmazones.LayoutRegistry.xml
-    dbus/org.plasmazones.Overlay.xml
-    dbus/org.plasmazones.Rules.xml
-    dbus/org.plasmazones.Screen.xml
-    dbus/org.plasmazones.Scrolling.xml
-    dbus/org.plasmazones.Settings.xml
-    dbus/org.plasmazones.SettingsApp.xml
-    dbus/org.plasmazones.Shader.xml
-    dbus/org.plasmazones.Snap.xml
-    dbus/org.plasmazones.Tiling.xml
-    dbus/org.plasmazones.WindowDrag.xml
-    dbus/org.plasmazones.WindowTracking.xml
-    dbus/org.plasmazones.ZoneDetection.xml
+    dbus/org.phosphor_works.Placement.Autotile.xml
+    dbus/org.phosphor_works.Placement.CompositorBridge.xml
+    dbus/org.phosphor_works.Placement.Control.xml
+    dbus/org.phosphor_works.PlasmaZones.Editor.xml
+    dbus/org.phosphor_works.Placement.LayoutRegistry.xml
+    dbus/org.phosphor_works.Placement.Overlay.xml
+    dbus/org.phosphor_works.Placement.Rules.xml
+    dbus/org.phosphor_works.Placement.Screen.xml
+    dbus/org.phosphor_works.Placement.Scrolling.xml
+    dbus/org.phosphor_works.Placement.Settings.xml
+    dbus/org.phosphor_works.Facet.xml
+    dbus/org.phosphor_works.Placement.Shader.xml
+    dbus/org.phosphor_works.Placement.Snap.xml
+    dbus/org.phosphor_works.Placement.Tiling.xml
+    dbus/org.phosphor_works.Placement.WindowDrag.xml
+    dbus/org.phosphor_works.Placement.WindowTracking.xml
+    dbus/org.phosphor_works.Placement.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
 )
 

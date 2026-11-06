@@ -161,10 +161,10 @@ private Q_SLOTS:
         QDBusConnection bus = QDBusConnection::sessionBus();
         if (!bus.isConnected())
             QSKIP("no session bus available");
-        const QString service = QStringLiteral("org.phosphor.test.LateLogind");
+        const QString service = QStringLiteral("org.phosphor_works.Test.LateLogind");
         if (!bus.registerService(service))
             QSKIP("could not own the test service name");
-        const QString sessionPath = QStringLiteral("/org/phosphor/test/late_session");
+        const QString sessionPath = QStringLiteral("/org/phosphor_works/Test/late_session");
 
         FakeLogindSession fake;
         QVERIFY(bus.registerObject(sessionPath, &fake, QDBusConnection::ExportAllSlots));
@@ -308,10 +308,10 @@ private Q_SLOTS:
         QDBusConnection bus = QDBusConnection::sessionBus();
         if (!bus.isConnected())
             QSKIP("no session bus available");
-        const QString service = QStringLiteral("org.phosphor.test.Logind");
+        const QString service = QStringLiteral("org.phosphor_works.Test.Logind");
         if (!bus.registerService(service))
             QSKIP("could not own the test service name");
-        const QString sessionPath = QStringLiteral("/org/phosphor/test/session");
+        const QString sessionPath = QStringLiteral("/org/phosphor_works/Test/session");
 
         FakeLogindSession fake;
         QVERIFY(bus.registerObject(sessionPath, &fake, QDBusConnection::ExportAllSlots));

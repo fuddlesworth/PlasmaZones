@@ -16,7 +16,7 @@ namespace PhosphorScreens {
 /**
  * @brief D-Bus endpoint that ScreenResolver queries.
  *
- * Defaults match the Phosphor daemon's canonical `org.plasmazones.Screen`
+ * Defaults match the Phosphor daemon's canonical `org.phosphor_works.Placement.Screen`
  * interface (sourced from `PhosphorProtocol::Service::*`). A consumer that
  * runs against a different service overrides them per call.
  *

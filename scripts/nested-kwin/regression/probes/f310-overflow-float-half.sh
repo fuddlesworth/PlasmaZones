@@ -26,8 +26,8 @@ read -r _ _ VW VH <<< "$(scr Virtual-0)"
 HALF=$((VW / 2))
 # maxwindows N: vs:0's per-screen autotile MaxWindows
 maxwindows() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.Settings.setPerScreenSetting Virtual-0/vs:0 autotile MaxWindows "<$1>" 2>&1
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.Settings.setPerScreenSetting Virtual-0/vs:0 autotile MaxWindows "<$1>" 2>&1
 }
 open a1 400 300
 open w1 400 300
@@ -37,7 +37,7 @@ FREE=$(rect "$(geo w1)")
 echo "w1's free frame: $FREE"
 case "$FREE" in "1050 150 "*) ;; *) stage_fail "w1 was not placed at 1050,150 ($FREE)" ;; esac
 SPLIT='{"screens":[{"index":0,"displayName":"L","region":{"x":0,"y":0,"width":0.5,"height":1}},{"index":1,"displayName":"R","region":{"x":0.5,"y":0,"width":0.5,"height":1}}]}'
-echo "split: '$(PZ org.plasmazones.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT")'"
+echo "split: '$(PZ org.phosphor_works.Placement.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT")'"
 sleep 2
 for vs in Virtual-0/vs:0 Virtual-0/vs:1; do
     assign "$vs" "autotile:master-stack"
@@ -50,7 +50,7 @@ A1=$(uuid a1)
 ID="org.pz.plain|$W1"
 # vtiles VS -> the tiles of VS as "name:x:width" (name a1, w1 or an id tail), floats marked float
 vtiles() {
-    PZ org.plasmazones.Tiling.currentTilesJson "$1" | python3 -c '
+    PZ org.phosphor_works.Placement.Tiling.currentTilesJson "$1" | python3 -c '
 import json, sys
 names = {sys.argv[1]: "w1", sys.argv[2]: "a1"}
 try:
@@ -73,7 +73,7 @@ emark
 dmark
 echo "MaxWindows 1 on vs:0: '$(maxwindows 1)'"
 sleep 1
-PZ org.plasmazones.Tiling.retile Virtual-0/vs:0 >/dev/null
+PZ org.phosphor_works.Placement.Tiling.retile Virtual-0/vs:0 >/dev/null
 sleep 3
 OVF=$(elog "Restored pre-autotile geometry for overflow" | head -1)
 case "$OVF" in
@@ -97,7 +97,7 @@ check "a1 after the overflow" "$(rect "$(geo a1)")" = "0 0 $HALF $VH"
 check "w1 after the overflow (its free frame)" "$(rect "$(geo w1)")" = "$FREE"
 echo "MaxWindows 5 on vs:0: '$(maxwindows 5)'"
 sleep 1
-PZ org.plasmazones.Tiling.retile Virtual-0/vs:0 >/dev/null
+PZ org.phosphor_works.Placement.Tiling.retile Virtual-0/vs:0 >/dev/null
 sleep 2.5
 check "a1 after the vs:0 retile" "$(rect "$(geo a1)")" = "0 0 $HALF $VH"
 check "w1 after the vs:0 retile" "$(rect "$(geo w1)")" = "$FREE"

@@ -36,7 +36,7 @@ ids
 P1=$(uuid p1)
 F1=$(uuid f1)
 [ -n "$P1" ] && [ -n "$F1" ] || stage_fail "p1 or f1 never mapped"
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P1" "$(zoneid "$COLS3" 1)" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P1" "$(zoneid "$COLS3" 1)" >/dev/null
 sleep 2
 Z=$(zoneof "org.pz.plain|$P1")
 echo "p1 snapped: $(geo p1) zone='$Z' | f1 free: $(geo f1)"

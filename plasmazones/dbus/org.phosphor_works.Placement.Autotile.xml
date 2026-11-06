@@ -5,11 +5,11 @@ SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
-    <!-- Autotile-engine-specific interface, sibling to org.plasmazones.Scrolling.
+    <!-- Autotile-engine-specific interface, sibling to org.phosphor_works.Placement.Scrolling.
          Window lifecycle and tile-request traffic rides the shared
-         org.plasmazones.Tiling transport. -->
-    <interface name="org.plasmazones.Autotile">
-        <annotation name="org.gtk.GDBus.DocString" value="Autotile-engine control: algorithm selection, master-area operations, focus cycling, and autotile configuration. Window lifecycle and tile requests ride org.plasmazones.Tiling."/>
+         org.phosphor_works.Placement.Tiling transport. -->
+    <interface name="org.phosphor_works.Placement.Autotile">
+        <annotation name="org.gtk.GDBus.DocString" value="Autotile-engine control: algorithm selection, master-area operations, focus cycling, and autotile configuration. Window lifecycle and tile requests ride org.phosphor_works.Placement.Tiling."/>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Properties
@@ -25,10 +25,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Number of windows in master area (1 to 5)."/>
         </property>
         <property name="innerGap" type="i" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="Gap between tiled windows in pixels. Read-only: gaps are rule-backed, set them via org.plasmazones.Rules."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Gap between tiled windows in pixels. Read-only: gaps are rule-backed, set them via org.phosphor_works.Placement.Rules."/>
         </property>
         <property name="outerGap" type="i" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="Gap from screen edges in pixels. Read-only: gaps are rule-backed, set them via org.plasmazones.Rules."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Gap from screen edges in pixels. Read-only: gaps are rule-backed, set them via org.phosphor_works.Placement.Rules."/>
         </property>
         <property name="smartGaps" type="b" access="readwrite">
             <annotation name="org.gtk.GDBus.DocString" value="Hide gaps when only one window is tiled."/>

@@ -31,15 +31,15 @@ T1=$(uuid t1)
 T2=$(uuid t2)
 [ -n "$T1" ] && [ -n "$T2" ] || stage_fail "t1 or t2 never mapped"
 rows() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.WindowTracking.getAllWindowStates 2>&1 | tr '(' '\n' | grep -cE "$T1|$T2"
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.WindowTracking.getAllWindowStates 2>&1 | tr '(' '\n' | grep -cE "$T1|$T2"
 }
 TL0=$(tiles Virtual-0)
 echo "tiled on desktop 2 ($(curdesk)): $(geo t1) | $(geo t2) | tiles $TL0"
 case "$TL0" in "2 "*"'${T1: -8}'"*) ;; *) stage_fail "t1/t2 not both tiled on desktop 2 ($TL0)" ;; esac
 case "$TL0" in *"'${T2: -8}'"*) ;; *) stage_fail "t2 not tiled on desktop 2 ($TL0)" ;; esac
 MON="$NEST/d5-monitor.log"
-mon_start "$MON" "interface='org.plasmazones.Tiling'"
+mon_start "$MON" "interface='org.phosphor_works.Placement.Tiling'"
 mmark "$MON"
 dmark
 IDRM=$(deskid 2)

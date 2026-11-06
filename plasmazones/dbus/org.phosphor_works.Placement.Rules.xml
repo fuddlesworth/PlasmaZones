@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Rules Interface -->
-    <interface name="org.plasmazones.Rules">
+    <interface name="org.phosphor_works.Placement.Rules">
         <annotation name="org.gtk.GDBus.DocString" value="Unified window-rule store: query and mutate the rule set that maps windows to zones. Rules cross the wire as JSON strings — a single rule serializes to { id, name, enabled, priority, match, actions } and the whole set is a JSON object { _version, rules }. This interface serves the daemon's authoritative in-memory view of the rules, which is not the same as being the only writer of rules.json: the settings app writes that file in its own process on a reset, on a per-mode engine disable and on a config import. The daemon watches rules.json and folds every such out-of-process write into its store once a short debounce fires, so reloadRules is needed only by a caller that must have the reload done before its very next call."/>
         <method name="getAllRules">
             <annotation name="org.gtk.GDBus.DocString" value="Return the whole rule set as a JSON object string ({ _version, rules }). Empty string if the store is unavailable."/>

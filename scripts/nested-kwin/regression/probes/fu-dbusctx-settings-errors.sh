@@ -22,8 +22,8 @@ call() {
     local method="$1"
     shift
     t0=$(date +%s%N)
-    REPLY=$(gdbus call --session --timeout 5 --dest org.plasmazones --object-path /PlasmaZones \
-        --method "org.plasmazones.Settings.$method" "$@" 2>&1 | tr '\n' ' ')
+    REPLY=$(gdbus call --session --timeout 5 --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method "org.phosphor_works.Placement.Settings.$method" "$@" 2>&1 | tr '\n' ' ')
     t1=$(date +%s%N)
     MS=$(((t1 - t0) / 1000000))
     echo "  $method $*: $REPLY (${MS} ms)"

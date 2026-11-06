@@ -25,7 +25,7 @@ done
 place p1 150 150
 place t1 1050 150
 SPLIT='{"screens":[{"index":0,"displayName":"L","region":{"x":0,"y":0,"width":0.5,"height":1}},{"index":1,"displayName":"R","region":{"x":0.5,"y":0,"width":0.5,"height":1}}]}'
-echo "split: '$(PZ org.plasmazones.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT")'"
+echo "split: '$(PZ org.phosphor_works.Placement.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT")'"
 sleep 2
 assign Virtual-0/vs:0 "$COLS3"
 assign Virtual-0/vs:1 "autotile:bsp"
@@ -34,7 +34,7 @@ ids
 P1=$(uuid p1)
 [ -n "$P1" ] || stage_fail "p1 never mapped"
 ID="org.pz.plain|$P1"
-PZ org.plasmazones.Snap.moveWindowToZone "$ID" "$(zoneid "$COLS3" 1)" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$ID" "$(zoneid "$COLS3" 1)" >/dev/null
 sleep 2
 ZN=$(zoneof "$ID")
 echo "p1 snapped on vs:0: $(geo p1) zone='$ZN' | t1 $(geo t1) | vs:1 tiles $(tilelist Virtual-0/vs:1)"

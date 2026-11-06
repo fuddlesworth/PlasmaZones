@@ -192,7 +192,7 @@ public:
     /// value key, since a pixel width can never be smaller than a proportion,
     /// but it bounds the PROPORTION range — the fixed range has its own floor
     /// in scrollingDefaultColumnWidthFixedMin.
-    /// NOTE the D-Bus DocStrings in dbus/org.plasmazones.Scrolling.xml spell
+    /// NOTE the D-Bus DocStrings in dbus/org.phosphor_works.Placement.Scrolling.xml spell
     /// these bounds (and the fixed/height ranges below) as literals, kept in
     /// sync BY HAND — retuning any of them means updating that XML too.
     static constexpr qreal scrollingDefaultColumnWidthProportionMin()

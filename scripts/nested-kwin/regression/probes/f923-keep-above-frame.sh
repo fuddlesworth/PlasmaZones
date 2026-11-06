@@ -23,8 +23,8 @@ kwjs_ok
 setting snapAssistEnabled false
 RID="{11111111-2222-4333-8444-5555555e18b1}"
 RULE='{"actions":[{"params":{},"type":"exclude"}],"enabled":true,"id":"'"$RID"'","match":{"all":[{"field":"appId","op":"equals","value":"org.pz.e18excl"}]},"name":"probe F923 exclude","priority":50}'
-[ "$(PZ org.plasmazones.Rules.addRule "$RULE")" = true ] || stage_fail "Rules.addRule refused the exclude rule"
-on_exit "PZ org.plasmazones.Rules.removeRule '$RID' >/dev/null"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$RULE")" = true ] || stage_fail "Rules.addRule refused the exclude rule"
+on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$RID' >/dev/null"
 sleep 1.5
 open e18p1 400 300
 openapp e18p2 org.pz.e18excl 300 300
@@ -34,8 +34,8 @@ P2U=$(uuid e18p2)
 [ -n "$P1U" ] && [ -n "$P2U" ] || stage_fail "p1 or p2 never mapped ($P1U / $P2U)"
 P1="org.pz.plain|$P1U"
 MON="$NEST/e18b-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='setFrameGeometry'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='storePreTileGeometry'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='setFrameGeometry'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='storePreTileGeometry'"
 # calls MEMBER UUID -> the MEMBER calls naming UUID since mmark, arguments after the id
 calls() { msgs "$MON" | awk -v m="$1" -v u="$2" '$1 == m && index($2, u) { $1 = ""; $2 = ""; sub(/^ +/, ""); print }'; }
 moveto e18p1 200 150
@@ -51,12 +51,12 @@ echo "p1 kept above and moved to 900,300: $(geo e18p1)"
 [ "$(rect "$(geo e18p1)" | cut -d' ' -f1-2)" = "900 300" ] || stage_fail "the script move of p1 did not land ($(geo e18p1))"
 check "setFrameGeometry calls for p1 after the keep-above move" "$(calls setFrameGeometry "$P1U" | wc -l)" -eq 1
 check "p1's reported frame after the keep-above move" "$(calls setFrameGeometry "$P1U" | tail -1 | cut -d' ' -f1-2)" = "900 300"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 sleep 2.5
 Z=$(zoneof "$P1")
 echo "p1 snapped into zone 1: $(geo e18p1) zone=$Z"
 case "$Z" in "{"*) ;; *) stage_fail "the keep-above p1 was not snapped ($Z)" ;; esac
-PZ org.plasmazones.Snap.setWindowFloat "$P1" true >/dev/null
+PZ org.phosphor_works.Placement.Snap.setWindowFloat "$P1" true >/dev/null
 sleep 2.5
 G=$(geo e18p1)
 echo "p1 floated: $G floating=$(floating "$P1")"

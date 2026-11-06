@@ -29,7 +29,7 @@ activate c2
 sleep 2
 # model -> "view=V active=I extent=E extents=[...]" for Virtual-0's strip
 model() {
-    PZ org.plasmazones.Scrolling.stripModelJson Virtual-0 | python3 -c '
+    PZ org.phosphor_works.Placement.Scrolling.stripModelJson Virtual-0 | python3 -c '
 import json, sys
 try:
     m = json.load(sys.stdin)
@@ -44,7 +44,7 @@ M=$(model)
 echo "strip: $M | c1 $(geo c1) | c2 $(geo c2) | c3 $(geo c3)"
 E0=$(echo "$M" | grep -o "extent=[0-9.]*" | cut -d= -f2 | cut -d. -f1)
 [ -n "$E0" ] || stage_fail "no active column extent ($M)"
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 "$E0" >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthPixels Virtual-0 "$E0" >/dev/null
 sleep 2
 G0=$(geo c2)
 W0=$(echo "$G0" | awk '{ print int($3) }')
@@ -54,18 +54,18 @@ emark
 echo "== c2 stopped; the width, the width back and the scroll inside one round trip"
 cstop c2
 sleep 0.3
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 $((E0 + 160)) >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthPixels Virtual-0 $((E0 + 160)) >/dev/null
 sleep 0.5
 echo "  after E0+160: c2 $(geo c2) | strip $(model)"
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 "$E0" >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthPixels Virtual-0 "$E0" >/dev/null
 sleep 0.5
 echo "  after E0: c2 $(geo c2)"
 V1=$(model | grep -o "view=[-0-9.]*")
-PZ org.plasmazones.Scrolling.scrollViewByPx Virtual-0 120 >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.scrollViewByPx Virtual-0 120 >/dev/null
 sleep 0.8
 V2=$(model | grep -o "view=[-0-9.]*")
 if [ "$V1" = "$V2" ]; then
-    PZ org.plasmazones.Scrolling.scrollViewByPx Virtual-0 -120 >/dev/null
+    PZ org.phosphor_works.Placement.Scrolling.scrollViewByPx Virtual-0 -120 >/dev/null
     sleep 0.8
     V2=$(model | grep -o "view=[-0-9.]*")
 fi

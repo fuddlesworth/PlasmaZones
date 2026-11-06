@@ -38,7 +38,7 @@ P1=$(uuid p1)
 [ -n "$T1" ] && [ -n "$T2" ] && [ -n "$P1" ] || stage_fail "a window never mapped"
 PRESNAP=$(size "$(geo p1)")
 echo "p1 pre-snap size: $PRESNAP"
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P1" "$ZONE1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P1" "$ZONE1" >/dev/null
 sleep 2
 [ "$(zoneof "org.pz.plain|$P1")" = "$ZONE1" ] || stage_fail "p1 not in zone 1"
 PAIR0=$(frames t1 t2)
@@ -47,8 +47,8 @@ echo "p1 snapped: $(geo p1) | t1/t2: $PAIR0 | tiles $TL0"
 case "$TL0" in "2 "*"'${T1: -8}'"*) ;; *) stage_fail "t1/t2 not both in Virtual-1's tiles ($TL0)" ;; esac
 case "$TL0" in *"'${T2: -8}'"*) ;; *) stage_fail "t2 not in Virtual-1's tiles ($TL0)" ;; esac
 MON="$NEST/f677-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowFloatingChanged'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowFloatingChanged'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 read -r GX GY GW GH _ <<< "$(geo p1)"
 GX=$((${GX%.*} + ${GW%.*} / 2))
 GY=$((${GY%.*} + ${GH%.*} / 2))

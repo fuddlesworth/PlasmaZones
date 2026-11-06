@@ -28,8 +28,8 @@ kwjs_ok
 [ -x "$PZR_FAKEINPUT" ] || stage_fail "no fakeinput binary (the probe needs flag F; run.sh builds it)"
 RUN="${PZ_F1015_RUN:-monocle}"
 MON="$NEST/f1015-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.Tiling',member='retile'" \
-    "type='method_call',interface='org.plasmazones.Scrolling',member='reapplyWindowGeometry'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.Tiling',member='retile'" \
+    "type='method_call',interface='org.phosphor_works.Placement.Scrolling',member='reapplyWindowGeometry'"
 # ncalls MEMBER [ARG]: MEMBER calls since mmark, only those naming ARG when given
 ncalls() { msgs "$MON" | awk -v m="$1" -v a="${2:-}" '$1 == m && (a == "" || index($0, a)) { n++ } END { print n + 0 }'; }
 # gesture CAPTION KIND: KIND escape (hold, Escape with the button down, release) or drop (released
@@ -94,8 +94,8 @@ bsp)
     sleep 2
     RID="{11111111-2222-4333-8444-55555f101501}"
     R='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"'"$RID"'","match":{"all":[{"field":"appId","op":"equals","value":"org.pz.plain"},{"field":"isTiled","op":"equals","value":true}]},"name":"probe F1015 tiled look","priority":50}'
-    [ "$(PZ org.plasmazones.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the tiled-look rule"
-    on_exit "PZ org.plasmazones.Rules.removeRule '$RID' >/dev/null"
+    [ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R")" = true ] || stage_fail "Rules.addRule refused the tiled-look rule"
+    on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$RID' >/dev/null"
     sleep 1
     open t1
     open t2
@@ -116,7 +116,7 @@ bsp)
     check "t1's tiled look (noBorder) after the cancel" "$(nbof "$A1")" = true
     check "t1 floating after the cancel" "$(floating "org.pz.plain|$T1")" = false
     echo "== control 1: t1 dragged and dropped (no Escape)"
-    PZ org.plasmazones.Tiling.retile Virtual-0 >/dev/null
+    PZ org.phosphor_works.Placement.Tiling.retile Virtual-0 >/dev/null
     sleep 2
     gesture t1 drop
     echo "  t1 $(geo t1)"

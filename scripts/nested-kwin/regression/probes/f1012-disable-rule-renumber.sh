@@ -64,7 +64,7 @@ for r in rules:
         break
 ' "$RULES" 2>/dev/null)
 [ -n "$SCROLLRULE" ] || stage_fail "no minted 'Scrolling off · ... Desktop 3' rule to rename"
-[ "$(PZ org.plasmazones.Rules.updateRule "$SCROLLRULE")" = true ] || stage_fail "Rules.updateRule refused the rename"
+[ "$(PZ org.phosphor_works.Placement.Rules.updateRule "$SCROLLRULE")" = true ] || stage_fail "Rules.updateRule refused the rename"
 sleep 1.5
 echo "before the removal:"
 offrules | sed 's/^/  /'
@@ -83,6 +83,6 @@ check "the snapping rule's name" "$(offrules | grep -c "^Snapping off · Virtual
 check "the renamed rule keeps its name" "$(offrules | grep -c "^probe F1012 my scroll rule|vd=\[2\]$")" -eq 1
 check "minted names still saying Desktop 3" "$(offrules | grep -c " off · Virtual-0 · Desktop 3|")" -eq 0
 for k in autotileDisabledDesktops snappingDisabledDesktops scrollingDisabledDesktops; do
-    check "$k after the removal" "$(PZ org.plasmazones.Settings.getSetting "$k" | tr '\n' ' ' | sed 's/ *$//')" = "Virtual-0/2"
+    check "$k after the removal" "$(PZ org.phosphor_works.Placement.Settings.getSetting "$k" | tr '\n' ' ' | sed 's/ *$//')" = "Virtual-0/2"
 done
 finish

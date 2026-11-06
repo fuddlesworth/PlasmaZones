@@ -35,12 +35,12 @@ const QRegularExpression kRefusedReport(QStringLiteral("windowClosed called befo
 
 } // namespace
 
-/// The daemon's org.plasmazones.CompositorBridge, answering a session or the
+/// The daemon's org.phosphor_works.Placement.CompositorBridge, answering a session or the
 /// REJECTED sentinel.
 class FakeBridgeAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.CompositorBridge")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.CompositorBridge")
 
 public:
     explicit FakeBridgeAdaptor(QObject* parent)
@@ -64,12 +64,12 @@ public Q_SLOTS:
     }
 };
 
-/// The daemon's org.plasmazones.Tiling, recording the window-closed reports
+/// The daemon's org.phosphor_works.Placement.Tiling, recording the window-closed reports
 /// that reach it.
 class FakeTilingAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Tiling")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Tiling")
 
 public:
     explicit FakeTilingAdaptor(QObject* parent)

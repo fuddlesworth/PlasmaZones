@@ -88,7 +88,7 @@ is private to phosphor-scripting.
 7. **To D-Bus `algorithmInfo`**, if needed. Change all of these together, or the bus round trip breaks:
    `AlgorithmInfoEntry` and its signature comment (`phosphor-protocol/include/PhosphorProtocol/AutotileTypes.h`),
    both operators in `phosphor-protocol/src/marshalling.cpp`, the `type` and DocString in
-   `plasmazones/dbus/org.plasmazones.Autotile.xml`, the fill in `plasmazones/src/dbus/autotileadaptor/autotileadaptor.cpp`,
+   `plasmazones/dbus/org.phosphor_works.Placement.Autotile.xml`, the fill in `plasmazones/src/dbus/autotileadaptor/autotileadaptor.cpp`,
    and the signature assertion in `plasmazones/tests/unit/compositor-common/test_wire_types.cpp`.
 8. **The new-algorithm wizard**, for a capability toggle: `Capabilities` in
    `plasmazones/src/settings/services/algorithmscaffold.h`, the writer in `algorithmscaffold.cpp`, the read in

@@ -11,7 +11,7 @@
 #               on the rects they act on (ChordLayout.js), the non-spatial
 #               chords in a right-edge column, over FullMap (the screen's
 #               cells at 1:1).
-#   ShortcutCatalog  the C++ reader behind the sheet: org.plasmazones
+#   ShortcutCatalog  the C++ reader behind the sheet: org.phosphor_works.Placement
 #               .Control.getShortcutsJson plus its shortcutsChanged relay.
 #
 # Themed through phosphor-theme, drawn with the phosphor-shell-widgets

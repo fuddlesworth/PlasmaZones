@@ -21,7 +21,7 @@ namespace PhosphorShellDashboard {
  *     ShortcutCatalog { id: chords }
  *     Cheatsheet { catalog: chords.rows }
  *
- * Reads `org.plasmazones.Control.getShortcutsJson` when the daemon is on
+ * Reads `org.phosphor_works.Placement.Control.getShortcutsJson` when the daemon is on
  * the bus and again on its `shortcutsChanged`, so a rebind (in the
  * settings or through the compositor) reaches an open sheet live. `rows`
  * is the JSON array as a list of maps, one per action: `id, label,

@@ -3354,7 +3354,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 # on the private bus too — as a child of the private dbus-daemon, which then
 # holds the test's stdout pipe open and hangs ctest AFTER the test itself
 # passed. Several tests here compile client sources whose async calls target
-# org.plasmazones with QDBus's default auto-start flag.
+# org.phosphor_works.Placement with QDBus's default auto-start flag.
 phosphor_apply_directory_test_isolation()
 
 # The shader-pack validator tests run glslang out of process, as the

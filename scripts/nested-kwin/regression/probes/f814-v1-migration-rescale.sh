@@ -44,7 +44,7 @@ G=$(geo p1)
 echo "p1 free: $G"
 [ "$(rect "$G" | cut -d' ' -f1,2)" = "$AX $AY" ] && [ "$(outof "$G")" = Virtual-1 ] \
     || stage_fail "p1 not free at 1150,500 on Virtual-1 ($G)"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
 sleep 2
 case "$(zoneof "$P1")" in "{"*) ;; *) stage_fail "p1 did not snap into Virtual-1 zone 1" ;; esac
 P=""
@@ -114,7 +114,7 @@ echo "p1 after the float shortcut: $G"
 check "the float puts p1 at its spot after the migration" "$(rect "$G" | cut -d' ' -f1,2)" = "$AX $AY"
 check "p1 reads floating after the migration" "$(floating "$P1")" = true
 echo "== the resize"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
 sleep 2
 case "$(zoneof "$P1")" in "{"*) ;; *) stage_fail "p1 did not snap back into Virtual-1 zone 1" ;; esac
 dmark

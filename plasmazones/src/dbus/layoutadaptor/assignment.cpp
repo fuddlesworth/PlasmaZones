@@ -118,7 +118,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     if (!PhosphorScreens::ScreenIdentity::findByIdOrName(screenId)) {
         qCWarning(lcDbusLayout)
             << "assignLayoutToScreen: screen name" << screenId
-            << "not found in daemon's screen list. Use org.plasmazones.Screen.getScreens for valid names.";
+            << "not found in daemon's screen list. Use org.phosphor_works.Placement.Screen.getScreens for valid names.";
     }
 
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
@@ -240,7 +240,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
                 // still mark the screen as carrying stored state, or a screen
                 // whose ONLY stored entry is that pin disappeared from the
                 // readback altogether. The omission of the row itself is
-                // documented on the method in org.plasmazones.LayoutRegistry.xml.
+                // documented on the method in org.phosphor_works.Placement.LayoutRegistry.xml.
                 hasAnyStored = true;
                 if (!desktopId.isEmpty()) {
                     screenObj[QString::number(desktop)] = desktopId;

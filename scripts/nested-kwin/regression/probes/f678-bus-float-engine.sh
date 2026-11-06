@@ -35,7 +35,7 @@ T1=$(uuid t1)
 T2=$(uuid t2)
 S1=$(uuid s1)
 [ -n "$T1" ] && [ -n "$T2" ] && [ -n "$S1" ] || stage_fail "a window never mapped"
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$S1" "$ZONE1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$S1" "$ZONE1" >/dev/null
 sleep 2
 PAIR0=$(frames t1 t2)
 TL0=$(tiles Virtual-1)
@@ -45,11 +45,11 @@ case "$TL0" in *"'${T1: -8}'"*) ;; *) stage_fail "t1 not in Virtual-1's tiles ($
 case "$TL0" in *"'${T2: -8}'"*) ;; *) stage_fail "t2 not in Virtual-1's tiles ($TL0)" ;; esac
 [ "$(zoneof "org.pz.plain|$S1")" = "$ZONE1" ] || stage_fail "s1 not in zone 1"
 MON="$NEST/a7-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowFloatingChanged'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='windowStateChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowFloatingChanged'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowStateChanged'"
 busfloat() {
-    PZ org.plasmazones.WindowTracking.setWindowFloating "$1" "$2" >/dev/null
+    PZ org.phosphor_works.Placement.WindowTracking.setWindowFloating "$1" "$2" >/dev/null
     sleep 2.5
 }
 echo "== setWindowFloating(t1, true)"
@@ -76,7 +76,7 @@ echo "  s1: $(geo s1)"
 check "s1 floated: s1 reads floating" "$(floating "org.pz.plain|$S1")" = true
 check "s1 floated: s1 left zone 1" "$(zoneof "org.pz.plain|$S1")" = ""
 check "s1 floated: zone 1 is kept as its pre-float zone" \
-    "$(PZ org.plasmazones.WindowTracking.getPreFloatZone "org.pz.plain|$S1" | paste -sd' ')" = "true $ZONE1"
+    "$(PZ org.phosphor_works.Placement.WindowTracking.getPreFloatZone "org.pz.plain|$S1" | paste -sd' ')" = "true $ZONE1"
 activate s1
 shortcut toggle_window_float
 sleep 2.5

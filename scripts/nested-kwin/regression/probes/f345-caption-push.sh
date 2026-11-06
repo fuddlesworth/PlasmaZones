@@ -28,7 +28,7 @@ kw() {
     grep "js: KW $nonce " "$LOG" | tail -1 | sed "s/.*js: KW $nonce //"
 }
 kwnb() { kw "$1" | grep -o "noBorder=[a-z]*" | cut -d= -f2; }
-mdtitle() { qdbus6 org.plasmazones /PlasmaZones org.plasmazones.WindowTracking.getWindowMetadata "$1" 2>&1 | sed -n 2p; }
+mdtitle() { qdbus6 org.phosphor_works.Placement /org/phosphor_works/Placement org.phosphor_works.Placement.WindowTracking.getWindowMetadata "$1" 2>&1 | sed -n 2p; }
 activateid() {
     js "const w = workspace.windowList(); for (var i = 0; i < w.length; i++) { if ((\"\" + w[i].internalId) === \"{$1}\") { workspace.activeWindow = w[i]; } }"
 }
@@ -84,8 +84,8 @@ check "F170 registry title after the change to \"\"" "[$(mdtitle "$G2")]" = "[]"
 echo "== F864: a Title rule follows the title"
 RID="{11111111-2222-4333-8444-5555555e1501}"
 RULE='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"'"$RID"'","match":{"all":[{"field":"title","op":"contains","value":"red"}]},"name":"probe F864 title","priority":50}'
-[ "$(PZ org.plasmazones.Rules.addRule "$RULE")" = true ] || stage_fail "Rules.addRule refused the title rule"
-on_exit "PZ org.plasmazones.Rules.removeRule '$RID' >/dev/null"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$RULE")" = true ] || stage_fail "Rules.addRule refused the title rule"
+on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$RID' >/dev/null"
 sleep 1.5
 CTL3="$NEST/e15-q1.ctl"
 qtclient retitle_qt.py e15blue "$CTL3" 500 400

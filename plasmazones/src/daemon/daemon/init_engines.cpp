@@ -945,12 +945,12 @@ void Daemon::initEnginesAndWiring()
     // (No cross-screen tiling reclaim hangs off the snap channel any more: under
     // the reopen contract a window arriving on a snap screen is restored only
     // from a record on that output, so no engine pulls it to another one.)
-    // org.plasmazones.Tiling is the engine-NEUTRAL transport shared by the
+    // org.phosphor_works.Placement.Tiling is the engine-NEUTRAL transport shared by the
     // whole tiling family (the effect keeps one engine-managed screen set
     // and one tile pipeline; the adaptor routes per screen through
     // IPlacementEngine and never sees a concrete engine type). Each
     // engine's SPECIFIC surface lives on its own sibling adaptor
-    // (org.plasmazones.Autotile / org.plasmazones.Scrolling), and its
+    // (org.phosphor_works.Placement.Autotile / org.phosphor_works.Placement.Scrolling), and its
     // engine-typed connections are made HERE, at the composition root.
     m_tilingAdaptor = new TilingAdaptor(m_screenManager.get(), this);
     // Every zone batch the snap adaptor emits, not only the snap engine's own

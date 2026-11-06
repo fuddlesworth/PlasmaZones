@@ -23,7 +23,7 @@ for s in Virtual-0 Virtual-1; do
 done
 sleep 2
 R='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555555581}","match":{"all":[{"field":"title","op":"equals","value":"w"},{"field":"screenId","op":"equals","value":"Virtual-1"}]},"name":"probe F379","priority":50}'
-ADD=$(PZ org.plasmazones.Rules.addRule "$R")
+ADD=$(PZ org.phosphor_works.Placement.Rules.addRule "$R")
 echo "addRule: $ADD"
 [ "$ADD" = true ] || stage_fail "the rule was not added ($ADD)"
 sleep 1

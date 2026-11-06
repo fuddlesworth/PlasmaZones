@@ -4,7 +4,7 @@
 # phosphor-screens
 
 > Physical and virtual screen topology, panel reservations, and the canonical
-> `org.plasmazones.Screen` D-Bus surface.
+> `org.phosphor_works.Placement.Screen` D-Bus surface.
 
 ## Responsibility
 
@@ -13,7 +13,7 @@ you should route the next event to." Tracks physical screens as reported
 by `QScreen`, user-defined virtual sub-regions within each physical
 screen, and panel reservations from taskbars, docks, and status bars that
 eat part of the usable geometry. Exposes all of it on the canonical
-`org.plasmazones.Screen` D-Bus interface so downstream consumers stay
+`org.phosphor_works.Placement.Screen` D-Bus interface so downstream consumers stay
 compositor-agnostic.
 
 ## Targets
@@ -37,7 +37,7 @@ pure-compute consumers:
 | `PhosphorScreens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
 | `PhosphorScreens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
 | `PhosphorScreens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
-| `PhosphorScreens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
+| `PhosphorScreens::DBusScreenAdaptor`  | Canonical `org.phosphor_works.Placement.Screen` D-Bus surface. |
 | `PhosphorScreens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
 
 ## Design notes
@@ -67,10 +67,10 @@ pure-compute consumers:
 - `PhosphorScreens::Runtime` — additionally `phosphor-wayland` (private)
   for the live `ScreenManager`
 - `PhosphorScreens` — additionally `QtDBus` and `PhosphorProtocol::Types`
-  (for the `org.plasmazones.Screen` service constants)
+  (for the `org.phosphor_works.Placement.Screen` service constants)
 - [`phosphor-identity`](../phosphor-identity/README.md) — `VirtualScreenId` format helpers
 
 ## See also
 
 - [`phosphor-identity`](../phosphor-identity/README.md) — where the screen-id wire format lives.
-- [`phosphor-protocol`](../phosphor-protocol/README.md) — `org.plasmazones.Screen` interface name comes from `ServiceConstants`.
+- [`phosphor-protocol`](../phosphor-protocol/README.md) — `org.phosphor_works.Placement.Screen` interface name comes from `ServiceConstants`.

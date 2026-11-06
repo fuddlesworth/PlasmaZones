@@ -3,7 +3,7 @@
 
 /**
  * @file test_scrolling_adaptor.cpp
- * @brief Behaviour of ScrollingAdaptor, the org.plasmazones.Scrolling surface.
+ * @brief Behaviour of ScrollingAdaptor, the org.phosphor_works.Placement.Scrolling surface.
  *
  * The contract-sync test covers the XML's SHAPE only — that the declared
  * methods and signals exist with the right signatures. What it cannot check
@@ -906,7 +906,7 @@ private Q_SLOTS:
         const QString path = QStringLiteral("/PropertiesChangedProbe");
         // ExportAdaptors, not ExportAllContents: the latter exports the
         // parent's OWN slots and properties and leaves its adaptors off the
-        // bus, so org.plasmazones.Scrolling was never on the wire and the
+        // bus, so org.phosphor_works.Placement.Scrolling was never on the wire and the
         // absence below held whatever QtDBus did.
         QVERIFY(bus.registerObject(path, m_parent, QDBusConnection::ExportAdaptors));
 
@@ -926,7 +926,7 @@ private Q_SLOTS:
         // come from. Without it the absence below proves nothing.
         QDBusMessage get = QDBusMessage::createMethodCall(
             bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-        get << QStringLiteral("org.plasmazones.Scrolling") << QStringLiteral("scrollingScreens");
+        get << QStringLiteral("org.phosphor_works.Placement.Scrolling") << QStringLiteral("scrollingScreens");
         const QDBusMessage reply = bus.call(get);
         QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
         QCOMPARE(qvariant_cast<QDBusVariant>(reply.arguments().value(0)).variant().toStringList(),
@@ -947,7 +947,7 @@ private Q_SLOTS:
         // is not a match rule that hears nothing.
         QDBusMessage probe = QDBusMessage::createSignal(path, QStringLiteral("org.freedesktop.DBus.Properties"),
                                                         QStringLiteral("PropertiesChanged"));
-        probe << QStringLiteral("org.plasmazones.Scrolling") << QVariantMap() << QStringList();
+        probe << QStringLiteral("org.phosphor_works.Placement.Scrolling") << QVariantMap() << QStringList();
         QVERIFY(bus.send(probe));
         QTRY_COMPARE(m_propertiesChangedCount, 1);
         // Pair the match rule with the unregister: the test QObject lives
@@ -1090,7 +1090,7 @@ private Q_SLOTS:
 public Q_SLOTS:
     void onPropertiesChanged(const QDBusMessage& msg)
     {
-        if (msg.arguments().value(0).toString() == QLatin1String("org.plasmazones.Scrolling")) {
+        if (msg.arguments().value(0).toString() == QLatin1String("org.phosphor_works.Placement.Scrolling")) {
             ++m_propertiesChangedCount;
         }
     }

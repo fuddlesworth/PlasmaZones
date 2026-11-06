@@ -41,17 +41,17 @@ check "refusals of a compositor report in both daemons' logs" \
     "$(cat "$NEST/daemon.log.earlier" "$NEST/daemon.log" 2>/dev/null | grep -cE 'refused for "?:[0-9]')" -eq 0
 check "refusals answered to the effect in the compositor log" \
     "$(elog "reserved for the registered compositor bridge" | wc -l)" -eq 0
-check "s1's metadata after the restart" "$(PZ org.plasmazones.WindowTracking.getWindowMetadata "$S1")" '~' "org.pz.plain"
+check "s1's metadata after the restart" "$(PZ org.phosphor_works.Placement.WindowTracking.getWindowMetadata "$S1")" '~' "org.pz.plain"
 check "Virtual-0's strip after the restart" "$(striporder Virtual-0)" = "$STRIP"
 
 echo "== calls from this shell"
-r=$(PZ org.plasmazones.Scrolling.reportCommittedSize "org.pz.plain|$S1" 400 300 3000 300)
+r=$(PZ org.phosphor_works.Placement.Scrolling.reportCommittedSize "org.pz.plain|$S1" 400 300 3000 300)
 echo "  reportCommittedSize: $r"
 check "reportCommittedSize from a stranger" "$r" '~' "AccessDenied"
-r=$(PZ org.plasmazones.WindowTracking.pruneStaleWindows "x")
+r=$(PZ org.phosphor_works.Placement.WindowTracking.pruneStaleWindows "x")
 echo "  pruneStaleWindows: $r"
 check "pruneStaleWindows from a stranger" "$r" '~' "AccessDenied"
-r=$(PZ org.plasmazones.Tiling.windowClosed "org.pz.plain|$S2")
+r=$(PZ org.phosphor_works.Placement.Tiling.windowClosed "org.pz.plain|$S2")
 echo "  windowClosed: $r"
 check "Tiling.windowClosed from a stranger" "$r" '~' "AccessDenied"
 sleep 1

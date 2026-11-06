@@ -19,14 +19,14 @@ setting snapAssistEnabled false
 setting autotileEnabled true
 assign Virtual-0 "$COLS3"
 sleep 1.5
-[ "$(PZ org.plasmazones.Settings.getSetting autotileEnabled)" = true ] || stage_fail "autotileEnabled did not turn on"
+[ "$(PZ org.phosphor_works.Placement.Settings.getSetting autotileEnabled)" = true ] || stage_fail "autotileEnabled did not turn on"
 open s1
 open s2
 ids
 S1="org.pz.plain|$(uuid s1)"
 S2="org.pz.plain|$(uuid s2)"
-PZ org.plasmazones.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "$S2" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$S2" 2 Virtual-0 >/dev/null
 sleep 2
 GZ=$(geo s2)
 echo "staged: s1 $(geo s1) zone=$(zoneof "$S1") | s2 $GZ zone=$(zoneof "$S2")"

@@ -24,26 +24,26 @@ namespace PlasmaZones {
 /**
  * @brief D-Bus adaptor for the autotile placement engine
  *
- * Provides D-Bus interface: org.plasmazones.Autotile
+ * Provides D-Bus interface: org.phosphor_works.Placement.Autotile
  *
- * The autotile-SPECIFIC wire surface, sibling to org.plasmazones.Scrolling:
+ * The autotile-SPECIFIC wire surface, sibling to org.phosphor_works.Placement.Scrolling:
  * algorithm selection, master-area ratio/count, master promote/demote,
  * focus cycling, and the autotile config properties. Window lifecycle and
  * tile-request traffic for autotile screens deliberately stays on
- * org.plasmazones.Tiling — the effect keeps ONE engine-managed screen set
+ * org.phosphor_works.Placement.Tiling — the effect keeps ONE engine-managed screen set
  * and one geometry pipeline for the whole tiling family, and TilingAdaptor
  * routes per screen through IPlacementEngine.
  */
 class PLASMAZONES_EXPORT AutotileAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Autotile")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Autotile")
 
     Q_PROPERTY(QString algorithm READ algorithm WRITE setAlgorithm NOTIFY algorithmChanged)
     Q_PROPERTY(double masterRatio READ masterRatio WRITE setMasterRatio NOTIFY configChanged)
     Q_PROPERTY(int masterCount READ masterCount WRITE setMasterCount NOTIFY configChanged)
     // Gaps are rule-backed (the managed baseline gap rule, edited over
-    // org.plasmazones.Rules) and synced into the engine on every settings
+    // org.phosphor_works.Placement.Rules) and synced into the engine on every settings
     // change, so they are READ-ONLY here: a direct write would be reverted on
     // the next sync. Mirrors the read-only gap getters on the Settings adaptor.
     Q_PROPERTY(int innerGap READ innerGap NOTIFY configChanged)

@@ -36,7 +36,7 @@ echo "desktop $(curdesk)"
 read -r V0X V0Y V0W V0H <<< "$(scr Virtual-0)"
 fake abs $((V0X + V0W / 2)) $((V0Y + V0H / 2)) wait 100
 MON="$NEST/f625-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='pendingRestoresChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='pendingRestoresChanged'"
 mmark "$MON"
 # signals: SIGS = pendingRestoresChanged since the last mark (after a 2 s settle), then a fresh
 # mark. Call it directly, never in $( ), or the mark is lost.
@@ -49,7 +49,7 @@ echo "== part 2: the effect's cache after a layout switch"
 assignd Virtual-0 1 "$COLS3"
 assign Virtual-0 "$COLS3"
 sleep 1.5
-case "$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen Virtual-0)" in *"$COLS3"*) ;; *) stage_fail "Virtual-0 is not on COLS3" ;; esac
+case "$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen Virtual-0)" in *"$COLS3"*) ;; *) stage_fail "Virtual-0 is not on COLS3" ;; esac
 openapp rest3 org.pz.restthree 300 300
 openapp rest2 org.pz.resttwo 300 300
 for c in rest3 rest2; do
@@ -58,8 +58,8 @@ done
 ids
 R3="org.pz.restthree|$(uuid rest3)"
 R2="org.pz.resttwo|$(uuid rest2)"
-PZ org.plasmazones.Snap.moveWindowToZone "$R3" "$ZONE3" >/dev/null
-PZ org.plasmazones.Snap.moveWindowToZone "$R2" "$ZONE2" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$R3" "$ZONE3" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$R2" "$ZONE2" >/dev/null
 sleep 2
 G3=$(rect "$(geo rest3)")
 G2=$(rect "$(geo rest2)")
@@ -71,8 +71,8 @@ on rest2 'w[i].closeWindow();'
 sleep 2
 emark
 RULE='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"'"$RULEID"'","match":{"all":[{"field":"appId","op":"equals","value":"org.pz.nothing"}]},"name":"probe F625 refetch","priority":50}'
-echo "addRule: $(PZ org.plasmazones.Rules.addRule "$RULE")"
-on_exit "PZ org.plasmazones.Rules.removeRule '$RULEID' >/dev/null"
+echo "addRule: $(PZ org.phosphor_works.Placement.Rules.addRule "$RULE")"
+on_exit "PZ org.phosphor_works.Placement.Rules.removeRule '$RULEID' >/dev/null"
 sleep 2
 [ "$(elog "Cached [0-9]* pending restore geometries" | tail -1)" = "Cached 2 pending restore geometries" ] \
     || stage_fail "the rule refetch did not cache the two closed apps' restores"
@@ -81,7 +81,7 @@ emark
 assignd Virtual-0 1 "$COLS2"
 signals
 check "the layout switch emits one pendingRestoresChanged" "$SIGS" = 1
-case "$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen Virtual-0)" in *"$COLS2"*) ;; *) stage_fail "Virtual-0 did not switch to Columns (2)" ;; esac
+case "$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen Virtual-0)" in *"$COLS2"*) ;; *) stage_fail "Virtual-0 did not switch to Columns (2)" ;; esac
 check "the effect refetches an empty cache after the switch" \
     "$(elog "Cached 0 pending restore geometries" | wc -l)" -ge 1
 fake abs $((V0X + V0W / 2)) $((V0Y + V0H / 2)) wait 100
@@ -96,7 +96,7 @@ echo "reopened: rest3 $N3 | rest2 $N2"
 check "no instant snap restore at the reopen" "$(elog "Instant snap restore for " | wc -l)" = 0
 check "rest3 does not reopen at its old zone-3 rect" "$N3" != "$G3"
 check "rest2 does not reopen at its old zone-2 rect" "$N2" != "$G2"
-PZ org.plasmazones.Rules.removeRule "$RULEID" >/dev/null
+PZ org.phosphor_works.Placement.Rules.removeRule "$RULEID" >/dev/null
 echo "== part 1: one signal per action"
 signals
 note "settle after staging: $SIGS signal(s)"

@@ -15,7 +15,7 @@ class IConfigStore;
  * @brief Canonical direction tokens accepted by VirtualScreenSwapper.
  *
  * Lower-case ASCII matches the D-Bus wire format used by the Phosphor
- * `org.plasmazones.Screen.swapVirtualScreenInDirection` method, so the
+ * `org.phosphor_works.Placement.Screen.swapVirtualScreenInDirection` method, so the
  * adaptor can pass through the user's string verbatim. New callers should
  * prefer constructing direction strings via these constants instead of
  * hand-rolled string literals.

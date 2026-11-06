@@ -47,7 +47,7 @@ P1=$(uuid p1)
 [ -n "$P1" ] || stage_fail "p1 never mapped"
 ID="org.pz.plain|$P1"
 snapzone2() {
-    PZ org.plasmazones.Snap.moveWindowToZone "$ID" "$ZONE2" >/dev/null
+    PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$ID" "$ZONE2" >/dev/null
     sleep 2
     [ "$(zoneof "$ID")" = "$ZONE2" ] || stage_fail "p1 did not snap into Columns (2) zone 2"
 }

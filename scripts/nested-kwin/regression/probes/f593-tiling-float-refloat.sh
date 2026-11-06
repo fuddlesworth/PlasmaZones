@@ -29,7 +29,7 @@ float() {
     sleep 2
 }
 MON="$NEST/f593-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowFloatingChanged'"
 echo "monocle with a1, a2: $(scene)"
 [ "$(maxof "$(geo a2)")" = 3 ] || stage_fail "a2 is not monocle-maximized at the start ($(geo a2))"
 activate a2

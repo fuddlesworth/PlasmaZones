@@ -16,7 +16,7 @@ class ShaderRegistry;
 /**
  * @brief D-Bus adaptor for shader management
  *
- * Provides D-Bus interface: org.plasmazones.Shader
+ * Provides D-Bus interface: org.phosphor_works.Placement.Shader
  *
  * Exposes shader metadata, compilation lifecycle, and user shader directory
  * monitoring. All methods delegate to ShaderRegistry.
@@ -28,7 +28,7 @@ class ShaderRegistry;
 class PLASMAZONES_EXPORT ShaderAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Shader")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Shader")
 
 public:
     explicit ShaderAdaptor(ShaderRegistry* registry, QObject* parent = nullptr);

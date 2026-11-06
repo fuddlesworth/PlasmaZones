@@ -53,7 +53,7 @@ sleep 1.5
 echo "  after the user un-maximize: m1 $(geo m1)"
 check "'Monocle window manually unmaximized' lines for m1" "$(elog "Monocle window manually unmaximized.*$M1" | wc -l)" -eq 1
 check "isWindowFloating m1" "$(floating "$MID")" = true
-PZ org.plasmazones.Tiling.retile Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Tiling.retile Virtual-1 >/dev/null
 sleep 2.5
 G=$(geo m1)
 echo "  after Tiling.retile Virtual-1: m1 $G | m2 $(geo m2)"

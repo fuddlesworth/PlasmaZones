@@ -46,7 +46,7 @@
 class StubLayoutRegistry : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.LayoutRegistry")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.LayoutRegistry")
 
 public:
     explicit StubLayoutRegistry(QObject* parent)
@@ -88,7 +88,7 @@ private Q_SLOTS:
         // owns it — run this suite under dbus-run-session.
         if (!m_bus.registerService(PhosphorProtocol::Service::Name)) {
             QSKIP(
-                "org.plasmazones is already owned (a daemon is running). "
+                "org.phosphor_works.Placement is already owned (a daemon is running). "
                 "Run this test under dbus-run-session.");
         }
 

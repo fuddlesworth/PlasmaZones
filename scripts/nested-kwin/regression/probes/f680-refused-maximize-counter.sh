@@ -29,7 +29,7 @@ counters() { elog "Countering external move of scroll-managed window" | grep -c 
 echo "fx in the strip: $(geo fx) maximizable=$(wprop fx 'w.maximizable')"
 [ "$(wprop fx 'w.maximizable')" = false ] || stage_fail "fx is maximizable, so KWin would not refuse the maximize"
 emark
-echo "toggleMaximizeToEdges: $(PZ org.plasmazones.Scrolling.toggleMaximizeToEdges Virtual-0 "$FXID")"
+echo "toggleMaximizeToEdges: $(PZ org.phosphor_works.Placement.Scrolling.toggleMaximizeToEdges Virtual-0 "$FXID")"
 sleep 2.5
 COL=$(geo fx)
 echo "fx after the refused maximize: $COL"

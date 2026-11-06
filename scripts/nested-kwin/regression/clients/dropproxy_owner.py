@@ -14,7 +14,7 @@ SCREEN = sys.argv[1]
 PROXY = sys.argv[2]
 
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-bus.call_sync("org.plasmazones", "/PlasmaZones", "org.plasmazones.WindowDrag", "registerDropProxy",
+bus.call_sync("org.phosphor_works.Placement", "/org/phosphor_works/Placement", "org.phosphor_works.Placement.WindowDrag", "registerDropProxy",
               GLib.Variant("(ss)", (SCREEN, PROXY)), None, Gio.DBusCallFlags.NONE, 5000, None)
 print("registered", bus.get_unique_name(), flush=True)
 GLib.MainLoop().run()

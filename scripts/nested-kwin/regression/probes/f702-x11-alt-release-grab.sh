@@ -17,7 +17,7 @@ LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
 setting snapAssistEnabled false
-HALF=$(PZ org.plasmazones.LayoutRegistry.createLayoutFromJson '{"id":"{5e1f0c2a-7d3b-4a8e-9c61-2b4d8f0a1e77}","name":"Half","type":1,"zones":[{"name":"Left","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.5,"height":1.0}}]}')
+HALF=$(PZ org.phosphor_works.Placement.LayoutRegistry.createLayoutFromJson '{"id":"{5e1f0c2a-7d3b-4a8e-9c61-2b4d8f0a1e77}","name":"Half","type":1,"zones":[{"name":"Left","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.5,"height":1.0}}]}')
 case "$HALF" in "{"*) ;; *) stage_fail "createLayoutFromJson refused the half layout ($HALF)" ;; esac
 sleep 1
 assign Virtual-0 "$HALF"

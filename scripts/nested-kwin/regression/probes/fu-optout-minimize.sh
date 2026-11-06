@@ -27,14 +27,14 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
 sleep 2
 case "$(zoneof "$W")" in "{"*) ;; *) stage_fail "w did not snap into zone 1" ;; esac
 assignd Virtual-0 1 "autotile:none"
 sleep 2
 echo "on the opt-out: $(wstat w "$W")"
 MON="$NEST/fu-optout-minimize-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 mmark "$MON"
 dmark
 on w 'w[i].minimized = true;'

@@ -6,8 +6,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Snap-Mode Window Placement Interface -->
-    <interface name="org.plasmazones.Snap">
-        <annotation name="org.gtk.GDBus.DocString" value="Snap-mode window placement: commit/uncommit confirmations, the snap-restore resolution chain, resnap and snap-all batch placement, daemon-driven navigation (move/focus/swap/push/by-number/rotate/cycle/restore), and snap-mode float. Geometry application flows BACK to the compositor over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch) — this interface carries no signals."/>
+    <interface name="org.phosphor_works.Placement.Snap">
+        <annotation name="org.gtk.GDBus.DocString" value="Snap-mode window placement: commit/uncommit confirmations, the snap-restore resolution chain, resnap and snap-all batch placement, daemon-driven navigation (move/focus/swap/push/by-number/rotate/cycle/restore), and snap-mode float. Geometry application flows BACK to the compositor over org.phosphor_works.Placement.WindowTracking (applyGeometryRequested, applyGeometriesBatch) — this interface carries no signals."/>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Snap commit (compositor → daemon)

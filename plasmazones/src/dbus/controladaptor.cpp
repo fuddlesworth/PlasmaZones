@@ -237,7 +237,7 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
 
 void ControlAdaptor::quit()
 {
-    qCInfo(lcDbus) << "Shutdown requested over D-Bus (org.plasmazones.Control.quit)";
+    qCInfo(lcDbus) << "Shutdown requested over D-Bus (org.phosphor_works.Placement.Control.quit)";
     // Return to main(), which owns the teardown order: Daemon::stop() then the
     // explicit window destroy loop. Doing either from here would run it inside
     // a D-Bus dispatch, with this adaptor's own parent among the objects torn

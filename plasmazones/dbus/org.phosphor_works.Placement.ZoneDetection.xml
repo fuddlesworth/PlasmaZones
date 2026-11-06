@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Zone Detection Interface -->
-    <interface name="org.plasmazones.ZoneDetection">
+    <interface name="org.phosphor_works.Placement.ZoneDetection">
         <annotation name="org.gtk.GDBus.DocString" value="Zone detection at cursor coordinates, adjacency navigation, zone enumeration, and keyboard modifier state."/>
 
         <method name="detectZoneAtPosition">

@@ -29,7 +29,7 @@ Z2=$(zoneid "$COLS3" 2)
 Z3=$(zoneid "$COLS3" 3)
 [ -n "$Z1" ] && [ -n "$Z2" ] && [ -n "$Z3" ] || stage_fail "COLS3's zone ids could not be read"
 name() { case "$1" in "$Z1") echo "zone1" ;; "$Z2") echo "zone2" ;; "$Z3") echo "zone3" ;; "") echo "none" ;; *) echo "$1" ;; esac; }
-last() { name "$(PZ org.plasmazones.WindowTracking.getLastUsedZoneId)"; }
+last() { name "$(PZ org.phosphor_works.Placement.WindowTracking.getLastUsedZoneId)"; }
 open p1
 activate p1
 shortcut snap_to_zone_1

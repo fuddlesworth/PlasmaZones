@@ -38,7 +38,7 @@ namespace PlasmaZones {
 /**
  * @brief D-Bus adaptor for high-level convenience API
  *
- * Provides D-Bus interface: org.plasmazones.Control
+ * Provides D-Bus interface: org.phosphor_works.Placement.Control
  *
  * Thin facade over existing adaptors for third-party integrations and scripts.
  * Provides one-call operations, API version negotiation, and a complete
@@ -47,7 +47,7 @@ namespace PlasmaZones {
 class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Control")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Control")
 
 public:
     explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor,

@@ -1359,11 +1359,11 @@ private:
     ControlAdaptor* m_controlAdaptor = nullptr;
     // Unified Rule store + its D-Bus adaptor. The store owns rules.json
     // (m_ruleStoreWatcher folds in outside writes) and the adaptor exposes it
-    // on org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
+    // on org.phosphor_works.Placement.Rules. Adaptor is Qt-parented (raw pointer); it
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
     RuleAdaptor* m_ruleAdaptor = nullptr;
-    /// Scrolling-engine wire surface (org.plasmazones.Scrolling) — the
+    /// Scrolling-engine wire surface (org.phosphor_works.Placement.Scrolling) — the
     /// scroll-specific screen set; lifecycle traffic rides the shared
     /// tiling adaptor. Qt-parented; stop() clears its engine pointer
     /// before the engine unique_ptr resets.
@@ -1434,7 +1434,7 @@ private:
     std::unique_ptr<PhosphorScreens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     TilingAdaptor* m_tilingAdaptor = nullptr;
-    /// Autotile-engine wire surface (org.plasmazones.Autotile) — algorithm
+    /// Autotile-engine wire surface (org.phosphor_works.Placement.Autotile) — algorithm
     /// selection, master ops, and autotile config; lifecycle traffic rides
     /// the shared tiling adaptor. Qt-parented; stop() clears its engine
     /// pointer before the engine unique_ptr resets.

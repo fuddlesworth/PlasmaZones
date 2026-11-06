@@ -27,12 +27,12 @@ LB="{a11899b1-f0e3-4425-9363-acb71726c566}"
 LC="$COLS2"
 setting snapAssistEnabled false
 setting snapUnfloatFallbackToZone false
-[ "$(PZ org.plasmazones.Settings.getSetting snapUnfloatFallbackToZone)" = false ] \
+[ "$(PZ org.phosphor_works.Placement.Settings.getSetting snapUnfloatFallbackToZone)" = false ] \
     || stage_fail "snapUnfloatFallbackToZone did not switch off"
 assign Virtual-0 "$LA"
 sleep 2
 layoutnow() {
-    case "$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen Virtual-0 | head -1)" in
+    case "$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen Virtual-0 | head -1)" in
     "$LA") echo A ;;
     "$LB") echo B ;;
     "$LC") echo C ;;
@@ -81,7 +81,7 @@ done
 zstate() { echo "$(geo "$1") floating=$(floating "${ID[$1]}") zone=$(lbl "$(zoneof "${ID[$1]}")")"; }
 zl() { lbl "$(zoneof "${ID[$1]}")"; }
 snap() {
-    PZ org.plasmazones.Control.snapWindowToZone "${ID[$1]}" "$2" Virtual-0 >/dev/null
+    PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[$1]}" "$2" Virtual-0 >/dev/null
     sleep 1.5
 }
 snap p1 2

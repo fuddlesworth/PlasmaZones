@@ -29,7 +29,7 @@ for _ in $(seq 10); do
     sleep 1
     SCR=$(screens)
     read -r OX OY OW OH <<< "$(scr Virtual-0)"
-    SCALE=$(PZ org.plasmazones.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
+    SCALE=$(PZ org.phosphor_works.Placement.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
     [ "$OW" = 1280 ] && [ "$OH" = 720 ] && [ "$SCALE" = 1.25 ] && break
 done
 echo "Virtual-0 ${OX:-?},${OY:-?} ${OW}x$OH, scale $SCALE"
@@ -40,9 +40,9 @@ zones='"zones":[
  {"name":"B","zoneNumber":2,"geometryMode":1,"fixedGeometry":{"x":400,"y":0,"width":800,"height":900},"relativeGeometry":{"x":0.25,"y":0,"width":0.5,"height":1}},
  {"name":"C","zoneNumber":3,"geometryMode":1,"fixedGeometry":{"x":1200,"y":0,"width":400,"height":900},"relativeGeometry":{"x":0.75,"y":0,"width":0.25,"height":1}}]'
 common='"type":1,"useFullScreenGeometry":true,"zonePadding":0,"outerGap":0'
-DEV=$(PZ org.plasmazones.LayoutRegistry.createLayoutFromJson \
+DEV=$(PZ org.phosphor_works.Placement.LayoutRegistry.createLayoutFromJson \
     "{\"id\":\"{6d1f0a52-3c47-4f4e-9a8b-2e1d0c9b8a71}\",\"name\":\"DEV\",$common,\"fixedGeometryInDevicePixels\":true,$zones}")
-LOGL=$(PZ org.plasmazones.LayoutRegistry.createLayoutFromJson \
+LOGL=$(PZ org.phosphor_works.Placement.LayoutRegistry.createLayoutFromJson \
     "{\"id\":\"{7e2a1b63-4d58-4a5f-8b9c-3f2e1d0c9b82}\",\"name\":\"LOG\",$common,$zones}")
 case "$DEV$LOGL" in "{"*"}{"*"}") ;; *) stage_fail "createLayoutFromJson returned no layout ids ($DEV / $LOGL)" ;; esac
 open w 300 300
@@ -58,7 +58,7 @@ snapped() {
     sleep 2
     z2=$(zoneid "$1" 2)
     [ -n "$z2" ] || stage_fail "zone 2 of $1 has no id"
-    PZ org.plasmazones.Control.snapWindowToZone "org.pz.plain|$W" 2 Virtual-0 >/dev/null
+    PZ org.phosphor_works.Placement.Control.snapWindowToZone "org.pz.plain|$W" 2 Virtual-0 >/dev/null
     sleep 2
     [ "$(zoneof "org.pz.plain|$W")" = "$z2" ] || stage_fail "w did not snap into zone 2 of $1 ($(zoneof "org.pz.plain|$W"))"
     read -r SX SY SW SH <<< "$(rect "$(geo w)")"

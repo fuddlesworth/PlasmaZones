@@ -55,7 +55,7 @@ sleep 1.5
 echo "desktop $(curdesk): t1 $(geo t1) floating=$(floating "$T1") | A tiles $(tileorder Virtual-1)"
 [ "$(floating "$T1")" = false ] || stage_fail "t1 does not read as a tile on desktop 1"
 MON="$NEST/f1121-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 echo "== Virtual-1 disabled"
 dmark
 ksd output.Virtual-1.disable

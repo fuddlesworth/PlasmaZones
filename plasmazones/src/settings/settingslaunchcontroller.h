@@ -21,7 +21,7 @@ class SettingsController;
  * stays focused on its domain (settings data, page state, layouts, screens).
  *
  * Owns:
- *   - The `SingleInstanceService` RAII handle for `org.plasmazones.Settings.App`
+ *   - The `SingleInstanceService` RAII handle for `org.phosphor_works.Facet`
  *     on the session bus.
  *   - `handleSetActivePage()` — the forwarded-launch entry point that a second
  *     launcher invokes via `SettingsAppAdaptor::setActivePage`.

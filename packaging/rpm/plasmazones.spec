@@ -354,17 +354,17 @@ echo ""
 %{_libdir}/qt6/qml/org/phosphor/
 
 # D-Bus interfaces
-%{_datadir}/dbus-1/interfaces/org.plasmazones.*.xml
+%{_datadir}/dbus-1/interfaces/org.phosphor_works.*.xml
 
 # D-Bus session activation file (daemon auto-launch on first bus call)
-%{_datadir}/dbus-1/services/org.plasmazones.service
+%{_datadir}/dbus-1/services/org.phosphor_works.Placement.service
 
 # Desktop files
-%{_datadir}/applications/org.plasmazones.*.desktop
+%{_datadir}/applications/org.phosphor_works.*.desktop
 %{_datadir}/applications/kcm_plasmazones_*.desktop
 
 # AppStream metainfo for distro app stores (Discover, GNOME Software, ...)
-%{_datadir}/metainfo/org.plasmazones.*.metainfo.xml
+%{_datadir}/metainfo/org.phosphor_works.*.metainfo.xml
 
 # KGlobalAccel component (display name + icon in Shortcuts KCM)
 %{_datadir}/kglobalaccel/plasmazonesd.desktop

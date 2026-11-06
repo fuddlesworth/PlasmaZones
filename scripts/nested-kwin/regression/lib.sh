@@ -166,7 +166,7 @@ COLS3="{678892d8-b63a-41a9-81b9-78caa95878e7}"
 COLS2="{2bd3c71a-1609-4641-bbe2-b9c1284fcdc1}"
 GRID4="{25828c9b-68f7-4256-a81b-9eaf4450a110}"
 
-PZ() { qdbus6 org.plasmazones /PlasmaZones "$@" 2>&1; }
+PZ() { qdbus6 org.phosphor_works.Placement /org/phosphor_works/Placement "$@" 2>&1; }
 
 # kwjs 'JS BODY': run a one-off KWin script in the nested session. print() output lands in the
 # compositor log as "js: ...". js is the same with the settle the readers below rely on.
@@ -438,21 +438,21 @@ metaresize() {
 # Daemon
 # --------------------------------------------------------------------------------------------
 
-floating() { PZ org.plasmazones.WindowTracking.isWindowFloating "$1"; }
-zoneof() { PZ org.plasmazones.WindowTracking.getZoneForWindow "$1"; }
+floating() { PZ org.phosphor_works.Placement.WindowTracking.isWindowFloating "$1"; }
+zoneof() { PZ org.phosphor_works.Placement.WindowTracking.getZoneForWindow "$1"; }
 # wstate ID -> gdbus's (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky) tuple
 wstate() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.WindowTracking.getWindowState "$1" 2>&1 | tr -d '\n'
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.WindowTracking.getWindowState "$1" 2>&1 | tr -d '\n'
 }
 wscreen() { wstate "$1" | grep -o "'[^']*'" | sed -n 3p | tr -d "'"; }
-screenid() { PZ org.plasmazones.Screen.getScreenId "$1"; }
-modeof() { PZ org.plasmazones.LayoutRegistry.getModeForScreenDesktop "$1" "$2"; }
-setting() { PZ org.plasmazones.Settings.setSetting "$1" "$2" >/dev/null; }
+screenid() { PZ org.phosphor_works.Placement.Screen.getScreenId "$1"; }
+modeof() { PZ org.phosphor_works.Placement.LayoutRegistry.getModeForScreenDesktop "$1" "$2"; }
+setting() { PZ org.phosphor_works.Placement.Settings.setSetting "$1" "$2" >/dev/null; }
 # gsetting KEY GVARIANT: setSetting through gdbus, for values qdbus6 cannot type (<0>, <true>)
 gsetting() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.Settings.setSetting "$1" "$2" 2>&1
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.Settings.setSetting "$1" "$2" 2>&1
 }
 # gsetting_ok KEY GVARIANT: gsetting that stage-fails unless the daemon answers true, so a refused
 # key never leaves the probe running on that key's default
@@ -461,8 +461,8 @@ gsetting_ok() {
     r=$(gsetting "$1" "$2")
     [ "$r" = "(true,)" ] || stage_fail "setSetting $1 $2 was not taken ($r)"
 }
-assign() { PZ org.plasmazones.LayoutRegistry.assignLayoutToScreen "$1" "$2" >/dev/null; }
-assignd() { PZ org.plasmazones.LayoutRegistry.assignLayoutToScreenDesktop "$1" "$2" "$3" >/dev/null; }
+assign() { PZ org.phosphor_works.Placement.LayoutRegistry.assignLayoutToScreen "$1" "$2" >/dev/null; }
+assignd() { PZ org.phosphor_works.Placement.LayoutRegistry.assignLayoutToScreenDesktop "$1" "$2" "$3" >/dev/null; }
 shortcut() {
     qdbus6 org.kde.kglobalaccel /component/plasmazonesd org.kde.kglobalaccel.Component.invokeShortcut "$1" \
         >/dev/null 2>&1
@@ -484,7 +484,7 @@ within() {
 }
 # zoneid LAYOUT N -> the id of zone number N in layout LAYOUT
 zoneid() {
-    PZ org.plasmazones.LayoutRegistry.getLayout "$1" | python3 -c '
+    PZ org.phosphor_works.Placement.LayoutRegistry.getLayout "$1" | python3 -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -496,7 +496,7 @@ for z in d.get("zones", []):
 }
 # tiles SCREEN -> "N [id-tails]" from Tiling.currentTilesJson (N = entries not floating)
 tiles() {
-    PZ org.plasmazones.Tiling.currentTilesJson "$1" | python3 -c '
+    PZ org.phosphor_works.Placement.Tiling.currentTilesJson "$1" | python3 -c '
 import json, sys
 try:
     a = json.load(sys.stdin)
@@ -508,7 +508,7 @@ print(len([e for e in a if not e.get("floating")]), sorted(e.get("windowId", "")
 # floating entry), named from the IDWIN lines ids left in the log. The list is the last batch the
 # daemon sent for SCREEN, whatever desktop it was for: read it only after a batch you counted.
 tileorder() {
-    PZ org.plasmazones.Tiling.currentTilesJson "$1" | python3 -c '
+    PZ org.phosphor_works.Placement.Tiling.currentTilesJson "$1" | python3 -c '
 import json, re, sys
 log = open(sys.argv[1], errors="replace").read()
 names = dict(re.findall(r"IDWIN \{([0-9a-f-]+)\} cap=(\S+)", log))
@@ -525,7 +525,7 @@ print(" ".join(out) if out else "(none)")' "$LOG"
 # striporder SCREEN -> the strip's columns in order as captions ("a | b | f+c" for a two-tile
 # column), from Scrolling.stripModelJson and the IDWIN lines (run ids first)
 striporder() {
-    PZ org.plasmazones.Scrolling.stripModelJson "$1" | python3 -c '
+    PZ org.phosphor_works.Placement.Scrolling.stripModelJson "$1" | python3 -c '
 import json, re, sys
 log = open(sys.argv[1], errors="replace").read()
 names = dict(re.findall(r"IDWIN \{([0-9a-f-]+)\} cap=(\S+)", log))
@@ -548,7 +548,7 @@ instrip() {
     if striporder "${2:-Virtual-0}" | tr ' |+' '\n\n\n' | grep -qxF "$1"; then echo yes; else echo no; fi
 }
 
-# dpid -> the nested daemon's pid, or nothing (status 1): the process that owns org.plasmazones
+# dpid -> the nested daemon's pid, or nothing (status 1): the process that owns org.phosphor_works.Placement
 # on the nested bus (the bus daemon's own answer, whichever way the daemon was started), gated two
 # more ways so it can never name the host daemon: its comm is plasmazonesd, and its environment
 # carries a dbus-run-session bus under /tmp/dbus- (the login bus never does).
@@ -558,7 +558,7 @@ dpid() {
     # hands over, and a bus call can fail once without the daemon being gone.
     for _ in 1 2 3 4 5; do
         p=$(dbus-send --session --print-reply --dest=org.freedesktop.DBus / \
-            org.freedesktop.DBus.GetConnectionUnixProcessID string:org.plasmazones 2>/dev/null | awk '/uint32/ { print $2 }')
+            org.freedesktop.DBus.GetConnectionUnixProcessID string:org.phosphor_works.Placement 2>/dev/null | awk '/uint32/ { print $2 }')
         [ -n "$p" ] && break
         sleep 0.4
     done
@@ -605,11 +605,11 @@ dcont() {
 # dsend METHOD ARGS...: a method call that queues behind a frozen daemon. dbus-send with no
 # --print-reply sends at once and waits for nothing; gdbus call would introspect the destination
 # first and send the real call only after dcont.
-# Example: dsend org.plasmazones.Snap.windowUnsnapped "string:$ID"
+# Example: dsend org.phosphor_works.Placement.Snap.windowUnsnapped "string:$ID"
 dsend() {
     local method="$1"
     shift
-    dbus-send --session --type=method_call --dest=org.plasmazones /PlasmaZones "$method" "$@"
+    dbus-send --session --type=method_call --dest=org.phosphor_works.Placement /org/phosphor_works/Placement "$method" "$@"
 }
 _pzr_block_activation() {
     [ -f "$NEST/activate-daemon.sh.pzr" ] || cp "$NEST/activate-daemon.sh" "$NEST/activate-daemon.sh.pzr"
@@ -644,7 +644,7 @@ drestart() {
     cat "$NEST/daemon.log" >> "$NEST/daemon.log.earlier" 2>/dev/null
     PZ_NESTED_DIR="$NEST" "$PZR_REPO/scripts/nested-kwin/daemon.sh" 2>&1 | tail -1
     dpid >/dev/null || stage_fail "the nested daemon did not come back"
-    dlogged_wait || stage_fail "the daemon owning org.plasmazones is not the one daemon.sh started ($(downer_note))"
+    dlogged_wait || stage_fail "the daemon owning org.phosphor_works.Placement is not the one daemon.sh started ($(downer_note))"
     PZR_DAEMON_DOWN=0
 }
 
@@ -699,7 +699,7 @@ wfct() { msgs "$1" | awk -v u="$2" '$1 == "windowFloatingChanged" && index($2, u
 # MMARK, empty when none came
 wfclast() { wfc "$1" "$2" | awk '{ print $NF }'; }
 # floatlisted ID -> how many entries of WindowTracking.getFloatingWindows name ID (0 or 1)
-floatlisted() { PZ org.plasmazones.WindowTracking.getFloatingWindows | grep -c -F "${1##*|}"; }
+floatlisted() { PZ org.phosphor_works.Placement.WindowTracking.getFloatingWindows | grep -c -F "${1##*|}"; }
 # kwinpid -> the nested compositor's pid: the kwin_wayland serving this session's socket
 kwinpid() { pgrep -u "$(id -u)" -f "^kwin_wayland .*--socket $WAYLAND_DISPLAY( |\$)" | head -1; }
 # monocleof UUID -> the monocle flag ("true"/"false") of the last "Autotile tile request" naming
@@ -741,7 +741,7 @@ floatkey() {
 # tilelist SCREEN -> the id tails of Tiling.currentTilesJson (tiles without its count)
 tilelist() { tiles "$1" | cut -d' ' -f2-; }
 # layoutof SCREEN DESKTOP -> the layout assigned to SCREEN on DESKTOP
-layoutof() { PZ org.plasmazones.LayoutRegistry.getLayoutForScreenDesktop "$1" "$2"; }
+layoutof() { PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreenDesktop "$1" "$2"; }
 
 # deskids -> KWin's desktop ids, one per line in desktop order; deskid N -> the id of desktop N
 deskids() {
@@ -754,7 +754,7 @@ deskid() { deskids | sed -n "${1}p"; }
 # named from the IDWIN lines ids left in the log; SCREEN defaults to Virtual-0. extent CAPTION
 # [SCREEN] -> the extent of the column holding CAPTION alone, empty when it is not in the strip.
 stripx() {
-    PZ org.plasmazones.Scrolling.stripModelJson "${1:-Virtual-0}" | python3 -c '
+    PZ org.phosphor_works.Placement.Scrolling.stripModelJson "${1:-Virtual-0}" | python3 -c '
 import json, re, sys
 names = dict(re.findall(r"IDWIN \{([0-9a-f-]+)\} cap=(\S+)", open(sys.argv[1], errors="replace").read()))
 try:
@@ -827,7 +827,7 @@ print(",".join(str(x) for x in sorted(out, key=str)))
 # rule_state ID -> "present enabled=B desktop=[values]" for the rule with ID as the daemon's
 # Rules.getAllRules lists it, or "absent"
 rule_state() {
-    PZ org.plasmazones.Rules.getAllRules | python3 -c '
+    PZ org.phosphor_works.Placement.Rules.getAllRules | python3 -c '
 import json, sys
 rid = sys.argv[1]
 try:
@@ -926,4 +926,4 @@ qrectf_centre() {
 # The last session check, here because it needs dpid: every reader of the daemon log assumes the
 # running daemon is the one daemon.sh started.
 # --------------------------------------------------------------------------------------------
-dlogged_wait || stage_fail "the daemon owning org.plasmazones is not the one daemon.sh started ($(downer_note)), so daemon.log is not its log"
+dlogged_wait || stage_fail "the daemon owning org.phosphor_works.Placement is not the one daemon.sh started ($(downer_note)), so daemon.log is not its log"

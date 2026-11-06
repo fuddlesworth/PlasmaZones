@@ -136,7 +136,7 @@ void Daemon::initCoreAdaptors()
     // that owns m_shaderRegistry runs its destructor.
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
-    // Rule adaptor - the unified org.plasmazones.Rules surface.
+    // Rule adaptor - the unified org.phosphor_works.Placement.Rules surface.
     // Held as a member so stop() can detach() it before the unique_ptr that
     // owns m_ruleStore runs its destructor.
     m_ruleAdaptor = new RuleAdaptor(m_ruleStore.get(), this);

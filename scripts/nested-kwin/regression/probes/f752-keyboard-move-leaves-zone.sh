@@ -28,8 +28,8 @@ F1="org.pz.plain|$(uuid f1)"
 F2="org.pz.plain|$(uuid f2)"
 Z1=$(zoneid "$COLS3" 1)
 Z3=$(zoneid "$COLS3" 3)
-PZ org.plasmazones.Snap.moveWindowToZone "$F1" "$Z1" >/dev/null
-PZ org.plasmazones.Snap.moveWindowToZone "$F2" "$Z3" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$F1" "$Z1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$F2" "$Z3" >/dev/null
 sleep 2
 G1=$(geo f1)
 G2=$(geo f2)

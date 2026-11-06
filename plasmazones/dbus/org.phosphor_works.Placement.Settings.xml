@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Settings Interface -->
-    <interface name="org.plasmazones.Settings">
+    <interface name="org.phosphor_works.Placement.Settings">
         <annotation name="org.gtk.GDBus.DocString" value="Configuration: load/save/reset, get/set by key, and Zone Selector-specific settings."/>
         <method name="reloadSettings">
             <annotation name="org.gtk.GDBus.DocString" value="Reload settings from disk."/>

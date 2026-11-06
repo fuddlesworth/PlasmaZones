@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
-    <interface name="org.plasmazones.Control">
+    <interface name="org.phosphor_works.Placement.Control">
         <annotation name="org.gtk.GDBus.DocString" value="High-level convenience API for third-party integrations and scripts."/>
 
         <method name="snapWindowToZone">

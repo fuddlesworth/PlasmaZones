@@ -13,8 +13,8 @@ class EditorLaunchController;
 /**
  * @brief D-Bus adaptor for the editor's single-instance launch surface.
  *
- * Implements the `org.plasmazones.EditorController` interface documented in
- * `dbus/org.plasmazones.EditorApp.xml`. Forwards calls to the parent
+ * Implements the `org.phosphor_works.PlasmaZones.Editor` interface documented in
+ * `dbus/org.phosphor_works.PlasmaZones.Editor.xml`. Forwards calls to the parent
  * `EditorLaunchController` so the controller itself doesn't need
  * `Q_SCRIPTABLE` annotations polluting its signature.
  *
@@ -25,14 +25,14 @@ class EditorLaunchController;
 class EditorAppAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.EditorController")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.PlasmaZones.Editor")
 
 public:
     explicit EditorAppAdaptor(EditorLaunchController* launcher);
     ~EditorAppAdaptor() override;
 
 public Q_SLOTS:
-    // Hand-maintained trio: this signature, dbus/org.plasmazones.EditorApp.xml,
+    // Hand-maintained trio: this signature, dbus/org.phosphor_works.PlasmaZones.Editor.xml,
     // and the QVariantList forward in src/editor/main.cpp must agree — the
     // contract test documents EditorApp.xml as out of scope, so nothing
     // mechanical checks them. Change all three together.

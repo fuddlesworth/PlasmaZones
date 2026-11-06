@@ -10,7 +10,7 @@
 
 A daemon, a compositor-side plugin (such as a KWin effect), and a settings
 UI all talk to each other over D-Bus. This library is the single place
-that owns the shared `org.plasmazones` wire surface, so magic strings and
+that owns the shared `org.phosphor_works.Placement` wire surface, so magic strings and
 ad-hoc marshallers don't proliferate across every consumer.
 
 It is layered so the value vocabulary does not drag QtDBus into
@@ -19,7 +19,7 @@ pure-compute consumers, and so the generic D-Bus plumbing stays reusable.
 ```
 phosphor-dbus              generic D-Bus client + HasDBusStreaming
    ▲
-phosphor-protocol          org.plasmazones contract  ── this library
+phosphor-protocol          org.phosphor_works.Placement contract  ── this library
    ▲
 PhosphorProtocol::Types    QtCore-only value vocabulary
 ```
@@ -50,7 +50,7 @@ Plus the cross-cutting headers:
 
 | Header | Purpose |
 |--------|---------|
-| `PhosphorProtocol/ServiceConstants.h` | Canonical service name, object path, interface names (`org.plasmazones.Tiling`, `.Screen`, `.Overlay`, …), API version, timeouts. **QtCore only**, shipped by `::Types`. |
+| `PhosphorProtocol/ServiceConstants.h` | Canonical service name, object path, interface names (`org.phosphor_works.Placement.Tiling`, `.Screen`, `.Overlay`, …), API version, timeouts. **QtCore only**, shipped by `::Types`. |
 | `PhosphorProtocol/Registration.h`     | `registerWireTypes()` does one-shot metatype registration. Call it once at startup. |
 | `PhosphorProtocol/ClientHelpers.h`    | `daemonClient()` returns a `PhosphorDBus::Client` value bound to the daemon, plus thin `ClientHelpers::` wrappers (`fireAndForget`, `sendOneWay`, `asyncCall`, `syncCall`, `loadSettingAsync`). |
 | `PhosphorProtocol/PhosphorProtocol.h` | Umbrella convenience header that pulls in everything. Prefer the per-interface headers. |
@@ -74,7 +74,7 @@ and the `HasDBusStreaming` `static_assert` guard.
   require an ApiVersion bump. Unknown wire values parse to a safe default
   rather than failing loudly.
 - **The daemon client is a thin binding.** `daemonClient()` returns a
-  `PhosphorDBus::Client` by value, pre-bound to `org.plasmazones` on the
+  `PhosphorDBus::Client` by value, pre-bound to `org.phosphor_works.Placement` on the
   session bus. The generic call mechanics live in `phosphor-dbus`, and this
   library only supplies the Phosphor endpoint. No singleton.
 - **Build-time marshaller check.** Add a struct to a `*Types.h` and

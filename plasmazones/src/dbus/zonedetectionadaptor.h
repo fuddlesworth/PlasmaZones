@@ -27,7 +27,7 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for zone detection operations
  *
- * Provides D-Bus interface: org.plasmazones.ZoneDetection
+ * Provides D-Bus interface: org.phosphor_works.Placement.ZoneDetection
  *  PhosphorZones::Zone detection queries
  *
  * Uses interface types for loose coupling
@@ -36,7 +36,7 @@ class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor,
                                                 public PhosphorSnapEngine::IZoneAdjacencyResolver
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.ZoneDetection")
 
 public:
     explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::LayoutRegistry* layoutManager,

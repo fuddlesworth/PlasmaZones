@@ -23,7 +23,7 @@ js 'workspace.currentDesktop = workspace.desktops[2];'
 sleep 1.5
 [ "$(curdesk)" = "3 of 4" ] || stage_fail "desktop 3 of 4 is not in view ($(curdesk))"
 MON="$NEST/f798-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='screenDesktopChanged'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='screenDesktopChanged'"
 FIRST=$(deskid 1)
 [ -n "$FIRST" ] || stage_fail "no id for desktop 1"
 echo "removing desktop 1 ($FIRST)"
@@ -41,5 +41,5 @@ echo "screenDesktopChanged sends since the switch:"
 msgs "$MON" | grep "^screenDesktopChanged " | sed 's/^/    /'
 check "screenDesktopChanged sends naming desktop 3 after the switch" \
     "$(msgs "$MON" | awk '$1 == "screenDesktopChanged" && $NF == 3' | wc -l)" -ge 1
-check "the daemon's current desktop" "$(PZ org.plasmazones.LayoutRegistry.getCurrentVirtualDesktop | head -1)" = 3
+check "the daemon's current desktop" "$(PZ org.phosphor_works.Placement.LayoutRegistry.getCurrentVirtualDesktop | head -1)" = 3
 finish

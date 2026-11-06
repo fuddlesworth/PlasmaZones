@@ -57,7 +57,7 @@ if [ -f "$NEST/daemon.pid" ]; then
     rm -f "$NEST/daemon.pid"
 fi
 BUSPID=$(dbus-send --session --print-reply --dest=org.freedesktop.DBus / \
-    org.freedesktop.DBus.GetConnectionUnixProcessID string:org.plasmazones 2>/dev/null \
+    org.freedesktop.DBus.GetConnectionUnixProcessID string:org.phosphor_works.Placement 2>/dev/null \
     | awk '/uint32/{print $2}') || true
 if [ -n "${BUSPID:-}" ]; then
     kill "$BUSPID" 2>/dev/null || true
@@ -122,13 +122,13 @@ nohup "$PZ_NESTED_REPO/$BUILD/bin/plasmazonesd" > "$NEST/daemon.log" 2>&1 &
 echo $! > "$NEST/daemon.pid"
 
 # "Up" means it OWNS the bus name, not merely that the pid exists — a
-# daemon that started but failed to claim org.plasmazones (or died into a
+# daemon that started but failed to claim org.phosphor_works.Placement (or died into a
 # zombie) would otherwise print success while every later qdbus6 call
 # answers from nothing.
 up=""
 for _ in $(seq 1 30); do
     OWNER=$(dbus-send --session --print-reply --dest=org.freedesktop.DBus / \
-        org.freedesktop.DBus.GetNameOwner string:org.plasmazones 2>/dev/null | awk '/string/{print $2}') || true
+        org.freedesktop.DBus.GetNameOwner string:org.phosphor_works.Placement 2>/dev/null | awk '/string/{print $2}') || true
     if [ -n "${OWNER:-}" ]; then
         up=1
         break
@@ -136,22 +136,22 @@ for _ in $(seq 1 30); do
     sleep 0.2
 done
 if [ -n "$up" ]; then
-    echo "daemon up (pid $(cat "$NEST/daemon.pid"), owns org.plasmazones); screens:"
+    echo "daemon up (pid $(cat "$NEST/daemon.pid"), owns org.phosphor_works.Placement); screens:"
     # The screen dump is a convenience, so a missing qdbus6 must not fail a
     # run that is otherwise healthy: the bus-name check above has ALREADY
     # established the daemon is up, and exiting non-zero here would report a
     # working session as a failure. Distros ship this binary under three
     # different names.
     if command -v qdbus6 >/dev/null 2>&1; then
-        qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+        qdbus6 org.phosphor_works.Placement /org/phosphor_works/Placement org.phosphor_works.Placement.Screen.getPhysicalScreens
     elif command -v qdbus-qt6 >/dev/null 2>&1; then
-        qdbus-qt6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+        qdbus-qt6 org.phosphor_works.Placement /org/phosphor_works/Placement org.phosphor_works.Placement.Screen.getPhysicalScreens
     elif command -v qdbus >/dev/null 2>&1; then
-        qdbus org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+        qdbus org.phosphor_works.Placement /org/phosphor_works/Placement org.phosphor_works.Placement.Screen.getPhysicalScreens
     else
         echo "  (no qdbus6/qdbus-qt6/qdbus on PATH; skipping the screen dump)"
     fi
 else
-    echo "daemon FAILED to claim org.plasmazones; see $NEST/daemon.log" >&2
+    echo "daemon FAILED to claim org.phosphor_works.Placement; see $NEST/daemon.log" >&2
     exit 1
 fi

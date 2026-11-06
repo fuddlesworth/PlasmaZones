@@ -59,7 +59,7 @@ if [ "$RUN" = hidden ]; then
     echo "desktop $(curdesk) shown (desktop 2's strip out of view)"
 fi
 MON="$NEST/f1028-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowsTileRequested'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowsTileRequested'"
 echo "== Virtual-1 disabled"
 dmark
 ksd output.Virtual-1.disable

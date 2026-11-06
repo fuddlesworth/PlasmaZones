@@ -33,11 +33,11 @@ for c in s1 s2; do
 done
 activate s2
 sleep 1
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 900 >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthPixels Virtual-0 900 >/dev/null
 sleep 1.5
 activate s1
 sleep 1
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 1100 >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthPixels Virtual-0 1100 >/dev/null
 sleep 2
 ids
 read -r V0X _ V0W _ <<< "$(scr Virtual-0)"

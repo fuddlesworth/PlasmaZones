@@ -32,7 +32,7 @@ ids
 S1U=$(uuid s1)
 [ -n "$S1U" ] || stage_fail "s1 never mapped"
 S1="org.pz.plain|$S1U"
-PZ org.plasmazones.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
 sleep 2.5
 Z1=$(zoneof "$S1")
 G1=$(geo s1)

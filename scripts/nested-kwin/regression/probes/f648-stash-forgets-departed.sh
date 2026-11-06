@@ -44,7 +44,7 @@ scrollmode() {
 widen() {
     activate "$1"
     sleep 0.4
-    PZ org.plasmazones.Scrolling.setColumnWidthProportion Virtual-0 0.8 >/dev/null
+    PZ org.phosphor_works.Placement.Scrolling.setColumnWidthProportion Virtual-0 0.8 >/dev/null
     sleep 1.5
 }
 setdesks() {

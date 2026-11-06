@@ -28,15 +28,15 @@ P2U=$(uuid p2)
 Z1=$(zoneid "$COLS3" 1)
 Z3=$(zoneid "$COLS3" 3)
 { [ -n "$Z1" ] && [ -n "$Z3" ]; } || stage_fail "COLS3 has no zones 1 and 3"
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P2U" "$Z1" >/dev/null
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P1U" "$Z3" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P2U" "$Z1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P1U" "$Z3" >/dev/null
 sleep 2
 activate p1
 sleep 0.4
 echo "before: active=$(activecap) | p1 $(geo p1) | p2 $(geo p2)"
 [ "$(activecap)" = p1 ] || stage_fail "p1 is not the active window"
 [ "$(deskof "$(geo p1)")" = 1 ] || stage_fail "p1 is not on desktop 1"
-PZ org.plasmazones.Snap.moveWindowToAdjacentZone right >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToAdjacentZone right >/dev/null
 sleep 2
 echo "after move right at the last zone: active=$(activecap) | cur $(curdesk) | p1 $(geo p1) | p2 $(geo p2)"
 check "p1's desktops after the move" "$(deskof "$(geo p1)")" = 2

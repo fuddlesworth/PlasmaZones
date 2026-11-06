@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Overlay Control Interface -->
-    <interface name="org.plasmazones.Overlay">
+    <interface name="org.phosphor_works.Placement.Overlay">
         <annotation name="org.gtk.GDBus.DocString" value="Zone overlay visibility, highlighting, shader preview, and Snap Assist."/>
         <method name="showOverlay">
             <annotation name="org.gtk.GDBus.DocString" value="Show the zone overlay on all screens."/>

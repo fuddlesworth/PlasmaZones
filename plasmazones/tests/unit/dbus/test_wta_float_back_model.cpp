@@ -880,9 +880,9 @@ private:
         /// error (a refusal answers too, silent toward the caller).
         bool floatOn(const QString& windowId, const QString& screen)
         {
-            QDBusMessage call = QDBusMessage::createMethodCall(bus.baseService(), path,
-                                                               QStringLiteral("org.plasmazones.WindowTracking"),
-                                                               QStringLiteral("setWindowFloatingForScreen"));
+            QDBusMessage call = QDBusMessage::createMethodCall(
+                bus.baseService(), path, QStringLiteral("org.phosphor_works.Placement.WindowTracking"),
+                QStringLiteral("setWindowFloatingForScreen"));
             call << windowId << screen << true;
             const QDBusPendingCall pending = peer.asyncCall(call, 5000);
             return QTest::qWaitFor(

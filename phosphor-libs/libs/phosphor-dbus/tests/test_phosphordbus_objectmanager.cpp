@@ -22,7 +22,7 @@ Q_DECLARE_METATYPE(InterfaceMap)
 Q_DECLARE_METATYPE(ManagedObjectMap)
 
 namespace {
-constexpr auto kService = "org.phosphor.test.ObjectManager";
+constexpr auto kService = "org.phosphor_works.Test.ObjectManager";
 constexpr auto kObjectManagerIface = "org.freedesktop.DBus.ObjectManager";
 
 InterfaceMap makeInterfaces(const QString& iface, const QString& nameKey, const QString& nameValue)
@@ -156,7 +156,7 @@ private Q_SLOTS:
 
         // No peer owns this name, so GetManagedObjects errors out; ready must
         // still fire so a consumer waiting on the initial snapshot is not stuck.
-        ObjectManager om(bus, QStringLiteral("org.phosphor.test.AbsentService"), QStringLiteral("/"));
+        ObjectManager om(bus, QStringLiteral("org.phosphor_works.Test.AbsentService"), QStringLiteral("/"));
         QSignalSpy addedSpy(&om, &ObjectManager::interfacesAdded);
         QSignalSpy readySpy(&om, &ObjectManager::ready);
 

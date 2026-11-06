@@ -40,7 +40,7 @@ echo "staged: h $GH (desktop 2) | d1 $(geo d1) | d2 $(geo d2) | desktop $(curdes
 [ "$(deskof "$GH")" = 2 ] || stage_fail "h is not on desktop 2 alone ($GH)"
 echo "== bus float of h from this shell"
 dmark
-echo "  reply: $(gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.WindowTracking.setWindowFloatingForScreen "$H" Virtual-0 true 2>&1 | tr -d '\n')"
+echo "  reply: $(gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement --method org.phosphor_works.Placement.WindowTracking.setWindowFloatingForScreen "$H" Virtual-0 true 2>&1 | tr -d '\n')"
 sleep 2
 dlog "setWindowFloatingForScreen: [^ ]*$HU.*|setWindowFloatingForScreen: windowId= [^ ]*$HU.*" | sed 's/org.pz.plain|[^ ]*/<h>/; s/^/    /'
 check "refusal lines for h" "$(dlog "setWindowFloatingForScreen: [^ ]*$HU.*refused for" | wc -l)" -eq 1

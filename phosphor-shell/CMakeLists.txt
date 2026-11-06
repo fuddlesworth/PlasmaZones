@@ -203,7 +203,7 @@ target_link_libraries(phosphor-shell
         # so the binary works without the optional DATADIR install.
         phosphor_shell_exampleplugin
         # The pane rule is built with the rules library's own types
-        # and seeded over org.plasmazones.Rules.
+        # and seeded over org.phosphor_works.Placement.Rules.
         PhosphorRules::PhosphorRules
         PhosphorProtocol::PhosphorProtocol
         Qt6::Core

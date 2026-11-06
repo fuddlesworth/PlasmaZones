@@ -35,7 +35,7 @@ P2="org.pz.plain|$P2U"
 Z2=$(zoneid "$COLS3" 2)
 Z3=$(zoneid "$COLS3" 3)
 [ -n "$Z2" ] && [ -n "$Z3" ] || stage_fail "COLS3's zone ids did not resolve"
-PZ org.plasmazones.Snap.moveWindowToZone "$P2" "$Z3" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P2" "$Z3" >/dev/null
 sleep 1.5
 case "$(zoneof "$P2")" in "{"*) ;; *) stage_fail "p2 did not snap into zone 3" ;; esac
 dragstate() { echo "$(geo p1) move=$(wprop p1 'w.move') active=$(activecap) zone='$(zoneof "$P1")' floating=$(floating "$P1")"; }
@@ -101,9 +101,9 @@ drag
 sleep 1.9
 midread
 [ "$MV" = true ] || stage_fail "KWin is not moving p1 mid-drag in run 2"
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$Z2" >/dev/null
-PZ org.plasmazones.Snap.toggleFloatForWindow "$P1" Virtual-0 >/dev/null
-PZ org.plasmazones.Snap.snapToZoneByNumber 1 "" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$Z2" >/dev/null
+PZ org.phosphor_works.Placement.Snap.toggleFloatForWindow "$P1" Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Snap.snapToZoneByNumber 1 "" >/dev/null
 wait "$FIPID"
 sleep 2
 landed 2

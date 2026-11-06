@@ -19,13 +19,13 @@ namespace PlasmaZones {
 /**
  * @brief D-Bus adaptor for the compositor bridge protocol
  *
- * Provides D-Bus interface: org.plasmazones.CompositorBridge
+ * Provides D-Bus interface: org.phosphor_works.Placement.CompositorBridge
  *
  * Compositor-agnostic bridge protocol: the registration handshake, and the
  * compositor's modifier-state and gesture reports (the latter only for a
  * bridge that registered the 'gestures' capability). Window manipulation
  * commands do NOT flow over
- * this interface — they ride org.plasmazones.WindowTracking
+ * this interface — they ride org.phosphor_works.Placement.WindowTracking
  * (applyGeometryRequested, applyGeometriesBatch, ...),
  * which bridges subscribe to after a successful registration.
  *
@@ -47,7 +47,7 @@ namespace PlasmaZones {
 class PLASMAZONES_EXPORT CompositorBridgeAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.CompositorBridge")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.CompositorBridge")
 
 public:
     explicit CompositorBridgeAdaptor(QObject* parent = nullptr);
@@ -165,7 +165,7 @@ Q_SIGNALS:
     //
     // NOTE: this interface deliberately carries NO window-manipulation
     // command signals. Geometry and focus commands flow over
-    // org.plasmazones.WindowTracking (applyGeometryRequested,
+    // org.phosphor_works.Placement.WindowTracking (applyGeometryRequested,
     // applyGeometriesBatch, ...) — a set of dead,
     // never-emitted command signals used to live here and misled bridge
     // implementers into subscribing to a channel that never fired.

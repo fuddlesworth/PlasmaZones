@@ -20,7 +20,7 @@ class EditorController;
  * undo, selection) separate from transport/launch concerns. This
  * class owns:
  *
- *   - The `SingleInstanceService` RAII handle for `org.plasmazones.Editor.App`
+ *   - The `SingleInstanceService` RAII handle for `org.phosphor_works.PlasmaZones.Editor`
  *     on the session bus.
  *   - `applyLaunchArgs()` — the shared launch-args entry point for the
  *     initial launch (main.cpp) and forwarded launches

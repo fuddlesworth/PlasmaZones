@@ -32,8 +32,8 @@ S2U=$(uuid s2)
 [ -n "$S1U" ] && [ -n "$S2U" ] || stage_fail "s1 or s2 never mapped"
 S1="org.pz.plain|$S1U"
 S2="org.pz.plain|$S2U"
-PZ org.plasmazones.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "$S2" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$S1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$S2" 2 Virtual-0 >/dev/null
 sleep 2
 GS1=$(geo s1)
 ZS1=$(zoneof "$S1")
@@ -49,7 +49,7 @@ case "$TB" in 2*) ;; *) stage_fail "desktop 1 does not hold two tiles" ;; esac
 
 echo "== run 1: setWindowFloating(s1, true) with s1's desktop hidden"
 dmark
-PZ org.plasmazones.WindowTracking.setWindowFloating "$S1" true >/dev/null
+PZ org.phosphor_works.Placement.WindowTracking.setWindowFloating "$S1" true >/dev/null
 sleep 2
 check "floating= true sends for s1" "$(floatsends "$S1U" true)" -eq 0
 check "hidden-desktop refusal lines for s1" \
@@ -64,7 +64,7 @@ echo "== run 2: setWindowFloating(s2, true) on a snapping context switched off"
 gsetting snappingDisabledDesktops "<['Virtual-0/2']>" >/dev/null
 sleep 2
 dmark
-PZ org.plasmazones.WindowTracking.setWindowFloating "$S2" true >/dev/null
+PZ org.phosphor_works.Placement.WindowTracking.setWindowFloating "$S2" true >/dev/null
 sleep 2
 echo "  s2 $(geo s2) floating=$(floating "$S2")"
 check "floating= true sends for s2" "$(floatsends "$S2U" true)" -eq 0

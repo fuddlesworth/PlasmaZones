@@ -86,4 +86,4 @@ static_assert(PhosphorDBus::HasDBusStreaming<MyEntry>::value,
 
 - [`phosphor-protocol`](../phosphor-protocol/README.md) — the Phosphor
   contract layer. Builds on `Client` and `HasDBusStreaming` with the
-  `org.plasmazones` service constants and wire types.
+  `org.phosphor_works.Placement` service constants and wire types.

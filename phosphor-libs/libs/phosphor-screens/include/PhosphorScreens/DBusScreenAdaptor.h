@@ -22,7 +22,7 @@ class IConfigStore;
 class ScreenManager;
 
 /**
- * @brief D-Bus adaptor for the `org.plasmazones.Screen` screen-topology
+ * @brief D-Bus adaptor for the `org.phosphor_works.Placement.Screen` screen-topology
  *        surface: screen queries, virtual-screen mutation, the JSON
  *        round-trip for `setVirtualScreenConfig`, caches, and signals.
  *
@@ -42,7 +42,7 @@ class ScreenManager;
 class PHOSPHORSCREENS_EXPORT DBusScreenAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Screen")
 
 public:
     /// Primary constructor: wires the screen-topology service and the VS

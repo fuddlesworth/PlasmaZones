@@ -840,8 +840,8 @@ private Q_SLOTS:
             });
             PlasmaZones::TestHelpers::BusPeer stranger(&host, QStringLiteral("BatchStranger"));
             QVERIFY(stranger.ready());
-            const QDBusMessage reply =
-                stranger.call(QStringLiteral("org.plasmazones.Snap"), QStringLiteral("handleBatchedResnap"), {payload});
+            const QDBusMessage reply = stranger.call(QStringLiteral("org.phosphor_works.Placement.Snap"),
+                                                     QStringLiteral("handleBatchedResnap"), {payload});
             QVERIFY2(reply.type() != QDBusMessage::InvalidMessage, "the call must have been answered");
         }
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));

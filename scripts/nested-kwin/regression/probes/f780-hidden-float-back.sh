@@ -51,9 +51,9 @@ on w 'w[i].desktops = [workspace.desktops[0], workspace.desktops[1]];'
 on v 'w[i].desktops = [workspace.desktops[0], workspace.desktops[1]];'
 sleep 1.5
 desk 2
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "$V" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$V" 2 Virtual-0 >/dev/null
 sleep 1.5
 echo "desktop 2, snapped: w $(spotstate w) | v $(spotstate v)"
 floatkey w
@@ -62,15 +62,15 @@ SW=$(spotstate w)
 echo "desktop 2, floated: w $SW | v $(spotstate v)"
 case "$SW" in *"desks=1,2 cur=2 floating=true"*) ;; *) stage_fail "w not floating on desktop 2 while on both desktops" ;; esac
 desk 1
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "$V" 4 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$V" 4 Virtual-0 >/dev/null
 sleep 1.5
 SW=$(spotstate w)
 echo "desktop 1, snapped: w $SW | v $(spotstate v)"
 case "$SW" in *"floating=false"*) ;; *) stage_fail "w not snapped on desktop 1" ;; esac
 MON="$NEST/f780-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='applyGeometryRequested'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='applyGeometryRequested'"
 mmark "$MON"
 on w 'w[i].desktops = [workspace.desktops[1]];'
 on v 'w[i].desktops = [workspace.desktops[1]];'

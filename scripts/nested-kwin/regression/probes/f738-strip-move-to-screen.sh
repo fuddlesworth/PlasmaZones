@@ -93,7 +93,7 @@ echo "== step 3: scroll Virtual-0's strip"
 emark
 dmark
 for px in 600 -600 600; do
-    PZ org.plasmazones.Scrolling.scrollViewByPx Virtual-0 "$px" >/dev/null
+    PZ org.phosphor_works.Placement.Scrolling.scrollViewByPx Virtual-0 "$px" >/dev/null
     sleep 1.5
 done
 check "transfer lines during the scrolls" "$(elog "Window moved between monitors:" | wc -l)" -eq 0
