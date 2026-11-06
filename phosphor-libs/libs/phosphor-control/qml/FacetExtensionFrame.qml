@@ -12,8 +12,9 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  * One section another module adds to a page, as FacetSlot lists it.
  *
  * Shows a caption naming the module the section comes from, then the
- * section's QML. The loaded item gets `domain` (the extension's staging
- * domain) and `settingsApp` if it declares them. When the module failed to
+ * section's QML, created with `domain` (the extension's staging domain) and
+ * `settingsApp` already set: a section's root declares both, and may declare
+ * them required. When the module failed to
  * load, or the QML does not load, an error card takes the section's place so
  * the rest of the page still works.
  */
@@ -49,12 +50,15 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.errorText.length === 0
         active: root.extension.error === undefined
-        source: root.extension.qmlSource !== undefined ? root.extension.qmlSource : ""
-        onLoaded: {
-            PhosphorLoaderHelpers.bindItemWidthToLoader(sectionLoader);
-            PhosphorLoaderHelpers.injectIfAssignable(sectionLoader.item, "domain", root.extension.domain);
-            PhosphorLoaderHelpers.injectIfAssignable(sectionLoader.item, "settingsApp", root.settingsApp);
+        Component.onCompleted: {
+            if (root.extension.qmlSource !== undefined) {
+                sectionLoader.setSource(root.extension.qmlSource, {
+                    "domain": root.extension.domain,
+                    "settingsApp": root.settingsApp
+                });
+            }
         }
+        onLoaded: PhosphorLoaderHelpers.bindItemWidthToLoader(sectionLoader)
     }
 
     Kirigami.InlineMessage {

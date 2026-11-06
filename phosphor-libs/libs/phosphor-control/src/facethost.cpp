@@ -432,6 +432,7 @@ void FacetHost::registerPlaceholders(Module& module)
         });
         m_controller->registerPage(stand, parent, page.name, UnavailablePageUrl, page.icon,
                                    hasChildren.contains(page.id));
+        registry->setPassesContext(scoped, true);
     }
     updateUnavailablePages(module);
 }

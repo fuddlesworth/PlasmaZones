@@ -11,6 +11,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -75,6 +76,11 @@ class TestFacetSlot : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void init()
+    {
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("non-existent property|TypeError")));
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());

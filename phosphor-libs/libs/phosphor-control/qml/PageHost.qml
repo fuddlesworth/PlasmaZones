@@ -177,15 +177,43 @@ Item {
                     pageLoader._everCurrent = true;
                 if (pageLoader.isIncubating)
                     root._reportIncubating(pageLoader.pageId, true);
+                pageLoader._load();
             }
-            source: {
-                // Depend on _registryRevision (same idiom as currentEntry):
-                // pageData() is non-notifying, so a re-registration that
-                // changes a page's qmlSource must force re-evaluation here.
+
+            // This page's registry entry. Depends on _registryRevision (same
+            // idiom as currentEntry): pageData() is non-notifying, so a
+            // re-registration or a bind that changes the page's QML must force
+            // re-evaluation here.
+            readonly property var _entry: {
                 void (root._registryRevision);
                 const data = root.controller.registry.pageData(pageLoader.pageId);
-                return (data && data.id) ? data.qmlSource : "";
+                return (data && data.id) ? data : null;
             }
+            // The QML last handed to the Loader, so a registry change that
+            // leaves this page's QML alone does not rebuild the page.
+            property string _loadedUrl: ""
+
+            // Creates the page from its entry. A page whose entry passes
+            // context (every Facet module page) gets `controller` and
+            // `settingsApp` set before its bindings run, so it can declare
+            // them required. Any other page gets them assigned in onLoaded,
+            // if it declares them.
+            function _load() {
+                const entry = pageLoader._entry;
+                const url = entry ? String(entry.qmlSource) : "";
+                if (url === pageLoader._loadedUrl)
+                    return;
+                pageLoader._loadedUrl = url;
+                if (entry && entry.passesContext) {
+                    pageLoader.setSource(url, {
+                        "controller": root.controller.registry.controller(pageLoader.pageId),
+                        "settingsApp": root.controller
+                    });
+                } else {
+                    pageLoader.source = url;
+                }
+            }
+            on_EntryChanged: pageLoader._load()
             // Only the current page is shown + interactive. Hidden cached
             // pages stay built but are not painted and take no input.
             visible: pageLoader.isCurrent
