@@ -9,6 +9,7 @@
 #include <QtMath>
 
 #include <cmath>
+#include <optional>
 
 namespace PhosphorAnimation {
 
@@ -306,40 +307,48 @@ bool Spring::overshoots() const
 // Parsing + equality + presets
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Spring Spring::fromString(const QString& str)
+std::optional<Spring> Spring::tryParse(const QString& str)
 {
-    Spring spring;
-    if (str.isEmpty())
-        return spring;
+    if (str.isEmpty()) {
+        return std::nullopt;
+    }
 
     const int colonIdx = str.indexOf(QLatin1Char(':'));
     const QString params = (colonIdx >= 0) ? str.mid(colonIdx + 1).trimmed() : str.trimmed();
     if (colonIdx >= 0) {
         const QString prefix = str.left(colonIdx).trimmed();
         if (prefix != QLatin1String("spring")) {
-            qCDebug(lcSpring) << "expected 'spring:' prefix, got" << prefix << "- using default";
-            return spring;
+            qCDebug(lcSpring) << "expected 'spring:' prefix, got" << prefix;
+            return std::nullopt;
         }
     }
 
     const QStringList parts = params.split(QLatin1Char(','));
     if (parts.size() != 2) {
-        qCDebug(lcSpring) << "invalid format (expected omega,zeta):" << str << "- using default";
-        return spring;
+        qCDebug(lcSpring) << "invalid format (expected omega,zeta):" << str;
+        return std::nullopt;
     }
 
     const QLocale cLocale = QLocale::c();
     bool okOmega, okZeta;
-    qreal omegaVal = cLocale.toDouble(parts[0].trimmed(), &okOmega);
-    qreal zetaVal = cLocale.toDouble(parts[1].trimmed(), &okZeta);
-    if (!okOmega || !okZeta) {
-        qCDebug(lcSpring) << "invalid numeric values in" << str << "- using default";
-        return spring;
+    const qreal omegaVal = cLocale.toDouble(parts[0].trimmed(), &okOmega);
+    const qreal zetaVal = cLocale.toDouble(parts[1].trimmed(), &okZeta);
+    // QLocale reads "nan" and "inf": a stiffness that is not a number is as
+    // malformed as one that is not there.
+    if (!okOmega || !okZeta || !std::isfinite(omegaVal) || !std::isfinite(zetaVal)) {
+        qCDebug(lcSpring) << "invalid numeric values in" << str;
+        return std::nullopt;
     }
 
+    Spring spring;
     spring.omega = qBound(0.1, omegaVal, 200.0);
     spring.zeta = qBound(0.0, zetaVal, 10.0);
     return spring;
+}
+
+Spring Spring::fromString(const QString& str)
+{
+    return tryParse(str).value_or(Spring());
 }
 
 Spring Spring::snappy()

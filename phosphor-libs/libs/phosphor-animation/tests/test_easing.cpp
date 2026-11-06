@@ -83,6 +83,39 @@ private Q_SLOTS:
         QVERIFY(qAbs(curve.y1 - 1.00) < 0.01);
     }
 
+    /// tryParse refuses what fromString would replace with the default, so a
+    /// settings validator can report a typo instead of drawing another curve.
+    void testTryParseRefusesMalformedSpecs_data()
+    {
+        QTest::addColumn<QString>("spec");
+        QTest::newRow("two bezier values") << QStringLiteral("0.5,0.5");
+        QTest::newRow("bezier word") << QStringLiteral("0.2,0,x,1");
+        QTest::newRow("json array") << QStringLiteral("[0.2,0,0,1]");
+        QTest::newRow("nan") << QStringLiteral("nan,0,0,1");
+        QTest::newRow("elastic word") << QStringLiteral("elastic-out:x");
+        QTest::newRow("elastic three values") << QStringLiteral("elastic-out:1.5,0.3,2");
+        QTest::newRow("elastic bad period") << QStringLiteral("elastic-out:1.5,y");
+        QTest::newRow("bounce bad count") << QStringLiteral("bounce-out:1.5,many");
+        QTest::newRow("unknown name") << QStringLiteral("bogus:1.0,2.0");
+        QTest::newRow("empty") << QString();
+    }
+
+    void testTryParseRefusesMalformedSpecs()
+    {
+        QFETCH(QString, spec);
+        QVERIFY(!Easing::tryParse(spec).has_value());
+        QCOMPARE(Easing::fromString(spec), Easing());
+    }
+
+    void testTryParseAcceptsAndClamps()
+    {
+        QVERIFY(Easing::tryParse(QStringLiteral("elastic-out")).has_value());
+        QVERIFY(Easing::tryParse(QStringLiteral("bounce-in:0.1,20")).has_value());
+        const auto clamped = Easing::tryParse(QStringLiteral("-5.0,3.0,5.0,-5.0"));
+        QVERIFY(clamped.has_value());
+        QCOMPARE(clamped->x1, 0.0);
+    }
+
     void testFromStringScientificNotNamed()
     {
         // Numeric strings with 'e' exponent must NOT be misclassified as named.

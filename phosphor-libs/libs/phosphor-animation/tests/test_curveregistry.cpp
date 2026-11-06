@@ -182,6 +182,31 @@ private Q_SLOTS:
         QVERIFY(CurveRegistry{}.tryCreate(QStringLiteral("not-a-real-curve:1,2,3")) == nullptr);
     }
 
+    /// A known typeId with parameters its factory cannot read fails too.
+    /// Before, the factories substituted their library default, so a typo such
+    /// as "spring:22" passed every validator and drew another curve.
+    void testTryCreateMalformedParamsReturnsNull_data()
+    {
+        QTest::addColumn<QString>("spec");
+        QTest::newRow("one spring value") << QStringLiteral("spring:22");
+        QTest::newRow("spring word") << QStringLiteral("spring:fast,1");
+        QTest::newRow("bezier junk") << QStringLiteral("bezier:junk");
+        QTest::newRow("bare words") << QStringLiteral("a,b,c,d");
+        QTest::newRow("json array") << QStringLiteral("[0.2,0,0,1]");
+        QTest::newRow("elastic word") << QStringLiteral("elastic-out:x");
+    }
+
+    void testTryCreateMalformedParamsReturnsNull()
+    {
+        QFETCH(QString, spec);
+        CurveRegistry reg;
+        QVERIFY(reg.tryCreate(spec) == nullptr);
+        // create() still never returns nullptr: the default bezier.
+        const auto fallback = reg.create(spec);
+        QVERIFY(fallback != nullptr);
+        QCOMPARE(fallback->typeId(), QStringLiteral("bezier"));
+    }
+
     void testTryCreateValidReturnsCurve()
     {
         auto curve = CurveRegistry{}.tryCreate(QStringLiteral("spring:12.0,0.8"));

@@ -9,6 +9,8 @@
 #include <QString>
 #include <QtGlobal>
 
+#include <optional>
+
 namespace PhosphorAnimation {
 
 /// Damped harmonic oscillator. Params: omega (angular frequency, rad/s, [0.1,200])
@@ -51,6 +53,10 @@ public:
     bool equals(const Curve& other) const override;
 
     /// Parse from "spring:omega,zeta" or "omega,zeta". Clamps to valid ranges.
+    /// Empty when @p str is malformed: another prefix, not two values, or a
+    /// value that is not a finite number.
+    static std::optional<Spring> tryParse(const QString& str);
+    /// tryParse, or the default spring when @p str is malformed.
     static Spring fromString(const QString& str);
 
     static Spring snappy(); ///< Responsive, slight overshoot.

@@ -54,7 +54,9 @@ public:
     /// Never returns nullptr — falls back to OutCubic on failure.
     std::shared_ptr<const Curve> create(const QString& spec) const;
 
-    /// Like create() but returns nullptr on any failure.
+    /// Like create() but returns nullptr on any failure: an unknown typeId,
+    /// or parameters that the built-in factory cannot read ("spring:22",
+    /// "bezier:junk"). A value out of range is clamped, not a failure.
     std::shared_ptr<const Curve> tryCreate(const QString& spec) const;
 
     /// Build a curve from @p typeId + JSON parameters. Returns nullptr on failure.

@@ -8,6 +8,9 @@
 #include <QStringList>
 #include <QtMath>
 
+#include <cmath>
+#include <optional>
+
 namespace PhosphorAnimation {
 
 Q_LOGGING_CATEGORY(lcEasing, "phosphoranimation.easing")
@@ -319,11 +322,12 @@ bool Easing::overshoots() const
 // Parsing + equality
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Easing Easing::fromString(const QString& str)
+std::optional<Easing> Easing::tryParse(const QString& str)
 {
+    if (str.isEmpty()) {
+        return std::nullopt;
+    }
     Easing curve;
-    if (str.isEmpty())
-        return curve;
 
     // Detect named curves (e.g. "elastic-in") vs numeric cubic-bezier
     // wire format ("0.33,1.0,0.68,1.0" or scientific "1.5e-3,…"). The
@@ -337,6 +341,14 @@ Easing Easing::fromString(const QString& str)
             break;
         }
     }
+
+    const QLocale cLocale = QLocale::c();
+    // QLocale reads "nan" and "inf", which no curve parameter can be.
+    const auto number = [&cLocale](const QString& text, qreal& out) {
+        bool ok = false;
+        out = cLocale.toDouble(text.trimmed(), &ok);
+        return ok && std::isfinite(out);
+    };
 
     if (hasLetter) {
         // Named curves (elastic-*, bounce-*) take the form "name:params".
@@ -360,9 +372,11 @@ Easing Easing::fromString(const QString& str)
         } else if (name == QLatin1String("bounce-in-out")) {
             curve.type = Type::BounceInOut;
         } else {
-            qCDebug(lcEasing) << "unknown named curve" << name << "- using default";
-            return curve;
+            qCDebug(lcEasing) << "unknown named curve" << name;
+            return std::nullopt;
         }
+        const bool elastic =
+            curve.type == Type::ElasticIn || curve.type == Type::ElasticOut || curve.type == Type::ElasticInOut;
 
         // Read the raw amplitude but do NOT clamp it yet. Elastic's amplitude is its
         // peak, and the reachable floor depends on the period — which is the NEXT
@@ -370,27 +384,29 @@ Easing Easing::fromString(const QString& str)
         // rather than the one being parsed.
         qreal rawAmplitude = curve.amplitude;
         if (!params.isEmpty()) {
-            const QLocale cLocale = QLocale::c();
+            // Each value given must read: a typo is malformed, not a request for
+            // the default of that one field.
             const QStringList parts = params.split(QLatin1Char(','));
-
-            if (parts.size() >= 1) {
-                bool ok;
-                const qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
-                if (ok)
-                    rawAmplitude = a;
+            if (parts.size() > 2 || !number(parts[0], rawAmplitude)) {
+                qCDebug(lcEasing) << "invalid parameters in" << str;
+                return std::nullopt;
             }
-            if (parts.size() >= 2) {
-                if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
-                    || curve.type == Type::ElasticInOut) {
-                    bool ok;
-                    qreal p = cLocale.toDouble(parts[1].trimmed(), &ok);
-                    if (ok)
-                        curve.period = qBound(MinElasticPeriod, p, MaxElasticPeriod);
+            if (parts.size() == 2) {
+                if (elastic) {
+                    qreal p = 0;
+                    if (!number(parts[1], p)) {
+                        qCDebug(lcEasing) << "invalid period in" << str;
+                        return std::nullopt;
+                    }
+                    curve.period = qBound(MinElasticPeriod, p, MaxElasticPeriod);
                 } else {
-                    bool ok;
-                    int b = cLocale.toInt(parts[1].trimmed(), &ok);
-                    if (ok)
-                        curve.bounces = qBound(1, b, 8);
+                    bool ok = false;
+                    const int b = cLocale.toInt(parts[1].trimmed(), &ok);
+                    if (!ok) {
+                        qCDebug(lcEasing) << "invalid bounce count in" << str;
+                        return std::nullopt;
+                    }
+                    curve.bounces = qBound(1, b, 8);
                 }
             }
         }
@@ -406,25 +422,25 @@ Easing Easing::fromString(const QString& str)
 
     // Cubic-bezier wire format: "x1,y1,x2,y2"
     const QStringList parts = str.split(QLatin1Char(','));
-    if (parts.size() == 4) {
-        const QLocale cLocale = QLocale::c();
-        bool ok1, ok2, ok3, ok4;
-        qreal x1v = cLocale.toDouble(parts[0].trimmed(), &ok1);
-        qreal y1v = cLocale.toDouble(parts[1].trimmed(), &ok2);
-        qreal x2v = cLocale.toDouble(parts[2].trimmed(), &ok3);
-        qreal y2v = cLocale.toDouble(parts[3].trimmed(), &ok4);
-        if (ok1 && ok2 && ok3 && ok4) {
-            curve.x1 = qBound(0.0, x1v, 1.0);
-            curve.y1 = qBound(-1.0, y1v, 2.0);
-            curve.x2 = qBound(0.0, x2v, 1.0);
-            curve.y2 = qBound(-1.0, y2v, 2.0);
-        } else {
-            qCDebug(lcEasing) << "invalid numeric values in" << str << "- using default";
-        }
-    } else {
-        qCDebug(lcEasing) << "invalid format (expected x1,y1,x2,y2):" << str << "- using default";
+    qreal x1v = 0, y1v = 0, x2v = 0, y2v = 0;
+    if (parts.size() != 4) {
+        qCDebug(lcEasing) << "invalid format (expected x1,y1,x2,y2):" << str;
+        return std::nullopt;
     }
+    if (!number(parts[0], x1v) || !number(parts[1], y1v) || !number(parts[2], x2v) || !number(parts[3], y2v)) {
+        qCDebug(lcEasing) << "invalid numeric values in" << str;
+        return std::nullopt;
+    }
+    curve.x1 = qBound(0.0, x1v, 1.0);
+    curve.y1 = qBound(-1.0, y1v, 2.0);
+    curve.x2 = qBound(0.0, x2v, 1.0);
+    curve.y2 = qBound(-1.0, y2v, 2.0);
     return curve;
+}
+
+Easing Easing::fromString(const QString& str)
+{
+    return tryParse(str).value_or(Easing());
 }
 
 bool Easing::operator==(const Easing& other) const
