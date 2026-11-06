@@ -9,7 +9,7 @@
 # KWin (see packaging/nix/overlays.nix).
 #
 # Usage:
-#   inputs.plasmazones.url = "github:fuddlesworth/PlasmaZones";
+#   inputs.plasmazones.url = "github:phosphor-works/PlasmaZones";
 #   { inputs, ... }: {
 #     imports = [ inputs.plasmazones.homeManagerModules.default ];
 #     programs.plasmazones.enable = true;

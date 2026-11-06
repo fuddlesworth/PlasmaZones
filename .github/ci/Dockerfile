@@ -27,6 +27,6 @@ RUN set -euo pipefail; \
     rm -rf /var/cache/pacman/pkg/*; \
     echo "$IMAGE_ID" > /etc/plasmazones-ci/id
 
-LABEL org.opencontainers.image.source="https://github.com/fuddlesworth/PlasmaZones" \
+LABEL org.opencontainers.image.source="https://github.com/phosphor-works/PlasmaZones" \
       org.opencontainers.image.description="PlasmaZones CI build environment (Arch)" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"

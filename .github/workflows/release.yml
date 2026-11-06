@@ -1214,7 +1214,7 @@ jobs:
           pkgrel=${{ needs.version.outputs.pkgrel }}
           pkgdesc="Window snapping, tiling and scrolling for KDE Plasma"
           arch=('x86_64')
-          url="https://github.com/fuddlesworth/PlasmaZones"
+          url="https://github.com/phosphor-works/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
           # KWin minimum, not an exact pin — mirrors packaging/arch/PKGBUILD.
           # An exact pin holds KWin back on -Syu and strands the desktop in a
@@ -1564,7 +1564,7 @@ jobs:
             echo "**NixOS (flake):**"
             echo '```nix'
             echo "# flake.nix inputs"
-            echo "plasmazones.url = \"github:fuddlesworth/PlasmaZones\";"
+            echo "plasmazones.url = \"github:phosphor-works/PlasmaZones\";"
             echo ""
             echo "# configuration.nix"
             echo "programs.plasmazones.enable = true;"
@@ -1576,7 +1576,7 @@ jobs:
             echo "# configuration.nix"
             echo "environment.systemPackages = ["
             echo "  (pkgs.callPackage"
-            echo "    \"\${builtins.fetchTarball \"https://github.com/fuddlesworth/PlasmaZones/archive/v${VERSION}.tar.gz\"}/packaging/nix/package.nix\""
+            echo "    \"\${builtins.fetchTarball \"https://github.com/phosphor-works/PlasmaZones/archive/v${VERSION}.tar.gz\"}/packaging/nix/package.nix\""
             echo "    { version = \"${VERSION}\"; })"
             echo "];"
             echo '```'
@@ -1666,7 +1666,7 @@ jobs:
     # Skip AUR publish for pre-releases. Single source of truth: the
     # version job's `is_prerelease` output — keeps this in sync with
     # the GH release's `--prerelease` flag automatically.
-    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
+    if: github.repository == 'phosphor-works/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout
@@ -1831,7 +1831,7 @@ jobs:
           # awk and mv are two commands, not `awk ... && mv ...`: under
           # bash -e a failure on the left of && does not stop the step, so a
           # PKGBUILD the rewrite could not parse was pushed with 'SKIP'.
-          TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
+          TARBALL_URL="https://github.com/phosphor-works/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
           # Stage the tarball to disk first so we can detect both curl
           # failures and pipe-side errors. Piping `curl | sha256sum`
           # silently produces a hash of empty input when curl 404s.
@@ -1958,7 +1958,7 @@ jobs:
     # Skip pre-releases — the home:fuddlesworth repo users add with
     # `zypper addrepo` is a stable channel. Single source of truth: the
     # version job's `is_prerelease` output, same as publish-aur.
-    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
+    if: github.repository == 'phosphor-works/PlasmaZones' && needs.version.outputs.is_prerelease != 'true' && needs.version.outputs.warm != 'true'
 
     steps:
       - name: Checkout

@@ -14,7 +14,7 @@ pkgrel=1
 _release=v$pkgver
 pkgdesc='Window snapping, tiling and scrolling for KDE Plasma (binary)'
 arch=('x86_64')
-url='https://github.com/fuddlesworth/PlasmaZones'
+url='https://github.com/phosphor-works/PlasmaZones'
 # Dual-licensed: the main daemon + KCM + editor are GPL-3.0-or-later; the
 # bundled Phosphor component shared libraries are LGPL-2.1-or-later. The
 # binary tarball contains all of them so both licenses apply to this

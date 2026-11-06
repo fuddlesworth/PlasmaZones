@@ -14,7 +14,7 @@ Settings.AboutPageShell {
     description: qsTr("Tiny end-to-end demo of the phosphor-control framework: ApplicationController + two registered pages routed through the standard sidebar/breadcrumbs/footer chrome.")
     copyright: "© 2026 fuddlesworth"
     license: "LGPL-2.1-or-later"
-    homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
+    homepageUrl: "https://github.com/phosphor-works/PlasmaZones"
     // Extras land below the homepage URL via the named `extraContent`
     // slot — explicit list syntax, since the shell intentionally does
     // NOT make extraContent its default property (that would hijack

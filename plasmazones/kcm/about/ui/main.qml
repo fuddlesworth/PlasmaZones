@@ -105,14 +105,14 @@ KCMUtils.SimpleKCM {
                 flat: true
                 text: qsTr("GitHub")
                 icon.name: "vcs-branch"
-                onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones")
+                onClicked: Qt.openUrlExternally("https://github.com/phosphor-works/PlasmaZones")
             }
 
             Button {
                 flat: true
                 text: qsTr("Report Bug")
                 icon.name: "tools-report-bug"
-                onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/issues/new")
+                onClicked: Qt.openUrlExternally("https://github.com/phosphor-works/PlasmaZones/issues/new")
             }
 
             Button {

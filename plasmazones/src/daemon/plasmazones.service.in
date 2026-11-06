@@ -3,7 +3,7 @@
 
 [Unit]
 Description=PlasmaZones Window Placement Daemon
-Documentation=https://github.com/fuddlesworth/PlasmaZones
+Documentation=https://github.com/phosphor-works/PlasmaZones
 PartOf=graphical-session.target
 After=plasma-workspace.target plasma-kglobalaccel.service
 
