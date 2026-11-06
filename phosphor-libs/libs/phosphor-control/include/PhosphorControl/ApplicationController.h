@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -9,6 +10,7 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QVariantList>
 
 #include <functional>
 #include <QtQml/qqmlregistration.h>
@@ -165,6 +167,22 @@ public:
     using NavigationHook = std::function<void(const QString& pageId)>;
     void setNavigationHook(NavigationHook hook);
 
+    /// Count @p domain as part of page @p pageId: the page shows dirty when
+    /// the domain is, and resetting the page resets the domain too. Used for
+    /// a section another module adds to the page (a Facet extension). The
+    /// domain must already be registered (registerDomain).
+    void attachDomainToPage(StagingDomain* domain, const QString& pageId);
+
+    /// The sections other modules add to slot @p slot of page @p pageId, for
+    /// the QML FacetSlot. Each entry is a map with id, moduleId, moduleName,
+    /// name, qmlSource, domain and, for a section that cannot be shown, error.
+    /// Empty without an extension provider.
+    Q_INVOKABLE QVariantList extensionsFor(const QString& pageId, const QString& slot) const;
+    using ExtensionProvider = std::function<QVariantList(const QString& pageId, const QString& slot)>;
+    void setExtensionProvider(ExtensionProvider provider);
+    /// Tell FacetSlots on page @p pageId to read extensionsFor again.
+    void notifyExtensionsChanged(const QString& pageId);
+
     /** Navigate to the previous / next navigable page (one with a
      *  qmlSource) in the registry's in-order traversal. The current
      *  page is skipped; the list wraps at boundaries. Returns the id
@@ -257,6 +275,8 @@ Q_SIGNALS:
     /// every domain reported success. `errors` is a list of
     /// user-readable messages (one per failed domain).
     void applyAllComplete(bool ok, const QStringList& errors);
+    /// The sections added to page @p pageId changed (notifyExtensionsChanged).
+    void extensionsChanged(const QString& pageId);
     /// Symmetric to applyAllComplete for discardAllAsync.
     void discardAllComplete(bool ok, const QStringList& errors);
 
@@ -281,6 +301,8 @@ private:
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
     NavigationHook m_navigationHook;
+    ExtensionProvider m_extensionProvider;
+    QHash<QString, QList<QPointer<StagingDomain>>> m_pageAttachments;
     // Back/forward navigation history (see canGoBack/goBack). The back
     // stack's last entry is the page goBack() lands on; symmetric for
     // the forward stack. m_navigatingHistory suppresses recording while

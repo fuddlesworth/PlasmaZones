@@ -46,6 +46,13 @@ public:
     /// Apply, Discard and the dirty flag.
     void registerDomain(StagingDomain* domain);
 
+    /// Register the section for the extension @p localExtensionId the
+    /// metadata declares: its staging domain, which joins Apply, Discard and
+    /// the dirty flag and counts toward the page it is added to, and the QML
+    /// the page's FacetSlot shows. Every declared extension must be
+    /// registered, whether or not its target is installed.
+    bool registerExtension(const QString& localExtensionId, StagingDomain* domain, const QUrl& qmlSource);
+
 private:
     friend class FacetHost;
     FacetContext(FacetHost* host, const FacetModuleMetadata& metadata);
@@ -53,6 +60,7 @@ private:
     FacetHost* m_host = nullptr;
     const FacetModuleMetadata& m_metadata;
     QSet<QString> m_registeredPages;
+    QSet<QString> m_registeredExtensions;
     QList<QPointer<StagingDomain>> m_domains;
     QStringList m_errors;
 };

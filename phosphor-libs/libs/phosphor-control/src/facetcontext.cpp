@@ -72,4 +72,30 @@ void FacetContext::registerDomain(StagingDomain* domain)
     m_domains.append(domain);
 }
 
+bool FacetContext::registerExtension(const QString& localExtensionId, StagingDomain* domain, const QUrl& qmlSource)
+{
+    if (!m_metadata.extension(localExtensionId)) {
+        m_errors.append(
+            QStringLiteral("registered extension %1, which the metadata does not declare").arg(localExtensionId));
+        return false;
+    }
+    if (m_registeredExtensions.contains(localExtensionId)) {
+        m_errors.append(QStringLiteral("registered extension %1 twice").arg(localExtensionId));
+        return false;
+    }
+    if (!domain) {
+        m_errors.append(QStringLiteral("registered extension %1 with no domain").arg(localExtensionId));
+        return false;
+    }
+    if (m_domains.contains(QPointer<StagingDomain>(domain))) {
+        m_errors.append(QStringLiteral("extension %1's domain is already registered").arg(localExtensionId));
+        return false;
+    }
+    m_host->addDomain(domain);
+    m_domains.append(domain);
+    m_host->addExtension(*m_host->m_modules.value(m_metadata.id), localExtensionId, domain, qmlSource);
+    m_registeredExtensions.insert(localExtensionId);
+    return true;
+}
+
 } // namespace PhosphorControl

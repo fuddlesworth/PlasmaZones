@@ -202,6 +202,12 @@ private Q_SLOTS:
         QTest::newRow("registers an undeclared page")
             << QStringLiteral("extrapage") << QStringLiteral("registered page undeclared");
         QTest::newRow("wrong controller id") << QStringLiteral("wrongid") << QStringLiteral("wrong:id");
+        QTest::newRow("skips an extension")
+            << QStringLiteral("missingextension") << QStringLiteral("did not register extension second");
+        QTest::newRow("registers an undeclared extension")
+            << QStringLiteral("extraextension") << QStringLiteral("registered extension undeclared");
+        QTest::newRow("registers an extension twice")
+            << QStringLiteral("extraextension") << QStringLiteral("registered extension first twice");
     }
 
     void aModuleThatBreaksItsContractFails()
@@ -259,6 +265,148 @@ private Q_SLOTS:
         QString error;
         QVERIFY2(h.host->retryModule(QStringLiteral("good"), &error), qPrintable(error));
         QCOMPARE(h.host->state(QStringLiteral("good")), FacetHost::ModuleState::Loaded);
+    }
+
+    void extensionsResolveAgainstTheirTargetPage()
+    {
+        Harness h({QStringLiteral("good"), QStringLiteral("extender"), QStringLiteral("badextender")});
+        h.host->start();
+
+        // Order, then module, then id. The one aimed at a module that is not
+        // installed is neither shown nor refused.
+        QCOMPARE(h.host->extensionsOn(QStringLiteral("good:general")),
+                 (QStringList{QStringLiteral("extender:after-speed"), QStringLiteral("extender:panel"),
+                              QStringLiteral("extender:top-early"), QStringLiteral("extender:top-late")}));
+        QVERIFY(h.host->extensionsOn(QStringLiteral("absent:page")).isEmpty());
+
+        const QList<FacetHost::RefusedExtension> refused = h.host->refusedExtensions();
+        QStringList ids;
+        for (const FacetHost::RefusedExtension& r : refused) {
+            ids.append(r.id);
+        }
+        QCOMPARE(ids,
+                 (QStringList{QStringLiteral("badextender:new-anchors"), QStringLiteral("badextender:no-anchor"),
+                              QStringLiteral("badextender:no-page"), QStringLiteral("badextender:no-point"),
+                              QStringLiteral("badextender:old-panel")}));
+        const auto reasonOf = [&refused](const QString& id) {
+            for (const FacetHost::RefusedExtension& r : refused) {
+                if (r.id == id) {
+                    return r.reason;
+                }
+            }
+            return QString();
+        };
+        QCOMPARE(reasonOf(QStringLiteral("badextender:new-anchors")),
+                 QStringLiteral("it is built for version 2 of slot top on good:general, which is at version 1"));
+        QCOMPARE(reasonOf(QStringLiteral("badextender:old-panel")),
+                 QStringLiteral("it is built for version 1 of slot panel on good:general, which is at version 2"));
+        QCOMPARE(reasonOf(QStringLiteral("badextender:no-anchor")),
+                 QStringLiteral("page good:general has no slot before:nope"));
+        QCOMPARE(reasonOf(QStringLiteral("badextender:no-point")),
+                 QStringLiteral("page good:general/advanced has no slot panel"));
+        QCOMPARE(reasonOf(QStringLiteral("badextender:no-page")),
+                 QStringLiteral("its target page good:nowhere does not exist"));
+
+        // Nothing is listed for a slot before its module loads.
+        QVERIFY(h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("top")).isEmpty());
+    }
+
+    void openingATargetPageLoadsTheModulesThatExtendIt()
+    {
+        Harness h({QStringLiteral("good"), QStringLiteral("extender"), QStringLiteral("badextender")});
+        h.host->start();
+        QSignalSpy changed(&h.controller, &ApplicationController::extensionsChanged);
+
+        h.controller.setCurrentPageId(QStringLiteral("good:general"));
+
+        QCOMPARE(h.host->state(QStringLiteral("good")), FacetHost::ModuleState::Loaded);
+        QCOMPARE(h.host->state(QStringLiteral("extender")), FacetHost::ModuleState::Loaded);
+        // Every one of its extensions was refused, so nothing needs it here.
+        QCOMPARE(h.host->state(QStringLiteral("badextender")), FacetHost::ModuleState::Available);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.first().first().toString(), QStringLiteral("good:general"));
+
+        const QVariantList top = h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("top"));
+        QCOMPARE(top.size(), 2);
+        const QVariantMap first = top.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("id")).toString(), QStringLiteral("extender:top-early"));
+        QCOMPARE(first.value(QStringLiteral("moduleId")).toString(), QStringLiteral("extender"));
+        QCOMPARE(first.value(QStringLiteral("moduleName")).toString(), QStringLiteral("Extender"));
+        QCOMPARE(first.value(QStringLiteral("name")).toString(), QStringLiteral("Top early"));
+        QCOMPARE(first.value(QStringLiteral("qmlSource")).toUrl(),
+                 QUrl(QStringLiteral("qrc:/fake/extension/top-early.qml")));
+        auto* domain = first.value(QStringLiteral("domain")).value<QObject*>();
+        QVERIFY(domain);
+        QCOMPARE(domain->objectName(), QStringLiteral("top-early"));
+        QVERIFY(!first.contains(QStringLiteral("error")));
+        QCOMPARE(top.last().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("extender:top-late"));
+
+        QCOMPARE(h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("after:speed")).size(), 1);
+        QCOMPARE(h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("panel")).size(), 1);
+        QVERIFY(h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("bottom")).isEmpty());
+        // Its own headless domain plus one per declared extension, the
+        // inactive one included.
+        QCOMPARE(h.host->moduleDomains(QStringLiteral("extender")).size(), 6);
+    }
+
+    void anExtensionDirtiesAndResetsWithItsPage()
+    {
+        Harness h({QStringLiteral("good"), QStringLiteral("extender")});
+        h.host->start();
+        h.controller.setCurrentPageId(QStringLiteral("good:general"));
+        const QVariantList panel = h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("panel"));
+        QCOMPARE(panel.size(), 1);
+        QObject* const domain = panel.first().toMap().value(QStringLiteral("domain")).value<QObject*>();
+        QVERIFY(domain);
+        QVERIFY(!h.controller.isDirty());
+
+        domain->setProperty("fakeDirty", true);
+        QVERIFY(h.controller.isDirty());
+        QCOMPARE(h.controller.dirtyPageIds(), QStringList{QStringLiteral("good:general")});
+
+        h.controller.resetCurrentPage();
+        QVERIFY(!domain->property("fakeDirty").toBool());
+        QVERIFY(!h.controller.isDirty());
+        QVERIFY(h.controller.dirtyPageIds().isEmpty());
+    }
+
+    void aFailedExtenderShowsAnErrorInItsSlot()
+    {
+        Harness h({QStringLiteral("good"), QStringLiteral("missingextension")});
+        h.host->start();
+        h.controller.setCurrentPageId(QStringLiteral("good:general"));
+
+        QCOMPARE(h.host->state(QStringLiteral("good")), FacetHost::ModuleState::Loaded);
+        QCOMPARE(h.host->state(QStringLiteral("missingextension")), FacetHost::ModuleState::Failed);
+        const QVariantList bottom =
+            h.controller.extensionsFor(QStringLiteral("good:general"), QStringLiteral("bottom"));
+        QCOMPARE(bottom.size(), 2);
+        for (const QVariant& entry : bottom) {
+            const QVariantMap map = entry.toMap();
+            QVERIFY(
+                map.value(QStringLiteral("error")).toString().contains(QStringLiteral("did not register extension")));
+            QVERIFY(!map.contains(QStringLiteral("domain")));
+        }
+    }
+
+    void anExtenderLoadsWithoutItsTarget()
+    {
+        Harness h({QStringLiteral("extender")});
+        h.host->start();
+        QString error;
+        QVERIFY2(h.host->loadModule(QStringLiteral("extender"), &error), qPrintable(error));
+        QVERIFY(h.host->refusedExtensions().isEmpty());
+        QVERIFY(h.host->extensionsOn(QStringLiteral("good:general")).isEmpty());
+    }
+
+    void attachingToAnUnknownPageIsRefused()
+    {
+        ApplicationController controller;
+        auto* domain = new SimplePage(QStringLiteral("d"), &controller);
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("attachDomainToPage: null domain or unknown page")));
+        controller.attachDomainToPage(domain, QStringLiteral("missing"));
+        QVERIFY(controller.dirtyPageIds().isEmpty());
     }
 };
 

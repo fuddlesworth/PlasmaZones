@@ -103,6 +103,66 @@ private Q_SLOTS:
                     .isEmpty());
     }
 
+    void parsesExtensionPointsAndExtensions()
+    {
+        QStringList errors;
+        const FacetModuleMetadata metadata = FacetModuleMetadata::parse(json(R"({
+            "Id": "m", "Name": "M",
+            "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["speed", "size"] } ],
+            "ExtensionPoints": [ { "Page": "p", "Id": "panel", "Version": 3 } ],
+            "Extensions": [ { "Id": "e", "Target": "other:page", "Slot": "after:x", "TargetVersion": 2,
+                              "Name": "E", "Name[de]": "Ee", "Keywords": ["k"], "Order": 5 } ] })"),
+                                                                        QLocale(QStringLiteral("de_DE")), &errors);
+        QVERIFY2(errors.isEmpty(), qPrintable(errors.join(QLatin1Char('\n'))));
+        QCOMPARE(metadata.page(QStringLiteral("p"))->anchors,
+                 (QStringList{QStringLiteral("speed"), QStringLiteral("size")}));
+        QCOMPARE(metadata.extensionPoints.size(), 1);
+        QCOMPARE(metadata.extensionPoints.first().version, 3);
+        const FacetExtensionMetadata* const extension = metadata.extension(QStringLiteral("e"));
+        QVERIFY(extension);
+        QCOMPARE(extension->target, QStringLiteral("other:page"));
+        QCOMPARE(extension->slot, QStringLiteral("after:x"));
+        QCOMPARE(extension->targetVersion, 2);
+        QCOMPARE(extension->name, QStringLiteral("Ee"));
+        QCOMPARE(extension->keywords, QStringList{QStringLiteral("k")});
+        QCOMPARE(extension->order, 5);
+        QVERIFY(!metadata.extension(QStringLiteral("nope")));
+    }
+
+    void offersSlotsAtTheirVersion_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("slot");
+        QTest::addColumn<int>("version");
+        QTest::newRow("top") << QStringLiteral("p") << QStringLiteral("top") << 4;
+        QTest::newRow("bottom") << QStringLiteral("p") << QStringLiteral("bottom") << 4;
+        QTest::newRow("before an anchor") << QStringLiteral("p") << QStringLiteral("before:speed") << 4;
+        QTest::newRow("after an anchor") << QStringLiteral("p") << QStringLiteral("after:speed") << 4;
+        QTest::newRow("unknown anchor") << QStringLiteral("p") << QStringLiteral("after:size") << 0;
+        QTest::newRow("named point") << QStringLiteral("p") << QStringLiteral("panel") << 2;
+        QTest::newRow("anchors is not a slot") << QStringLiteral("p") << QStringLiteral("anchors") << 0;
+        QTest::newRow("unknown point") << QStringLiteral("p") << QStringLiteral("other") << 0;
+        QTest::newRow("default anchors version") << QStringLiteral("q") << QStringLiteral("top") << 1;
+        QTest::newRow("point on another page") << QStringLiteral("q") << QStringLiteral("panel") << 0;
+        QTest::newRow("unknown page") << QStringLiteral("z") << QStringLiteral("top") << 0;
+    }
+
+    void offersSlotsAtTheirVersion()
+    {
+        QFETCH(QString, page);
+        QFETCH(QString, slot);
+        QFETCH(int, version);
+        QStringList errors;
+        const FacetModuleMetadata metadata = FacetModuleMetadata::parse(json(R"({
+            "Id": "m", "Name": "M",
+            "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["speed"] }, { "Id": "q", "Name": "Q" } ],
+            "ExtensionPoints": [ { "Page": "p", "Id": "anchors", "Version": 4 },
+                                 { "Page": "p", "Id": "panel", "Version": 2 } ] })"),
+                                                                        QLocale::c(), &errors);
+        QVERIFY2(errors.isEmpty(), qPrintable(errors.join(QLatin1Char('\n'))));
+        QCOMPARE(metadata.slotVersion(page, slot), version);
+    }
+
     void reportsEveryProblem_data()
     {
         QTest::addColumn<QByteArray>("text");
@@ -134,6 +194,43 @@ private Q_SLOTS:
         QTest::newRow("category without name")
             << QByteArray(R"({ "Id": "m", "Name": "M", "Categories": [ { "Id": "c" } ] })")
             << QStringLiteral("category c has no \"Name\"");
+
+        QTest::newRow("point on an undeclared page")
+            << QByteArray(R"({ "Id": "m", "Name": "M", "ExtensionPoints": [ { "Page": "x", "Id": "p" } ] })")
+            << QStringLiteral("which the module does not declare");
+        QTest::newRow("point named top") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "a", "Name": "A" } ], "ExtensionPoints": [ { "Page": "a", "Id": "top" } ] })")
+                                         << QStringLiteral("not be top or bottom");
+        QTest::newRow("point version zero") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "a", "Name": "A" } ],
+                   "ExtensionPoints": [ { "Page": "a", "Id": "p", "Version": 0 } ] })")
+                                            << QStringLiteral("which is below 1");
+        QTest::newRow("point declared twice") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "a", "Name": "A" } ],
+                   "ExtensionPoints": [ { "Page": "a", "Id": "p" }, { "Page": "a", "Id": "p" } ] })")
+                                              << QStringLiteral("extension point p is declared twice");
+        QTest::newRow("extension without id") << QByteArray(
+            R"({ "Id": "m", "Name": "M", "Extensions": [ { "Target": "o:p", "Slot": "top", "Name": "E" } ] })")
+                                              << QStringLiteral("extension id  must match");
+        QTest::newRow("extension declared twice") << QByteArray(R"({ "Id": "m", "Name": "M", "Extensions": [
+                   { "Id": "e", "Target": "o:p", "Slot": "top", "Name": "E" },
+                   { "Id": "e", "Target": "o:p", "Slot": "top", "Name": "E" } ] })")
+                                                  << QStringLiteral("extension e is declared twice");
+        QTest::newRow("extension with a local target") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Extensions": [ { "Id": "e", "Target": "p", "Slot": "top", "Name": "E" } ] })")
+                                                       << QStringLiteral("which is not <module>:<page>");
+        QTest::newRow("extension on its own module") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Extensions": [ { "Id": "e", "Target": "m:p", "Slot": "top", "Name": "E" } ] })")
+                                                     << QStringLiteral("targets its own module");
+        QTest::newRow("extension with a bad slot") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Extensions": [ { "Id": "e", "Target": "o:p", "Slot": "after:", "Name": "E" } ] })")
+                                                   << QStringLiteral("has slot after:");
+        QTest::newRow("extension target version zero") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Extensions": [ { "Id": "e", "Target": "o:p", "Slot": "top", "TargetVersion": 0, "Name": "E" } ] })")
+                                                       << QStringLiteral("TargetVersion 0");
+        QTest::newRow("extension without name") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Extensions": [ { "Id": "e", "Target": "o:p", "Slot": "top" } ] })")
+                                                << QStringLiteral("extension e has no \"Name\"");
     }
 
     void reportsEveryProblem()

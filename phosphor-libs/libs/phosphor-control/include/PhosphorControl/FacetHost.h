@@ -15,6 +15,8 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
+#include <QVariantList>
 
 #include <memory>
 #include <optional>
@@ -40,6 +42,13 @@ class StagingDomain;
 /// id, and a module page is `<module>:<page>` (FacetContext::pageId). Neither
 /// form can collide with another, because module ids contain neither `@`
 /// nor `:`.
+///
+/// Extensions: a module's metadata can add sections to another module's
+/// page. start() resolves each against its target page's slots and their
+/// versions, and lists the ones that do not fit in refusedExtensions(). An
+/// extension aimed at a module that is not installed is skipped quietly.
+/// Opening a page also loads every module that extends it, and the host
+/// answers ApplicationController::extensionsFor() for the page's FacetSlots.
 ///
 /// A crash while a module loads is remembered: the module's id is written to a
 /// sentinel file before registerInto and removed after. A sentinel left at the
@@ -99,7 +108,24 @@ public:
     [[nodiscard]] std::optional<FacetModuleMetadata> metadata(const QString& moduleId) const;
     /// Module files the catalog refused, with the reason.
     [[nodiscard]] QList<PhosphorRegistry::RefusedPlugin> refusedModules() const;
-    /// The headless domains @p moduleId registered while loading.
+
+    /// An extension that will not be shown, and why: its target page does not
+    /// exist, has no such slot, or offers the slot at another version. An
+    /// extension whose target module is not installed is not refused, only
+    /// inactive.
+    struct RefusedExtension
+    {
+        /// `<module>:<extension>`.
+        QString id;
+        QString reason;
+    };
+    [[nodiscard]] QList<RefusedExtension> refusedExtensions() const;
+    /// The scoped ids of the extensions that will be shown on @p pageId, in
+    /// slot order.
+    [[nodiscard]] QStringList extensionsOn(const QString& pageId) const;
+
+    /// The domains @p moduleId registered while loading: headless ones and its
+    /// extensions'.
     [[nodiscard]] QList<StagingDomain*> moduleDomains(const QString& moduleId) const;
     /// The page ids the module of @p moduleId registered while loading.
     [[nodiscard]] QStringList boundPages(const QString& moduleId) const;
@@ -118,6 +144,9 @@ private:
     [[nodiscard]] QString owningModule(const QString& pageId) const;
     bool bindPage(Module& module, const QString& scopedId, PageController* controller, const QUrl& qmlSource);
     void addDomain(StagingDomain* domain);
+    void addExtension(Module& module, const QString& localId, StagingDomain* domain, const QUrl& qmlSource);
+    void resolveExtensions();
+    [[nodiscard]] QVariantList extensionsFor(const QString& pageId, const QString& slot) const;
     PageController* placeholder(const QString& id);
     void ensureCategoryNode(const QString& categoryId);
     void setFailed(Module& module, const QString& reason);
@@ -135,6 +164,10 @@ private:
     QHash<QString, FacetCategoryMetadata> m_categories;
     QSet<QString> m_registeredCategoryNodes;
     QHash<QString, PageController*> m_placeholders;
+    struct ActiveExtension;
+    QHash<QString, QList<std::shared_ptr<ActiveExtension>>> m_extensionsByPage;
+    QList<RefusedExtension> m_refusedExtensions;
+    QSet<QString> m_warnedExtensions;
 };
 
 } // namespace PhosphorControl

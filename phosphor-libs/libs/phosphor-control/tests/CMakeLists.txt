@@ -104,8 +104,10 @@ endfunction()
 set(_good_pages [=[
     "Pages": [
         { "Id": "general/advanced", "Name": "Advanced", "Parent": "general" },
-        { "Id": "general", "Name": "General", "Name[de]": "Allgemein", "Keywords": ["basic"] }
-    ]]=])
+        { "Id": "general", "Name": "General", "Name[de]": "Allgemein", "Keywords": ["basic"],
+          "Anchors": ["speed"] }
+    ],
+    "ExtensionPoints": [ { "Page": "general", "Id": "panel", "Version": 2 } ]]=])
 phosphorcontrol_add_fake_module(good MODE 0 METADATA
     "{ \"Id\": \"good\", \"ApiVersion\": 1, \"Name\": \"Good\", \"Category\": \"input\", \"Icon\": \"good-icon\",${_good_pages} }")
 phosphorcontrol_add_fake_module(child MODE 0 METADATA [=[{
@@ -128,9 +130,44 @@ phosphorcontrol_add_fake_module(badmetadata MODE 0 METADATA [=[{
     "Id": "badmetadata", "ApiVersion": 1,
     "Pages": [ { "Id": "a:b", "Name": "Colon" } ] }]=])
 
+# Modules that add sections to good's pages. extender's land: two at the top
+# (ordered by Order, then id), one after the speed anchor, one at the panel
+# point, and one aimed at a module that is not installed. badextender's are
+# all refused.
+phosphorcontrol_add_fake_module(extender MODE 0 METADATA [=[{
+    "Id": "extender", "ApiVersion": 1, "Name": "Extender",
+    "Pages": [ { "Id": "own", "Name": "Own" } ],
+    "Extensions": [
+        { "Id": "top-late", "Target": "good:general", "Slot": "top", "Name": "Top late", "Order": 10 },
+        { "Id": "top-early", "Target": "good:general", "Slot": "top", "Name": "Top early" },
+        { "Id": "after-speed", "Target": "good:general", "Slot": "after:speed", "Name": "After speed" },
+        { "Id": "panel", "Target": "good:general", "Slot": "panel", "TargetVersion": 2, "Name": "Panel" },
+        { "Id": "ghost", "Target": "absent:page", "Slot": "top", "Name": "Ghost" } ] }]=])
+phosphorcontrol_add_fake_module(badextender MODE 0 METADATA [=[{
+    "Id": "badextender", "ApiVersion": 1, "Name": "Bad Extender",
+    "Extensions": [
+        { "Id": "old-panel", "Target": "good:general", "Slot": "panel", "Name": "Old panel" },
+        { "Id": "new-anchors", "Target": "good:general", "Slot": "top", "TargetVersion": 2, "Name": "New anchors" },
+        { "Id": "no-anchor", "Target": "good:general", "Slot": "before:nope", "Name": "No anchor" },
+        { "Id": "no-point", "Target": "good:general/advanced", "Slot": "panel", "Name": "No point" },
+        { "Id": "no-page", "Target": "good:nowhere", "Slot": "top", "Name": "No page" } ] }]=])
+set(_two_extensions [=[
+    "Extensions": [
+        { "Id": "first", "Target": "good:general", "Slot": "bottom", "Name": "First" },
+        { "Id": "second", "Target": "good:general", "Slot": "bottom", "Name": "Second" } ]]=])
+phosphorcontrol_add_fake_module(missingextension MODE 5 METADATA
+    "{ \"Id\": \"missingextension\", \"ApiVersion\": 1, \"Name\": \"Missing Extension\",${_two_extensions} }")
+phosphorcontrol_add_fake_module(extraextension MODE 6 METADATA
+    "{ \"Id\": \"extraextension\", \"ApiVersion\": 1, \"Name\": \"Extra Extension\",${_two_extensions} }")
+
 phosphorcontrol_add_test(test_facet_module_metadata)
 phosphorcontrol_add_test(test_facet_host)
 phosphorcontrol_add_test(test_facet_test_host)
+
+# FacetSlot and FacetExtensionFrame, through the static org.phosphor.control
+# module the in-tree apps link.
+phosphorcontrol_add_test(test_facet_slot)
+target_link_libraries(test_facet_slot PRIVATE PhosphorControl::PhosphorControlQml PhosphorControlQmlplugin Qt6::Quick)
 foreach(test test_facet_host test_facet_test_host)
     target_compile_definitions(${test} PRIVATE PHOSPHOR_CONTROL_FIXTURE_DIR="${PHOSPHOR_CONTROL_FIXTURE_DIR}")
     add_dependencies(${test} ${phosphorcontrol_fixture_targets})

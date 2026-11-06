@@ -141,6 +141,7 @@ FacetModuleMetadata FacetModuleMetadata::parse(const QJsonObject& json, const QL
         page.icon = object.value(QLatin1String("Icon")).toString();
         page.parent = object.value(QLatin1String("Parent")).toString();
         page.keywords = stringList(localized(object, QStringLiteral("Keywords"), locale));
+        page.anchors = stringList(object.value(QLatin1String("Anchors")));
         if (!pageIdPattern().match(page.id).hasMatch()) {
             problems.append(QStringLiteral("page id %1 must match [A-Za-z0-9][A-Za-z0-9._/-]*").arg(page.id));
             continue;
@@ -209,10 +210,135 @@ FacetModuleMetadata FacetModuleMetadata::parse(const QJsonObject& json, const QL
         place(place, page);
     }
 
+    QSet<QString> pointKeys;
+    const QJsonArray points = json.value(QLatin1String("ExtensionPoints")).toArray();
+    for (const QJsonValue& value : points) {
+        const QJsonObject object = value.toObject();
+        FacetExtensionPointMetadata point;
+        point.page = object.value(QLatin1String("Page")).toString();
+        point.id = object.value(QLatin1String("Id")).toString();
+        point.version = object.value(QLatin1String("Version")).toInt(1);
+        if (!pageIds.contains(point.page)) {
+            problems.append(QStringLiteral("extension point %1 is on page %2, which the module does not declare")
+                                .arg(point.id, point.page));
+            continue;
+        }
+        if (!categoryIdPattern().match(point.id).hasMatch() || point.id == QLatin1String("top")
+            || point.id == QLatin1String("bottom")) {
+            problems.append(QStringLiteral("extension point id %1 must match [a-z0-9][a-z0-9-]* and not be top or "
+                                           "bottom")
+                                .arg(point.id));
+            continue;
+        }
+        if (point.version < 1) {
+            problems.append(QStringLiteral("extension point %1 has version %2, which is below 1")
+                                .arg(point.id, QString::number(point.version)));
+            continue;
+        }
+        const QString key = point.page + QLatin1Char('|') + point.id;
+        if (pointKeys.contains(key)) {
+            problems.append(
+                QStringLiteral("extension point %1 is declared twice on page %2").arg(point.id, point.page));
+            continue;
+        }
+        pointKeys.insert(key);
+        metadata.extensionPoints.append(point);
+    }
+
+    QSet<QString> extensionIds;
+    const QJsonArray extensions = json.value(QLatin1String("Extensions")).toArray();
+    for (const QJsonValue& value : extensions) {
+        const QJsonObject object = value.toObject();
+        FacetExtensionMetadata extension;
+        extension.id = object.value(QLatin1String("Id")).toString();
+        extension.target = object.value(QLatin1String("Target")).toString();
+        extension.slot = object.value(QLatin1String("Slot")).toString();
+        extension.targetVersion = object.value(QLatin1String("TargetVersion")).toInt(1);
+        extension.name = localized(object, QStringLiteral("Name"), locale).toString();
+        extension.keywords = stringList(localized(object, QStringLiteral("Keywords"), locale));
+        extension.order = object.value(QLatin1String("Order")).toInt(0);
+        if (!moduleIdPattern().match(extension.id).hasMatch()) {
+            problems.append(QStringLiteral("extension id %1 must match [A-Za-z0-9][A-Za-z0-9._-]*").arg(extension.id));
+            continue;
+        }
+        if (extensionIds.contains(extension.id)) {
+            problems.append(QStringLiteral("extension %1 is declared twice").arg(extension.id));
+            continue;
+        }
+        if (!isCrossModuleParent(extension.target)) {
+            problems.append(QStringLiteral("extension %1 targets %2, which is not <module>:<page>")
+                                .arg(extension.id, extension.target));
+            continue;
+        }
+        if (extension.target.section(QLatin1Char(':'), 0, 0) == metadata.id) {
+            problems.append(QStringLiteral("extension %1 targets its own module; add the section to the page instead")
+                                .arg(extension.id));
+            continue;
+        }
+        const bool slotWellFormed = extension.slot == QLatin1String("top") || extension.slot == QLatin1String("bottom")
+            || ((extension.slot.startsWith(QLatin1String("before:"))
+                 || extension.slot.startsWith(QLatin1String("after:")))
+                && extension.slot.section(QLatin1Char(':'), 1).size() > 0)
+            || categoryIdPattern().match(extension.slot).hasMatch();
+        if (!slotWellFormed) {
+            problems.append(QStringLiteral("extension %1 has slot %2, which is not top, bottom, before:<anchor>, "
+                                           "after:<anchor> or an extension point id")
+                                .arg(extension.id, extension.slot));
+            continue;
+        }
+        if (extension.targetVersion < 1) {
+            problems.append(QStringLiteral("extension %1 has TargetVersion %2, which is below 1")
+                                .arg(extension.id, QString::number(extension.targetVersion)));
+            continue;
+        }
+        if (extension.name.isEmpty()) {
+            problems.append(QStringLiteral("extension %1 has no \"Name\"").arg(extension.id));
+            continue;
+        }
+        extensionIds.insert(extension.id);
+        metadata.extensions.append(extension);
+    }
+
     if (errors) {
         errors->append(problems);
     }
     return metadata;
+}
+
+const FacetExtensionMetadata* FacetModuleMetadata::extension(const QString& id) const
+{
+    for (const FacetExtensionMetadata& candidate : extensions) {
+        if (candidate.id == id) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
+int FacetModuleMetadata::slotVersion(const QString& pageId, const QString& slot) const
+{
+    const FacetPageMetadata* const target = page(pageId);
+    if (!target) {
+        return 0;
+    }
+    int anchorsVersion = 1;
+    for (const FacetExtensionPointMetadata& point : extensionPoints) {
+        if (point.page == pageId && point.id == QLatin1String("anchors")) {
+            anchorsVersion = point.version;
+        }
+    }
+    if (slot == QLatin1String("top") || slot == QLatin1String("bottom")) {
+        return anchorsVersion;
+    }
+    if (slot.startsWith(QLatin1String("before:")) || slot.startsWith(QLatin1String("after:"))) {
+        return target->anchors.contains(slot.section(QLatin1Char(':'), 1)) ? anchorsVersion : 0;
+    }
+    for (const FacetExtensionPointMetadata& point : extensionPoints) {
+        if (point.page == pageId && point.id == slot && point.id != QLatin1String("anchors")) {
+            return point.version;
+        }
+    }
+    return 0;
 }
 
 const FacetPageMetadata* FacetModuleMetadata::page(const QString& id) const
