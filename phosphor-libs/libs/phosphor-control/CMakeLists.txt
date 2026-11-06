@@ -167,6 +167,7 @@ set(phosphorcontrol_SRCS
     src/facetmodulemetadata.cpp
     src/facetcontext.cpp
     src/facethost.cpp
+    src/facetplaceholderpage_p.h
     src/facettesthost.cpp
 )
 
@@ -322,6 +323,7 @@ set(phosphorcontrol_qml_FILES
     qml/AboutPageShell.qml
     qml/FacetSlot.qml
     qml/FacetExtensionFrame.qml
+    qml/FacetUnavailablePage.qml
 )
 
 # JS helpers shared by the QML chrome — kept separate from QML_FILES

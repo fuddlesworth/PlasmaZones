@@ -30,6 +30,7 @@ namespace PhosphorControl {
 
 class ApplicationController;
 class FacetContext;
+class FacetPlaceholderPage;
 class PageController;
 class StagingDomain;
 
@@ -159,7 +160,9 @@ private:
                         const std::function<std::unique_ptr<PhosphorConfig::IBackend>(const QString&)>& create);
     void resolveExtensions();
     [[nodiscard]] QVariantList extensionsFor(const QString& pageId, const QString& slot) const;
-    PageController* placeholder(const QString& id);
+    FacetPlaceholderPage* placeholder(const QString& id);
+    [[nodiscard]] static bool canRetry(const Module& module);
+    void updateUnavailablePages(const Module& module);
     void ensureCategoryNode(const QString& categoryId);
     void setFailed(Module& module, const QString& reason);
     [[nodiscard]] QString readSentinel() const;
@@ -175,7 +178,7 @@ private:
     QHash<QString, std::shared_ptr<Module>> m_modules;
     QHash<QString, FacetCategoryMetadata> m_categories;
     QSet<QString> m_registeredCategoryNodes;
-    QHash<QString, PageController*> m_placeholders;
+    QHash<QString, FacetPlaceholderPage*> m_placeholders;
     struct ActiveExtension;
     QHash<QString, QList<std::shared_ptr<ActiveExtension>>> m_extensionsByPage;
     QList<RefusedExtension> m_refusedExtensions;

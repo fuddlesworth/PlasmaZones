@@ -311,6 +311,14 @@ Item {
             }
         }
 
+        // A placeholder page took its real controller and QML (a Facet module
+        // loaded). The QML change reaches the cached Loader through the
+        // revision its source depends on, and the new controller is injected
+        // into the item that source builds.
+        function onPageBound(id) {
+            root._registryRevision++;
+        }
+
         target: root.controller.registry
     }
 }

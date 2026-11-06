@@ -8,6 +8,7 @@
 #include "PhosphorControl/FacetModule.h"
 #include "PhosphorControl/PageController.h"
 #include "PhosphorControl/PageRegistry.h"
+#include "facetplaceholderpage_p.h"
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -30,27 +31,10 @@ Q_LOGGING_CATEGORY(lcFacetHost, "phosphorcontrol.facethost")
 const QString CategoryPrefix = QStringLiteral("@category/");
 const QString DefaultCategory = QStringLiteral("apps");
 
-// Stands in for a page whose module has not loaded, and for the structural
-// category and module nodes. Never dirty, and Apply and Discard succeed at
-// once, so it never holds up a batch.
-class FacetPlaceholderPage final : public PageController
-{
-public:
-    using PageController::PageController;
-
-    bool isDirty() const override
-    {
-        return false;
-    }
-    void apply() override
-    {
-        Q_EMIT applyResult(true, QString());
-    }
-    void discard() override
-    {
-        Q_EMIT discardResult(true, QString());
-    }
-};
+// The page a module page shows until its module loads, and for good when the
+// module cannot load. Navigating to the page loads the module first, so it is
+// only ever seen with a reason.
+const QUrl UnavailablePageUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/control/qml/FacetUnavailablePage.qml"));
 
 // The file may not exist yet, so the key is its cleaned absolute path with
 // the directory's symlinks resolved when the directory exists, rather than
@@ -341,11 +325,32 @@ void FacetHost::ensureCategoryNode(const QString& categoryId)
     m_registeredCategoryNodes.insert(categoryId);
 }
 
-PageController* FacetHost::placeholder(const QString& id)
+FacetPlaceholderPage* FacetHost::placeholder(const QString& id)
 {
     auto* page = new FacetPlaceholderPage(id, this);
     m_placeholders.insert(id, page);
     return page;
+}
+
+bool FacetHost::canRetry(const Module& module)
+{
+    // A module that failed before binding anything can be tried again. One
+    // with invalid metadata has no placeholder pages to bind into, and one
+    // that bound pages keeps them: loading it twice would bind controllers
+    // into pages that already have them.
+    return module.state == ModuleState::DisabledAfterCrash
+        || (module.state == ModuleState::Failed && module.nodeRegistered && module.boundPages.isEmpty());
+}
+
+void FacetHost::updateUnavailablePages(const Module& module)
+{
+    const bool retryable = canRetry(module);
+    for (const FacetPageMetadata& page : module.metadata.pages) {
+        FacetPlaceholderPage* const placeholder = m_placeholders.value(pageId(module.metadata.id, page.id));
+        if (placeholder) {
+            placeholder->setUnavailable(module.reason, retryable);
+        }
+    }
 }
 
 void FacetHost::registerPlaceholders(Module& module)
@@ -386,9 +391,17 @@ void FacetHost::registerPlaceholders(Module& module)
             parent = pageId(metadata.id, page.parent);
         }
         const QString scoped = pageId(metadata.id, page.id);
-        m_controller->registerPage(placeholder(scoped), parent, page.name, QUrl(), page.icon,
+        FacetPlaceholderPage* const stand = placeholder(scoped);
+        stand->setRetry([this, moduleId = metadata.id]() {
+            QString error;
+            if (!retryModule(moduleId, &error)) {
+                qCWarning(lcFacetHost).noquote() << "FacetHost: retrying module" << moduleId << "failed -" << error;
+            }
+        });
+        m_controller->registerPage(stand, parent, page.name, UnavailablePageUrl, page.icon,
                                    hasChildren.contains(page.id));
     }
+    updateUnavailablePages(module);
 }
 
 QString FacetHost::owningModule(const QString& pageId) const
@@ -520,15 +533,7 @@ bool FacetHost::loadModule(const QString& moduleId, QString* errorString)
 bool FacetHost::retryModule(const QString& moduleId, QString* errorString)
 {
     const std::shared_ptr<Module> module = m_modules.value(moduleId);
-    if (module && module->state == ModuleState::DisabledAfterCrash) {
-        module->state = ModuleState::Available;
-        module->reason.clear();
-    } else if (module && module->state == ModuleState::Failed && module->nodeRegistered
-               && module->boundPages.isEmpty()) {
-        // A module that failed before binding anything can be tried again.
-        // One with invalid metadata has no placeholder pages to bind into,
-        // and one that bound pages keeps them: loading it twice would bind
-        // controllers into pages that already have them.
+    if (module && canRetry(*module)) {
         module->state = ModuleState::Available;
         module->reason.clear();
     }
@@ -678,6 +683,7 @@ void FacetHost::setFailed(Module& module, const QString& reason)
 {
     module.state = ModuleState::Failed;
     module.reason = reason;
+    updateUnavailablePages(module);
     qCWarning(lcFacetHost).noquote() << "FacetHost: module" << module.metadata.id << "failed:" << reason;
     Q_EMIT moduleFailed(module.metadata.id, reason);
 }

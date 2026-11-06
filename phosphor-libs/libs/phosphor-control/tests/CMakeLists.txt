@@ -174,6 +174,9 @@ phosphorcontrol_add_test(test_facet_test_host)
 # module the in-tree apps link.
 phosphorcontrol_add_test(test_facet_slot)
 target_link_libraries(test_facet_slot PRIVATE PhosphorControl::PhosphorControlQml PhosphorControlQmlplugin Qt6::Quick)
+phosphorcontrol_add_test(test_page_host)
+target_link_libraries(test_page_host PRIVATE
+    PhosphorControl::PhosphorControlQml PhosphorControlQmlplugin PhosphorAnimationQmlplugin Qt6::Quick)
 foreach(test test_facet_host test_facet_test_host)
     target_compile_definitions(${test} PRIVATE PHOSPHOR_CONTROL_FIXTURE_DIR="${PHOSPHOR_CONTROL_FIXTURE_DIR}")
     add_dependencies(${test} ${phosphorcontrol_fixture_targets})

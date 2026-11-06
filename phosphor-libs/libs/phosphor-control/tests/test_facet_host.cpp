@@ -167,7 +167,15 @@ private Q_SLOTS:
         for (const QString& id : h.host->moduleIds()) {
             QCOMPARE(h.host->state(id), FacetHost::ModuleState::Available);
         }
-        QVERIFY(registry->entry(QStringLiteral("good:general")).qmlSource.isEmpty());
+        // A module page stands in with the unavailable page, so it is a
+        // navigable leaf the sidebar shows and search can land on before its
+        // module loads. Category and module nodes stay headers.
+        QCOMPARE(registry->entry(QStringLiteral("good:general")).qmlSource,
+                 QUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/control/qml/FacetUnavailablePage.qml")));
+        QVERIFY(registry->hasNavigablePage(QStringLiteral("good:general/advanced")));
+        QCOMPARE(registry->firstVisibleLeafId(input), QStringLiteral("good:general"));
+        QVERIFY(!registry->hasNavigablePage(QStringLiteral("good")));
+        QVERIFY(!registry->hasNavigablePage(input));
     }
 
     void openingAPageLoadsItsModule()
@@ -268,9 +276,31 @@ private Q_SLOTS:
         h.controller.setCurrentPageId(QStringLiteral("good:general"));
         QCOMPARE(h.host->state(QStringLiteral("good")), FacetHost::ModuleState::DisabledAfterCrash);
 
-        QString error;
-        QVERIFY2(h.host->retryModule(QStringLiteral("good"), &error), qPrintable(error));
+        // Its page says why, and offers the retry, which loads it.
+        PageController* const stand = h.registry()->controller(QStringLiteral("good:general"));
+        QVERIFY(stand->property("unavailableReason").toString().contains(QStringLiteral("stopped unexpectedly")));
+        QVERIFY(stand->property("retryable").toBool());
+        QSignalSpy bound(h.registry(), &PageRegistry::pageBound);
+        QVERIFY(QMetaObject::invokeMethod(stand, "retry"));
         QCOMPARE(h.host->state(QStringLiteral("good")), FacetHost::ModuleState::Loaded);
+        QCOMPARE(bound.count(), 2);
+        QVERIFY(h.registry()->controller(QStringLiteral("good:general")) != stand);
+    }
+
+    void aPageWhoseModuleFailedSaysWhy()
+    {
+        Harness h({QStringLiteral("missingpage")});
+        h.host->start();
+        h.controller.setCurrentPageId(QStringLiteral("missingpage:general"));
+        QCOMPARE(h.host->state(QStringLiteral("missingpage")), FacetHost::ModuleState::Failed);
+        // The page it did bind keeps its real controller; the one it skipped
+        // keeps the placeholder, which explains. It bound a page, so loading it
+        // again is not offered.
+        PageController* const stand = h.registry()->controller(QStringLiteral("missingpage:general/advanced"));
+        QVERIFY(stand->property("unavailableReason")
+                    .toString()
+                    .contains(QStringLiteral("did not register page general/advanced")));
+        QVERIFY(!stand->property("retryable").toBool());
     }
 
     void extensionsResolveAgainstTheirTargetPage()
