@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // CPU meter plugin for phosphor-registry-plugin-demo. Demonstrates
-// the plugin ABI shape: a single .so exporting
-// `phosphor_registry_create_factory` which returns an
-// IBarWidgetFactory.
+// the bar-widget plugin shape: a Qt plugin whose root object
+// implements IBarWidgetPlugin and hands out an IBarWidgetFactory,
+// with its id and ApiVersion in metadata.json.
 //
 // The widget itself is inline QML (no separate file) because the
 // plugin needs to be a self-contained .so without a QML module
@@ -12,9 +12,10 @@
 // its QML via qt_add_qml_module and load via a qrc URL; for the
 // demo, inline QML is the simplest proof-of-shape.
 
-#include <PhosphorRegistry/IBarWidgetFactory.h>
+#include <PhosphorRegistry/IBarWidgetPlugin.h>
 
 #include <QEventLoop>
+#include <QObject>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -22,6 +23,7 @@
 #include <QStringList>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <memory>
 #include <new> // std::nothrow
 
 namespace {
@@ -151,14 +153,22 @@ public:
 
 } // namespace
 
-extern "C" Q_DECL_EXPORT PhosphorRegistry::IBarWidgetFactory* phosphor_registry_create_factory()
+// The plugin's root object. Lives outside the anonymous namespace because
+// moc generates the plugin entry points against its name.
+class CpuMeterPlugin : public QObject, public PhosphorRegistry::IBarWidgetPlugin
 {
-    // The PluginLoader ABI contract (PluginLoader.h) says the entry
-    // point must not throw — exceptions crossing the extern "C"
-    // boundary are UB. Throwing-new could violate that contract on
-    // allocation failure; nothrow-new returns nullptr instead, which
-    // the loader treats as a recoverable "plugin construction
-    // failed" failure mode. This also keeps the plugin buildable
-    // with -fno-exceptions.
-    return new (std::nothrow) CpuMeterFactory();
-}
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID PhosphorRegistryBarWidgetPlugin_iid FILE "metadata.json")
+    Q_INTERFACES(PhosphorRegistry::IBarWidgetPlugin)
+
+public:
+    // Must not throw (IBarWidgetPlugin's contract): make_unique's
+    // allocation failure would, so build the factory with nothrow new and
+    // hand back nullptr, which the loader treats as a failed plugin.
+    std::unique_ptr<PhosphorRegistry::IBarWidgetFactory> createFactory() override
+    {
+        return std::unique_ptr<PhosphorRegistry::IBarWidgetFactory>(new (std::nothrow) CpuMeterFactory());
+    }
+};
+
+#include "cpumeter.moc"

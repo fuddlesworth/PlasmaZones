@@ -3,24 +3,6 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test Quick Gui Qml)
 
-# ─── Fake plugin fixture helper ────────────────────────────────────────────────
-#
-# Builds one MODULE library + copies its templated manifest into a
-# per-fixture build directory the test binaries pick up via CMake-
-# defined preprocessor macros. Used for every plugin variant the
-# pluginloader tests need.
-#
-# Args:
-#   target  - CMake target name (also the subdir name under
-#             ${CMAKE_CURRENT_BINARY_DIR}/)
-#   source  - .cpp file relative to ${CMAKE_CURRENT_SOURCE_DIR}/
-#   linkQt  - "FACTORY" to PRIVATE-link the full Qt + PhosphorRegistry
-#             stack (canonical fixture shape: the plugin builds a
-#             real factory subclass against the public ABI);
-#             "MINIMAL" for fixtures that only need Q_DECL_EXPORT
-#             from QtCore (e.g. the noentry fixture that exports a
-#             dummy symbol with no factory machinery)
-
 # Shared test isolation: a private D-Bus session (so a test that touches D-Bus
 # cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
 # open and hangs ctest after the test itself passed) plus a per-target XDG
@@ -47,87 +29,98 @@ else()
         set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT ${ARGN})
     endfunction()
 endif()
-function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
-    add_library(${target} MODULE ${sourceDir}/${source})
-    # All fixtures need at least Qt6::Core for Q_DECL_EXPORT.
-    target_link_libraries(${target} PRIVATE Qt6::Core)
-    if(linkQt STREQUAL "FACTORY")
-        target_link_libraries(${target}
-            PRIVATE
-                PhosphorRegistry::PhosphorRegistry
-                Qt6::Gui
-                Qt6::Qml
-                Qt6::Quick
-        )
+
+# ─── Test plugin fixtures ──────────────────────────────────────────────────────
+#
+# Every bar-widget test plugin is fake_plugin/fakeplugin.cpp built once per
+# variant. A variant differs only in its generated fake_plugin_config.h (IID,
+# factory id, null factory) and metadata.json (embedded by Q_PLUGIN_METADATA),
+# both written to a per-variant directory on the target's include path, where
+# moc finds the metadata file. Each library lands at
+# ${PHOSPHOR_REGISTRY_FIXTURE_DIR}/<variant>.so, and the tests copy it into
+# temporary search paths.
+set(PHOSPHOR_REGISTRY_FIXTURE_DIR ${CMAKE_CURRENT_BINARY_DIR}/fixtures)
+set(PHOSPHOR_REGISTRY_BAR_WIDGET_IID "org.phosphor_works.Lambent.BarWidget/1")
+set(phosphorregistry_fixture_targets "")
+
+# phosphorregistry_add_fake_plugin(<variant> IID <iid> FACTORY_ID <id>
+#     METADATA <json body> [NULL_FACTORY])
+function(phosphorregistry_add_fake_plugin variant)
+    cmake_parse_arguments(ARG "NULL_FACTORY" "IID;FACTORY_ID;METADATA" "" ${ARGN})
+    set(target phosphor_registry_fixture_${variant})
+    set(configDir ${CMAKE_CURRENT_BINARY_DIR}/fixture-config/${variant})
+    set(FAKE_PLUGIN_IID "${ARG_IID}")
+    set(FAKE_FACTORY_ID "${ARG_FACTORY_ID}")
+    if(ARG_NULL_FACTORY)
+        set(FAKE_NULL_FACTORY 1)
+    else()
+        set(FAKE_NULL_FACTORY 0)
     endif()
-    # Default lib<name>.so output naming; matches the install helper
-    # in the test binary which copies fixtures by basename.
-    # UNITY_BUILD OFF is load-bearing: each fixture's extern "C"
-    # entry-point symbol (phosphor_registry_create_factory) would
-    # collide with the others if they were merged into a single
-    # translation unit.
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fake_plugin/fake_plugin_config.h.in
+                   ${configDir}/fake_plugin_config.h @ONLY)
+    file(WRITE ${configDir}/metadata.json.tmp "${ARG_METADATA}\n")
+    configure_file(${configDir}/metadata.json.tmp ${configDir}/metadata.json COPYONLY)
+
+    add_library(${target} MODULE ${CMAKE_CURRENT_SOURCE_DIR}/fake_plugin/fakeplugin.cpp)
+    target_include_directories(${target} PRIVATE ${configDir})
+    target_link_libraries(${target}
+        PRIVATE
+            PhosphorRegistry::PhosphorRegistry
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+    )
     set_target_properties(${target} PROPERTIES
-        PREFIX "lib"
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target}
+        PREFIX ""
+        OUTPUT_NAME ${variant}
+        LIBRARY_OUTPUT_DIRECTORY ${PHOSPHOR_REGISTRY_FIXTURE_DIR}
+        AUTOMOC ON
         UNITY_BUILD OFF
     )
-    # Template the manifest so abi: stays locked to
-    # PhosphorRegistry::PluginAbiVersion (mirrored from CMake via
-    # PHOSPHOR_PLUGIN_ABI_VERSION). Drift between header and fixture
-    # would silently break every pluginloader test on the next
-    # version bump.
-    set(manifestIn "${CMAKE_CURRENT_SOURCE_DIR}/${sourceDir}/manifest.json.in")
-    if(EXISTS "${manifestIn}")
-        # Guard against a templated manifest that forgot to reference
-        # the abi-version variable: the configure_file call would
-        # happily produce a stale literal and the drift would only
-        # surface at test runtime as a confusing abi mismatch. Read
-        # the source and fail configure if the placeholder is missing.
-        file(READ "${manifestIn}" _manifestInContents)
-        string(FIND "${_manifestInContents}"
-                    "@PHOSPHOR_PLUGIN_ABI_VERSION@"
-                    _manifestAbiIdx)
-        if(_manifestAbiIdx EQUAL -1)
-            message(FATAL_ERROR
-                "Manifest template ${manifestIn} does not reference "
-                "@PHOSPHOR_PLUGIN_ABI_VERSION@. The abi value would "
-                "drift from PhosphorRegistry::PluginAbiVersion on the "
-                "next bump. Either reference the variable or stop "
-                "templating this manifest.")
-        endif()
-        unset(_manifestInContents)
-        unset(_manifestAbiIdx)
-        configure_file(${manifestIn}
-                       ${CMAKE_CURRENT_BINARY_DIR}/${target}/manifest.json @ONLY)
-    endif()
+    set(phosphorregistry_fixture_targets ${phosphorregistry_fixture_targets} ${target} PARENT_SCOPE)
 endfunction()
 
-phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin
-                                 fake_plugin
-                                 fakeplugin.cpp
-                                 FACTORY)
-phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_secondary
-                                 fake_plugin_secondary
-                                 fakeplugin_secondary.cpp
-                                 FACTORY)
-phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_idmismatch
-                                 fake_plugin_idmismatch
-                                 fakeplugin_idmismatch.cpp
-                                 FACTORY)
-phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_nullfactory
-                                 fake_plugin_nullfactory
-                                 fakeplugin_nullfactory.cpp
-                                 FACTORY)
-phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_noentry
-                                 fake_plugin_noentry
-                                 fakeplugin_noentry.cpp
-                                 MINIMAL)
+phosphorregistry_add_fake_plugin(fake-plugin
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-plugin"
+    METADATA [=[{ "Id": "fake-plugin", "ApiVersion": 1 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-secondary
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-plugin-secondary"
+    METADATA [=[{ "Id": "fake-plugin-secondary", "ApiVersion": 1 }]=])
+# The metadata says one id and the factory another.
+phosphorregistry_add_fake_plugin(fake-plugin-idmismatch
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-other"
+    METADATA [=[{ "Id": "fake-plugin-idmismatch", "ApiVersion": 1 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-nullfactory
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-plugin-nullfactory" NULL_FACTORY
+    METADATA [=[{ "Id": "fake-plugin-nullfactory", "ApiVersion": 1 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-wrongapi
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-plugin-wrongapi"
+    METADATA [=[{ "Id": "fake-plugin-wrongapi", "ApiVersion": 2 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-wrongiid
+    IID "org.phosphor_works.Test.NotABarWidget/1" FACTORY_ID "fake-plugin-wrongiid"
+    METADATA [=[{ "Id": "fake-plugin-wrongiid", "ApiVersion": 1 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-noid
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "fake-plugin-noid"
+    METADATA [=[{ "ApiVersion": 1 }]=])
+phosphorregistry_add_fake_plugin(fake-plugin-badid
+    IID "${PHOSPHOR_REGISTRY_BAR_WIDGET_IID}" FACTORY_ID "../escape"
+    METADATA [=[{ "Id": "../escape", "ApiVersion": 1 }]=])
+
+# A shared library that is not a Qt plugin.
+add_library(phosphor_registry_fixture_plain MODULE ${CMAKE_CURRENT_SOURCE_DIR}/fake_plugin/plain.cpp)
+set_target_properties(phosphor_registry_fixture_plain PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME plain
+    LIBRARY_OUTPUT_DIRECTORY ${PHOSPHOR_REGISTRY_FIXTURE_DIR}
+    UNITY_BUILD OFF
+)
+list(APPEND phosphorregistry_fixture_targets phosphor_registry_fixture_plain)
+
+# ─── Tests ─────────────────────────────────────────────────────────────────────
 
 function(phosphorregistry_add_test name)
     add_executable(${name} ${name}.cpp)
-    # Core / Gui / Qml propagate PUBLIC from PhosphorRegistry. Qt6::Test
-    # is test-specific. Qt6::Quick is needed by the QQuickItem helpers
-    # used in test_registry_helpers.h.
     target_link_libraries(${name}
         PRIVATE
             PhosphorRegistry::PhosphorRegistry
@@ -141,59 +134,13 @@ function(phosphorregistry_add_test name)
 endfunction()
 
 phosphorregistry_add_test(test_phosphor_registry)
-# The shared baseline-plus-keyed-overrides container the four shader-assignment
-# trees hold. Tested here rather than through any one tree: all four used to
-# hand-write it, and the copies drifted, so the contract belongs where the one
-# copy lives. One of its four consumers (OverlayShaderTree) has no unit test at
-# all, which left the empty-key refusal and clearOverride's return value unpinned
-# for that payload entirely.
 phosphorregistry_add_test(test_path_keyed_overrides)
 phosphorregistry_add_test(test_phosphor_registry_metadatapack_loader)
-phosphorregistry_add_test(test_phosphor_registry_manifest)
+phosphorregistry_add_test(test_phosphor_registry_plugincatalog)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
-# test_phosphor_registry_pluginloader_lifecycle holds the rescan-
-# reentry + destructor-pin slots. It shares
-# tests/test_pluginloader_helpers.h with the primary pluginloader test
-# TU for the WarningCapture + plugin-fixture install scaffolding.
-phosphorregistry_add_test(test_phosphor_registry_pluginloader_lifecycle)
 
-# QT_FATAL_WARNINGS is NOT set at the process level here. A process-
-# wide promotion of qWarning() to abort() conflicts with
-# QTest::ignoreMessage in the sibling tests that intentionally
-# trigger qWarning paths (ignoresInvalidManifest,
-# rejectsAbiVersionMismatch, etc.). Qt's default handler aborts
-# before the ignore-message infrastructure can match.
-# rescanReentryFromPluginUnloadedSlotIsSafe and
-# rescanReentryRemovingSecondPluginExercisesConstFindGuard install
-# a per-test message handler to enforce the "no qWarning fires"
-# contract locally instead. See those tests' implementations.
-
-# Plugin-loader tests consume the five MODULE fixtures via per-fixture
-# compile definitions + an explicit build-time dependency. Other test
-# binaries don't get the macros (they don't load .so files) so the
-# define surface stays minimal and parallel builds don't accidentally
-# run a test before its fixtures exist.
-#
-# Both the primary pluginloader TU and the lifecycle TU need the full
-# macro set + fixture dependency. Wrap the wiring once so adding a
-# third pluginloader TU in the future is one line; otherwise the macro
-# list silently drifts between binaries.
-function(phosphorregistry_wire_pluginloader_fixtures target)
-    target_compile_definitions(${target}
-        PRIVATE
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_secondary"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
-    )
-    add_dependencies(${target}
-        phosphor_registry_test_fake_plugin
-        phosphor_registry_test_fake_plugin_secondary
-        phosphor_registry_test_fake_plugin_idmismatch
-        phosphor_registry_test_fake_plugin_nullfactory
-        phosphor_registry_test_fake_plugin_noentry)
-endfunction()
-
-phosphorregistry_wire_pluginloader_fixtures(test_phosphor_registry_pluginloader)
-phosphorregistry_wire_pluginloader_fixtures(test_phosphor_registry_pluginloader_lifecycle)
+foreach(test test_phosphor_registry_plugincatalog test_phosphor_registry_pluginloader)
+    target_compile_definitions(${test}
+        PRIVATE PHOSPHOR_REGISTRY_FIXTURE_DIR="${PHOSPHOR_REGISTRY_FIXTURE_DIR}")
+    add_dependencies(${test} ${phosphorregistry_fixture_targets})
+endforeach()

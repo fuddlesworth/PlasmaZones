@@ -1,0 +1,8 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// Generated per test plugin variant by tests/CMakeLists.txt.
+#pragma once
+
+#define FAKE_PLUGIN_IID "@FAKE_PLUGIN_IID@"
+#define FAKE_FACTORY_ID "@FAKE_FACTORY_ID@"
+#define FAKE_NULL_FACTORY @FAKE_NULL_FACTORY@

@@ -12,9 +12,8 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 
-# Build the CPU-meter plugin .so first; the demo's --plugin-root
-# argument will point at the directory the plugin's CMakeLists
-# writes the .so + manifest.json into.
+# Build the CPU-meter plugin first. It lands in the bar-widget directory
+# of the per-build plugin root the demo searches by default.
 add_subdirectory(plugins/cpu-meter)
 
 # Directory-scope suppression of -Wmissing-include-dirs for the targets
