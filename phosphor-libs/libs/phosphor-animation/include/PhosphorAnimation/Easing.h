@@ -9,6 +9,8 @@
 #include <QString>
 #include <QtGlobal>
 
+#include <optional>
+
 namespace PhosphorAnimation {
 
 /// Parametric easing curve: cubic bezier, elastic, or bounce. All stateless.
@@ -41,7 +43,11 @@ public:
     bool overshoots() const override;
     bool equals(const Curve& other) const override;
 
-    /// Parse from config string. Returns default OutCubic on failure.
+    /// Parse from config string. Empty when @p str is malformed: an unknown
+    /// name, the wrong number of values, or a value that is not a finite
+    /// number. Values in range are clamped, as the setters do.
+    static std::optional<Easing> tryParse(const QString& str);
+    /// tryParse, or the default OutCubic when @p str is malformed.
     static Easing fromString(const QString& str);
 
     /// Highest peak an elastic curve may reach. It is `Limits::MaxCurveProgress`,

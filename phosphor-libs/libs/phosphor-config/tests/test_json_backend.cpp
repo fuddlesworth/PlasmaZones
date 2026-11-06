@@ -548,6 +548,76 @@ private Q_SLOTS:
                  QStringLiteral("again"));
     }
 
+    /// reload() is the reparse for a caller that reports problems itself: it
+    /// returns the reason, and a clean read ends the refusal that the first
+    /// load set. Afterglow reloads this way, and without the second half every
+    /// later write stayed refused once it had started on a broken file.
+    void reload_reportsAndEndsTheRefusal()
+    {
+        QVERIFY(writeFile(m_path, QByteArray("{not json")));
+        JsonBackend b(m_path);
+        QVERIFY(b.loadFailed());
+        const QString problem = b.reload();
+        QVERIFY(problem.contains(QStringLiteral("does not parse")));
+        QVERIFY(b.loadFailed());
+
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"fixed"}})")));
+        QCOMPARE(b.reload(), QString());
+        QVERIFY(!b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("k")), QStringLiteral("fixed"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("saved"));
+        }
+        QVERIFY(b.commit());
+        QVERIFY(readFile(m_path).contains("saved"));
+    }
+
+    /// reload() takes the file's stamp, so a file rewritten since an earlier
+    /// load but read cleanly now is not mistaken for one broken after this read.
+    void reload_takesTheStampOfItsRead()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"one"}})")));
+        JsonBackend b(m_path);
+        // Another size, so the stamp moves on a coarse-mtime filesystem too.
+        QVERIFY(writeFile(m_path, QByteArray(R"({"G":{"k":"a longer value"}})")));
+        QCOMPARE(b.reload(), QString());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("two"));
+        }
+        QVERIFY(b.commit());
+        QVERIFY(!b.loadFailed());
+    }
+
+    void reload_opensAMissingFileAsEmpty()
+    {
+        JsonBackend b(m_path);
+        QCOMPARE(b.reload(), QString());
+        QVERIFY(!b.loadFailed());
+    }
+
+    /// A file that holds only white space (a `touch`) holds nothing a write
+    /// could lose, so it reads as empty and accepts writes.
+    void whiteSpaceFile_readsAsEmpty()
+    {
+        QVERIFY(writeFile(m_path, QByteArray(" \n\t\n")));
+        JsonBackend b(m_path);
+        QVERIFY(!b.loadFailed());
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("k"), QStringLiteral("v"));
+        }
+        QVERIFY(b.commit());
+        QCOMPARE(QJsonDocument::fromJson(readFile(m_path))
+                     .object()
+                     .value(QStringLiteral("G"))
+                     .toObject()
+                     .value(QStringLiteral("k"))
+                     .toString(),
+                 QStringLiteral("v"));
+    }
+
     /// A refused write stays refused until a reparse reads the repaired
     /// file. Repairing the file alone is not enough: the backend cannot know
     /// it is readable again until it looks.

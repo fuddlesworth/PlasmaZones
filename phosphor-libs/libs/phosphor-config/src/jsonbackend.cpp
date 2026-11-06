@@ -206,40 +206,52 @@ void removeAtPath(QJsonObject& root, const QStringList& segments)
 namespace {
 
 /// What a read of the backing file found. Missing is a first run (or a
-/// deliberate delete) and is not a failure; Unreadable covers an open
-/// failure, a parse error and a non-object root alike.
+/// deliberate delete) and is not a failure, and neither is a file that holds
+/// only white space (a `touch`), which reads as an empty document: there is
+/// nothing in it that a write could lose. Unreadable covers an open failure,
+/// a parse error and a non-object root alike.
 enum class DiskRead {
     Missing,
     Ok,
     Unreadable,
 };
 
-/// Read and parse @p path into @p out. Logs the reason for Unreadable, naming
-/// what @p consequence then happens.
-DiskRead readDocument(const QString& path, QJsonObject& out, const char* consequence)
+/// Read and parse @p path into @p out. For Unreadable, the reason goes to
+/// @p problem when the caller reports it itself, else to the log, naming what
+/// @p consequence then happens.
+DiskRead readDocument(const QString& path, QJsonObject& out, const char* consequence, QString* problem = nullptr)
 {
+    const auto unreadable = [&](const QString& reason) {
+        if (problem) {
+            *problem = reason;
+        } else {
+            qWarning("PhosphorConfig::JsonBackend: %s — %s", qPrintable(reason), consequence);
+        }
+        return DiskRead::Unreadable;
+    };
     QFile f(path);
     if (!f.exists()) {
         return DiskRead::Missing;
     }
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("PhosphorConfig::JsonBackend: failed to open %s for reading — %s", qPrintable(path), consequence);
-        return DiskRead::Unreadable;
+        return unreadable(QStringLiteral("%1 cannot be read: %2").arg(path, f.errorString()));
+    }
+    const QByteArray bytes = f.readAll();
+    if (bytes.trimmed().isEmpty()) {
+        out = QJsonObject();
+        return DiskRead::Ok;
     }
     QJsonParseError err;
-    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
     if (err.error != QJsonParseError::NoError) {
-        qWarning("PhosphorConfig::JsonBackend: JSON parse error in %s at offset %d: %s — %s", qPrintable(path),
-                 err.offset, qPrintable(err.errorString()), consequence);
-        return DiskRead::Unreadable;
+        return unreadable(
+            QStringLiteral("%1 does not parse: %2 at offset %3").arg(path, err.errorString()).arg(err.offset));
     }
     if (!doc.isObject()) {
         // Well-formed JSON that isn't an object (a bare array / literal at the
         // root). doc.object() would silently hand back {}, which must not be
         // mistaken for a first run.
-        qWarning("PhosphorConfig::JsonBackend: %s does not hold a JSON object at its root — %s", qPrintable(path),
-                 consequence);
-        return DiskRead::Unreadable;
+        return unreadable(QStringLiteral("%1 does not hold a JSON object").arg(path));
     }
     out = doc.object();
     return DiskRead::Ok;
@@ -732,7 +744,7 @@ JsonBackend::~JsonBackend()
     }
 }
 
-void JsonBackend::loadFromDisk()
+void JsonBackend::loadFromDisk(QString* problem)
 {
     // An unreadable file falls back to the last readable document and flags
     // the load as failed; see Data::loadFailed for why writes are then
@@ -740,7 +752,7 @@ void JsonBackend::loadFromDisk()
     // deliberate delete), and starting empty with writes allowed is correct.
     d->stamp = stampOf(d->filePath);
     QJsonObject doc;
-    switch (readDocument(d->filePath, doc, "keeping the last readable state")) {
+    switch (readDocument(d->filePath, doc, "keeping the last readable state", problem)) {
     case DiskRead::Missing:
         d->root = QJsonObject();
         d->lastGoodRoot = QJsonObject();
@@ -840,6 +852,22 @@ void JsonBackend::reparseConfiguration()
     // over the reloaded values.
     loadFromDisk();
     d->dirty = false;
+}
+
+QString JsonBackend::reload()
+{
+    Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::reload",
+               "Cannot reload while JsonGroup instances are alive");
+    // Release-build pair, as for reparseConfiguration: the document stays.
+    if (d->activeGroupCount != 0) {
+        return QStringLiteral("%1 was not reloaded: %2 group view(s) are open")
+            .arg(d->filePath)
+            .arg(d->activeGroupCount);
+    }
+    QString problem;
+    loadFromDisk(&problem);
+    d->dirty = false;
+    return problem;
 }
 
 bool JsonBackend::sync()

@@ -203,8 +203,12 @@ void CurveRegistry::Impl::registerBuiltins()
     // schema lives in the registry, so `CurveLoader::Sink::parseFile`
     // just forwards to `tryCreateFromJson` without duplicating the
     // cases.
+    // The string factories return nullptr for a malformed spec, so that
+    // tryCreate can tell it from a good one: create() then falls back to the
+    // default with a warning, and a settings validator refuses it.
     Factory bezierFactory = [](const QString&, const QString& params) -> std::shared_ptr<const Curve> {
-        return std::make_shared<Easing>(Easing::fromString(params));
+        const auto easing = Easing::tryParse(params);
+        return easing ? std::make_shared<Easing>(*easing) : nullptr;
     };
     JsonFactory bezierJson = [](const QJsonObject& params) -> std::shared_ptr<const Curve> {
         qreal x1, y1, x2, y2;
@@ -222,7 +226,8 @@ void CurveRegistry::Impl::registerBuiltins()
     // typeId in the spec to choose the right Type enumerator.
     Factory namedEasingFactory = [](const QString& typeId, const QString& params) -> std::shared_ptr<const Curve> {
         const QString spec = params.isEmpty() ? typeId : (typeId + QLatin1Char(':') + params);
-        return std::make_shared<Easing>(Easing::fromString(spec));
+        const auto easing = Easing::tryParse(spec);
+        return easing ? std::make_shared<Easing>(*easing) : nullptr;
     };
 
     const QStringList elasticIds{
@@ -263,7 +268,8 @@ void CurveRegistry::Impl::registerBuiltins()
     // Spring: single typeId, dedicated factory.
     Factory springFactory = [](const QString& typeId, const QString& params) -> std::shared_ptr<const Curve> {
         const QString spec = params.isEmpty() ? typeId : (typeId + QLatin1Char(':') + params);
-        return std::make_shared<Spring>(Spring::fromString(spec));
+        const auto spring = Spring::tryParse(spec);
+        return spring ? std::make_shared<Spring>(*spring) : nullptr;
     };
     JsonFactory springJson = [](const QJsonObject& params) -> std::shared_ptr<const Curve> {
         qreal omega, zeta;

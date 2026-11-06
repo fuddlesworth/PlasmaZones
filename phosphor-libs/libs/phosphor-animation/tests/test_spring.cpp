@@ -59,6 +59,31 @@ private Q_SLOTS:
         QCOMPARE(s, def);
     }
 
+    void testTryParseRefusesMalformedSpecs_data()
+    {
+        QTest::addColumn<QString>("spec");
+        QTest::newRow("one value") << QStringLiteral("spring:22");
+        QTest::newRow("word") << QStringLiteral("spring:fast,1");
+        QTest::newRow("three values") << QStringLiteral("spring:1,2,3");
+        QTest::newRow("other prefix") << QStringLiteral("bounce:12,0.8");
+        QTest::newRow("infinite") << QStringLiteral("spring:inf,0.8");
+        QTest::newRow("empty") << QString();
+    }
+
+    void testTryParseRefusesMalformedSpecs()
+    {
+        QFETCH(QString, spec);
+        QVERIFY(!Spring::tryParse(spec).has_value());
+        QCOMPARE(Spring::fromString(spec), Spring());
+    }
+
+    void testTryParseClampsInRangeValues()
+    {
+        const auto spring = Spring::tryParse(QStringLiteral("spring:500,0.8"));
+        QVERIFY(spring.has_value());
+        QCOMPARE(spring->omega, 200.0);
+    }
+
     void testFromStringRoundTrip()
     {
         const Spring original(15.3, 0.65);
