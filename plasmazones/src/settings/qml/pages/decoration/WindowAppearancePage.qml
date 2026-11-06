@@ -15,9 +15,13 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
     // The config-backed controller: window border / title bar + gap values and
     // the CONSTANT slider bounds.
-    readonly property var ctl: settingsController.windowAppearancePage
+    readonly property var ctl: root.controller
 
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.

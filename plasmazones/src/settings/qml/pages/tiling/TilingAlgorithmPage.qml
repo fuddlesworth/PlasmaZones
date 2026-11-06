@@ -10,7 +10,11 @@ import "../../js/AlgorithmCapabilities.js" as AlgoCaps
 SettingsFlickable {
     id: root
 
-    readonly property var settingsBridge: settingsController.tilingAlgorithmPage
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
+    readonly property var settingsBridge: root.controller
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper (shared app-wide scope, bound below).

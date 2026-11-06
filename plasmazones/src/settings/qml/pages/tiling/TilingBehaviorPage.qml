@@ -9,9 +9,13 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
     // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
     // references stay direct (those are Settings Q_PROPERTYs not wrapped here).
-    readonly property var settingsBridge: settingsController.tilingBehaviorPage
+    readonly property var settingsBridge: root.controller
 
     contentHeight: content.implicitHeight
     clip: true
