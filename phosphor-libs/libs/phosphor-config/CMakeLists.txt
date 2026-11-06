@@ -54,6 +54,7 @@ set(phosphorconfig_public_HDRS
     include/PhosphorConfig/Schema.h
     include/PhosphorConfig/MigrationRunner.h
     include/PhosphorConfig/Store.h
+    include/PhosphorConfig/HostDirectory.h
 )
 
 set(phosphorconfig_SRCS
@@ -61,6 +62,7 @@ set(phosphorconfig_SRCS
     src/qsettingsbackend.cpp
     src/migrationrunner.cpp
     src/store.cpp
+    src/hostdirectory.cpp
 )
 
 add_library(PhosphorConfig SHARED

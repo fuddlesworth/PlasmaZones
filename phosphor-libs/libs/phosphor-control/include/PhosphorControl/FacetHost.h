@@ -18,8 +18,13 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <functional>
 #include <memory>
 #include <optional>
+
+namespace PhosphorConfig {
+class IBackend;
+}
 
 namespace PhosphorControl {
 
@@ -130,6 +135,10 @@ public:
     /// The page ids the module of @p moduleId registered while loading.
     [[nodiscard]] QStringList boundPages(const QString& moduleId) const;
 
+    /// The config backend modules share for the file at @p path, or null
+    /// when no module opened it (FacetContext::configBackend).
+    [[nodiscard]] PhosphorConfig::IBackend* configBackend(const QString& path) const;
+
 Q_SIGNALS:
     void moduleLoaded(const QString& moduleId);
     void moduleFailed(const QString& moduleId, const QString& reason);
@@ -145,6 +154,9 @@ private:
     bool bindPage(Module& module, const QString& scopedId, PageController* controller, const QUrl& qmlSource);
     void addDomain(StagingDomain* domain);
     void addExtension(Module& module, const QString& localId, StagingDomain* domain, const QUrl& qmlSource);
+    PhosphorConfig::IBackend*
+    sharedConfigBackend(const QString& path,
+                        const std::function<std::unique_ptr<PhosphorConfig::IBackend>(const QString&)>& create);
     void resolveExtensions();
     [[nodiscard]] QVariantList extensionsFor(const QString& pageId, const QString& slot) const;
     PageController* placeholder(const QString& id);
@@ -168,6 +180,9 @@ private:
     QHash<QString, QList<std::shared_ptr<ActiveExtension>>> m_extensionsByPage;
     QList<RefusedExtension> m_refusedExtensions;
     QSet<QString> m_warnedExtensions;
+    // Shared, not unique: QHash values must be copyable. Each backend writes
+    // its unsaved changes when it is destroyed.
+    QHash<QString, std::shared_ptr<PhosphorConfig::IBackend>> m_configBackends;
 };
 
 } // namespace PhosphorControl

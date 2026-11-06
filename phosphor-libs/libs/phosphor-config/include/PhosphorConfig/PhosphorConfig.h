@@ -6,6 +6,7 @@
 /// Umbrella include for PhosphorConfig. Consumers may include individual
 /// headers for tighter dependencies.
 
+#include <PhosphorConfig/HostDirectory.h>
 #include <PhosphorConfig/IBackend.h>
 #include <PhosphorConfig/IGroupPathResolver.h>
 #include <PhosphorConfig/JsonBackend.h>
