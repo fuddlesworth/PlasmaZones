@@ -15,10 +15,10 @@ namespace PhosphorControl {
 /// FacetHost over a fresh ApplicationController, loads it, and checks that:
 ///   - the catalog accepts it (IID, ApiVersion, a valid "Id")
 ///   - its metadata is valid
-///   - it loads, and registerInto registers exactly the pages its metadata
-///     declares, with matching controller ids
-///   - every page controller and headless domain emits applyResult and
-///     discardResult exactly once when applied and discarded
+///   - it loads, and registerInto registers exactly the pages and extensions
+///     its metadata declares, with matching controller ids
+///   - every page controller, headless domain and extension domain emits
+///     applyResult and discardResult exactly once when applied and discarded
 ///
 /// Needs a QCoreApplication (or QGuiApplication) running on this thread.
 class PHOSPHORCONTROL_EXPORT FacetTestHost

@@ -16,6 +16,7 @@
 #include <QLoggingCategory>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QVariantMap>
 
 #include <algorithm>
 
@@ -74,6 +75,22 @@ struct FacetHost::Module
     bool nodeRegistered = false;
     QStringList boundPages;
     QList<QPointer<StagingDomain>> domains;
+    struct Extension
+    {
+        QPointer<StagingDomain> domain;
+        QUrl qmlSource;
+    };
+    QHash<QString, Extension> extensions;
+};
+
+struct FacetHost::ActiveExtension
+{
+    QString moduleId;
+    QString localId;
+    QString targetPage;
+    QString slot;
+    QString name;
+    int order = 0;
 };
 
 PhosphorRegistry::PluginSeam FacetHost::seam()
@@ -110,6 +127,7 @@ FacetHost::~FacetHost()
 {
     if (m_controller) {
         m_controller->setNavigationHook({});
+        m_controller->setExtensionProvider({});
     }
 }
 
@@ -247,6 +265,11 @@ void FacetHost::start()
         pending = next;
     }
 
+    resolveExtensions();
+    m_controller->setExtensionProvider([this](const QString& pageId, const QString& slot) {
+        return extensionsFor(pageId, slot);
+    });
+
     connect(m_catalog.get(), &PhosphorRegistry::PluginCatalog::pluginAdded, this, &FacetHost::addModule);
     connect(m_catalog.get(), &PhosphorRegistry::PluginCatalog::pluginRemoved, this, [](const QString& id) {
         qCInfo(lcFacetHost).noquote() << "FacetHost: module" << id << "was removed; its pages go at the next start";
@@ -284,6 +307,15 @@ void FacetHost::addModule(const QString& moduleId)
     }
     ensureCategoryNode(module->metadata.category);
     registerPlaceholders(*module);
+    const QStringList before = m_extensionsByPage.keys();
+    resolveExtensions();
+    QSet<QString> touched(before.cbegin(), before.cend());
+    for (auto it = m_extensionsByPage.cbegin(); it != m_extensionsByPage.cend(); ++it) {
+        touched.insert(it.key());
+    }
+    for (const QString& page : std::as_const(touched)) {
+        m_controller->notifyExtensionsChanged(page);
+    }
 }
 
 void FacetHost::ensureCategoryNode(const QString& categoryId)
@@ -359,17 +391,29 @@ QString FacetHost::owningModule(const QString& pageId) const
 
 void FacetHost::onNavigation(const QString& pageId)
 {
-    const QString moduleId = owningModule(pageId);
-    if (moduleId.isEmpty()) {
-        return;
+    // The page's own module, then every module that adds a section to it, so
+    // the page shows complete on its first paint.
+    QStringList toLoad;
+    const QString owner = owningModule(pageId);
+    if (!owner.isEmpty()) {
+        toLoad.append(owner);
     }
-    if (m_modules.value(moduleId)->state != ModuleState::Available) {
-        return;
+    const QList<std::shared_ptr<ActiveExtension>> extensions = m_extensionsByPage.value(pageId);
+    for (const auto& extension : extensions) {
+        if (!toLoad.contains(extension->moduleId)) {
+            toLoad.append(extension->moduleId);
+        }
     }
-    QString error;
-    if (!loadModule(moduleId, &error)) {
-        qCWarning(lcFacetHost).noquote() << "FacetHost: opening" << pageId << "could not load module" << moduleId << "-"
-                                         << error;
+    for (const QString& moduleId : std::as_const(toLoad)) {
+        const std::shared_ptr<Module> module = m_modules.value(moduleId);
+        if (!module || module->state != ModuleState::Available) {
+            continue;
+        }
+        QString error;
+        if (!loadModule(moduleId, &error)) {
+            qCWarning(lcFacetHost).noquote()
+                << "FacetHost: opening" << pageId << "could not load module" << moduleId << "-" << error;
+        }
     }
 }
 
@@ -420,6 +464,11 @@ bool FacetHost::loadModule(const QString& moduleId, QString* errorString)
             context.m_errors.append(QStringLiteral("did not register page %1").arg(page.id));
         }
     }
+    for (const FacetExtensionMetadata& extension : std::as_const(module->metadata.extensions)) {
+        if (!context.m_registeredExtensions.contains(extension.id)) {
+            context.m_errors.append(QStringLiteral("did not register extension %1").arg(extension.id));
+        }
+    }
     module->domains = context.m_domains;
     if (!context.m_errors.isEmpty()) {
         const QString reason = context.m_errors.join(QStringLiteral("; "));
@@ -428,6 +477,29 @@ bool FacetHost::loadModule(const QString& moduleId, QString* errorString)
     }
     module->state = ModuleState::Loaded;
     module->reason.clear();
+
+    // Its sections join the pages they are added to: dirty mark, reset, and
+    // the pages' FacetSlots. Notified after the walk, since a slot handler
+    // may navigate and so change the extension map.
+    QStringList touched;
+    for (auto it = m_extensionsByPage.cbegin(); it != m_extensionsByPage.cend(); ++it) {
+        for (const auto& extension : it.value()) {
+            if (extension->moduleId != moduleId) {
+                continue;
+            }
+            const auto registered = module->extensions.constFind(extension->localId);
+            if (registered != module->extensions.cend() && registered->domain) {
+                m_controller->attachDomainToPage(registered->domain.data(), it.key());
+                if (!touched.contains(it.key())) {
+                    touched.append(it.key());
+                }
+            }
+        }
+    }
+    for (const QString& page : std::as_const(touched)) {
+        m_controller->notifyExtensionsChanged(page);
+    }
+
     qCInfo(lcFacetHost).noquote() << "FacetHost: loaded module" << moduleId;
     Q_EMIT moduleLoaded(moduleId);
     return true;
@@ -463,6 +535,131 @@ bool FacetHost::bindPage(Module& module, const QString& scopedId, PageController
 void FacetHost::addDomain(StagingDomain* domain)
 {
     m_controller->registerDomain(domain);
+}
+
+void FacetHost::addExtension(Module& module, const QString& localId, StagingDomain* domain, const QUrl& qmlSource)
+{
+    module.extensions.insert(localId, Module::Extension{domain, qmlSource});
+}
+
+void FacetHost::resolveExtensions()
+{
+    m_extensionsByPage.clear();
+    m_refusedExtensions.clear();
+    for (auto moduleIt = m_modules.cbegin(); moduleIt != m_modules.cend(); ++moduleIt) {
+        const Module& module = *moduleIt.value();
+        if (!module.nodeRegistered) {
+            continue; // invalid metadata: nothing of it is shown
+        }
+        for (const FacetExtensionMetadata& extension : module.metadata.extensions) {
+            const QString scoped = pageId(module.metadata.id, extension.id);
+            const QString targetModuleId = extension.target.section(QLatin1Char(':'), 0, 0);
+            const QString targetLocalPage = extension.target.section(QLatin1Char(':'), 1);
+            const std::shared_ptr<Module> target = m_modules.value(targetModuleId);
+            if (!target || !target->nodeRegistered) {
+                qCInfo(lcFacetHost).noquote() << "FacetHost: extension" << scoped << "targets" << extension.target
+                                              << "whose module is not installed; it stays inactive";
+                continue;
+            }
+            QString reason;
+            if (!target->metadata.page(targetLocalPage)) {
+                reason = QStringLiteral("its target page %1 does not exist").arg(extension.target);
+            } else if (const int offered = target->metadata.slotVersion(targetLocalPage, extension.slot);
+                       offered == 0) {
+                reason = QStringLiteral("page %1 has no slot %2").arg(extension.target, extension.slot);
+            } else if (offered != extension.targetVersion) {
+                reason = QStringLiteral("it is built for version %1 of slot %2 on %3, which is at version %4")
+                             .arg(QString::number(extension.targetVersion), extension.slot, extension.target,
+                                  QString::number(offered));
+            }
+            if (!reason.isEmpty()) {
+                m_refusedExtensions.append({scoped, reason});
+                continue;
+            }
+            auto active = std::make_shared<ActiveExtension>();
+            active->moduleId = module.metadata.id;
+            active->localId = extension.id;
+            active->targetPage = extension.target;
+            active->slot = extension.slot;
+            active->name = extension.name;
+            active->order = extension.order;
+            m_extensionsByPage[extension.target].append(active);
+        }
+    }
+    for (auto it = m_extensionsByPage.begin(); it != m_extensionsByPage.end(); ++it) {
+        std::sort(it->begin(), it->end(), [](const auto& a, const auto& b) {
+            if (a->order != b->order) {
+                return a->order < b->order;
+            }
+            if (a->moduleId != b->moduleId) {
+                return a->moduleId < b->moduleId;
+            }
+            return a->localId < b->localId;
+        });
+    }
+    std::sort(m_refusedExtensions.begin(), m_refusedExtensions.end(),
+              [](const RefusedExtension& a, const RefusedExtension& b) {
+                  return a.id < b.id;
+              });
+    // Resolution runs again whenever a module arrives, so warn once per
+    // refused extension, not once per pass.
+    for (const RefusedExtension& refused : std::as_const(m_refusedExtensions)) {
+        if (!m_warnedExtensions.contains(refused.id)) {
+            m_warnedExtensions.insert(refused.id);
+            qCWarning(lcFacetHost).noquote() << "FacetHost: skipping extension" << refused.id << "-" << refused.reason;
+        }
+    }
+}
+
+QVariantList FacetHost::extensionsFor(const QString& pageId, const QString& slot) const
+{
+    QVariantList list;
+    const QList<std::shared_ptr<ActiveExtension>> extensions = m_extensionsByPage.value(pageId);
+    for (const auto& extension : extensions) {
+        if (extension->slot != slot) {
+            continue;
+        }
+        const std::shared_ptr<Module> module = m_modules.value(extension->moduleId);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("id"), FacetHost::pageId(extension->moduleId, extension->localId));
+        entry.insert(QStringLiteral("moduleId"), extension->moduleId);
+        entry.insert(QStringLiteral("moduleName"), module->metadata.name);
+        entry.insert(QStringLiteral("name"), extension->name);
+        switch (module->state) {
+        case ModuleState::Available:
+            continue; // not loaded yet: opening the page loads it first
+        case ModuleState::Loaded: {
+            const auto registered = module->extensions.constFind(extension->localId);
+            if (registered == module->extensions.cend()) {
+                continue;
+            }
+            entry.insert(QStringLiteral("qmlSource"), registered->qmlSource);
+            entry.insert(QStringLiteral("domain"), QVariant::fromValue<QObject*>(registered->domain.data()));
+            break;
+        }
+        case ModuleState::Failed:
+        case ModuleState::DisabledAfterCrash:
+            entry.insert(QStringLiteral("error"), module->reason);
+            break;
+        }
+        list.append(entry);
+    }
+    return list;
+}
+
+QList<FacetHost::RefusedExtension> FacetHost::refusedExtensions() const
+{
+    return m_refusedExtensions;
+}
+
+QStringList FacetHost::extensionsOn(const QString& pageId) const
+{
+    QStringList ids;
+    const QList<std::shared_ptr<ActiveExtension>> extensions = m_extensionsByPage.value(pageId);
+    for (const auto& extension : extensions) {
+        ids.append(FacetHost::pageId(extension->moduleId, extension->localId));
+    }
+    return ids;
 }
 
 void FacetHost::setFailed(Module& module, const QString& reason)

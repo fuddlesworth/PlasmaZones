@@ -221,6 +221,33 @@ void ApplicationController::setNavigationHook(NavigationHook hook)
     m_navigationHook = std::move(hook);
 }
 
+void ApplicationController::attachDomainToPage(StagingDomain* domain, const QString& pageId)
+{
+    if (!domain || !m_registry->hasPage(pageId)) {
+        qWarning() << "ApplicationController::attachDomainToPage: null domain or unknown page" << pageId;
+        return;
+    }
+    QList<QPointer<StagingDomain>>& attached = m_pageAttachments[pageId];
+    if (!attached.contains(QPointer<StagingDomain>(domain))) {
+        attached.append(domain);
+    }
+}
+
+QVariantList ApplicationController::extensionsFor(const QString& pageId, const QString& slot) const
+{
+    return m_extensionProvider ? m_extensionProvider(pageId, slot) : QVariantList();
+}
+
+void ApplicationController::setExtensionProvider(ExtensionProvider provider)
+{
+    m_extensionProvider = std::move(provider);
+}
+
+void ApplicationController::notifyExtensionsChanged(const QString& pageId)
+{
+    Q_EMIT extensionsChanged(pageId);
+}
+
 void ApplicationController::registerDomain(StagingDomain* domain)
 {
     if (!domain) {
@@ -354,6 +381,13 @@ void ApplicationController::resetCurrentPage()
     }
     if (auto* page = m_registry->controller(m_currentPageId)) {
         page->resetToDefaults();
+    }
+    // Sections other modules add to the page reset with it.
+    const QList<QPointer<StagingDomain>> attached = m_pageAttachments.value(m_currentPageId);
+    for (const QPointer<StagingDomain>& domain : attached) {
+        if (domain) {
+            domain->resetToDefaults();
+        }
     }
 }
 
@@ -545,7 +579,17 @@ QStringList ApplicationController::dirtyPageIds() const
     // the null check below is unchanged.
     for (const PageRegistry::Entry& entry : m_registry->allPagesRef()) {
         const PageController* ctrl = entry.controller.data();
-        if (ctrl != nullptr && ctrl->isDirty()) {
+        bool dirty = ctrl != nullptr && ctrl->isDirty();
+        if (!dirty) {
+            // A section another module adds to the page makes it dirty too.
+            const auto attached = m_pageAttachments.constFind(entry.id);
+            if (attached != m_pageAttachments.cend()) {
+                dirty = std::any_of(attached->cbegin(), attached->cend(), [](const QPointer<StagingDomain>& d) {
+                    return d && d->isDirty();
+                });
+            }
+        }
+        if (dirty) {
             ids.append(entry.id);
         }
     }

@@ -317,6 +317,8 @@ set(phosphorcontrol_qml_FILES
     qml/PageLoadingIndicator.qml
     qml/DiscardChangesDialog.qml
     qml/AboutPageShell.qml
+    qml/FacetSlot.qml
+    qml/FacetExtensionFrame.qml
 )
 
 # JS helpers shared by the QML chrome — kept separate from QML_FILES

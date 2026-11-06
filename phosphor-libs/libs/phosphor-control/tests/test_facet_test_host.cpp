@@ -38,6 +38,21 @@ private Q_SLOTS:
         QVERIFY2(problems.contains(QStringLiteral("did not register page general/advanced")), qPrintable(problems));
     }
 
+    void anExtenderPassesWithoutItsTargets()
+    {
+        // Its extension domains go through Apply and Discard like any other.
+        FacetTestHost host(fixture("extender"));
+        const QStringList problems = host.run();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));
+    }
+
+    void reportsAModuleThatSkipsAnExtension()
+    {
+        FacetTestHost host(fixture("missingextension"));
+        const QString problems = host.run().join(QLatin1Char('\n'));
+        QVERIFY2(problems.contains(QStringLiteral("did not register extension second")), qPrintable(problems));
+    }
+
     void reportsADomainThatAnswersTwice()
     {
         FacetTestHost host(fixture("doubleresult"));

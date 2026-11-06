@@ -54,9 +54,9 @@ library provides:
 | `PhosphorControl::DBusBridge`             | Configured endpoint(s) for daemon calls: sync `call()` / async `asyncCall()`, with explicit-interface variants |
 | `PhosphorControl::LocalizedContext`       | QML i18n context routing `i18n()`/`i18nc()`/`i18np()` through Qt translation, for Qt-only consumers without KF6 |
 | `PhosphorControl::IFacetModule`           | The interface a Facet module's root object implements (`registerInto(FacetContext&)`), IID `org.phosphor_works.Facet.Module/1` |
-| `PhosphorControl::FacetModuleMetadata`    | A module's embedded metadata (id, name, icon, category, parent module, pages), parsed and validated per locale |
-| `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, and its headless staging domains |
-| `PhosphorControl::FacetHost`              | Finds Facet modules through a `PhosphorRegistry::PluginCatalog`, fills the page registry with placeholders, and loads a module the first time one of its pages is opened |
+| `PhosphorControl::FacetModuleMetadata`    | A module's embedded metadata (id, name, icon, category, parent module, pages and their anchors, extension points, extensions), parsed and validated per locale |
+| `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, its headless staging domains, and the domain and QML of each section it adds to another module's page |
+| `PhosphorControl::FacetHost`              | Finds Facet modules through a `PhosphorRegistry::PluginCatalog`, fills the page registry with placeholders, resolves extensions against their target pages, and loads a module the first time one of its pages, or a page it extends, is opened |
 | `PhosphorControl::FacetTestHost`          | Loads one module headless and lists every way it breaks the contract, for the module's own CI |
 
 ## Typical use
@@ -128,9 +128,34 @@ announced, and its `registerInto` binds its real controllers into the
 placeholders (`ApplicationController::bindPage`). A module that registers a
 page its metadata does not declare, skips one, or gives a controller the wrong
 id fails with the reason. A module that was loading when the process died is
-disabled at the next start until `retryModule`. The full design, including
-extensions into other modules' pages, is `DESIGN-facet-extensions.md` in the
-phosphor-works workspace.
+disabled at the next start until `retryModule`.
+
+A module can also add sections to another module's page. Its metadata lists
+each one under `Extensions` with a target (`<module>:<page>`), a slot and the
+slot version it was built for. Every page offers `top`, `bottom`, and
+`before:<anchor>` / `after:<anchor>` for each anchor it lists, all at the
+version of the page's reserved `anchors` extension point (1 when it declares
+none), and a page can declare named `ExtensionPoints` with versions of their
+own. `FacetHost` shows an extension only when its target page offers that slot
+at that version. One aimed at a module that is not installed stays inactive,
+and one whose page, slot or version does not match is listed in
+`refusedExtensions()` with the reason. Opening a page loads every module that
+extends it, and each section's staging domain counts toward that page's dirty
+mark and resets with it. The page shows the sections with `FacetSlot`, which
+lists them through `ApplicationController::extensionsFor()` and wraps each in a
+`FacetExtensionFrame` that names the module it comes from and shows an error
+card in its place when the module failed:
+
+```qml
+FacetSlot {
+    settingsApp: page.settingsApp
+    pageId: "placement:snapping/behavior"
+    slot: "after:drag-modifier"
+}
+```
+
+The full design is `DESIGN-facet-extensions.md` in the phosphor-works
+workspace.
 
 ## Design notes
 
