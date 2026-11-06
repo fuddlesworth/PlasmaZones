@@ -202,6 +202,12 @@ Copyright: 2016 Tristan Penman
            2016 Akamai Technologies, Inc.
 License: BSD-2-Clause
 
+# The suite's branding release, pinned beside them, which supplies the icons
+# the package installs. Artwork, not GPL.
+Files: packaging/deps/phosphor-branding-*.tar.gz
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: CC-BY-SA-4.0
+
 Files: debian/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
@@ -353,3 +359,8 @@ License: BSD-3-Clause
  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+License: CC-BY-SA-4.0
+ This work is licensed under the Creative Commons Attribution-ShareAlike 4.0
+ International License. To view a copy of this license, visit
+ https://creativecommons.org/licenses/by-sa/4.0/legalcode or send a letter to
+ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.

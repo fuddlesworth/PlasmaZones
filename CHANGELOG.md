@@ -10,6 +10,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Updated app icons, now at every size**: PlasmaZones, its editor and its settings take their icons from the suite's shared branding, which has the current artwork. Besides the scalable icons, each now comes drawn at sizes from 16 to 512 pixels, so menus and panels that prefer a fixed size get a crisp one. Screen readers announce each icon's name and a short description of it.
+
 ## [3.5.5] - 2026-11-04
 
 ### Added

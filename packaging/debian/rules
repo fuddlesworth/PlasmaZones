@@ -8,7 +8,7 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 %:
 	dh $@ --buildsystem=cmake+ninja
 
-# PHOSPHOR_DEPS_ARCHIVES: the Luau and valijson archives pinned in
+# PHOSPHOR_DEPS_ARCHIVES: the Luau, valijson and branding archives pinned in
 # cmake/PhosphorDependencies.cmake, which CMake checks against their hashes and
 # unpacks, so the build never reaches the network. packaging/deps is filled in
 # both places this package is built: the OBS source package carries the

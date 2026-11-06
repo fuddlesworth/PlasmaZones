@@ -227,12 +227,10 @@ endif()
 
 install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
 
-install(FILES icons/hicolor/scalable/apps/phosphor-shell.svg
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
-)
-install(FILES icons/hicolor-light/scalable/apps/phosphor-shell.svg
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
-)
+# The shell's icon, from the pinned branding release (cmake/PhosphorDependencies.cmake).
+phosphor_fetch_dependency(branding)
+include(${branding_SOURCE_DIR}/cmake/PhosphorBranding.cmake)
+phosphor_install_brand_icons(phosphor-shell phosphor-shell)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

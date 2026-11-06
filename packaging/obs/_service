@@ -10,21 +10,21 @@
   real Version into the spec before each `osc commit`, so the service
   needs no version parameter — it always resolves to the tag just cut.
 
-  It fetches Source1 and Source2 the same way: the Luau and valijson
-  archives pinned in cmake/PhosphorDependencies.cmake, stored under their
+  It fetches Source1 to Source3 the same way: the Luau, valijson and
+  branding archives pinned in cmake/PhosphorDependencies.cmake, stored under their
   file names (the #/<file> fragment on each Source line) so rpmbuild finds
   them in its source directory. The spec hands that directory to CMake as
   PHOSPHOR_DEPS_ARCHIVES, which checks each hash, so the OBS build never
   needs the network.
 
-  RPM targets build from plasmazones.spec and those three tarballs. Debian
+  RPM targets build from plasmazones.spec and those four tarballs. Debian
   targets build from plasmazones.dsc plus the debian.* files, which
   obs-build's debtransform folds together into a real source package at
   build time, and from a fourth tarball that publish-obs builds and commits
-  itself: plasmazones_<version>.orig.tar.gz, the tag's tree with the two
+  itself: plasmazones_<version>.orig.tar.gz, the tag's tree with the three
   archives added at packaging/deps, where debian/rules points CMake.
   debtransform takes exactly one source tarball and supports no component
-  tarballs, so the archives have to ride inside it. With four tarballs in
+  tarballs, so the archives have to ride inside it. With five tarballs in
   the package it would abort on auto-discovery, so the .dsc names that one
   on its DEBTRANSFORM-TAR line (packaging/obs/generate-dsc.sh).
 

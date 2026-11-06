@@ -214,25 +214,16 @@ install(PROGRAMS scripts/plasmazones-report.sh
     RENAME plasmazones-report
 )
 
-# Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons moved to phosphor-shell/CMakeLists.txt with
-# the rest of that tier, where the whole file is already gated on
-# BUILD_PHOSPHOR_SHELL, so nothing here is conditional.
-set(_plasmazones_dark_icons
-    icons/hicolor/scalable/apps/plasmazones.svg
-    icons/hicolor/scalable/apps/plasmazones-editor.svg
-    icons/hicolor/scalable/apps/plasmazones-settings.svg
-)
-set(_plasmazones_light_icons
-    icons/hicolor-light/scalable/apps/plasmazones.svg
-    icons/hicolor-light/scalable/apps/plasmazones-editor.svg
-    icons/hicolor-light/scalable/apps/plasmazones-settings.svg
-)
-install(FILES ${_plasmazones_dark_icons}
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
-)
-install(FILES ${_plasmazones_light_icons}
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
+# Icons come from the pinned branding release (cmake/PhosphorDependencies.cmake):
+# scalable and 16 to 512 px, in hicolor for dark themes and hicolor-light for
+# light ones. Installed under the names the .desktop files use. The shell's
+# icon is installed by phosphor-shell/CMakeLists.txt.
+phosphor_fetch_dependency(branding)
+include(${branding_SOURCE_DIR}/cmake/PhosphorBranding.cmake)
+phosphor_install_brand_icons(
+    plasmazones plasmazones
+    plasmazones-editor plasmazones-editor
+    plasmazones-settings plasmazones-settings
 )
 
 # Aggregate target for the moon workspace: `cmake --build build --target plasmazones-tier`.

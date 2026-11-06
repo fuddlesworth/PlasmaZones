@@ -106,6 +106,15 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_SYSTEMDUSERUNITDIR@/plasmazones.service"
 )
 
+# The rendered icon sizes the branding release ships next to the scalable ones.
+foreach(theme hicolor hicolor-light)
+    foreach(size 16 22 24 32 48 64 128 256 512)
+        foreach(icon plasmazones plasmazones-editor plasmazones-settings phosphor-shell)
+            list(APPEND KNOWN_FILES "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/${theme}/${size}x${size}/apps/${icon}.png")
+        endforeach()
+    endforeach()
+endforeach()
+
 foreach(f ${KNOWN_FILES})
     if(EXISTS "${f}" OR IS_SYMLINK "${f}")
         message(STATUS "  Removing: ${f}")

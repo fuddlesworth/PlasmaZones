@@ -116,6 +116,14 @@ let
         hash = "sha256-iHtTsakk9v4LNfo7vJu75a6Mcgl7fw98F7RfTPpkYCk=";
       };
     }
+    {
+      name = "phosphor-branding-0.1.0.tar.gz";
+      path = fetchurl {
+        url = "https://github.com/phosphor-works/branding/releases/download/v0.1.0/phosphor-branding-0.1.0.tar.gz";
+        # sha256 53c7247e7e2c304a4d2e75a7bdd1a87164c63c1defa4159f3cef8da23d8244b3
+        hash = "sha256-U8ckfn4sMEpNLnWnvdGocWTGPB3vpBWfPO+Noj2CRLM=";
+      };
+    }
   ];
 in
 

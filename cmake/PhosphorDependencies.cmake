@@ -44,7 +44,7 @@ include_guard(GLOBAL)
 # ─── Pins ────────────────────────────────────────────────────────────────────
 # Source archives: built into the tree. PHOSPHOR_DEPS lists them for the fetch
 # script and for the dep-pins rule.
-set(PHOSPHOR_DEPS luau valijson)
+set(PHOSPHOR_DEPS luau valijson branding)
 
 # Luau (MIT, Roblox), the tiling algorithms' runtime (phosphor-scripting).
 set(PHOSPHOR_DEP_luau_VERSION "0.745")
@@ -58,6 +58,15 @@ set(PHOSPHOR_DEP_valijson_VERSION "1.1.3")
 set(PHOSPHOR_DEP_valijson_URL "https://github.com/tristanpenman/valijson/archive/refs/tags/v1.1.3.tar.gz")
 set(PHOSPHOR_DEP_valijson_FILE "valijson-1.1.3.tar.gz")
 set(PHOSPHOR_DEP_valijson_SHA256 "887b53b1a924f6fe0b35fa3bbc9bbbe5ae8c72097b7f0f7c17b45f4cfa646029")
+
+# The suite's branding release (CC-BY-SA-4.0, phosphor-works/branding): the app
+# icons, installed from it with its cmake/PhosphorBranding.cmake. No app keeps
+# icon files of its own. This is the app's pin, not the libraries': it moves
+# to PlasmaZones' own pin module when phosphor-libs leaves this tree.
+set(PHOSPHOR_DEP_branding_VERSION "0.1.0")
+set(PHOSPHOR_DEP_branding_URL "https://github.com/phosphor-works/branding/releases/download/v0.1.0/phosphor-branding-0.1.0.tar.gz")
+set(PHOSPHOR_DEP_branding_FILE "phosphor-branding-0.1.0.tar.gz")
+set(PHOSPHOR_DEP_branding_SHA256 "53c7247e7e2c304a4d2e75a7bdd1a87164c63c1defa4159f3cef8da23d8244b3")
 
 # glslang's prebuilt tools, a test-time program and not a source dependency, so
 # not in PHOSPHOR_DEPS: no packaging build runs the tests. Khronos publishes a
