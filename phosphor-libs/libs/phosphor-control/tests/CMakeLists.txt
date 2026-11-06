@@ -67,3 +67,71 @@ phosphorcontrol_add_test(test_dbus_bridge)
 phosphorcontrol_add_test(test_search_ranker)
 phosphorcontrol_add_test(test_search_controller)
 phosphorcontrol_add_test(test_sidebar_rows)
+
+# ─── Facet module fixtures ─────────────────────────────────────────────────────
+#
+# Every test Facet module is fake_module/fakemodule.cpp built once per variant.
+# A variant differs only in its generated fake_module_config.h (FAKE_MODE, see
+# the source) and metadata.json, both in a per-variant directory on the
+# target's include path, where moc finds the metadata file. Each library lands
+# at ${PHOSPHOR_CONTROL_FIXTURE_DIR}/<variant>.so.
+set(PHOSPHOR_CONTROL_FIXTURE_DIR ${CMAKE_CURRENT_BINARY_DIR}/fixtures)
+set(phosphorcontrol_fixture_targets "")
+
+# phosphorcontrol_add_fake_module(<variant> MODE <n> METADATA <json>)
+function(phosphorcontrol_add_fake_module variant)
+    cmake_parse_arguments(ARG "" "MODE;METADATA" "" ${ARGN})
+    set(target phosphor_control_fixture_${variant})
+    set(configDir ${CMAKE_CURRENT_BINARY_DIR}/fixture-config/${variant})
+    set(FAKE_MODE ${ARG_MODE})
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fake_module/fake_module_config.h.in
+                   ${configDir}/fake_module_config.h @ONLY)
+    file(WRITE ${configDir}/metadata.json.tmp "${ARG_METADATA}\n")
+    configure_file(${configDir}/metadata.json.tmp ${configDir}/metadata.json COPYONLY)
+    add_library(${target} MODULE ${CMAKE_CURRENT_SOURCE_DIR}/fake_module/fakemodule.cpp)
+    target_include_directories(${target} PRIVATE ${configDir})
+    target_link_libraries(${target} PRIVATE PhosphorControl::PhosphorControl Qt6::Core)
+    set_target_properties(${target} PROPERTIES
+        PREFIX ""
+        OUTPUT_NAME ${variant}
+        LIBRARY_OUTPUT_DIRECTORY ${PHOSPHOR_CONTROL_FIXTURE_DIR}
+        AUTOMOC ON
+        UNITY_BUILD OFF
+    )
+    set(phosphorcontrol_fixture_targets ${phosphorcontrol_fixture_targets} ${target} PARENT_SCOPE)
+endfunction()
+
+set(_good_pages [=[
+    "Pages": [
+        { "Id": "general/advanced", "Name": "Advanced", "Parent": "general" },
+        { "Id": "general", "Name": "General", "Name[de]": "Allgemein", "Keywords": ["basic"] }
+    ]]=])
+phosphorcontrol_add_fake_module(good MODE 0 METADATA
+    "{ \"Id\": \"good\", \"ApiVersion\": 1, \"Name\": \"Good\", \"Category\": \"input\", \"Icon\": \"good-icon\",${_good_pages} }")
+phosphorcontrol_add_fake_module(child MODE 0 METADATA [=[{
+    "Id": "child", "ApiVersion": 1, "Name": "Child", "Parent": "good",
+    "Pages": [ { "Id": "extra", "Name": "Extra", "Parent": "good:general" } ] }]=])
+phosphorcontrol_add_fake_module(orphan MODE 0 METADATA [=[{
+    "Id": "orphan", "ApiVersion": 1, "Name": "Orphan", "Parent": "absent", "Category": "no-such-category",
+    "Pages": [ { "Id": "page", "Name": "Page", "Parent": "absent:somewhere" } ] }]=])
+phosphorcontrol_add_fake_module(missingpage MODE 1 METADATA
+    "{ \"Id\": \"missingpage\", \"ApiVersion\": 1, \"Name\": \"Missing Page\",${_good_pages} }")
+phosphorcontrol_add_fake_module(extrapage MODE 2 METADATA
+    "{ \"Id\": \"extrapage\", \"ApiVersion\": 1, \"Name\": \"Extra Page\",${_good_pages} }")
+phosphorcontrol_add_fake_module(wrongid MODE 3 METADATA
+    "{ \"Id\": \"wrongid\", \"ApiVersion\": 1, \"Name\": \"Wrong Id\",${_good_pages} }")
+phosphorcontrol_add_fake_module(doubleresult MODE 4 METADATA
+    "{ \"Id\": \"doubleresult\", \"ApiVersion\": 1, \"Name\": \"Double Result\",${_good_pages} }")
+phosphorcontrol_add_fake_module(wrongapi MODE 0 METADATA [=[{
+    "Id": "wrongapi", "ApiVersion": 2, "Name": "Wrong Api", "Pages": [] }]=])
+phosphorcontrol_add_fake_module(badmetadata MODE 0 METADATA [=[{
+    "Id": "badmetadata", "ApiVersion": 1,
+    "Pages": [ { "Id": "a:b", "Name": "Colon" } ] }]=])
+
+phosphorcontrol_add_test(test_facet_module_metadata)
+phosphorcontrol_add_test(test_facet_host)
+phosphorcontrol_add_test(test_facet_test_host)
+foreach(test test_facet_host test_facet_test_host)
+    target_compile_definitions(${test} PRIVATE PHOSPHOR_CONTROL_FIXTURE_DIR="${PHOSPHOR_CONTROL_FIXTURE_DIR}")
+    add_dependencies(${test} ${phosphorcontrol_fixture_targets})
+endforeach()

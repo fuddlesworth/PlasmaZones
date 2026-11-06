@@ -18,6 +18,39 @@ PageRegistry::PageRegistry(QObject* parent)
 
 PageRegistry::~PageRegistry() = default;
 
+bool PageRegistry::bindPage(const QString& id, PageController* controller, const QUrl& qmlSource)
+{
+    const auto index = m_indexById.constFind(id);
+    if (index == m_indexById.cend()) {
+        qWarning() << "PageRegistry::bindPage: unknown page" << id;
+        return false;
+    }
+    if (!controller) {
+        qWarning() << "PageRegistry::bindPage: page" << id << "given a null controller";
+        return false;
+    }
+    Entry& entry = m_pages[*index];
+    if (entry.controller.data() == controller) {
+        entry.qmlSource = qmlSource;
+        Q_EMIT pageBound(id);
+        return true;
+    }
+    const bool usedElsewhere = std::any_of(m_pages.cbegin(), m_pages.cend(), [controller](const Entry& e) {
+        return e.controller.data() == controller;
+    });
+    if (usedElsewhere) {
+        qWarning() << "PageRegistry::bindPage: controller already registered for another page, refusing to bind it to"
+                   << id;
+        return false;
+    }
+    m_controllerSet.remove(entry.controller.data());
+    m_controllerSet.insert(controller);
+    entry.controller = controller;
+    entry.qmlSource = qmlSource;
+    Q_EMIT pageBound(id);
+    return true;
+}
+
 bool PageRegistry::registerPage(Entry entry)
 {
     if (entry.id.isEmpty()) {

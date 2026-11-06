@@ -69,6 +69,9 @@ void ApplicationController::setCurrentPageId(const QString& id)
         qWarning() << "ApplicationController::setCurrentPageId: unknown page" << id;
         return;
     }
+    if (m_navigationHook && !id.isEmpty()) {
+        m_navigationHook(id);
+    }
     // Record ordinary navigation in the back/forward history: push the
     // page being left and drop the forward trail (browser model). Moves
     // driven by goBack/goForward manage the stacks themselves and set
@@ -192,6 +195,30 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     }
 
     trackDomain(page);
+}
+
+bool ApplicationController::bindPage(const QString& id, PageController* controller, const QUrl& qmlSource)
+{
+    if (!controller) {
+        qWarning() << "ApplicationController::bindPage: null controller for" << id;
+        return false;
+    }
+    if (controller->thread() != this->thread()) {
+        qWarning() << "ApplicationController::bindPage: cross-thread controller refused for" << id;
+        return false;
+    }
+    if (!m_registry->bindPage(id, controller, qmlSource)) {
+        return false;
+    }
+    if (!m_domains.contains(QPointer<StagingDomain>(controller))) {
+        registerDomain(controller);
+    }
+    return true;
+}
+
+void ApplicationController::setNavigationHook(NavigationHook hook)
+{
+    m_navigationHook = std::move(hook);
 }
 
 void ApplicationController::registerDomain(StagingDomain* domain)

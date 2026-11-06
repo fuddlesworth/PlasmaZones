@@ -87,6 +87,12 @@ if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
     endif()
 endif()
 
+# The shared plugin catalog Facet modules load through. In-tree the target
+# already exists; a standalone build finds the installed package.
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry CONFIG REQUIRED)
+endif()
+
 # Shared-vs-static lib type. SHARED is the LGPL-friendly default: an
 # end-user can relink against a modified copy of this library without
 # also having to relink the consuming application, satisfying the
@@ -137,6 +143,11 @@ set(phosphorcontrol_public_HDRS
     include/PhosphorControl/ISearchProvider.h
     include/PhosphorControl/SearchController.h
     include/PhosphorControl/SidebarRows.h
+    include/PhosphorControl/FacetModule.h
+    include/PhosphorControl/FacetModuleMetadata.h
+    include/PhosphorControl/FacetContext.h
+    include/PhosphorControl/FacetHost.h
+    include/PhosphorControl/FacetTestHost.h
 )
 
 set(phosphorcontrol_SRCS
@@ -153,6 +164,10 @@ set(phosphorcontrol_SRCS
     src/searchranker.cpp
     src/searchcontroller.cpp
     src/sidebarrows.cpp
+    src/facetmodulemetadata.cpp
+    src/facetcontext.cpp
+    src/facethost.cpp
+    src/facettesthost.cpp
 )
 
 # NOTE: three near-identical targets (PhosphorControl C++ lib +
@@ -212,6 +227,9 @@ target_link_libraries(PhosphorControl
         # need the Qml include path at compile time even if they don't
         # use the registration macros themselves.
         Qt6::Qml
+        # PUBLIC: FacetHost.h exposes PluginSeam, PluginSearchPath and
+        # RefusedPlugin, the shared plugin catalog's types.
+        PhosphorRegistry::PhosphorRegistry
     PRIVATE
         # Qt6::Gui is PRIVATE: moc-generated code on the implementation
         # side may reference QColor/QPalette/etc. through Qt5 compat

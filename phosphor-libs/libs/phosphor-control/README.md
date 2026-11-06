@@ -53,6 +53,11 @@ library provides:
 | `PhosphorControl::SearchEntry`            | One searchable item (Page / Section / Setting / Entity), addressed as `"pageId"` or `"pageId#anchor"` |
 | `PhosphorControl::DBusBridge`             | Configured endpoint(s) for daemon calls: sync `call()` / async `asyncCall()`, with explicit-interface variants |
 | `PhosphorControl::LocalizedContext`       | QML i18n context routing `i18n()`/`i18nc()`/`i18np()` through Qt translation, for Qt-only consumers without KF6 |
+| `PhosphorControl::IFacetModule`           | The interface a Facet module's root object implements (`registerInto(FacetContext&)`), IID `org.phosphor_works.Facet.Module/1` |
+| `PhosphorControl::FacetModuleMetadata`    | A module's embedded metadata (id, name, icon, category, parent module, pages), parsed and validated per locale |
+| `PhosphorControl::FacetContext`           | What a module registers into: its page controllers, by local page id, and its headless staging domains |
+| `PhosphorControl::FacetHost`              | Finds Facet modules through a `PhosphorRegistry::PluginCatalog`, fills the page registry with placeholders, and loads a module the first time one of its pages is opened |
+| `PhosphorControl::FacetTestHost`          | Loads one module headless and lists every way it breaks the contract, for the module's own CI |
 
 ## Typical use
 
@@ -110,6 +115,23 @@ The shell drives the dirty/Apply lifecycle from the domains' signals:
 
 See `examples/minimal/` for a complete two-page app (General + About).
 
+## Facet modules
+
+Facet is the suite's one settings app, and every app adds its settings as a
+module: a Qt plugin in the `facet` seam whose root object implements
+`IFacetModule`. `FacetHost` reads every module's metadata without loading it
+and puts a placeholder page in the sidebar for each category in use, each
+module and each module page, under ids `@category/<id>`, `<module>` and
+`<module>:<page>`. Opening one of a module's pages loads the module through
+`ApplicationController`'s navigation hook, before the page change is
+announced, and its `registerInto` binds its real controllers into the
+placeholders (`ApplicationController::bindPage`). A module that registers a
+page its metadata does not declare, skips one, or gives a controller the wrong
+id fails with the reason. A module that was loading when the process died is
+disabled at the next start until `retryModule`. The full design, including
+extensions into other modules' pages, is `DESIGN-facet-extensions.md` in the
+phosphor-works workspace.
+
 ## Design notes
 
 - **Staging is the contract, not persistence.** `ApplicationController` only
@@ -142,6 +164,8 @@ See `examples/minimal/` for a complete two-page app (General + About).
 - [`phosphor-animation`](../phosphor-animation/README.md) — the QML chrome
   imports `org.phosphor.animation` for the spring-physics motion profiles
   (panel fade, accordion expand/collapse, tint, pulse)
+- [`phosphor-registry`](../phosphor-registry/README.md) — `PluginCatalog`, the
+  plugin loader `FacetHost` finds and loads Facet modules through
 
 ## See also
 
