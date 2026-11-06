@@ -209,10 +209,13 @@ namespace {
 /// deliberate delete) and is not a failure, and neither is a file that holds
 /// only white space (a `touch`), which reads as an empty document: there is
 /// nothing in it that a write could lose. Unreadable covers an open failure,
-/// a parse error and a non-object root alike.
+/// a parse error and a non-object root alike. Blank is that white-space
+/// file, told apart so that a caller can tell a file just emptied by an
+/// editor that saves in place from one that holds an empty object.
 enum class DiskRead {
     Missing,
     Ok,
+    Blank,
     Unreadable,
 };
 
@@ -239,7 +242,7 @@ DiskRead readDocument(const QString& path, QJsonObject& out, const char* consequ
     const QByteArray bytes = f.readAll();
     if (bytes.trimmed().isEmpty()) {
         out = QJsonObject();
-        return DiskRead::Ok;
+        return DiskRead::Blank;
     }
     QJsonParseError err;
     const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
@@ -301,6 +304,11 @@ struct JsonBackend::Data
     /// d->root is then a stand-in rather than what disk holds, and a
     /// whole-document flush would overwrite the user's file with it.
     bool loadFailed = false;
+    /// Load::Deferred and no load yet: d->root is not the file, so writes
+    /// are refused, as for an unreadable file, but with no file to blame.
+    bool notLoaded = false;
+    /// The most recent load found a file of only white space (see blankFile).
+    bool blank = false;
     /// setOverwriteUnreadable: a failed load does not block writes.
     bool overwriteUnreadable = false;
     /// The backing file as this backend last read or wrote it, so a flush can
@@ -711,10 +719,14 @@ QStringList JsonGroup::keyList() const
 
 // ─── JsonBackend ────────────────────────────────────────────────────────────
 
-JsonBackend::JsonBackend(QString filePath)
+JsonBackend::JsonBackend(QString filePath, Load load)
     : d(std::make_unique<Data>())
 {
     d->filePath = std::move(filePath);
+    if (load == Load::Deferred) {
+        d->notLoaded = true;
+        return;
+    }
     loadFromDisk();
 }
 
@@ -751,8 +763,11 @@ void JsonBackend::loadFromDisk(QString* problem)
     // refused. A missing file is NOT a failure: it is a first run (or a
     // deliberate delete), and starting empty with writes allowed is correct.
     d->stamp = stampOf(d->filePath);
+    d->notLoaded = false;
     QJsonObject doc;
-    switch (readDocument(d->filePath, doc, "keeping the last readable state", problem)) {
+    const DiskRead read = readDocument(d->filePath, doc, "keeping the last readable state", problem);
+    d->blank = read == DiskRead::Blank;
+    switch (read) {
     case DiskRead::Missing:
         d->root = QJsonObject();
         d->lastGoodRoot = QJsonObject();
@@ -763,6 +778,7 @@ void JsonBackend::loadFromDisk(QString* problem)
         d->loadFailed = true;
         return;
     case DiskRead::Ok:
+    case DiskRead::Blank:
         d->root = std::move(doc);
         d->lastGoodRoot = d->root;
         d->loadFailed = false;
@@ -778,6 +794,11 @@ void JsonBackend::setOverwriteUnreadable(bool overwrite)
 bool JsonBackend::loadFailed() const
 {
     return d->loadFailed;
+}
+
+bool JsonBackend::blankFile() const
+{
+    return d->blank;
 }
 
 void JsonBackend::markDirty()
@@ -891,6 +912,12 @@ bool JsonBackend::flushNow()
 {
     if (!d->dirty) {
         return true;
+    }
+    if (d->notLoaded) {
+        // Load::Deferred and never loaded: the root is not what the file
+        // holds, and setOverwriteUnreadable does not make it so.
+        qWarning("PhosphorConfig::JsonBackend: refusing to write %s — it was not loaded yet", qPrintable(d->filePath));
+        return false;
     }
     if (!d->overwriteUnreadable) {
         // A file broken since the last load is caught here, not only by a
@@ -1299,7 +1326,7 @@ bool JsonBackend::applyMigration(const Schema& schema)
     if (schema.migrations.isEmpty()) {
         return true;
     }
-    if (d->loadFailed && !d->overwriteUnreadable) {
+    if (d->notLoaded || (d->loadFailed && !d->overwriteUnreadable)) {
         // Same refusal as flushNow: the root is a stand-in for a file that
         // could not be read, so committing a migrated copy of it would
         // overwrite that file.

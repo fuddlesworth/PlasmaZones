@@ -121,7 +121,11 @@ stays on top of the fallback document. A later `reparseConfiguration()` or
 `reload()` that reads the file cleanly clears the flag. `reload()` is the same
 reload for a caller that reports problems itself: it logs nothing and returns
 the reason the file could not be read. A file that holds only white space reads
-as an empty document, as a missing one does. A machine-written file with
+as an empty document, as a missing one does, and `blankFile()` tells it from a
+file that holds `{}`: an editor that saves in place empties the file before it
+writes. A caller that reloads at once constructs the backend with
+`JsonBackend::Load::Deferred`, so the file is read and reported one time. Until
+that first reload the backend is empty and refuses writes. A machine-written file with
 nothing worth keeping opts out with `setOverwriteUnreadable(true)`.
 
 ## Design notes
