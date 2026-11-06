@@ -36,7 +36,7 @@ if [ "$RUN" = snap ]; then
     sleep 1
     setting autotileEnabled false
     sleep 1
-    echo "autotileEnabled reads $(PZ org.plasmazones.Settings.getSetting autotileEnabled)"
+    echo "autotileEnabled reads $(PZ org.phosphor_works.Placement.Settings.getSetting autotileEnabled)"
     assignd Virtual-1 2 "autotile:bsp"
 else
     assignd Virtual-1 1 "autotile:bsp"
@@ -54,7 +54,7 @@ if [ "$RUN" = snap ]; then
     WU=$(uuid w)
     [ -n "$WU" ] || stage_fail "w never mapped"
     W="org.pz.plain|$WU"
-    PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+    PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
     sleep 2
     Z=$(zoneof "$W")
     echo "staged: w (...${WU: -8}) $(geo w) zone=$Z floating=$(floating "$W")"
@@ -77,7 +77,7 @@ fi
 desk 1
 echo "desktop $(curdesk) shown"
 MON="$NEST/f1137-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowsTileRequested'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowsTileRequested'"
 echo "== Virtual-1 disabled"
 dmark
 ksd output.Virtual-1.disable

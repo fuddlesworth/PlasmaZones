@@ -33,13 +33,13 @@ P1="org.pz.plain|$P1U"
 ZA=$(zoneid "$COLS3" 1)
 ZB=$(zoneid "$COLS2" 1)
 { [ -n "$ZA" ] && [ -n "$ZB" ]; } || stage_fail "no zone 1 in COLS3 or Columns (2)"
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
 sleep 2
 G=$(geo p1)
 echo "p1 in COLS3 zone 1: $G"
 { [ "$(outof "$G")" = Virtual-0 ] && [ "$(deskof "$G")" = 1 ]; } || stage_fail "p1 is not on Virtual-0 desktop 1 ($G)"
 emark
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$ZB" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$ZB" >/dev/null
 sleep 2.5
 G=$(geo p1)
 echo "p1 after the move to Virtual-1: $G zone=$(zoneof "$P1")"

@@ -38,13 +38,13 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 floatkey w
 echo "staged: $(wstat w "$W")"
 [ "$(floating "$W")" = true ] || stage_fail "w is not snap-floating on Virtual-1"
 MON="$NEST/fu-optout-inview-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 echo "== Virtual-1 disabled, desktop 1 in view on Virtual-0"
 dmark
 mmark "$MON"

@@ -347,9 +347,9 @@ export QT_FORCE_STDERR_LOGGING=1
 
 # D-BUS ACTIVATION, redirected to the build tree.
 #
-# The system ships /usr/share/dbus-1/services/org.plasmazones.service, so the
+# The system ships /usr/share/dbus-1/services/org.phosphor_works.Placement.service, so the
 # nested bus activates the INSTALLED daemon the moment the effect first calls
-# org.plasmazones. That daemon inherits the bus's environment — which names the
+# org.phosphor_works.Placement. That daemon inherits the bus's environment — which names the
 # HOST compositor, not this session — so it connects to the wrong Wayland
 # display, answers queries with the host's screens, and outlives the nested bus
 # when it dies. They accumulate across runs, compete for the bus name, and
@@ -375,9 +375,9 @@ set -eu
 exec "$REPO/$BUILD/bin/plasmazonesd"
 ACTIVATE
 chmod +x "$NEST/activate-daemon.sh"
-cat > "$SVC_DIR/org.plasmazones.service" <<SVC
+cat > "$SVC_DIR/org.phosphor_works.Placement.service" <<SVC
 [D-BUS Service]
-Name=org.plasmazones
+Name=org.phosphor_works.Placement
 Exec=$NEST/activate-daemon.sh
 SVC
 # No wallet in a nested session. A GTK test client starts xdg-desktop-portal,

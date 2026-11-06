@@ -7,9 +7,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <node>
     <!-- Engine-neutral transport shared by the tiling-family placement
          engines (autotile, scrolling). Engine-specific verbs live on
-         org.plasmazones.Autotile and org.plasmazones.Scrolling. -->
-    <interface name="org.plasmazones.Tiling">
-        <annotation name="org.gtk.GDBus.DocString" value="Shared tiling-family transport: the engine-managed screen set, window lifecycle notifications from the KWin effect, and geometry/focus/float requests to it. Engine-specific control lives on org.plasmazones.Autotile and org.plasmazones.Scrolling."/>
+         org.phosphor_works.Placement.Autotile and org.phosphor_works.Placement.Scrolling. -->
+    <interface name="org.phosphor_works.Placement.Tiling">
+        <annotation name="org.gtk.GDBus.DocString" value="Shared tiling-family transport: the engine-managed screen set, window lifecycle notifications from the KWin effect, and geometry/focus/float requests to it. Engine-specific control lives on org.phosphor_works.Placement.Autotile and org.phosphor_works.Placement.Scrolling."/>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Properties
@@ -19,7 +19,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Whether any tiling-family engine is active on any screen (read-only, derived from assignments). Changes are announced on the enabledChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
         <property name="managedScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset. Changes are announced on the managedScreensChanged signal below, which carries an extra isDesktopSwitch flag the property itself cannot express, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.phosphor_works.Placement.Scrolling names the scrolling subset. Changes are announced on the managedScreensChanged signal below, which carries an extra isDesktopSwitch flag the property itself cannot express, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
         <property name="activeLayouts" type="a{sv}" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
@@ -179,8 +179,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
              all float operations are now routed through the unified methods —
-             org.plasmazones.Snap.toggleFloatForWindow for toggle,
-             org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional -->
+             org.phosphor_works.Placement.Snap.toggleFloatForWindow for toggle,
+             org.phosphor_works.Placement.WindowTracking.setWindowFloatingForScreen for directional -->
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Signals

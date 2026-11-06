@@ -83,7 +83,7 @@ A shortcut family on `Meta+Alt` covers the whole vocabulary: [Keyboard shortcuts
 - **Appearance** — GLSL shader overlays for zones (audio-reactive, procedural, distro-themed) with up to 4 image textures each, window decoration packs, and animation packs for open, close, minimize, and desktop switching — [Shader gallery →](https://phosphor-works.github.io/plasmazones/shaders/) · [authoring guide →](https://phosphor-works.github.io/plasmazones/guides/shaders/)
 - **Per-monitor, per-desktop, per-activity** — layouts, algorithms, templates, and mode assignments are all scoped, and virtual screens subdivide a physical monitor into independent logical workspaces with their own everything
 - **Window rules** — match on class, title, active layout, screen orientation, and more, then act on placement, floating, opacity, borders, animations, scroll speed, and per-app behavior in every mode
-- **Scriptable** — a D-Bus API on `org.plasmazones` covering every mode — [scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)
+- **Scriptable** — a D-Bus API on `org.phosphor_works.Placement` covering every mode — [scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)
 
 ---
 
@@ -245,7 +245,7 @@ The archive lands in `/tmp` by default with home paths redacted, so it's safe to
 
 ## D-Bus API
 
-The daemon exposes its whole surface on `org.plasmazones` for scripting and integration. Interface inventory, scripting recipes, and signal watching: **[D-Bus scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)**.
+The daemon exposes its whole surface on `org.phosphor_works.Placement` for scripting and integration. Interface inventory, scripting recipes, and signal watching: **[D-Bus scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)**.
 
 ---
 

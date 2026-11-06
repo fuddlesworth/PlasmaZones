@@ -255,7 +255,7 @@ The settings app owns config.json while it is open.
 3. Nothing watches config.json. Tell the daemon to re-read it (verified on the live bus,
    `plasmazones/src/dbus/settingsadaptor/settingsadaptor.cpp` `reloadSettings` calls `Settings::load()`):
    ```bash
-   gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.Settings.reloadSettings
+   gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement --method org.phosphor_works.Placement.Settings.reloadSettings
    ```
    The daemon then broadcasts `settingsChanged`, and the KWin effect re-reads the decoration
    tree over D-Bus on that signal. Confirm with `journalctl --user -f | grep -i plasmazones`

@@ -54,8 +54,8 @@ activate k
 echo "desktop $(curdesk) shown, active: $(activecap)"
 [ "$(activecap)" = k ] || stage_fail "k is not the active window before the unplug"
 MON="$NEST/f1099-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowsTileRequested'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='parkDropped'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowsTileRequested'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='parkDropped'"
 echo "== Virtual-1 disabled"
 dmark
 ksd output.Virtual-1.disable

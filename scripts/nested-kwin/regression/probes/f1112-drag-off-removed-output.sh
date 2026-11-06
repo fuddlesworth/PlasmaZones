@@ -47,8 +47,8 @@ DX=$((BX + 300))
 DY=$((BY + BH - 250))
 echo "staged: w $G | B $BX $BY ${BW}x$BH ($BMODE) | press at $CX,$CY, drop at $DX,$DY"
 MON="$NEST/f1112-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='windowScreenChanged'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='windowCrossedScreens'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='windowScreenChanged'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='windowCrossedScreens'"
 mmark "$MON"
 dmark
 emark

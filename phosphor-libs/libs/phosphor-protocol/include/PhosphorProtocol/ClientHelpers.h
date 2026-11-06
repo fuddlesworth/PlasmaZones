@@ -27,7 +27,7 @@ PHOSPHORPROTOCOL_EXPORT const QLoggingCategory& lcPhosphorProtocol();
  *
  * Returned by value — `Client` is a cheap handle, so this is not a singleton
  * and holds no shared global state. It binds the canonical
- * `org.plasmazones` service / `/PlasmaZones` object on the session bus, with
+ * `org.phosphor_works.Placement` service / `/org/phosphor_works/Placement` object on the session bus, with
  * call failures logged under `lcPhosphorProtocol()`.
  *
  * Generic, service-agnostic D-Bus plumbing lives in PhosphorDBus; this is the

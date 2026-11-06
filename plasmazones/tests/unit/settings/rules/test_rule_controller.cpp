@@ -183,11 +183,11 @@ void TestRuleController::dirtyTrackingAndRevert()
     // daemon up. That asymmetry is accepted rather than mocked away: the
     // controller reaches the bus directly through `QDBusConnection::sessionBus()`
     // (see rulecontroller.cpp's fetchAndLoad), so making the success arm
-    // hermetic means standing up a real `org.plasmazones.Rules` service on a
+    // hermetic means standing up a real `org.phosphor_works.Placement.Rules` service on a
     // private bus — a fixture no other test in this file needs, for one
     // transition the daemon-side rule tests already cover from the other end.
     // Under ctest the TEST_LAUNCHER private bus declares NO service
-    // directories, so org.plasmazones.Rules is never reachable and the
+    // directories, so org.phosphor_works.Placement.Rules is never reachable and the
     // failure arm below is the one that runs. The assertion IS
     // outcome-derived (the branch keeps the success arm alive for a direct
     // dev-box run against a live daemon), so a ctest environment that ever

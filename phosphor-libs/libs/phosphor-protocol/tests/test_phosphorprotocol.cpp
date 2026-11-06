@@ -344,8 +344,8 @@ private Q_SLOTS:
 
     void testServiceConstants()
     {
-        QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
-        QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
+        QCOMPARE(Service::Name, QLatin1String("org.phosphor_works.Placement"));
+        QCOMPARE(Service::ObjectPath, QLatin1String("/org/phosphor_works/Placement"));
         // MinPeerApiVersion tracks ApiVersion exactly, so every unreleased
         // step collapses into the current number. See the v6 entry in
         // ServiceConstants.h for what it covers: it widened TileRequestEntry

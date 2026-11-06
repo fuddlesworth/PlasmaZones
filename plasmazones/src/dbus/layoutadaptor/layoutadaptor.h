@@ -50,13 +50,13 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for layout management operations
  *
- * Provides D-Bus interface: org.plasmazones.LayoutRegistry
+ * Provides D-Bus interface: org.phosphor_works.Placement.LayoutRegistry
  *  PhosphorZones::Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.LayoutRegistry")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.LayoutRegistry")
 
 public:
     explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent = nullptr);

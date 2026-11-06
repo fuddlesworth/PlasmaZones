@@ -24,7 +24,7 @@ P1U=$(uuid p1)
 P1="org.pz.plain|$P1U"
 Z1=$(zoneid "$COLS3" 1)
 [ -n "$Z1" ] || stage_fail "no zone 1 in COLS3"
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$Z1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$Z1" >/dev/null
 sleep 2
 echo "p1 snapped: $(geo p1) zone=$(zoneof "$P1")"
 case "$(zoneof "$P1")" in "{"*) ;; *) stage_fail "p1 did not snap into COLS3 zone 1" ;; esac

@@ -26,7 +26,7 @@ namespace PlasmaZones {
  * filters in QML over this one model.
  *
  * The model is staging: it holds an in-memory `QList<Rule>` that the
- * `RuleController` populates from the daemon's `org.plasmazones.Rules`
+ * `RuleController` populates from the daemon's `org.phosphor_works.Placement.Rules`
  * D-Bus surface, mutates locally as the user edits, and flushes back to the
  * daemon on commit. The model never talks to D-Bus itself.
  *

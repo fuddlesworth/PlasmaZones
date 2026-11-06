@@ -19,25 +19,25 @@ setting snapAssistEnabled false
 newdesk 1 D2
 assign Virtual-0 "$COLS3"
 sleep 1.5
-echo "desktops: $(curdesk) | daemon count $(PZ org.plasmazones.LayoutRegistry.getVirtualDesktopCount)"
+echo "desktops: $(curdesk) | daemon count $(PZ org.phosphor_works.Placement.LayoutRegistry.getVirtualDesktopCount)"
 open p1
 ids
 P1U=$(uuid p1)
 [ -n "$P1U" ] || stage_fail "p1 never mapped"
 P1="org.pz.plain|$P1U"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 sleep 2
 Z=$(zoneof "$P1")
 echo "p1 staged: $(geo p1) zone=$Z"
 case "$Z" in "{"*) ;; *) stage_fail "p1 did not snap ($Z)" ;; esac
 listed() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.WindowTracking.getWindowStatesForDesktop Virtual-0 "$1" 2>&1 | grep -c "$P1U"
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.WindowTracking.getWindowStatesForDesktop Virtual-0 "$1" 2>&1 | grep -c "$P1U"
 }
 [ "$(listed 1)" = 1 ] || stage_fail "p1 is not listed on desktop 1 before the first try"
 COUNTED=0
 for try in 1 2 3; do
-    N=$(($(PZ org.plasmazones.LayoutRegistry.getVirtualDesktopCount) + 1))
+    N=$(($(PZ org.phosphor_works.Placement.LayoutRegistry.getVirtualDesktopCount) + 1))
     echo "== try $try: create desktop $N and move p1 onto it in one script"
     dmark
     js "workspace.createDesktop(workspace.desktops.length, \"W8N$try\"); const nd = workspace.desktops[workspace.desktops.length - 1]; const w = workspace.windowList(); for (var i = 0; i < w.length; i++) { if (w[i].caption === \"p1\") { w[i].desktops = [nd]; print(\"F1022MOVED p1 to \" + nd.x11DesktopNumber + \" of \" + workspace.desktops.length); } }"
@@ -51,7 +51,7 @@ for try in 1 2 3; do
         ;;
     esac
     COUNTED=$((COUNTED + 1))
-    echo "  KWin: $MV | p1 $(geo p1) | daemon count $(PZ org.plasmazones.LayoutRegistry.getVirtualDesktopCount)"
+    echo "  KWin: $MV | p1 $(geo p1) | daemon count $(PZ org.phosphor_works.Placement.LayoutRegistry.getVirtualDesktopCount)"
     check "try $try: refusal lines naming desktop $N" \
         "$(dlog "setWindowMetadata: virtualDesktop $N out of range|screenDesktopChanged: desktop $N past the last" | wc -l)" -eq 0
     check "try $try: p1 listed on desktop $N" "$(listed "$N")" = 1

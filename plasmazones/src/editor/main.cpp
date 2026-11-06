@@ -46,7 +46,7 @@ bool activateRunningInstance(const QString& screenId, const QString& layoutId, b
                              const QString& templateId, bool newTemplate)
 {
     // Hand-maintained trio: this arg list, EditorAppAdaptor::handleLaunchRequest,
-    // and dbus/org.plasmazones.EditorApp.xml must agree (the contract test
+    // and dbus/org.phosphor_works.PlasmaZones.Editor.xml must agree (the contract test
     // documents that XML as out of scope). Change all three together.
     return PlasmaZones::SingleInstanceService::forward(
         kEditorIds, QStringLiteral("handleLaunchRequest"),
@@ -93,8 +93,8 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("plasmazones-editor"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setOrganizationName(QStringLiteral("plasmazones"));
-    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
-    app.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
+    app.setOrganizationDomain(QStringLiteral("phosphor-works.org"));
+    app.setDesktopFileName(QStringLiteral("org.phosphor_works.PlasmaZones.Editor"));
 
     // Command line options
     QCommandLineParser parser;

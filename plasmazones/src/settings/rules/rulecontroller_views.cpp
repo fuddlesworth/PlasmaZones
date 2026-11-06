@@ -284,7 +284,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens, const 
         // same thing. On the daemon-served path "name" IS that id:
         // ScreenProvider::fetchScreens fills ScreenInfo::name from the daemon's
         // `getScreens`, which returns effective screen identifiers (see
-        // dbus/org.plasmazones.Screen.xml), and parks the real connector under a
+        // dbus/org.phosphor_works.Placement.Screen.xml), and parks the real connector under a
         // separate "connectorName" key this lookup never reads. "screenId" is the
         // alternate; fall back to it so the overview never silently drops a tile
         // whose name happens to be empty.

@@ -12,7 +12,7 @@
  * documented against a deleted method, internal helpers exposed as bus slots,
  * and renamed args. This test pins, for every linkable handwritten
  * (XML, adaptor) pair — the daemon's fourteen src/dbus interfaces plus
- * phosphor-screens' org.plasmazones.Screen (fifteen in total):
+ * phosphor-screens' org.phosphor_works.Placement.Screen (fifteen in total):
  *
  *  1. Every XML method exists as a bus-exposed metaobject method with
  *     matching in/out argument types, names, and return mapping.
@@ -30,9 +30,9 @@
  * reference parameters in declaration order.
  *
  * NOT covered (documented gap, not an oversight): the settings/editor apps'
- * single-slot launch forwarders — SettingsAppAdaptor (org.plasmazones
- * .SettingsController, dbus/org.plasmazones.SettingsApp.xml) and
- * EditorAppAdaptor (org.plasmazones.EditorController, dbus/org.plasmazones
+ * single-slot launch forwarders — SettingsAppAdaptor (org.phosphor_works.Placement
+ * .SettingsController, dbus/org.phosphor_works.Facet.xml) and
+ * EditorAppAdaptor (org.phosphor_works.PlasmaZones.Editor, dbus/org.phosphor_works.Placement
  * .EditorApp.xml). Their classes are app-internal (compiled into the app
  * binaries, not exported from any linkable target), so their
  * staticMetaObjects cannot be linked here without dragging each app's
@@ -556,59 +556,61 @@ private Q_SLOTS:
 
     void testCompositorBridgeContract()
     {
-        verifyContract(CompositorBridgeAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.CompositorBridge"));
+        verifyContract(CompositorBridgeAdaptor::staticMetaObject,
+                       QStringLiteral("org.phosphor_works.Placement.CompositorBridge"));
     }
 
     void testWindowTrackingContract()
     {
         // No allowlist: the in-process close and prune notices live on
         // WindowLifecycleRelay, off the bus (F514).
-        verifyContract(WindowTrackingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowTracking"));
+        verifyContract(WindowTrackingAdaptor::staticMetaObject,
+                       QStringLiteral("org.phosphor_works.Placement.WindowTracking"));
     }
 
     void testTilingContract()
     {
-        verifyContract(TilingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Tiling"));
+        verifyContract(TilingAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Tiling"));
     }
 
     void testAutotileContract()
     {
-        verifyContract(AutotileAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Autotile"));
+        verifyContract(AutotileAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Autotile"));
     }
 
     void testSnapContract()
     {
-        verifyContract(SnapAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Snap"));
+        verifyContract(SnapAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Snap"));
     }
 
     void testScrollingContract()
     {
-        verifyContract(ScrollingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Scrolling"));
+        verifyContract(ScrollingAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Scrolling"));
     }
 
     void testControlContract()
     {
-        verifyContract(ControlAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Control"));
+        verifyContract(ControlAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Control"));
     }
 
     void testLayoutRegistryContract()
     {
-        verifyContract(LayoutAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.LayoutRegistry"));
+        verifyContract(LayoutAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.LayoutRegistry"));
     }
 
     void testOverlayContract()
     {
-        verifyContract(OverlayAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Overlay"));
+        verifyContract(OverlayAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Overlay"));
     }
 
     void testSettingsContract()
     {
-        verifyContract(SettingsAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Settings"));
+        verifyContract(SettingsAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Settings"));
     }
 
     void testShaderContract()
     {
-        verifyContract(ShaderAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Shader"));
+        verifyContract(ShaderAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Shader"));
     }
 
     void testWindowDragContract()
@@ -617,23 +619,25 @@ private Q_SLOTS:
         // method: the effect invokes it cross-process at shutdown, but it is
         // deliberately absent from the published XML (see its doc comment in
         // windowdragadaptor.h — it must STAY a slot).
-        verifyContract(WindowDragAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowDrag"), {},
-                       {QStringLiteral("clearForCompositorReconnect")});
+        verifyContract(WindowDragAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.WindowDrag"),
+                       {}, {QStringLiteral("clearForCompositorReconnect")});
     }
 
     void testRulesContract()
     {
-        verifyContract(RuleAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Rules"));
+        verifyContract(RuleAdaptor::staticMetaObject, QStringLiteral("org.phosphor_works.Placement.Rules"));
     }
 
     void testZoneDetectionContract()
     {
-        verifyContract(ZoneDetectionAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.ZoneDetection"));
+        verifyContract(ZoneDetectionAdaptor::staticMetaObject,
+                       QStringLiteral("org.phosphor_works.Placement.ZoneDetection"));
     }
 
     void testScreenContract()
     {
-        verifyContract(PhosphorScreens::DBusScreenAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Screen"));
+        verifyContract(PhosphorScreens::DBusScreenAdaptor::staticMetaObject,
+                       QStringLiteral("org.phosphor_works.Placement.Screen"));
     }
 
     void testAllXmlFilesCovered()
@@ -643,27 +647,27 @@ private Q_SLOTS:
         // launch adaptors — see the header comment). A new XML added later
         // must not go silently unchecked.
         static const QSet<QString> covered = {
-            QStringLiteral("org.plasmazones.Autotile.xml"),
-            QStringLiteral("org.plasmazones.Tiling.xml"),
-            QStringLiteral("org.plasmazones.CompositorBridge.xml"),
-            QStringLiteral("org.plasmazones.Control.xml"),
-            QStringLiteral("org.plasmazones.LayoutRegistry.xml"),
-            QStringLiteral("org.plasmazones.Overlay.xml"),
-            QStringLiteral("org.plasmazones.Screen.xml"),
-            QStringLiteral("org.plasmazones.Settings.xml"),
-            QStringLiteral("org.plasmazones.Shader.xml"),
-            QStringLiteral("org.plasmazones.Scrolling.xml"),
-            QStringLiteral("org.plasmazones.Snap.xml"),
-            QStringLiteral("org.plasmazones.WindowDrag.xml"),
-            QStringLiteral("org.plasmazones.Rules.xml"),
-            QStringLiteral("org.plasmazones.WindowTracking.xml"),
-            QStringLiteral("org.plasmazones.ZoneDetection.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Autotile.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Tiling.xml"),
+            QStringLiteral("org.phosphor_works.Placement.CompositorBridge.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Control.xml"),
+            QStringLiteral("org.phosphor_works.Placement.LayoutRegistry.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Overlay.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Screen.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Settings.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Shader.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Scrolling.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Snap.xml"),
+            QStringLiteral("org.phosphor_works.Placement.WindowDrag.xml"),
+            QStringLiteral("org.phosphor_works.Placement.Rules.xml"),
+            QStringLiteral("org.phosphor_works.Placement.WindowTracking.xml"),
+            QStringLiteral("org.phosphor_works.Placement.ZoneDetection.xml"),
         };
         static const QSet<QString> documentedOutOfScope = {
             // App-internal single-slot launch forwarders; rationale in the
             // file header's "NOT covered" paragraph.
-            QStringLiteral("org.plasmazones.SettingsApp.xml"),
-            QStringLiteral("org.plasmazones.EditorApp.xml"),
+            QStringLiteral("org.phosphor_works.Facet.xml"),
+            QStringLiteral("org.phosphor_works.PlasmaZones.Editor.xml"),
         };
         const QDir xmlDir(QStringLiteral(PLASMAZONES_DBUS_XML_DIR));
         const QStringList onDisk = xmlDir.entryList({QStringLiteral("*.xml")}, QDir::Files);

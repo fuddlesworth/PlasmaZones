@@ -59,8 +59,8 @@ using PlasmaZones::TestHelpers::isBusError;
 // Named, not anonymous: the test class's Fixture holds these by value.
 namespace BusContextTestSupport {
 
-const QString OverlayInterface = QStringLiteral("org.plasmazones.Overlay");
-const QString ProbeInterface = QStringLiteral("org.plasmazones.test.Probe");
+const QString OverlayInterface = QStringLiteral("org.phosphor_works.Placement.Overlay");
+const QString ProbeInterface = QStringLiteral("org.phosphor_works.Test.Probe");
 
 /// Records the thumbnails that got past the adaptor, and stores every one.
 class RecordingOverlay : public TestHelpers::StubOverlayService
@@ -86,7 +86,7 @@ public:
 class ProbeAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.test.Probe")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Test.Probe")
 
 public:
     explicit ProbeAdaptor(QObject* parent)

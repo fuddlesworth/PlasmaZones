@@ -145,7 +145,7 @@ private Q_SLOTS:
     {
         // A host on a connection with no org.bluez peer must construct, expose
         // empty-or-real lists, and answer out-of-range queries with nullptr.
-        BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor.test.AbsentBluez"));
+        BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor_works.Test.AbsentBluez"));
         QVERIFY(host.adapterAt(-1) == nullptr);
         QVERIFY(host.adapterAt(0) == nullptr);
         QVERIFY(host.deviceAt(0) == nullptr);
@@ -384,7 +384,7 @@ private Q_SLOTS:
     {
         // The session bus is connected even though no org.bluez peer exists,
         // so the host sets up (and exports) its agent.
-        BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor.test.AbsentBluez2"));
+        BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor_works.Test.AbsentBluez2"));
         QVERIFY(host.agent() != nullptr);
         QCOMPARE(host.agent()->pendingRequestCount(), 0);
     }
@@ -459,7 +459,7 @@ private Q_SLOTS:
         QDBusConnection bus = QDBusConnection::sessionBus();
         if (!bus.isConnected())
             QSKIP("no session bus available");
-        const QString service = QStringLiteral("org.phosphor.test.Agent");
+        const QString service = QStringLiteral("org.phosphor_works.Test.Agent");
         if (!bus.registerService(service))
             QSKIP("could not own the test service name");
 

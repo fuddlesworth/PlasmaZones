@@ -48,8 +48,8 @@ sleep 2
 echo "w minimized: $(geo w) floating=$(floating "$W")"
 [ "$(floating "$W")" = true ] || stage_fail "w is not minimize-floated"
 MON="$NEST/f1147-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='parkDropped'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='parkReseated'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='parkDropped'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='parkReseated'"
 echo "== Virtual-1 disabled"
 emark
 dmark

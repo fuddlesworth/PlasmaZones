@@ -4,7 +4,7 @@
   SPDX-License-Identifier: CC0-1.0
 -->
 <component type="desktop-application">
-  <id>org.plasmazones.editor</id>
+  <id>org.phosphor_works.PlasmaZones.Editor</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
 
@@ -30,7 +30,7 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">org.plasmazones.editor.desktop</launchable>
+  <launchable type="desktop-id">org.phosphor_works.PlasmaZones.Editor.desktop</launchable>
 
   <categories>
     <category>Settings</category>

@@ -24,7 +24,7 @@ ids
 W1U=$(uuid w1)
 [ -n "$W1U" ] || stage_fail "w1 never mapped"
 W1="org.pz.plain|$W1U"
-PZ org.plasmazones.Control.snapWindowToZone "$W1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W1" 1 Virtual-0 >/dev/null
 sleep 2
 floatkey w1
 [ "$(floating "$W1")" = true ] || stage_fail "w1 is not snap-floating"

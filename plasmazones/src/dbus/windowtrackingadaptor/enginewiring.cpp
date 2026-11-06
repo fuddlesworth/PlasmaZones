@@ -310,12 +310,12 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     //
     // Both engines' navigation feedback routes through this adaptor's
     // navigationFeedback signal because the KWin effect listens for OSD
-    // data on org.plasmazones.WindowTracking regardless of engine mode.
+    // data on org.phosphor_works.Placement.WindowTracking regardless of engine mode.
     //
     // SnapEngine's navigation feedback is connected by SnapAdaptor (mirrors
     // TilingAdaptor's constructor pattern). This single connection is the
     // only autotile signal that routes through WTA — all other autotile
-    // signals go through TilingAdaptor on org.plasmazones.Tiling.
+    // signals go through TilingAdaptor on org.phosphor_works.Placement.Tiling.
     //
     // NOTE: AutotileEngine::windowFloatingChanged is NOT relayed here.
     // The daemon intercepts it with a lambda (signals.cpp) for cross-mode
@@ -518,7 +518,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // above receive: OSD feedback, cross-desktop moves, cross-mode handoff,
     // float-restore geometry, and the rule-driven open-floating gate.
     // Tile-request / floating / screens relays live on TilingAdaptor
-    // (the scroll engine shares the org.plasmazones.Tiling surface).
+    // (the scroll engine shares the org.phosphor_works.Placement.Tiling surface).
     // ═══════════════════════════════════════════════════════════════════════════
     if (m_scrollEngine) {
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,

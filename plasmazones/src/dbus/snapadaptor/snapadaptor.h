@@ -32,7 +32,7 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for snap-mode window placement
  *
- * Provides D-Bus interface: org.plasmazones.Snap
+ * Provides D-Bus interface: org.phosphor_works.Placement.Snap
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
  * (placement rule / emptyZone / lastZone / resolveWindowRestore),
@@ -57,7 +57,7 @@ class ISettings;
 class PLASMAZONES_EXPORT SnapAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Snap")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Snap")
 
 public:
     /**

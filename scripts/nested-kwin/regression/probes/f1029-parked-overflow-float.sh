@@ -16,7 +16,7 @@ LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
 need_outputs 2
-ORIGMAX=$(PZ org.plasmazones.Settings.getSetting autotileMaxWindows)
+ORIGMAX=$(PZ org.phosphor_works.Placement.Settings.getSetting autotileMaxWindows)
 on_exit 'ksd output.Virtual-1.enable >/dev/null; setting autotileMaxWindows "$ORIGMAX"'
 setting autotileOverflowBehavior 0
 setting autotileMaxWindows 2

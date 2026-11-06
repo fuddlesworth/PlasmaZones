@@ -91,7 +91,7 @@ if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland CONFIG REQUIRED)
 endif()
 
-# PhosphorProtocol::Types ships the QtCore-only org.plasmazones.* service /
+# PhosphorProtocol::Types ships the QtCore-only org.phosphor_works.Placement service /
 # object / interface constants. Resolver.h pulls them in for the default
 # endpoint — constants only, no QtDBus from this dependency.
 if(NOT TARGET PhosphorProtocol::Types)

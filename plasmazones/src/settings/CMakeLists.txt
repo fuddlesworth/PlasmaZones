@@ -189,7 +189,7 @@ set(plasmazones_settings_SRCS
     services/settingsstagingdomain.cpp
     # Rules page — the unified rule surface. RuleController
     # owns one RuleModel (QAbstractListModel) and talks to the
-    # daemon's org.plasmazones.Rules adaptor.
+    # daemon's org.phosphor_works.Placement.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
     # Label composition + summaries, split from rulemodel.cpp for file-size.
@@ -664,4 +664,4 @@ target_link_libraries(plasmazones-settings
 )
 
 install(TARGETS plasmazones-settings DESTINATION ${KDE_INSTALL_BINDIR})
-install(FILES org.plasmazones.settings.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+install(FILES org.phosphor_works.Facet.desktop DESTINATION ${KDE_INSTALL_APPDIR})

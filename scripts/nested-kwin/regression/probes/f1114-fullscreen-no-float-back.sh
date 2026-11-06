@@ -51,8 +51,8 @@ C=$(geo t)
 echo "t back in its column: $C floating=$(floating "$TW") | strip $(striporder Virtual-0)"
 [ "$(floating "$TW")" = false ] || stage_fail "t did not go back into the strip"
 MON="$NEST/f1114-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='storePreTileGeometry'" \
-    "type='method_call',interface='org.plasmazones.Scrolling',member='setWindowFullscreenFloat'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='storePreTileGeometry'" \
+    "type='method_call',interface='org.phosphor_works.Placement.Scrolling',member='setWindowFullscreenFloat'"
 echo "== t fullscreen on"
 mmark "$MON"
 on t 'w[i].fullScreen = true;'

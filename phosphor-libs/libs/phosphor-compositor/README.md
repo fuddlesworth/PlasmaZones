@@ -111,7 +111,7 @@ class MyPlugin : public PhosphorCompositor::IGeometryHandler,
 ## Architecture
 
 ```
-Daemon (org.plasmazones D-Bus service)
+Daemon (org.phosphor_works.Placement D-Bus service)
     ↕ D-Bus IPC
 DaemonClient (this library)
     ↓ dispatches to

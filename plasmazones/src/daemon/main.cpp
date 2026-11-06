@@ -23,6 +23,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QFile>
 #include <QGuiApplication>
@@ -111,6 +112,29 @@ extern "C" void signalHandler(int signum)
     // ignored rather than logged (logging here is what we are avoiding).
     const ssize_t written = ::write(g_signalPipe[1], &byte, 1);
     static_cast<void>(written);
+}
+
+// org.phosphor_works.Placement has one host per session: plasmazonesd under
+// KWin, the Phosphor compositor in its own session. This is the KWin host, so
+// it runs only where KWin is on the bus. The systemd unit is already scoped to
+// plasma-workspace.target; this covers D-Bus activation, autostart and a manual
+// start. At login KWin can take its name a moment after this process starts,
+// so wait a bounded time before deciding.
+bool waitForKWin(QDBusConnection& bus)
+{
+    QDBusConnectionInterface* const iface = bus.interface();
+    if (!iface) {
+        return false;
+    }
+    const QString kwinService = QStringLiteral("org.kde.KWin");
+    // 25 x 200ms: five seconds.
+    for (int attempt = 0; attempt < 25; ++attempt) {
+        if (iface->isServiceRegistered(kwinService)) {
+            return true;
+        }
+        QThread::msleep(200);
+    }
+    return iface->isServiceRegistered(kwinService);
 }
 
 } // namespace
@@ -335,8 +359,8 @@ int main(int argc, char* argv[])
     app.setApplicationDisplayName(QStringLiteral("PlasmaZones"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setOrganizationName(QStringLiteral("plasmazones"));
-    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
-    app.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
+    app.setOrganizationDomain(QStringLiteral("phosphor-works.org"));
+    app.setDesktopFileName(QStringLiteral("org.phosphor_works.PlasmaZones"));
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("plasmazones")));
 
     // Command line options. Same table the early help/version path at the top
@@ -391,6 +415,16 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    // Exit 0, not 1: outside KWin this is not a failure for systemd to retry.
+    if (!waitForKWin(bus)) {
+        qCWarning(PlasmaZones::lcDaemon) << "org.kde.KWin is not on the session bus, so this is not a KWin session."
+                                         << "plasmazonesd only runs under KWin; exiting.";
+        return 0;
+    }
+
+    // registerService does not queue: when another process owns the name it
+    // fails at once, so this daemon never waits to take a session's placement
+    // API over from another host.
     if (!bus.registerService(serviceName)) {
         if (parser.isSet(options.replace)) {
             // Ask the incumbent to quit, then wait for the name to come free.
@@ -398,7 +432,7 @@ int main(int argc, char* argv[])
             // The object path and interface must be the ones the daemon actually
             // exports: ControlAdaptor is Qt-parented to the Daemon, which is
             // registered at Service::ObjectPath, so the shutdown verb lives at
-            // org.plasmazones.Control.quit on /PlasmaZones. Addressing anything
+            // org.phosphor_works.Placement.Control.quit on /org/phosphor_works/Placement. Addressing anything
             // else silently no-ops — isValid() comes back false, no call is sent,
             // and the retry loop below just burns its budget while the old
             // instance keeps the name.

@@ -16,12 +16,12 @@ LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
 setting snapAssistEnabled false
-DUP=$(PZ org.plasmazones.LayoutRegistry.duplicateLayout "$COLS3")
+DUP=$(PZ org.phosphor_works.Placement.LayoutRegistry.duplicateLayout "$COLS3")
 echo "DUP: $DUP"
 case "$DUP" in "{"*) ;; *) stage_fail "duplicateLayout answered '$DUP'" ;; esac
 assign Virtual-0 "$DUP"
 sleep 1.5
-[ "$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen Virtual-0 | tr -d ' \n')" = "$DUP" ] || stage_fail "Virtual-0 is not on DUP"
+[ "$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen Virtual-0 | tr -d ' \n')" = "$DUP" ] || stage_fail "Virtual-0 is not on DUP"
 open p1
 on p1 'w[i].frameGeometry = {x: 150, y: 120, width: 520, height: 360};'
 sleep 1.5
@@ -33,14 +33,14 @@ R=$(geo p1)
 Q=$(geo p2)
 echo "p1 free at R: $R | p2 free at Q: $Q"
 [ "$(rect "$R")" = "150 120 520 360" ] || stage_fail "p1 did not take the scripted frame ($R)"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 2 Virtual-0 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "$P2" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P2" 1 Virtual-0 >/dev/null
 sleep 2
 echo "staged: p1 $(geo p1) zone=$(zoneof "$P1") | p2 $(geo p2) zone=$(zoneof "$P2")"
 case "$(zoneof "$P1") $(zoneof "$P2")" in "{"*" {"*) ;; *) stage_fail "p1 and p2 are not both snapped" ;; esac
 echo "== deleteLayout DUP"
 dmark
-echo "  deleteLayout: '$(PZ org.plasmazones.LayoutRegistry.deleteLayout "$DUP")'"
+echo "  deleteLayout: '$(PZ org.phosphor_works.Placement.LayoutRegistry.deleteLayout "$DUP")'"
 sleep 3
 A1=$(geo p1)
 A2=$(geo p2)

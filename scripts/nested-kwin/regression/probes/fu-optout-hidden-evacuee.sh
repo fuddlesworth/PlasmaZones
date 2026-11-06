@@ -42,7 +42,7 @@ WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
 [ "$(deskof "$(geo w)")" = 2 ] || stage_fail "w is not on desktop 2 only ($(geo w))"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 floatkey w
 echo "staged on desktop 2: $(wstat w "$W")"

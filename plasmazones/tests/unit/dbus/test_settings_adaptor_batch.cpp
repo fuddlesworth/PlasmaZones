@@ -446,7 +446,7 @@ private Q_SLOTS:
     {
         BusPeer peer(m_parent, QStringLiteral("GetSetting"));
         QVERIFY(peer.ready());
-        const QString settings = QStringLiteral("org.plasmazones.Settings");
+        const QString settings = QStringLiteral("org.phosphor_works.Placement.Settings");
 
         const QDBusMessage unknown =
             peer.call(settings, QStringLiteral("getSetting"), {QStringLiteral("noSuchSetting")}, 2000);
@@ -465,7 +465,7 @@ private Q_SLOTS:
     {
         BusPeer peer(m_parent, QStringLiteral("PerScreen"));
         QVERIFY(peer.ready());
-        const QString settings = QStringLiteral("org.plasmazones.Settings");
+        const QString settings = QStringLiteral("org.phosphor_works.Placement.Settings");
         const QVariant value = QVariant::fromValue(QDBusVariant(2));
 
         const QDBusMessage bogus =

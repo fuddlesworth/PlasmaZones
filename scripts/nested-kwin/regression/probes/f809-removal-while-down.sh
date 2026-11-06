@@ -53,7 +53,7 @@ for n in 1 2 3; do
     newdesk "$n" "D$((n + 1))"
 done
 sleep 1
-DUP=$(PZ org.plasmazones.LayoutRegistry.duplicateLayout "$COLS3")
+DUP=$(PZ org.phosphor_works.Placement.LayoutRegistry.duplicateLayout "$COLS3")
 echo "DUP layout: $DUP"
 case "$DUP" in "{"*) ;; *) stage_fail "duplicateLayout returned no id ($DUP)" ;; esac
 sleep 1

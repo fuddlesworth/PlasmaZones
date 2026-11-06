@@ -147,7 +147,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // true and still leave it false. showAtPosition falls through to here when the cursor's
     // virtual screen has no window or an invisible slot (lifecycle.cpp), so a transport
     // failure on that path used to drop visible→hidden with no notification at all, leaving
-    // the `visible` Q_PROPERTY — and the org.plasmazones.Overlay.overlayVisibilityChanged
+    // the `visible` Q_PROPERTY — and the org.phosphor_works.Placement.Overlay.overlayVisibilityChanged
     // signal the adaptor relays from it — permanently stale for every external client. The
     // success arm had the mirror-image bug, emitting true on a fall-through where nothing
     // changed. Same capture-into-a-local idiom as recreateOverlayWindowsOnTypeMismatch below, which uses it

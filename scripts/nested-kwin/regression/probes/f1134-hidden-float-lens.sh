@@ -25,7 +25,7 @@ setting snapAssistEnabled false
 newdesk 1 D2
 setting autotileEnabled false
 sleep 1
-echo "autotileEnabled reads $(PZ org.plasmazones.Settings.getSetting autotileEnabled)"
+echo "autotileEnabled reads $(PZ org.phosphor_works.Placement.Settings.getSetting autotileEnabled)"
 assignd Virtual-1 1 "$COLS3"
 assignd Virtual-1 2 "$COLS3"
 assignd Virtual-0 1 "$COLS3"
@@ -41,7 +41,7 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 activate w
 shortcut toggle_window_float
@@ -65,7 +65,7 @@ H=$(handoffs "$WU")
 check "snap handoffReceive stating w floating at the settle" "$(echo -n "$H" | grep -c "wasFloating= true")" -eq 1
 check "isWindowFloating(w) with desktop 2 hidden" "$(floating "$W")" = true
 check "getFloatingWindows names w with desktop 2 hidden" \
-    "$(yesno 'PZ org.plasmazones.WindowTracking.getFloatingWindows | grep -q "$WU"')" = yes
+    "$(yesno 'PZ org.phosphor_works.Placement.WindowTracking.getFloatingWindows | grep -q "$WU"')" = yes
 echo "== desktop 2 shown"
 desk 2
 sleep 2

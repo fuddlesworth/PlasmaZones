@@ -87,14 +87,14 @@ class ZoneDetectionAdaptor;
 /**
  * @brief D-Bus adaptor for window-zone tracking
  *
- * Provides D-Bus interface: org.plasmazones.WindowTracking
+ * Provides D-Bus interface: org.phosphor_works.Placement.WindowTracking
  *  Window-zone assignment tracking
  */
 class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor,
                                                  public PhosphorSnapEngine::INavigationStateProvider
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowTracking")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.WindowTracking")
 
 public:
     explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
@@ -308,7 +308,7 @@ public Q_SLOTS:
                            const QString& activity, int windowType, const QVariantMap& extended);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
-    // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
+    // recordSnapIntent moved to SnapAdaptor (org.phosphor_works.Placement.Snap D-Bus interface).
 
     /// A snapped window was dragged without the activation trigger and dropped
     /// on its own screen: unsnap it as a drag-out (floating, zone cleared).
@@ -335,7 +335,7 @@ public Q_SLOTS:
      */
     void setWindowSticky(const QString& windowId, bool sticky);
 
-    // windowUnsnappedForFloat moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
+    // windowUnsnappedForFloat moved to SnapAdaptor (org.phosphor_works.Placement.Snap D-Bus interface).
 
     /**
      * Get the zone to restore to when unfloating (if any).
@@ -360,7 +360,7 @@ public Q_SLOTS:
      */
     void clearPreFloatZone(const QString& windowId);
 
-    // calculateUnfloatRestore moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
+    // calculateUnfloatRestore moved to SnapAdaptor (org.phosphor_works.Placement.Snap D-Bus interface).
 
     /**
      * Store geometry before tiling (unified snap + autotile)
@@ -573,7 +573,7 @@ public Q_SLOTS:
 
     // snapToLastZone, recordSnapIntent, snapToAppRule, snapToEmptyZone and
     // resolveWindowRestore moved to SnapAdaptor
-    // (org.plasmazones.Snap D-Bus interface).
+    // (org.phosphor_works.Placement.Snap D-Bus interface).
 
     /**
      * The zone rect each snapped window holds in the context in view, for the
@@ -598,7 +598,7 @@ public Q_SLOTS:
     // moveWindowToAdjacentZone, focusAdjacentZone, swapWindowWithAdjacentZone,
     // pushToEmptyZone, snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize,
     // rotateWindowsInLayout, moveWindowToZone, swapWindowsById moved to SnapAdaptor
-    // (org.plasmazones.Snap D-Bus interface).
+    // (org.phosphor_works.Placement.Snap D-Bus interface).
 
     /**
      * @brief Get comprehensive state for a single window
@@ -1407,7 +1407,7 @@ Q_SIGNALS:
     /// context disabled, an output added, removed or moved. One emission per burst, a short debounce (F625).
     void pendingRestoresChanged();
 
-    // toggleFloatForWindow moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
+    // toggleFloatForWindow moved to SnapAdaptor (org.phosphor_works.Placement.Snap D-Bus interface).
 
 public Q_SLOTS:
     /**

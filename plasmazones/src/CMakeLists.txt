@@ -740,8 +740,8 @@ install(FILES
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).
 configure_file(
-    daemon/org.plasmazones.daemon.desktop.in
-    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.daemon.desktop
+    daemon/org.phosphor_works.PlasmaZones.desktop.in
+    ${CMAKE_CURRENT_BINARY_DIR}/org.phosphor_works.PlasmaZones.desktop
     @ONLY
 )
 
@@ -750,8 +750,8 @@ configure_file(
 # running. Installed to ${KDE_INSTALL_DBUSSERVICEDIR}; install() rule is
 # in the install block lower in this file.
 configure_file(
-    daemon/org.plasmazones.service.in
-    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.service
+    daemon/org.phosphor_works.Placement.service.in
+    ${CMAKE_CURRENT_BINARY_DIR}/org.phosphor_works.Placement.service
     @ONLY
 )
 
@@ -1090,20 +1090,20 @@ endif()
 
 # Desktop file for the editor (org.kde naming for portal integration)
 install(FILES
-    editor/org.plasmazones.editor.desktop
+    editor/org.phosphor_works.PlasmaZones.Editor.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
 # Desktop file for the daemon (for XDG portal registration, NoDisplay=true).
 # Uses configured .desktop with full Exec path for KWin screenshot auth.
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.daemon.desktop
+    ${CMAKE_CURRENT_BINARY_DIR}/org.phosphor_works.PlasmaZones.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
 # D-Bus session activation file. Wakes the daemon on first bus call.
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.service
+    ${CMAKE_CURRENT_BINARY_DIR}/org.phosphor_works.Placement.service
     DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR}
 )
 
@@ -1111,8 +1111,8 @@ install(FILES
 # editor + settings apps with summary, screenshots, and content rating.
 # Validated by `appstreamcli validate <file>` if `appstream` is installed.
 install(FILES
-    editor/org.plasmazones.editor.metainfo.xml
-    settings/org.plasmazones.settings.metainfo.xml
+    editor/org.phosphor_works.PlasmaZones.Editor.metainfo.xml
+    settings/org.phosphor_works.Facet.metainfo.xml
     DESTINATION ${KDE_INSTALL_METAINFODIR}
 )
 

@@ -29,7 +29,7 @@ path = sys.argv[1]
 data = json.load(open(path))
 data.setdefault("Snapping", {}).setdefault("Behavior", {})["Triggers"] = [{"modifier": 0, "mouseButton": 2}]
 json.dump(data, open(path, "w"))' "$CFG" || stage_fail "could not write the drag trigger"
-PZ org.plasmazones.Settings.reloadSettings >/dev/null
+PZ org.phosphor_works.Placement.Settings.reloadSettings >/dev/null
 assign Virtual-0 "$COLS3"
 assign Virtual-1 "$COLS3"
 sleep 2
@@ -37,7 +37,7 @@ open f1 300 300
 moveto f1 600 300
 sleep 1
 MON="$NEST/f751-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='windowScreenChanged'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='windowScreenChanged'"
 dpid >/dev/null || stage_fail "no gated nested daemon to freeze"
 fake abs 750 450 wait 100 keydown 125 wait 50 down left wait 150 \
     path 750 450 520 400 15 30 wait 200 down right wait 400 path 520 400 512 384 4 30 wait 300 \

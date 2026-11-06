@@ -20,7 +20,7 @@ LOG="$2"
 kwjs_ok
 newdesk 1 Two
 gsetting_ok snapAssistEnabled "<false>"
-Q4=$(PZ org.plasmazones.LayoutRegistry.createLayoutFromJson '{"id":"{2b7e0c11-9a4d-4c1e-8f3b-6d5a4c3b2a19}","name":"Q4","type":1,"zones":[{"name":"A","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.25,"height":1.0}},{"name":"B","zoneNumber":2,"relativeGeometry":{"x":0.25,"y":0,"width":0.25,"height":1.0}},{"name":"C","zoneNumber":3,"relativeGeometry":{"x":0.5,"y":0,"width":0.25,"height":1.0}},{"name":"D","zoneNumber":4,"relativeGeometry":{"x":0.75,"y":0,"width":0.25,"height":1.0}}]}')
+Q4=$(PZ org.phosphor_works.Placement.LayoutRegistry.createLayoutFromJson '{"id":"{2b7e0c11-9a4d-4c1e-8f3b-6d5a4c3b2a19}","name":"Q4","type":1,"zones":[{"name":"A","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.25,"height":1.0}},{"name":"B","zoneNumber":2,"relativeGeometry":{"x":0.25,"y":0,"width":0.25,"height":1.0}},{"name":"C","zoneNumber":3,"relativeGeometry":{"x":0.5,"y":0,"width":0.25,"height":1.0}},{"name":"D","zoneNumber":4,"relativeGeometry":{"x":0.75,"y":0,"width":0.25,"height":1.0}}]}')
 case "$Q4" in "{"*) ;; *) stage_fail "createLayoutFromJson returned no layout id ($Q4)" ;; esac
 Z1=$(zoneid "$Q4" 1)
 Z2=$(zoneid "$Q4" 2)
@@ -38,8 +38,8 @@ B=$(uuid by)
 [ -n "$W" ] && [ -n "$B" ] || stage_fail "pw or by never mapped"
 on pw 'w[i].onAllDesktops = true;'
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "org.pz.plain|$W" 2 Virtual-0 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "org.pz.plain|$B" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "org.pz.plain|$W" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "org.pz.plain|$B" 1 Virtual-0 >/dev/null
 sleep 2
 ZONE=$(rect "$(geo pw)")
 BY=$(rect "$(geo by)")

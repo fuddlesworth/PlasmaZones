@@ -76,4 +76,4 @@ public:
 // `SnapEngine::snapSettings()` in SnapEngine.cpp), not `qobject_cast`, so the
 // IID string below is never exercised at runtime — but the macro pairing with
 // `Q_INTERFACES` is still structurally required for an implementer to compile.
-Q_DECLARE_INTERFACE(PhosphorEngine::ISnapSettings, "org.plasmazones.ISnapSettings")
+Q_DECLARE_INTERFACE(PhosphorEngine::ISnapSettings, "org.phosphor_works.Placement.ISnapSettings")

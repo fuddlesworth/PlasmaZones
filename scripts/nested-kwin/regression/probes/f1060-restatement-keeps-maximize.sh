@@ -32,7 +32,7 @@ XU=$(uuid x)
 [ -n "$XU" ] || stage_fail "x never mapped"
 X="org.pz.relay|$XU"
 echo "x free at P: $P"
-PZ org.plasmazones.Control.snapWindowToZone "$X" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$X" 1 Virtual-0 >/dev/null
 sleep 2
 echo "x snapped: $(geo x) zone=$(zoneof "$X")"
 case "$(zoneof "$X")" in "{"*) ;; *) stage_fail "x did not snap" ;; esac

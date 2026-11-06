@@ -48,7 +48,7 @@ assign Virtual-0 "scrolling:"
 sleep 3
 for c in s1 s2 s3; do
     activate "$c"
-    PZ org.plasmazones.Scrolling.setColumnWidthProportion Virtual-0 0.6 >/dev/null
+    PZ org.phosphor_works.Placement.Scrolling.setColumnWidthProportion Virtual-0 0.6 >/dev/null
     sleep 1
 done
 sleep 1.5

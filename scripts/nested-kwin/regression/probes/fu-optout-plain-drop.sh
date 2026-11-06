@@ -36,7 +36,7 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 echo "  staged: $(wstat w "$W")"
 case "$(zoneof "$W")" in "{"*) ;; *) stage_fail "w did not snap into zone 1 on Virtual-1" ;; esac

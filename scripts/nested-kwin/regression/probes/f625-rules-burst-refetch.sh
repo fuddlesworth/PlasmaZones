@@ -17,9 +17,9 @@ LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
 MON="$NEST/e18c-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Rules',member='rulesChanged'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='getPendingRestoreGeometries'" \
-    "type='method_call',interface='org.plasmazones.Rules',member='getAllRules'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Rules',member='rulesChanged'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='getPendingRestoreGeometries'" \
+    "type='method_call',interface='org.phosphor_works.Placement.Rules',member='getAllRules'"
 sleep 0.5
 on_exit 'burst remove >/dev/null 2>&1'
 burst() {
@@ -39,7 +39,7 @@ for i in range(10):
         method, arg = "addRule", rule
     else:
         method, arg = "removeRule", rid
-    reply = bus.call_sync("org.plasmazones", "/PlasmaZones", "org.plasmazones.Rules", method,
+    reply = bus.call_sync("org.phosphor_works.Placement", "/org/phosphor_works/Placement", "org.phosphor_works.Placement.Rules", method,
                           GLib.Variant("(s)", (arg,)), None, Gio.DBusCallFlags.NONE, 5000, None)
     print(method, i, reply.unpack()[0] if reply.n_children() else "")
 EOF

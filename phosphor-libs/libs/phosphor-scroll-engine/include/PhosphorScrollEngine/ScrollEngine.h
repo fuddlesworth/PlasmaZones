@@ -373,7 +373,7 @@ public:
     void scrollViewByPercent(qreal percent, const QString& screenId);
     /// The pixel twin of scrollViewByPercent, for a caller that already holds
     /// a distance along the strip (the placement map's drag pan, over
-    /// org.plasmazones.Scrolling.scrollViewByPx). Same detachment and
+    /// org.phosphor_works.Placement.Scrolling.scrollViewByPx). Same detachment and
     /// clamping, but the only answer it reports is no_windows, for an empty
     /// strip. A successful pan, a zero @p px and a pan pinned at the end it is
     /// asked to move toward all report nothing, because the map pans once per
@@ -1050,7 +1050,7 @@ public:
 Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
     /// as AutotileEngine::windowsTiled. The field list and semantics live
-    /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
+    /// in dbus/org.phosphor_works.Placement.Tiling.xml's TileRequestEntry annotation,
     /// which is the single source: an inline copy here named a handful of
     /// the fields actually emitted and drifted every time one was added,
     /// which is why no count is repeated here. Float transitions go out on the

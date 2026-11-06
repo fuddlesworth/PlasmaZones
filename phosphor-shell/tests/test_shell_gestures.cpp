@@ -16,8 +16,8 @@ using namespace PhosphorShellApp;
 
 namespace ShellGesturesTestSupport {
 
-constexpr QLatin1String kFakeService("org.plasmazones.test.gestures");
-constexpr QLatin1String kFakePath("/PlasmaZones");
+constexpr QLatin1String kFakeService("org.phosphor_works.Test.gestures");
+constexpr QLatin1String kFakePath("/org/phosphor_works/Placement");
 
 // The daemon side of the relay, reduced to the one signal.
 class FakeBridge : public QObject
@@ -77,7 +77,7 @@ private Q_SLOTS:
 
     void otherServicesAreIgnored()
     {
-        ShellGestures gestures(QStringLiteral("org.plasmazones.test.other"), kFakePath, nullptr);
+        ShellGestures gestures(QStringLiteral("org.phosphor_works.Test.other"), kFakePath, nullptr);
         QSignalSpy swiped(&gestures, &ShellGestures::swiped);
         QVERIFY(m_bridge.emitGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3));
         QTest::qWait(100);

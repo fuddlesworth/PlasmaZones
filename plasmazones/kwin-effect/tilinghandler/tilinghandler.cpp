@@ -1003,7 +1003,7 @@ void TilingHandler::drainDeadSessionState()
     // The scrolling set belongs to the dead session like the managed set, so
     // clear its snapshot ahead of onDaemonReady's re-query:
     // an errored/timed-out Properties.Get (daemon still starting, or one
-    // without org.plasmazones.Scrolling) is reply.isValid()-gated and would
+    // without org.phosphor_works.Placement.Scrolling) is reply.isValid()-gated and would
     // otherwise leave the old set stamping Mode "scrolling" indefinitely.
     // m_managedScreens is deliberately NOT cleared here — it carries real
     // per-screen lifecycle state whose removal transitions run through

@@ -42,11 +42,11 @@ if [ "$RUN" = d ]; then
     Z2K=$(echo "$Z2" | tr -d '{}' | cut -c1-8)
     RZ1='{"actions":[{"value":"above","type":"setWindowLayer"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555551152}","match":{"all":[{"field":"title","op":"equals","value":"l"},{"field":"zone","op":"contains","value":"'"$Z1K"'"}]},"name":"probe F1152 zone 1","priority":50}'
     RZ2='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555551153}","match":{"all":[{"field":"title","op":"equals","value":"l"},{"field":"zone","op":"contains","value":"'"$Z2K"'"}]},"name":"probe F1152 zone 2","priority":50}'
-    echo "addRule zone 1 ($Z1K): $(PZ org.plasmazones.Rules.addRule "$RZ1")"
-    echo "addRule zone 2 ($Z2K): $(PZ org.plasmazones.Rules.addRule "$RZ2")"
+    echo "addRule zone 1 ($Z1K): $(PZ org.phosphor_works.Placement.Rules.addRule "$RZ1")"
+    echo "addRule zone 2 ($Z2K): $(PZ org.phosphor_works.Placement.Rules.addRule "$RZ2")"
 else
     R1='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555551140}","match":{"all":[{"field":"title","op":"equals","value":"l"},{"field":"isSnapped","op":"equals","value":true}]},"name":"probe F1140 snapped","priority":50}'
-    echo "addRule: $(PZ org.plasmazones.Rules.addRule "$R1")"
+    echo "addRule: $(PZ org.phosphor_works.Placement.Rules.addRule "$R1")"
 fi
 sleep 1
 open l
@@ -58,7 +58,7 @@ SU=$(uuid s)
 [ -n "$LU" ] && [ -n "$SU" ] || stage_fail "l or s never mapped"
 L="org.pz.plain|$LU"
 S="org.pz.plain|$SU"
-PZ org.plasmazones.Snap.moveWindowToZone "$L" "$Z1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$L" "$Z1" >/dev/null
 sleep 2
 GL=$(geo l)
 echo "staged ($RUN): l (...${LU: -8}) $GL zone='$(zoneof "$L")' | s (...${SU: -8}) $(geo s)"
@@ -71,7 +71,7 @@ else
     [ "$(nbof "$GL")" = false ] || stage_fail "l reads the zone-2 rule before the act ($GL)"
 fi
 MON="$NEST/f1140-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowStateChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowStateChanged'"
 mmark "$MON"
 emark
 dmark
@@ -80,10 +80,10 @@ activate s
 [ "$(activecap)" = s ] || stage_fail "s did not take focus ($(activecap))"
 echo "== s focused; daemon frozen; calls queued; s closed"
 dstop || stage_fail "the daemon could not be frozen"
-dsend org.plasmazones.Snap.moveWindowToZone "string:$S" "string:$Z2"
+dsend org.phosphor_works.Placement.Snap.moveWindowToZone "string:$S" "string:$Z2"
 sleep 0.5
 if [ "$RUN" = a ]; then
-    dsend org.plasmazones.Snap.restoreWindowSize
+    dsend org.phosphor_works.Placement.Snap.restoreWindowSize
     sleep 0.5
 fi
 kill "$SPID"

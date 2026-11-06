@@ -149,7 +149,7 @@ void TilingHandler::loadSettings()
     // Query initial engine-managed screen set from daemon asynchronously. The
     // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
     // property access; ClientHelpers can't be used here because it hard-wires
-    // the org.plasmazones interface. Bound by SyncCallTimeoutMs so a wedged
+    // the org.phosphor_works.Placement interface. Bound by SyncCallTimeoutMs so a wedged
     // daemon doesn't leak a watcher for Qt's default 25 s.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

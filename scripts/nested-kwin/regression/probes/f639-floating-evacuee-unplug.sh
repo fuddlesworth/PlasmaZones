@@ -37,8 +37,8 @@ P2U=$(uuid p2)
 [ -n "$P1U" ] && [ -n "$P2U" ] || stage_fail "p1 or p2 never mapped"
 P1="org.pz.plain|$P1U"
 P2="org.pz.plain|$P2U"
-PZ org.plasmazones.Control.snapWindowToZone "$P2" 3 Virtual-1 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P2" 3 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
 sleep 1.5
 echo "p1 snapped in Virtual-1 zone 1: $(wstat p1 "$P1")"
 activate p1
@@ -78,7 +78,7 @@ for try in $(seq 1 "$TRIES"); do
     fi
 done
 MON="$NEST/f639-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='navigationFeedback'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='navigationFeedback'"
 mmark "$MON"
 activate p1
 shortcut toggle_window_float

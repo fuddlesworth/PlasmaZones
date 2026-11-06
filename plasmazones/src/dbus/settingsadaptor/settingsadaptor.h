@@ -25,7 +25,7 @@ class Settings; // Forward declaration for concrete type
 /**
  * @brief D-Bus adaptor for settings operations
  *
- * Provides D-Bus interface: org.plasmazones.Settings
+ * Provides D-Bus interface: org.phosphor_works.Placement.Settings
  *  Settings read/write operations
  *
  * Uses registry pattern for setSetting.
@@ -44,7 +44,7 @@ class Settings; // Forward declaration for concrete type
 class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Settings")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Settings")
 
 public:
     /// @param settings Settings interface (required).
@@ -137,7 +137,7 @@ public Q_SLOTS:
      * NOTE: nothing in this tree calls it. It was added for a KCM per-monitor flush that
      * never materialised — the KCM writes config.json in-process and calls
      * reloadSettings(). It stays as part of the PUBLISHED D-Bus write surface (declared in
-     * org.plasmazones.Settings.xml, covered by tests/unit/dbus), for external clients. Do
+     * org.phosphor_works.Placement.Settings.xml, covered by tests/unit/dbus), for external clients. Do
      * not re-justify it by naming an in-tree caller; there is none.
      *
      * Unknown keys inside @p values are passed through to the underlying
@@ -179,7 +179,7 @@ public Q_SLOTS:
     /**
      * @brief Receive window list from KWin effect (callback)
      * @param json JSON array of window rows, shaped as the provideRunningWindows
-     *        docstring in org.plasmazones.Settings.xml gives it. A payload over
+     *        docstring in org.phosphor_works.Placement.Settings.xml gives it. A payload over
      *        PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes is refused.
      */
     void provideRunningWindows(const QString& json);
@@ -260,7 +260,7 @@ Q_SIGNALS:
      *
      * @param json JSON array: [{windowClass, rawWindowClass, appName, caption,
      *        desktopFile}, ...], as the runningWindowsAvailable docstring in
-     *        org.plasmazones.Settings.xml describes it.
+     *        org.phosphor_works.Placement.Settings.xml describes it.
      */
     void runningWindowsAvailable(const QString& json);
 

@@ -44,13 +44,13 @@ done
 W1U=${ID[w1]##*|}
 W2U=${ID[w2]##*|}
 W3U=${ID[w3]##*|}
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w1]}" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w1]}" 1 Virtual-0 >/dev/null
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w2]}" 3 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w2]}" 3 Virtual-0 >/dev/null
 sleep 1.5
 floatkey w1
 desk 2
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w3]}" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w3]}" 2 Virtual-0 >/dev/null
 sleep 1.5
 floatkey w3
 [ "$(floating "${ID[w3]}")" = true ] || stage_fail "w3 is not snap-floating on desktop 2"
@@ -59,7 +59,7 @@ echo "staged: w1 $(wstat w1 "${ID[w1]}") | w2 $(wstat w2 "${ID[w2]}")"
 [ "$(floating "${ID[w1]}")" = true ] || stage_fail "w1 is not snap-floating on desktop 1"
 [ "$(zoneof "${ID[w2]}")" = "$Z3" ] || stage_fail "w2 is not in zone 3"
 MON="$NEST/fu-optout-switch-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowFloatingChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowFloatingChanged'"
 echo "== desktop 1 (in view) assigned autotile:none"
 dmark
 mmark "$MON"

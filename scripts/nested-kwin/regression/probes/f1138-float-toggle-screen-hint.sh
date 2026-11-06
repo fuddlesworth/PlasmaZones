@@ -34,12 +34,12 @@ UU=$(uuid u)
 W="org.pz.plain|$WU"
 U="org.pz.plain|$UU"
 toggle() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.Snap.toggleFloatForWindow "$1" "$2" 2>&1 | tr -d '\n'
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.Snap.toggleFloatForWindow "$1" "$2" 2>&1 | tr -d '\n'
 }
 refusals() { dlog "Bus float of [^ ]*$1[^ ]* refused: the window is not on" | wc -l; }
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
-PZ org.plasmazones.Control.snapWindowToZone "$U" 2 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$U" 2 Virtual-1 >/dev/null
 sleep 2
 echo "u floated with the toggle naming Virtual-1: $(toggle "$U" Virtual-1)"
 sleep 2

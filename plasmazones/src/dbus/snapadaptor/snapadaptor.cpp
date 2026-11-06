@@ -46,7 +46,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     // disconnect(sender, receiver) that could nuke connections set up
     // elsewhere (e.g. a future direct WTA→SnapEngine observer).
     //
-    // All snap navigation signals relay through org.plasmazones.WindowTracking
+    // All snap navigation signals relay through org.phosphor_works.Placement.WindowTracking
     // because the KWin effect listens for them on that D-Bus interface.
     // ═══════════════════════════════════════════════════════════════════════════
 

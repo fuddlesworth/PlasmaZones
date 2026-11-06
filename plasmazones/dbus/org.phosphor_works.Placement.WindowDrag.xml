@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Window Drag Interface (KWin script -> Daemon) -->
-    <interface name="org.plasmazones.WindowDrag">
+    <interface name="org.phosphor_works.Placement.WindowDrag">
         <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin effect calls beginDrag / updateDragCursor / endDrag; daemon returns a DragPolicy and a DragOutcome that drive the compositor's drag streaming, keyboard grab, snap geometry, and snap-assist follow-on. A shell registers a drop proxy (registerDropProxy / unregisterDropProxy) so a drag dropped on its miniature of a snapping screen lands in the real zone. Uses int for cursor / modifier flags and the typed DragPolicy / DragOutcome structs for the typed payloads."/>
         <method name="beginDrag">
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. The daemon is the single source of truth, so no effect-side cache goes stale after settings reloads. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>

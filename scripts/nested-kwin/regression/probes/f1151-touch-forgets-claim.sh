@@ -52,8 +52,8 @@ echo "staged: w (...${WU: -8}) $G | w2 $(geo w2) | w's last tile request monocle
 [ "$(monocleof "$WU")" = true ] || stage_fail "A's last batch for w is not monocle"
 [ "$(maxof "$G")" = 3 ] || stage_fail "w is not Monocle-maximized on Virtual-1 ($G)"
 MON="$NEST/f1151-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='parkDropped'" \
-    "type='signal',interface='org.plasmazones.WindowTracking',member='parkReseated'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='parkDropped'" \
+    "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='parkReseated'"
 echo "== Virtual-1 disabled, desktop 1 in view"
 emark
 dmark
@@ -91,7 +91,7 @@ dmark
 mmark "$MON"
 sendto w Virtual-0 || stage_fail "w not on Virtual-0 ($(geo w))"
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-0 >/dev/null
 sleep 2.5
 echo "  w $(geo w) zone=$(zoneof "$W")"
 elog "(Evacuee|Park drop for) .*$WU.*" | sed 's/org.pz.plain|[^ "]*/<w>/g; s/^/    /'

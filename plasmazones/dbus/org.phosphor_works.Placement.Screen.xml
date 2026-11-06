@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Screen Management Interface -->
-    <interface name="org.plasmazones.Screen">
+    <interface name="org.phosphor_works.Placement.Screen">
         <annotation name="org.gtk.GDBus.DocString" value="Screen enumeration and metadata (geometry, scale, refresh). Notifications when screens are added, removed, or geometry changes."/>
         <method name="getScreens">
             <annotation name="org.gtk.GDBus.DocString" value="Return the list of effective screen identifiers (EDID-based physical IDs like Dell:U2722D:115107, or virtual screen IDs like Dell:U2722D:115107/vs:0 when subdivided)."/>

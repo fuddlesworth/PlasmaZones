@@ -18,7 +18,7 @@ namespace PlasmaZones {
 /**
  * @brief D-Bus adaptor for the unified Rule store.
  *
- * Provides D-Bus interface: @c org.plasmazones.Rules
+ * Provides D-Bus interface: @c org.phosphor_works.Placement.Rules
  *
  * Hand-written (no @c .xml codegen) like every other adaptor in this
  * codebase. The settings app / KCM talks to this adaptor for the daemon's
@@ -38,7 +38,7 @@ namespace PlasmaZones {
 class PLASMAZONES_EXPORT RuleAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Rules")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Rules")
 
 public:
     explicit RuleAdaptor(PhosphorRules::RuleStore* store, QObject* parent = nullptr);

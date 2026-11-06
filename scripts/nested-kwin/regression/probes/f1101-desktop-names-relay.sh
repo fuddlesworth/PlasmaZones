@@ -16,8 +16,8 @@ LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
 MON="$NEST/f1101-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.LayoutRegistry'"
-names() { PZ org.plasmazones.LayoutRegistry.getVirtualDesktopNames | tr '\n' ',' | sed 's/,$//'; }
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.LayoutRegistry'"
+names() { PZ org.phosphor_works.Placement.LayoutRegistry.getVirtualDesktopNames | tr '\n' ',' | sed 's/,$//'; }
 desksigs() { msgs "$MON" | grep "^virtualDesktop" | sed 's/^/    /'; }
 namesigs() { msgs "$MON" | grep "^virtualDesktopNamesChanged " | grep -c "$1"; }
 echo "names at start: $(names)"

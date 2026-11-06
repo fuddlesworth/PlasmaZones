@@ -57,7 +57,7 @@ check "the reopen restores p1 at its spot on Virtual-1" "$(rect "$G" | cut -d' '
 check "the reopen restores p1 on Virtual-1" "$(outof "$G")" = Virtual-1
 check "the reopen restores p1 floating" "$F" = true
 if [ "$F" = true ]; then
-    PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+    PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
     sleep 2
     echo "p1 snapped into Virtual-1 zone 1 first: $(geo p1)"
 fi

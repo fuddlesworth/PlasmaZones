@@ -48,8 +48,8 @@ PY=$((${GY%.*} + ${GH%.*} / 2))
 DX=$((BX + BW - 200))
 DY=$((BY + BH / 2))
 MON="$NEST/f1129-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='windowCrossedScreens'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='windowScreenChanged'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='windowCrossedScreens'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='windowScreenChanged'"
 mmark "$MON"
 dmark
 emark

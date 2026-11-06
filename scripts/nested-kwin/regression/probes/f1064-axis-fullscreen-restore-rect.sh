@@ -58,7 +58,7 @@ check "storePreTileGeometry calls for f1 at 500 250" "$(echo "$P" | grep -c " 50
 echo "== step 3: fullscreen off, snap into zone 1, float"
 on f1 'w[i].fullScreen = false;'
 sleep 2
-PZ org.plasmazones.Control.snapWindowToZone "$F1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$F1" 1 Virtual-0 >/dev/null
 sleep 2
 activate f1
 shortcut toggle_window_float

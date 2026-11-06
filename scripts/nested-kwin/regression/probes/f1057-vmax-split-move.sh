@@ -26,7 +26,7 @@ read -r OX OY OW OH <<< "$(scr Virtual-0)"
 SPLITX=$((OX + OW / 2))
 setting snapAssistEnabled false
 SPLIT='{"screens":[{"index":0,"displayName":"L","region":{"x":0,"y":0,"width":0.5,"height":1}},{"index":1,"displayName":"R","region":{"x":0.5,"y":0,"width":0.5,"height":1}}]}'
-PZ org.plasmazones.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT" >/dev/null
+PZ org.phosphor_works.Placement.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT" >/dev/null
 sleep 2
 assign Virtual-0/vs:0 "$COLS3"
 assign Virtual-0/vs:1 "$COLS3"

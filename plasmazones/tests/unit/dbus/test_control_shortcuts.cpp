@@ -129,9 +129,9 @@ private Q_SLOTS:
         QDBusConnection peer =
             QDBusConnection::connectToBus(QDBusConnection::SessionBus, QStringLiteral("support-report-peer"));
         QVERIFY(peer.isConnected());
-        QDBusMessage call =
-            QDBusMessage::createMethodCall(bus.baseService(), path, QStringLiteral("org.plasmazones.Control"),
-                                           QStringLiteral("generateSupportReport"));
+        QDBusMessage call = QDBusMessage::createMethodCall(bus.baseService(), path,
+                                                           QStringLiteral("org.phosphor_works.Placement.Control"),
+                                                           QStringLiteral("generateSupportReport"));
         call << 1;
         QDBusPendingCall pending = peer.asyncCall(call, 5000);
         QTRY_VERIFY(pending.isFinished());

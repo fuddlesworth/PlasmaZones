@@ -18,7 +18,7 @@
  * OPT-IN: this test connects to the LIVE session (it must — an offscreen GL
  * grab returns a uniform placeholder and proves nothing), and mapping a real
  * window has side effects on a developer machine: the installed KWin effect
- * reacts to the new window with D-Bus calls to org.plasmazones, whose
+ * reacts to the new window with D-Bus calls to org.phosphor_works.Placement, whose
  * activation service file spawns the installed plasmazonesd (and from there
  * the daemon can launch plasmazones-settings) — processes a test run must
  * never leave behind. SpawnedServiceReaper below covers that for a DIRECT

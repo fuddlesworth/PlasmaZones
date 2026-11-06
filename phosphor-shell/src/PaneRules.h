@@ -15,7 +15,7 @@ namespace PhosphorShellApp::PaneRules {
 // Rules live in the daemon's rules.json, which the daemon alone writes and
 // which nothing seeds from data/ any more (the managed appearance baselines
 // moved to the config store). So the shell, as the owner of the panes,
-// carries the rule set for them and installs it over org.plasmazones.Rules
+// carries the rule set for them and installs it over org.phosphor_works.Placement.Rules
 // on startup: one MANAGED rule per pane, with a stable id derived from the
 // pane's app id, added only when absent. Managed rules sit at lowest
 // precedence and stay out of the Rules page, so a user rule for the same

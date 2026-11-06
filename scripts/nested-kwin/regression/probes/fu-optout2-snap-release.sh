@@ -45,12 +45,12 @@ done
 W1U=${ID[w1]##*|}
 W2U=${ID[w2]##*|}
 W3U=${ID[w3]##*|}
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w1]}" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w1]}" 1 Virtual-0 >/dev/null
 sleep 1.5
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w2]}" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w2]}" 2 Virtual-0 >/dev/null
 sleep 1.5
 desk 2
-PZ org.plasmazones.Control.snapWindowToZone "${ID[w3]}" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[w3]}" 1 Virtual-0 >/dev/null
 sleep 1.5
 [ "$(zoneof "${ID[w3]}")" = "$Z1" ] || stage_fail "w3 did not snap into zone 1 on desktop 2"
 desk 1
@@ -60,7 +60,7 @@ G1=$(rect "$(geo w1)")
 G2=$(rect "$(geo w2)")
 echo "staged: w1 $G1 | w2 $G2"
 MON="$NEST/fu-optout2-release-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowStateChanged'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.WindowTracking',member='windowStateChanged'"
 # unsnapped UUID: windowStateChanged signals since MMARK naming UUID with the "unsnapped" change
 unsnapped() { msgs "$MON" | grep "^windowStateChanged " | grep -F "$1" | grep -c "unsnapped"; }
 echo "== desktop 1 (in view) assigned autotile:none"

@@ -19,8 +19,8 @@ kwjs_ok
 KP=$(kwinpid)
 [ -n "$KP" ] || stage_fail "no nested kwin_wayland pid for socket $WAYLAND_DISPLAY"
 push() {
-    gdbus call --session --timeout 10 --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.Overlay.setSnapAssistThumbnail "{00000000-0000-0000-0000-000000000001}" 2 2 \
+    gdbus call --session --timeout 10 --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.Overlay.setSnapAssistThumbnail "{00000000-0000-0000-0000-000000000001}" 2 2 \
         "[byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]" 2>&1 | tr '\n' ' '
 }
 dmark

@@ -73,7 +73,7 @@ RuleController::RuleController(QObject* parent)
     // symmetry mechanical: a future rename of the signal touches the
     // tuple in one place and connect+disconnect track each other.
     if (!subscribeRulesChanged()) {
-        qCWarning(lcConfig) << "RuleController: failed to subscribe to org.plasmazones.Rules.rulesChanged "
+        qCWarning(lcConfig) << "RuleController: failed to subscribe to org.phosphor_works.Placement.Rules.rulesChanged "
                                "— will retry when the daemon becomes reachable";
     }
     // Kick off the initial fetch immediately — the call is asynchronous

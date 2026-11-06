@@ -199,7 +199,7 @@ class SettingsController : public QObject
     Q_PROPERTY(ShaderPresetBridge* pointerPresets READ pointerPresets CONSTANT)
     Q_PROPERTY(ShaderPresetBridge* overlayPresets READ overlayPresets CONSTANT)
     // Rules page — the unified rule surface. The controller owns one
-    // RuleModel and talks to the daemon's org.plasmazones.Rules
+    // RuleModel and talks to the daemon's org.phosphor_works.Placement.Rules
     // adaptor; QML reads `settingsController.rulesPage.model`.
     Q_PROPERTY(RuleController* rulesPage READ rulesPage CONSTANT)
 
@@ -609,13 +609,13 @@ public:
     Q_INVOKABLE QVariantList getScreenStates() const;
     /// The live scrolling strip of @p screenId as zone maps for LayoutThumbnail
     /// (relativeGeometry + zoneNumber per tile, plus the StripPreviewKey tab
-    /// fields on a tabbed column's tile), from org.plasmazones.Scrolling. Empty
+    /// fields on a tabbed column's tile), from org.phosphor_works.Placement.Scrolling. Empty
     /// when the screen has no strip right now (not scrolling, no windows,
     /// daemon down) — the Monitors page falls back to a static strip.
     Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
     /// How far @p screenId has worked through its scrolling template's seed
     /// blueprint, as {"total": int, "used": int}, fetched from
-    /// org.plasmazones.Scrolling. An EMPTY map when the screen is not
+    /// org.phosphor_works.Placement.Scrolling. An EMPTY map when the screen is not
     /// scrolling, has no template blueprint, or the daemon is down — the
     /// Monitors page renders the progress line only for a non-empty answer,
     /// so an absent daemon reads as "nothing to say" rather than "no starting

@@ -45,7 +45,7 @@ a = {t.split(":", 1)[1] for t in sys.argv[1].split() if ":" in t}
 b = {t.split(":", 1)[1] for t in sys.argv[2].split() if ":" in t}
 print(len(a & b))' "$1" "$2"
 }
-lzones() { PZ org.plasmazones.LayoutRegistry.getLayout "$1" | zoneids; }
+lzones() { PZ org.phosphor_works.Placement.LayoutRegistry.getLayout "$1" | zoneids; }
 kwjs_ok
 read -r _ _ SW _ <<< "$(scr Virtual-0)"
 echo "== step 2: the daemon restarted with the copy in the user directory"
@@ -90,8 +90,8 @@ check "step 4: no 'reused' line" "$(grep -cE "reused .* zone id\(s\) of another 
 check "step 4: the copy keeps its ids" "$(lzones "$COPYID")" = "$CP"
 echo "== step 5: a layout round trip through the copy"
 setting snapAssistEnabled false
-PZ org.plasmazones.LayoutRegistry.setQuickLayoutSlot 0 1 "$COLS3" >/dev/null
-PZ org.plasmazones.LayoutRegistry.setQuickLayoutSlot 0 2 "$COPYID" >/dev/null
+PZ org.phosphor_works.Placement.LayoutRegistry.setQuickLayoutSlot 0 1 "$COLS3" >/dev/null
+PZ org.phosphor_works.Placement.LayoutRegistry.setQuickLayoutSlot 0 2 "$COPYID" >/dev/null
 assign Virtual-0 "$COLS3"
 sleep 2
 open p1 400 300
@@ -110,7 +110,7 @@ quick() {
     shortcut "quick_layout_$1"
     sleep 2.5
 }
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-0 >/dev/null
 sleep 2
 [ "$(column p1)" = LEFT ] && [ "$(zoneof "$P1")" = "$ZONE1" ] || stage_fail "p1 not in COLS3 zone 1 ($(geo p1))"
 quick 2
@@ -122,7 +122,7 @@ check "step 5: back on COLS3, p1 is in the left column" "$(column p1)" = LEFT
 check "step 5: back on COLS3, p1 is in COLS3 zone 1" "$(zoneof "$P1")" = "$ZONE1"
 echo "== step 6: import COLS3's zones under a fresh layout id"
 dmark
-NEWID=$(PZ org.plasmazones.LayoutRegistry.importLayout "$IMPORT")
+NEWID=$(PZ org.phosphor_works.Placement.LayoutRegistry.importLayout "$IMPORT")
 echo "  importLayout -> $NEWID"
 check "step 6: the import re-issues COLS3's zone ids" \
     "$(dlog "importLayout: 3 zone id\\(s\\) of another layout given new ids" | wc -l)" -ge 1

@@ -368,19 +368,19 @@ launch() {
             sleep 0.5
         done
         [ "$ok" = 1 ] && break
-        echo "daemon.sh run $try: org.plasmazones is owned by pid '$(bus_owner)' (comm '$(cat "/proc/$(bus_owner)/comm" 2>/dev/null)'), daemon.pid is '$(cat "$NEST/daemon.pid" 2>/dev/null)'" >> "$slog"
+        echo "daemon.sh run $try: org.phosphor_works.Placement is owned by pid '$(bus_owner)' (comm '$(cat "/proc/$(bus_owner)/comm" 2>/dev/null)'), daemon.pid is '$(cat "$NEST/daemon.pid" 2>/dev/null)'" >> "$slog"
     done
     [ "$ok" = 1 ]
 }
-# bus_owner -> the pid owning org.plasmazones on the session's bus, empty when nobody does
+# bus_owner -> the pid owning org.phosphor_works.Placement on the session's bus, empty when nobody does
 bus_owner() {
     (
         . "$NEST/env.sh"
         dbus-send --session --print-reply --dest=org.freedesktop.DBus / \
-            org.freedesktop.DBus.GetConnectionUnixProcessID string:org.plasmazones 2>/dev/null | awk '/uint32/ { print $2 }'
+            org.freedesktop.DBus.GetConnectionUnixProcessID string:org.phosphor_works.Placement 2>/dev/null | awk '/uint32/ { print $2 }'
     )
 }
-# daemon_is_ours: the process owning org.plasmazones on the session's bus is daemon.sh's daemon
+# daemon_is_ours: the process owning org.phosphor_works.Placement on the session's bus is daemon.sh's daemon
 daemon_is_ours() {
     local owner
     owner=$(bus_owner)

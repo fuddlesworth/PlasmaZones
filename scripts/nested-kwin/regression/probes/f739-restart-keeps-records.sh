@@ -19,10 +19,10 @@ NEST="$1"
 LOG="$2"
 . "$(dirname "$0")/../lib.sh"
 kwjs_ok
-md() { qdbus6 org.plasmazones /PlasmaZones org.plasmazones.WindowTracking.getWindowMetadata "$1" 2>&1 | paste -sd'|'; }
+md() { qdbus6 org.phosphor_works.Placement /org/phosphor_works/Placement org.phosphor_works.Placement.WindowTracking.getWindowMetadata "$1" 2>&1 | paste -sd'|'; }
 newdesk 1 D2
 assign Virtual-0 "autotile:bsp"
-[ "$(PZ org.plasmazones.Settings.setSetting autotileStickyWindowHandling 2)" = true ] \
+[ "$(PZ org.phosphor_works.Placement.Settings.setSetting autotileStickyWindowHandling 2)" = true ] \
     || stage_fail "setSetting autotileStickyWindowHandling 2 was refused"
 sleep 2
 for c in n1 k1 f1 s1; do
@@ -46,8 +46,8 @@ done
 [ "$(wprop s1 'w.onAllDesktops')" = true ] || stage_fail "s1 is not on all desktops"
 S1BEFORE=$(rect "$(geo s1)")
 MON="$NEST/e18a-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.WindowTracking',member='setWindowSticky'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='setWindowMetadata'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='setWindowSticky'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='setWindowMetadata'"
 dkill
 echo "nested daemon stopped"
 sleep 1

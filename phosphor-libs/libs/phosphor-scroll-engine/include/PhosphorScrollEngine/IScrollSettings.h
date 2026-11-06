@@ -217,4 +217,4 @@ public:
 
 } // namespace PhosphorEngine
 
-Q_DECLARE_INTERFACE(PhosphorEngine::IScrollSettings, "org.plasmazones.IScrollSettings")
+Q_DECLARE_INTERFACE(PhosphorEngine::IScrollSettings, "org.phosphor_works.Placement.IScrollSettings")

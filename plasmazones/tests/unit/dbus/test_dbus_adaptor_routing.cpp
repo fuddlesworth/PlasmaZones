@@ -51,7 +51,7 @@ using namespace PhosphorProtocol;
 class TestTypedAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.test.TypedRouting")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Test.TypedRouting")
 
 public:
     explicit TestTypedAdaptor(QObject* parent)
@@ -117,7 +117,7 @@ private Q_SLOTS:
         // there; the UUID suffix is belt-and-braces for direct runs on the
         // developer's real session bus.
         m_serviceName =
-            QStringLiteral("org.plasmazones.test.Routing_") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+            QStringLiteral("org.phosphor_works.Test.Routing_") + QUuid::createUuid().toString(QUuid::WithoutBraces);
         m_objectPath = QStringLiteral("/Routing");
 
         m_bus = QDBusConnection::sessionBus();
@@ -163,7 +163,7 @@ private Q_SLOTS:
         entries << e1 << e2;
 
         QDBusMessage msg = QDBusMessage::createMethodCall(m_serviceName, m_objectPath,
-                                                          QStringLiteral("org.plasmazones.test.TypedRouting"),
+                                                          QStringLiteral("org.phosphor_works.Test.TypedRouting"),
                                                           QStringLiteral("takeWindowOpenedList"));
         msg << QVariant::fromValue(entries);
 
@@ -193,7 +193,7 @@ private Q_SLOTS:
         QVERIFY(m_bus.isConnected());
 
         QDBusMessage msg = QDBusMessage::createMethodCall(m_serviceName, m_objectPath,
-                                                          QStringLiteral("org.plasmazones.test.TypedRouting"),
+                                                          QStringLiteral("org.phosphor_works.Test.TypedRouting"),
                                                           QStringLiteral("produceMoveTarget"));
 
         QDBusPendingCall pending = m_bus.asyncCall(msg);

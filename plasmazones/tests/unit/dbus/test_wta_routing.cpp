@@ -155,7 +155,7 @@ private Q_SLOTS:
 
     void testApplyOpenRoutingForTiling_acceptsScrollingTarget()
     {
-        // DP-2 is a SCROLLING screen: org.plasmazones.Tiling serves both
+        // DP-2 is a SCROLLING screen: org.phosphor_works.Placement.Tiling serves both
         // tiling-family engines, so a RouteToScreen rule targeting a
         // scrolling monitor must redirect exactly like an autotile target.
         PhosphorZones::AssignmentEntry scrolling;

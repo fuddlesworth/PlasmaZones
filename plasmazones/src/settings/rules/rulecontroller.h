@@ -29,7 +29,7 @@ namespace PlasmaZones {
  *
  *   1. On construction (and on a daemon `rulesChanged` D-Bus signal while the
  *      page is clean) it fetches the rule set from
- *      `org.plasmazones.Rules` and loads it into the model.
+ *      `org.phosphor_works.Placement.Rules` and loads it into the model.
  *   2. Every QML CRUD call mutates the in-memory model and flips the dirty bit.
  *   3. On `apply()` the staged rule set is pushed back to the daemon
  *      asynchronously (`asyncCommit` → `setAllRules`) — the daemon stays the
@@ -265,7 +265,7 @@ public:
     void captureSavedSnapshot();
 
     /// Fire-and-forget D-Bus call for the GLOBAL Restore Defaults path
-    /// (org.plasmazones.Rules.resetManagedDefaults): asks the daemon to strip any
+    /// (org.phosphor_works.Placement.Rules.resetManagedDefaults): asks the daemon to strip any
     /// stale managed appearance baseline rules left in rules.json by an older
     /// build, preserving user rules. The daemon persists + broadcasts
     /// rulesChanged; SettingsController::defaults() pairs this with revert() to

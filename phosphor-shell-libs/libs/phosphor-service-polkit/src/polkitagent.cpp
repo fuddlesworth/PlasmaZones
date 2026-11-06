@@ -21,7 +21,7 @@
 #include <utility>
 
 namespace {
-constexpr auto kDefaultObjectPath = "/org/phosphor/PolicyKit1/AuthenticationAgent";
+constexpr auto kDefaultObjectPath = "/org/phosphor_works/Lambent/PolicyKit1/AuthenticationAgent";
 
 Q_LOGGING_CATEGORY(lcPolkitAgent, "phosphor.service.polkit")
 } // namespace

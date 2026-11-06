@@ -39,7 +39,7 @@ G=$(geo p1)
 echo "p1 free: $G"
 [ "$(rect "$G" | cut -d' ' -f1,2)" = "$((V1X + 200)) $((V1Y + 200))" ] && [ "$(outof "$G")" = Virtual-1 ] \
     || stage_fail "p1 not free at 200,200 on Virtual-1 ($G)"
-PZ org.plasmazones.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$P1" 1 Virtual-1 >/dev/null
 sleep 2
 case "$(zoneof "$P1")" in "{"*) ;; *) stage_fail "p1 did not snap into Virtual-1 zone 1" ;; esac
 echo "p1 snapped: $(geo p1)"

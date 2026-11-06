@@ -63,16 +63,16 @@ using PlasmaZones::TestHelpers::isBusError;
 
 namespace CompositorGateTestSupport {
 
-const QString BridgeInterface = QStringLiteral("org.plasmazones.CompositorBridge");
-const QString ProbeInterface = QStringLiteral("org.plasmazones.test.GateProbe");
-const QString OtherInterface = QStringLiteral("org.plasmazones.test.OtherProbe");
+const QString BridgeInterface = QStringLiteral("org.phosphor_works.Placement.CompositorBridge");
+const QString ProbeInterface = QStringLiteral("org.phosphor_works.Test.GateProbe");
+const QString OtherInterface = QStringLiteral("org.phosphor_works.Test.OtherProbe");
 const QString Rejected = QStringLiteral("REJECTED");
 
 /// An adaptor with one compositor-only slot and one open slot that reaches it.
 class GateProbe : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.test.GateProbe")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Test.GateProbe")
 
 public:
     explicit GateProbe(QObject* parent)
@@ -103,7 +103,7 @@ public Q_SLOTS:
 class OtherProbe : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.test.OtherProbe")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Test.OtherProbe")
 
 public:
     OtherProbe(QObject* parent, GateProbe* gated)
@@ -428,7 +428,7 @@ private Q_SLOTS:
         const QString xmlDirectory = appRoot + QStringLiteral("/dbus");
         const QString adaptorSources = appRoot + QStringLiteral("/src/dbus");
         const QString screenAdaptor = repoRoot + QStringLiteral("/phosphor-libs/libs/phosphor-screens");
-        QVERIFY2(QFileInfo::exists(xmlDirectory + QStringLiteral("/org.plasmazones.Snap.xml")),
+        QVERIFY2(QFileInfo::exists(xmlDirectory + QStringLiteral("/org.phosphor_works.Placement.Snap.xml")),
                  qPrintable(QStringLiteral("no interface XML under %1").arg(xmlDirectory)));
         QVERIFY2(QFileInfo::exists(screenAdaptor + QStringLiteral("/src/dbusscreenadaptor.cpp")),
                  qPrintable(QStringLiteral("no screen adaptor under %1").arg(screenAdaptor)));
@@ -447,7 +447,7 @@ private Q_SLOTS:
                 classForInterface.insert(match.captured(2), match.captured(1));
             }
         }
-        QVERIFY(classForInterface.contains(QStringLiteral("org.plasmazones.Snap")));
+        QVERIFY(classForInterface.contains(QStringLiteral("org.phosphor_works.Placement.Snap")));
 
         // (class, method) → the bodies of its out-of-line definitions, each
         // from the line naming it to the closing brace in the first column.
@@ -518,7 +518,8 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));
-        QVERIFY2(compositorOnly(docs.value({QStringLiteral("org.plasmazones.Snap"), QStringLiteral("windowSnapped")})),
+        QVERIFY2(compositorOnly(docs.value(
+                     {QStringLiteral("org.phosphor_works.Placement.Snap"), QStringLiteral("windowSnapped")})),
                  "the scrape found no documented compositor-only method; the check above is vacuous");
         QVERIFY(documented > 0);
     }

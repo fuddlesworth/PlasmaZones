@@ -51,12 +51,12 @@ Z2=$(zoneid "$COLS3" 2)
 Z3=$(zoneid "$COLS3" 3)
 [ -n "$Z1" ] && [ -n "$Z2" ] && [ -n "$Z3" ] || stage_fail "could not read COLS3's zone ids"
 desk 1
-PZ org.plasmazones.Control.snapWindowToZone "${ID[s1]}" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[s1]}" 1 Virtual-0 >/dev/null
 sleep 1.5
 desk 2
-PZ org.plasmazones.Control.snapWindowToZone "${ID[s2a]}" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[s2a]}" 1 Virtual-0 >/dev/null
 sleep 1
-PZ org.plasmazones.Control.snapWindowToZone "${ID[s2b]}" 3 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "${ID[s2b]}" 3 Virtual-0 >/dev/null
 sleep 1.5
 zname() {
     case "$1" in

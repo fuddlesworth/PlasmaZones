@@ -46,7 +46,7 @@ if [ "$SCALE" != 1 ]; then
         sleep 1
         SCR=$(screens)
         read -r OX OY OW OH <<< "$(scr Virtual-0)"
-        DSCALE=$(PZ org.plasmazones.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
+        DSCALE=$(PZ org.phosphor_works.Placement.Screen.getScreenInfo Virtual-0 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("devicePixelRatio"))' 2>/dev/null)
         [ "$OW" = "$WANTW" ] && [ "$OH" = "$WANTH" ] && [ "$DSCALE" = "$SCALE" ] && break
     done
     echo "Virtual-0 $OX,$OY ${OW}x$OH, daemon scale $DSCALE"
@@ -66,7 +66,7 @@ N1=$(uuid n1)
 [ -n "$N1" ] || stage_fail "n1 never mapped"
 [ "$(striporder Virtual-0)" = "x1 | n1" ] || stage_fail "the strip is not [x1 | n1] ($(striporder Virtual-0))"
 activate n1
-PZ org.plasmazones.Scrolling.setColumnWidthProportion Virtual-0 0.25 >/dev/null
+PZ org.phosphor_works.Placement.Scrolling.setColumnWidthProportion Virtual-0 0.25 >/dev/null
 sleep 2
 activate x1
 sleep 2

@@ -10,6 +10,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **New D-Bus names**: the PlasmaZones service moved from `org.plasmazones` on `/PlasmaZones` to `org.phosphor_works.Placement` on `/org/phosphor_works/Placement`. Each interface keeps its own name after the new prefix, so `org.plasmazones.Snap` is now `org.phosphor_works.Placement.Snap`, and the error names moved the same way. The Settings app answers on `org.phosphor_works.Facet` and the layout editor on `org.phosphor_works.PlasmaZones.Editor`. Scripts that call PlasmaZones over D-Bus need the new names. Log out and back in after updating so KWin loads the updated effect.
+- **New app IDs**: the desktop entries and AppStream ids follow the same names. The service is `org.phosphor_works.PlasmaZones`, the Settings app is `org.phosphor_works.Facet` and the layout editor is `org.phosphor_works.PlasmaZones.Editor`. A launcher or panel entry pinned to the Settings app or the editor needs pinning again. Global shortcuts set in System Settings keep working. On a desktop that binds global shortcuts through the XDG portal, bind them again once.
+- **The PlasmaZones service only starts under KWin**: started anywhere KWin is not running, it now says so in its log and exits instead of running without a compositor to talk to.
+
 ## [3.5.5] - 2026-11-04
 
 ### Added

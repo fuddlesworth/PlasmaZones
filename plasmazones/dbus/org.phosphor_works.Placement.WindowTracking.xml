@@ -6,8 +6,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <!-- Window Tracking Interface -->
-    <interface name="org.plasmazones.WindowTracking">
-        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, window-metadata registration, and the Phosphor shell surface (activateWindow, getWindowMetadata, moveWindowToDesktop, getUrgentWindows, getWindowStatesForDesktop, findWindowByPid with the windowMetadataChanged and windowUrgencyChanged announcements). Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
+    <interface name="org.phosphor_works.Placement.WindowTracking">
+        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, window-metadata registration, and the Phosphor shell surface (activateWindow, getWindowMetadata, moveWindowToDesktop, getUrgentWindows, getWindowStatesForDesktop, findWindowByPid with the windowMetadataChanged and windowUrgencyChanged announcements). Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.phosphor_works.Placement.Snap adaptor."/>
         <method name="notifyDragOutUnsnap">
             <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger and dropped on the screen it is snapped on. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen. A drag that ends on another screen is resolved by the drag adaptor at the end of the drag. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
@@ -539,7 +539,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border, while the scrolling engine has none of its own) for every window it manages. Snap re-states the zone only of a window it holds on the desktop shown on a screen it runs, so no window is moved into a zone it is not in. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the Rules rulesChanged broadcast. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
         </method>
         <signal name="snapAllWindowsRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.phosphor_works.Placement.Snap)."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
             </arg>

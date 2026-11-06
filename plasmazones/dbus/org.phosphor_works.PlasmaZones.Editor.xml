@@ -9,8 +9,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
         EditorApp single-instance D-Bus interface.
 
         Hosted by plasmazones-editor at:
-            service: org.plasmazones.Editor.App
-            path:    /EditorApp
+            service: org.phosphor_works.PlasmaZones.Editor
+            path:    /org/phosphor_works/PlasmaZones/Editor
 
         A second plasmazones-editor launcher forwards its CLI args here so the
         existing editor can switch layout / screen / preview /
@@ -27,7 +27,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         Mirror interface: SettingsApp.
     -->
-    <interface name="org.plasmazones.EditorController">
+    <interface name="org.phosphor_works.PlasmaZones.Editor">
         <annotation name="org.gtk.GDBus.DocString"
                     value="Single-instance launch forwarding for plasmazones-editor."/>
         <method name="handleLaunchRequest">

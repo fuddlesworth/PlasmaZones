@@ -353,7 +353,7 @@ void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adapto
 //
 // Snap-commit D-Bus slots (windowSnapped, windowSnappedMultiZone,
 // windowUnsnapped, windowsSnappedBatch, recordSnapIntent) moved to
-// SnapAdaptor (org.plasmazones.Snap D-Bus interface).
+// SnapAdaptor (org.phosphor_works.Placement.Snap D-Bus interface).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool WindowTrackingAdaptor::validateWindowId(const QString& windowId, const QString& operation) const

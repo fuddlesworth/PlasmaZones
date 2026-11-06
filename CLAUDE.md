@@ -167,7 +167,7 @@ In-repo skills under `.claude/skills/` (symlinked into `.agents/skills/`). Invok
 
 Agents under `.claude/agents/`: the `review/pz-*-reviewer` domain reviewers the audit dispatches, the `shader-theme/` art and critique agents, `triage/pz-crash-triage` (core or hang to mechanism) and `triage/pz-kwin-scout` (what a KWin or Qt API actually does, from the installed version's source), and `experts/pz-perf-expert`.
 
-A PreToolUse hook (`.claude/hooks/guard.py`, cases in `test_guard.py`) blocks the commands these rules forbid: `sudo`, installs outside a `/tmp` stage, `pkill`/`killall`, D-Bus calls to `org.plasmazones` on the user's own session bus, restarting the user's KWin, plasmashell or daemon, force pushes, pushes to `main`, broad `git add`, and edits inside build trees. Run `python3 .claude/hooks/test_guard.py` after changing it.
+A PreToolUse hook (`.claude/hooks/guard.py`, cases in `test_guard.py`) blocks the commands these rules forbid: `sudo`, installs outside a `/tmp` stage, `pkill`/`killall`, D-Bus calls to PlasmaZones' names (`org.phosphor_works.*`) on the user's own session bus, restarting the user's KWin, plasmashell or daemon, force pushes, pushes to `main`, broad `git add`, and edits inside build trees. Run `python3 .claude/hooks/test_guard.py` after changing it.
 
 ## Build & Test
 

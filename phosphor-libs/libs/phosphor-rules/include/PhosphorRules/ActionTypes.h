@@ -383,7 +383,7 @@ inline constexpr QLatin1StringView SetScrollSmartGaps{"setScrollSmartGaps"};
 /// Whether moving the pointer over a column focuses it on the matched
 /// context. Boolean `ActionParam::Value`. EFFECT-consumed: focus-follows-mouse
 /// lives entirely in the compositor, so the daemon resolves this per screen
-/// and pushes the resolved set over `org.plasmazones.Scrolling` rather than
+/// and pushes the resolved set over `org.phosphor_works.Placement.Scrolling` rather than
 /// onto the engine's override map. It governs the SCROLLING half of the
 /// per-mode focus-follows-mouse split only — a snapping or tiling screen
 /// keeps reading the global setting.

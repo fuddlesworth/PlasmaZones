@@ -28,8 +28,8 @@ assign Virtual-0 "$COLS3"
 sleep 2
 R1='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555557a01}","match":{"all":[{"field":"title","op":"equals","value":"p1"},{"field":"isSnapped","op":"equals","value":true}]},"name":"probe F488 snapped","priority":50}'
 R2='{"actions":[{"value":"above","type":"setWindowLayer"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555557a02}","match":{"all":[{"field":"title","op":"equals","value":"p1"},{"field":"zone","op":"contains","value":"2bb43b1d"}]},"name":"probe F488 zone","priority":50}'
-[ "$(PZ org.plasmazones.Rules.addRule "$R1")" = true ] || stage_fail "the isSnapped rule was refused"
-[ "$(PZ org.plasmazones.Rules.addRule "$R2")" = true ] || stage_fail "the zone rule was refused"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R1")" = true ] || stage_fail "the isSnapped rule was refused"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R2")" = true ] || stage_fail "the zone rule was refused"
 sleep 1
 open p1 300 300
 open p2 300 300
@@ -39,8 +39,8 @@ P2=$(uuid p2)
 [ -n "$P1" ] && [ -n "$P2" ] || stage_fail "p1 or p2 never mapped"
 # p1rules -> "noBorder=B keepAbove=B active=CAPTION" for p1
 p1rules() { wprop p1 '"noBorder=" + w.noBorder + " keepAbove=" + w.keepAbove + " active=" + (workspace.activeWindow ? workspace.activeWindow.caption : "none")'; }
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P1" "$Z1" >/dev/null
-PZ org.plasmazones.Snap.moveWindowToZone "org.pz.plain|$P2" "$Z2" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P1" "$Z1" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "org.pz.plain|$P2" "$Z2" >/dev/null
 sleep 2
 [ "$(zoneof "org.pz.plain|$P1")" = "$Z1" ] || stage_fail "p1 did not snap into zone 1"
 SNAPPED=$(rect "$(geo p1)")

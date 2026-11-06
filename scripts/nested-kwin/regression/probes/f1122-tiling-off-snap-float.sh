@@ -25,7 +25,7 @@ setting snapAssistEnabled false
 newdesk 1 D2
 setting autotileEnabled false
 sleep 1
-AE=$(PZ org.plasmazones.Settings.getSetting autotileEnabled)
+AE=$(PZ org.phosphor_works.Placement.Settings.getSetting autotileEnabled)
 echo "autotileEnabled reads $AE"
 [ "$AE" = false ] || stage_fail "autotileEnabled did not switch off ($AE)"
 assignd Virtual-1 1 "$COLS3"
@@ -44,7 +44,7 @@ ids
 WU=$(uuid w)
 [ -n "$WU" ] || stage_fail "w never mapped"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 activate w
 shortcut toggle_window_float

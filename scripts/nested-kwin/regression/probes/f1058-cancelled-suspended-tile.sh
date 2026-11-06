@@ -29,8 +29,8 @@ setting autotileDragBehavior 1
 sleep 2
 RULE="{11111111-2222-4333-8444-55555f105801}"
 R='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"'"$RULE"'","match":{"all":[{"field":"appId","op":"equals","value":"org.pz.plain"},{"field":"isTiled","op":"equals","value":true}]},"name":"probe F1058 tiled look","priority":50}'
-[ "$(PZ org.plasmazones.Rules.addRule "$R")" = true ] || stage_fail "the tiled-look rule was not added"
-on_exit 'PZ org.plasmazones.Rules.removeRule "$RULE" >/dev/null'
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R")" = true ] || stage_fail "the tiled-look rule was not added"
+on_exit 'PZ org.phosphor_works.Placement.Rules.removeRule "$RULE" >/dev/null'
 sleep 1
 for c in t1 t2; do
     open "$c"
@@ -122,7 +122,7 @@ check "'endDrag cancelled: re-tiling' lines for t1" "$(elog "endDrag cancelled: 
 check "retile calls naming Virtual-0 since the gesture" "$(msgs "$MON" | grep -c "^retile Virtual-0")" -eq 1
 check "t1's tiled look (noBorder) back at the read" "$(nbof "$A")" = true
 echo "== control: a pointer drag onto Virtual-1 and back, dropped on Virtual-0"
-PZ org.plasmazones.Tiling.retile Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Tiling.retile Virtual-0 >/dev/null
 sleep 2
 drop
 echo "  t1 $(geo t1) | t2 $(geo t2) | tiles $(tiles Virtual-0)"

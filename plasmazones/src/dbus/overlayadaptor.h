@@ -33,7 +33,7 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for overlay control operations
  *
- * Provides D-Bus interface: org.plasmazones.Overlay
+ * Provides D-Bus interface: org.phosphor_works.Placement.Overlay
  *  PhosphorZones::Zone overlay visibility and highlighting only
  *
  * Note: PhosphorZones::Zone detection and window tracking are handled by separate adaptors
@@ -53,7 +53,7 @@ class ISettings;
 class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Overlay")
 
 public:
     explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,

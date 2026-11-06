@@ -39,7 +39,7 @@ class WindowTrackingAdaptor;
 /**
  * @brief D-Bus adaptor for the shared tiling-family transport
  *
- * Provides D-Bus interface: org.plasmazones.Tiling
+ * Provides D-Bus interface: org.phosphor_works.Placement.Tiling
  *
  * The engine-NEUTRAL wire surface shared by every tiling-family placement
  * engine (autotile, scrolling): the effect keeps ONE engine-managed screen
@@ -48,7 +48,7 @@ class WindowTrackingAdaptor;
  * it, regardless of which engine owns the screen. The adaptor dispatches
  * per screen/window through IPlacementEngine only — it never sees a
  * concrete engine type. Engine-SPECIFIC verbs live on the sibling
- * interfaces org.plasmazones.Autotile and org.plasmazones.Scrolling.
+ * interfaces org.phosphor_works.Placement.Autotile and org.phosphor_works.Placement.Scrolling.
  *
  * All engine→adaptor signal connections are made at the composition root
  * (init_engines.cpp), not by the adaptor itself. Most land on a relay entry
@@ -62,7 +62,7 @@ class WindowTrackingAdaptor;
 class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Tiling")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Tiling")
 
     Q_PROPERTY(bool enabled READ enabled NOTIFY enabledChanged)
     Q_PROPERTY(QStringList managedScreens READ managedScreens NOTIFY managedScreensChanged)
@@ -513,8 +513,8 @@ public Q_SLOTS:
 
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
     // all float operations are now routed through the unified methods —
-    // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
-    // org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional.
+    // org.phosphor_works.Placement.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
+    // org.phosphor_works.Placement.WindowTracking.setWindowFloatingForScreen for directional.
 
 Q_SIGNALS:
     /**

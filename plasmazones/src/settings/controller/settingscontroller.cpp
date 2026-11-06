@@ -881,7 +881,7 @@ SettingsController::SettingsController(QObject* parent)
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's
-    // org.plasmazones.Rules adaptor. Dirty-tracking mirrors the
+    // org.phosphor_works.Placement.Rules adaptor. Dirty-tracking mirrors the
     // animations page: a staged edit flips needsSave; commit/revert run
     // from this controller's save()/load() so they don't race the
     // setNeedsSave(false) those methods emit.

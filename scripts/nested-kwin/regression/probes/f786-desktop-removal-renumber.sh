@@ -24,7 +24,7 @@ for n in 1 2; do
     newdesk "$n" "D$((n + 1))"
 done
 sleep 1
-DUP=$(PZ org.plasmazones.LayoutRegistry.duplicateLayout "$COLS3")
+DUP=$(PZ org.phosphor_works.Placement.LayoutRegistry.duplicateLayout "$COLS3")
 echo "DUP layout: $DUP"
 case "$DUP" in "{"*) ;; *) stage_fail "duplicateLayout returned no id ($DUP)" ;; esac
 sleep 1
@@ -34,8 +34,8 @@ assignd Virtual-0 3 "$DUP"
 gsetting autotileDisabledDesktops "<['Virtual-0/3']>" >/dev/null
 R1='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-5555555d3001}","match":{"all":[{"field":"appId","op":"equals","value":"kwrite"},{"field":"virtualDesktop","op":"equals","value":3}]},"name":"probe D3 kwrite on 3","priority":50}'
 R2='{"actions":[{"targetDesktop":2,"type":"routeToDesktop"}],"enabled":true,"id":"{11111111-2222-4333-8444-5555555d3002}","match":{"all":[{"field":"appId","op":"equals","value":"konsole"}]},"name":"probe D3 konsole to 2","priority":50}'
-[ "$(PZ org.plasmazones.Rules.addRule "$R1")" = true ] || stage_fail "the kwrite rule was not added"
-[ "$(PZ org.plasmazones.Rules.addRule "$R2")" = true ] || stage_fail "the konsole rule was not added"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R1")" = true ] || stage_fail "the kwrite rule was not added"
+[ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R2")" = true ] || stage_fail "the konsole rule was not added"
 sleep 2
 echo "before the removal: 1=$(layoutof Virtual-0 1) 2=$(layoutof Virtual-0 2) 3=$(layoutof Virtual-0 3)"
 rule_rows | sed 's/^/  /'
@@ -49,11 +49,11 @@ qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.re
 sleep 2.5
 desk 2
 echo "now on: $(curdesk)"
-check "getLayoutForScreen Virtual-0 on the new desktop 2" "$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen Virtual-0)" = "$DUP"
+check "getLayoutForScreen Virtual-0 on the new desktop 2" "$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen Virtual-0)" = "$DUP"
 check "desktop 2's layout after the removal" "$(layoutof Virtual-0 2)" = "$DUP"
 check "desktop 2's mode after the removal" "$(modeof Virtual-0 2)" = 0
 check "autotileDisabledDesktops after the removal" \
-    "$(PZ org.plasmazones.Settings.getSetting autotileDisabledDesktops | tr -d '\n ')" = "Virtual-0/2"
+    "$(PZ org.phosphor_works.Placement.Settings.getSetting autotileDisabledDesktops | tr -d '\n ')" = "Virtual-0/2"
 rule_rows | sed 's/^/  /'
 check "rules naming desktop 3 after the removal" "$(rule_rows | cut -d'|' -f3 | grep -c '\b3\b')" -eq 0
 check "the kwrite rule after the removal" "$(rule_row "probe D3 kwrite on 3")" = "True|2|"

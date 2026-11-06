@@ -67,8 +67,8 @@ License: LGPL-2.1-or-later
 # AppStream metadata. Both files declare CC0-1.0 in their own headers, which is
 # the usual licence for distro metadata so downstreams can redistribute and
 # translate it freely.
-Files: plasmazones/src/editor/org.plasmazones.editor.metainfo.xml
-       plasmazones/src/settings/org.plasmazones.settings.metainfo.xml
+Files: plasmazones/src/editor/org.phosphor_works.PlasmaZones.Editor.metainfo.xml
+       plasmazones/src/settings/org.phosphor_works.Facet.metainfo.xml
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: CC0-1.0
 

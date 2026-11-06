@@ -60,7 +60,7 @@ fi
 desk 1
 echo "desktop $(curdesk) shown"
 MON="$NEST/f1102-monitor.log"
-mon_start "$MON" "type='signal',interface='org.plasmazones.Tiling',member='windowsTileRequested'"
+mon_start "$MON" "type='signal',interface='org.phosphor_works.Placement.Tiling',member='windowsTileRequested'"
 echo "== Virtual-1 disabled"
 dmark
 ksd output.Virtual-1.disable

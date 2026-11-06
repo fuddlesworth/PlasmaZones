@@ -29,18 +29,18 @@ wid() {
     ids
     echo "org.pz.$1|$(uuid "$1")"
 }
-pending() { PZ org.plasmazones.WindowTracking.getPendingRestoreGeometries | tr -d '\n '; }
+pending() { PZ org.phosphor_works.Placement.WindowTracking.getPendingRestoreGeometries | tr -d '\n '; }
 close() {
     on "$1" "w[i].closeWindow();"
     sleep 1.5
 }
 for c in pa qa ra sa; do openapp "$c" "org.pz.$c" 300 300; done
 for c in pa ra; do
-    PZ org.plasmazones.Snap.moveWindowToZone "$(wid "$c")" "$Z1" >/dev/null
+    PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$(wid "$c")" "$Z1" >/dev/null
     sleep 1.5
 done
 for c in qa sa; do
-    PZ org.plasmazones.Snap.moveWindowToZone "$(wid "$c")" "$Z3" >/dev/null
+    PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$(wid "$c")" "$Z3" >/dev/null
     sleep 1.5
 done
 Z1RECT=$(rect "$(geo pa)")
@@ -54,12 +54,12 @@ for c in pa qa ra sa; do
 done
 
 setting restoreWindowsToZonesOnLogin false
-PZ org.plasmazones.Settings.saveSettings >/dev/null
+PZ org.phosphor_works.Placement.Settings.saveSettings >/dev/null
 sleep 1
 emark
 drestart
 sleep 7
-[ "$(PZ org.plasmazones.Settings.getSetting restoreWindowsToZonesOnLogin)" = false ] \
+[ "$(PZ org.phosphor_works.Placement.Settings.getSetting restoreWindowsToZonesOnLogin)" = false ] \
     || stage_fail "restoreWindowsToZonesOnLogin did not read back false after the restart"
 check "the effect's restore cache after the restart" \
     "$(elog "Cached [0-9]* pending restore geometries" | tail -1)" = "Cached 0 pending restore geometries"

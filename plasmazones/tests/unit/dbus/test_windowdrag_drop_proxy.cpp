@@ -324,7 +324,7 @@ private Q_SLOTS:
         QVERIFY(peer.ready());
 
         const QDBusMessage reply =
-            peer.call(QStringLiteral("org.plasmazones.WindowDrag"), QStringLiteral("registerDropProxy"),
+            peer.call(QStringLiteral("org.phosphor_works.Placement.WindowDrag"), QStringLiteral("registerDropProxy"),
                       {f.screenId, proxyJson(QRect(20, 20, 100, 90), {{zone0, QRect(20, 20, 100, 90)}})});
         QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
 

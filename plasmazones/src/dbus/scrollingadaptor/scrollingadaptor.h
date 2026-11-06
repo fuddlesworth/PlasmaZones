@@ -24,7 +24,7 @@ namespace PlasmaZones {
 /**
  * @brief D-Bus adaptor for the scrolling placement engine
  *
- * Provides D-Bus interface: org.plasmazones.Scrolling
+ * Provides D-Bus interface: org.phosphor_works.Placement.Scrolling
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin effect
  * uses as its Mode-stamp discriminator, the strip-preview snapshot (with the
@@ -48,14 +48,14 @@ namespace PlasmaZones {
  * leaves its own fullscreen.
  *
  * Window lifecycle and tile-request traffic for scrolling screens
- * deliberately stays on org.plasmazones.Tiling — the effect keeps ONE
+ * deliberately stays on org.phosphor_works.Placement.Tiling — the effect keeps ONE
  * engine-managed screen set and one geometry pipeline for both tiling-family
  * engines, and TilingAdaptor routes per screen.
  */
 class PLASMAZONES_EXPORT ScrollingAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Scrolling")
+    Q_CLASSINFO("D-Bus Interface", "org.phosphor_works.Placement.Scrolling")
 
     Q_PROPERTY(QStringList scrollingScreens READ scrollingScreens NOTIFY scrollingScreensChanged)
     Q_PROPERTY(QVariantMap scrollEffectBehaviour READ scrollEffectBehaviour NOTIFY scrollEffectBehaviourChanged)
@@ -71,7 +71,7 @@ public:
     ///
     /// This is the RAW set. The KWin effect does not answer its Mode
     /// discriminator from it directly: it intersects this with the
-    /// engine-managed union published on org.plasmazones.Tiling at read
+    /// engine-managed union published on org.phosphor_works.Placement.Tiling at read
     /// time, because the two arrive as independent signals with no
     /// ordering guarantee and this set can transiently name a screen the
     /// union has already dropped.
@@ -633,7 +633,7 @@ public Q_SLOTS:
      * the screen is not scrolling.
      *
      * NOTE: nothing in this tree calls it. It stays as part of the PUBLISHED
-     * D-Bus read surface (declared in org.plasmazones.Scrolling.xml, covered
+     * D-Bus read surface (declared in org.phosphor_works.Placement.Scrolling.xml, covered
      * by tests/unit/dbus), for external clients that want to know which
      * fractions the cycle shortcuts will walk. Do not re-justify it by naming
      * an in-tree caller; there is none.

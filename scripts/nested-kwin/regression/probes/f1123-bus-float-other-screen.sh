@@ -34,7 +34,7 @@ WU=$(uuid w)
 T1U=$(uuid t1)
 [ -n "$WU" ] && [ -n "$T1U" ] || stage_fail "w and t1 did not both map"
 W="org.pz.plain|$WU"
-PZ org.plasmazones.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$W" 1 Virtual-1 >/dev/null
 sleep 2
 GW=$(geo w)
 Z=$(zoneof "$W")
@@ -46,7 +46,7 @@ float_lines() {
 }
 echo "== bus float of w naming Virtual-0 (B), from this shell"
 dmark
-echo "  reply: $(gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.WindowTracking.setWindowFloatingForScreen "$W" Virtual-0 true 2>&1 | tr -d '\n')"
+echo "  reply: $(gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement --method org.phosphor_works.Placement.WindowTracking.setWindowFloatingForScreen "$W" Virtual-0 true 2>&1 | tr -d '\n')"
 sleep 2
 float_lines "$WU"
 check "refusal lines for w naming the screen it is on" "$(dlog "setWindowFloatingForScreen: [^ ]*$WU.* is on .*refused for" | wc -l)" -eq 1
@@ -56,7 +56,7 @@ check "w's zone after the refused call" "$(zoneof "$W")" = "$Z"
 check "isWindowFloating w after the refused call" "$(floating "$W")" = false
 echo "== control: bus float of w naming Virtual-1 (its own screen)"
 dmark
-gdbus call --session --dest org.plasmazones --object-path /PlasmaZones --method org.plasmazones.WindowTracking.setWindowFloatingForScreen "$W" Virtual-1 true >/dev/null 2>&1
+gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement --method org.phosphor_works.Placement.WindowTracking.setWindowFloatingForScreen "$W" Virtual-1 true >/dev/null 2>&1
 sleep 2
 float_lines "$WU"
 check "floating= true sends for w naming its own screen" "$(floatsends "$WU")" -eq 1

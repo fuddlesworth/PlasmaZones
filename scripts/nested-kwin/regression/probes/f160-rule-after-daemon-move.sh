@@ -22,7 +22,7 @@ assign Virtual-0 "$COLS3"
 assign Virtual-1 "$COLS2"
 sleep 2
 R='{"actions":[{"value":true,"type":"setHideTitleBar"}],"enabled":true,"id":"{11111111-2222-4333-8444-555555555571}","match":{"all":[{"field":"title","op":"equals","value":"p1"},{"field":"screenId","op":"equals","value":"Virtual-1"}]},"name":"probe F160","priority":50}'
-ADD=$(PZ org.plasmazones.Rules.addRule "$R")
+ADD=$(PZ org.phosphor_works.Placement.Rules.addRule "$R")
 echo "addRule: $ADD"
 [ "$ADD" = true ] || stage_fail "the rule was not added ($ADD)"
 sleep 1
@@ -34,13 +34,13 @@ P1="org.pz.plain|$P1U"
 ZA=$(zoneid "$COLS3" 1)
 ZB=$(zoneid "$COLS2" 1)
 { [ -n "$ZA" ] && [ -n "$ZB" ]; } || stage_fail "no zone 1 in COLS3 or Columns (2)"
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
 sleep 2
 G=$(geo p1)
 echo "on Virtual-0: $G"
 [ "$(outof "$G")" = Virtual-0 ] || stage_fail "p1 is not on Virtual-0 ($G)"
 check "noBorder on Virtual-0" "$(nbof "$G")" = false
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$ZB" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$ZB" >/dev/null
 sleep 0.8
 G=$(geo p1)
 echo "landed on Virtual-1: $G"
@@ -48,7 +48,7 @@ echo "landed on Virtual-1: $G"
 check "noBorder right after the landing on Virtual-1" "$(nbof "$G")" = true
 sleep 1.5
 check "noBorder 1.5 s later" "$(nbof "$(geo p1)")" = true
-PZ org.plasmazones.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
+PZ org.phosphor_works.Placement.Snap.moveWindowToZone "$P1" "$ZA" >/dev/null
 sleep 0.8
 G=$(geo p1)
 echo "back on Virtual-0: $G"

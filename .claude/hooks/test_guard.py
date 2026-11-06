@@ -51,17 +51,20 @@ class BashRules(unittest.TestCase):
         self.allowed('kill 12345')
 
     def test_host_dbus(self):
-        self.blocked('qdbus6 org.plasmazones.daemon /PlasmaZones', guard.MSG_HOST_DBUS)
-        self.blocked('busctl --user call org.plasmazones.daemon /X a b', guard.MSG_HOST_DBUS)
-        self.blocked('dbus-send --session --dest=org.plasmazones.daemon /X a.b', guard.MSG_HOST_DBUS)
-        self.blocked('bash -c "qdbus6 org.plasmazones.daemon"', guard.MSG_HOST_DBUS)
-        self.allowed('. "$XDG_RUNTIME_DIR/pz-nested/env.sh"; qdbus6 org.plasmazones.daemon /PlasmaZones')
-        self.allowed('bash -c \'. "$XDG_RUNTIME_DIR/pz-nested/env.sh" && qdbus6 org.plasmazones.daemon\'')
-        self.allowed('DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-x qdbus6 org.plasmazones.daemon')
-        self.allowed('dbus-run-session -- qdbus6 org.plasmazones.daemon')
-        self.allowed('gdbus call --address unix:path=/tmp/b --dest org.plasmazones.daemon -o /X -m a.b')
+        self.blocked('qdbus6 org.phosphor_works.Placement /org/phosphor_works/Placement', guard.MSG_HOST_DBUS)
+        self.blocked('busctl --user call org.phosphor_works.Placement /X a b', guard.MSG_HOST_DBUS)
+        self.blocked('dbus-send --session --dest=org.phosphor_works.Placement /X a.b', guard.MSG_HOST_DBUS)
+        self.blocked('bash -c "qdbus6 org.phosphor_works.Placement"', guard.MSG_HOST_DBUS)
+        self.allowed('. "$XDG_RUNTIME_DIR/pz-nested/env.sh"; qdbus6 org.phosphor_works.Placement '
+                     '/org/phosphor_works/Placement')
+        self.allowed('bash -c \'. "$XDG_RUNTIME_DIR/pz-nested/env.sh" && qdbus6 org.phosphor_works.Placement\'')
+        self.allowed('DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-x qdbus6 org.phosphor_works.Placement')
+        self.allowed('dbus-run-session -- qdbus6 org.phosphor_works.Placement')
+        self.allowed('gdbus call --address unix:path=/tmp/b --dest org.phosphor_works.Placement -o /X -m a.b')
+        self.blocked('gdbus call --session --dest org.phosphor_works.Facet -o /org/phosphor_works/Facet -m a.b',
+                     guard.MSG_HOST_DBUS)
         self.allowed('qdbus6 org.kde.KWin /KWin supportInformation')
-        self.allowed('grep -rn org.plasmazones plasmazones/dbus')
+        self.allowed('grep -rn org.phosphor_works plasmazones/dbus')
 
     def test_desktop(self):
         self.blocked('kwin_wayland --replace &', guard.MSG_DESKTOP)

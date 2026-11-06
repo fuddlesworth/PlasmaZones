@@ -50,8 +50,8 @@ GY=$((${GY%.*} + ${GH%.*} / 2))
 DX=$((V1X + V1W / 2))
 DY=$((V1Y + V1H / 2))
 MON="$NEST/f731-monitor.log"
-mon_start "$MON" "type='method_call',interface='org.plasmazones.Tiling',member='releaseWindowTracking'" \
-    "type='method_call',interface='org.plasmazones.WindowTracking',member='setWindowFloatingForScreen'"
+mon_start "$MON" "type='method_call',interface='org.phosphor_works.Placement.Tiling',member='releaseWindowTracking'" \
+    "type='method_call',interface='org.phosphor_works.Placement.WindowTracking',member='setWindowFloatingForScreen'"
 mmark "$MON"
 emark
 echo "== t2: Meta+left drag from $GX,$GY to $DX,$DY, no trigger, held about 5.5 s"

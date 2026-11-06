@@ -34,12 +34,12 @@ echo "strip: $(striporder Virtual-0)"
 for r in 'keepAbove|tabColorActive|#ff0000|a1' 'isMaximized|tabColorInactive|#00ff00|a2'; do
     IFS='|' read -r F A C N <<< "$r"
     R="{\"actions\":[{\"value\":\"$C\",\"type\":\"$A\"}],\"enabled\":true,\"id\":\"{11111111-2222-4333-8444-5555555555$N}\",\"match\":{\"all\":[{\"field\":\"title\",\"op\":\"equals\",\"value\":\"t2\"},{\"field\":\"$F\",\"op\":\"equals\",\"value\":true}]},\"name\":\"probe F699 $F\",\"priority\":50}"
-    [ "$(PZ org.plasmazones.Rules.addRule "$R")" = true ] || stage_fail "the $F rule was not added"
+    [ "$(PZ org.phosphor_works.Placement.Rules.addRule "$R")" = true ] || stage_fail "the $F rule was not added"
 done
 sleep 2
 query() {
-    gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
-        --method org.plasmazones.Tiling.scrollTabColors "$T2" 2>&1 | tr -d '\n'
+    gdbus call --session --dest org.phosphor_works.Placement --object-path /org/phosphor_works/Placement \
+        --method org.phosphor_works.Placement.Tiling.scrollTabColors "$T2" 2>&1 | tr -d '\n'
 }
 # edge LABEL 'STATEMENT' STATE QUERY: run STATEMENT on t2; the staging holds when t2 then reads
 # STATE ("keepAbove maximizeMode"), and the query must answer QUERY

@@ -17,8 +17,8 @@ namespace PhosphorProtocol::Service {
  * Centralized D-Bus interface names to avoid magic strings.
  * Used by KWin effect, Wayfire plugin, and any future compositor integration.
  */
-inline constexpr QLatin1String Name("org.plasmazones");
-inline constexpr QLatin1String ObjectPath("/PlasmaZones");
+inline constexpr QLatin1String Name("org.phosphor_works.Placement");
+inline constexpr QLatin1String ObjectPath("/org/phosphor_works/Placement");
 
 /// Quick-layout slots are numbered 1..QuickLayoutSlotCount. Protocol-level
 /// because the daemon validates the bound on the D-Bus boundary while the
@@ -40,37 +40,37 @@ inline constexpr int QuickLayoutSlotCount = 9;
 inline constexpr int MaxRunningWindowsPayloadBytes = 1 << 20;
 
 namespace Interface {
-inline constexpr QLatin1String Settings("org.plasmazones.Settings");
-inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
-inline constexpr QLatin1String WindowTracking("org.plasmazones.WindowTracking");
-inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
+inline constexpr QLatin1String Settings("org.phosphor_works.Placement.Settings");
+inline constexpr QLatin1String WindowDrag("org.phosphor_works.Placement.WindowDrag");
+inline constexpr QLatin1String WindowTracking("org.phosphor_works.Placement.WindowTracking");
+inline constexpr QLatin1String Overlay("org.phosphor_works.Placement.Overlay");
 // Shared tiling-family engine pipeline (autotile + scrolling). Renamed
-// from org.plasmazones.Autotile when the scrolling engine joined; the
+// from org.phosphor_works.Placement.Autotile when the scrolling engine joined; the
 // project ships daemon and effect together, so no wire compatibility
 // alias is kept.
-inline constexpr QLatin1String Tiling("org.plasmazones.Tiling");
+inline constexpr QLatin1String Tiling("org.phosphor_works.Placement.Tiling");
 // Engine-specific sibling interfaces (autotile verbs / scrolling screen
 // set). Listed so this namespace stays a complete index of published
 // interfaces even though the adaptors' Q_CLASSINFO must repeat the
 // literal (macro argument).
-inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
-inline constexpr QLatin1String Scrolling("org.plasmazones.Scrolling");
-inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
-inline constexpr QLatin1String Screen("org.plasmazones.Screen");
-inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
-inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
-inline constexpr QLatin1String Snap("org.plasmazones.Snap");
-inline constexpr QLatin1String Rules("org.plasmazones.Rules");
-inline constexpr QLatin1String Control("org.plasmazones.Control");
-inline constexpr QLatin1String Shader("org.plasmazones.Shader");
+inline constexpr QLatin1String Autotile("org.phosphor_works.Placement.Autotile");
+inline constexpr QLatin1String Scrolling("org.phosphor_works.Placement.Scrolling");
+inline constexpr QLatin1String LayoutRegistry("org.phosphor_works.Placement.LayoutRegistry");
+inline constexpr QLatin1String Screen("org.phosphor_works.Placement.Screen");
+inline constexpr QLatin1String ZoneDetection("org.phosphor_works.Placement.ZoneDetection");
+inline constexpr QLatin1String CompositorBridge("org.phosphor_works.Placement.CompositorBridge");
+inline constexpr QLatin1String Snap("org.phosphor_works.Placement.Snap");
+inline constexpr QLatin1String Rules("org.phosphor_works.Placement.Rules");
+inline constexpr QLatin1String Control("org.phosphor_works.Placement.Control");
+inline constexpr QLatin1String Shader("org.phosphor_works.Placement.Shader");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
 /// so adaptors emit identical strings and consumers can match on them without
 /// relying on free-form text.
 namespace Error {
-inline constexpr QLatin1String Busy("org.plasmazones.Error.Busy");
-inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
+inline constexpr QLatin1String Busy("org.phosphor_works.Placement.Error.Busy");
+inline constexpr QLatin1String Shutdown("org.phosphor_works.Placement.Error.Shutdown");
 }
 
 /// Property names exposed by the Settings interface's runtime D-Bus surface
@@ -136,7 +136,7 @@ inline constexpr QLatin1String Activities("activities");
 }
 
 /// Keys of the two scrolling tab-indicator maps that cross the daemon → KWin
-/// effect boundary on org.plasmazones.Tiling: the per-screen context-rule
+/// effect boundary on org.phosphor_works.Placement.Tiling: the per-screen context-rule
 /// PAINT override map (scrollTabPaintOverridesChanged / scrollTabPaintOverrides,
 /// all eleven paint keys) and the per-window rule COLOUR map (scrollTabColors /
 /// scrollTabColorsChanged, the three colour keys). The daemon produces them
@@ -144,7 +144,7 @@ inline constexpr QLatin1String Activities("activities");
 /// forward to these) and the effect's TilingHandler reads them; this is the
 /// ONE home for the spellings, so a rename is a compile error on both sides
 /// rather than a silently dropped override. The XML DocStrings in
-/// dbus/org.plasmazones.Tiling.xml (and a few C++ doc comments) repeat the
+/// dbus/org.phosphor_works.Placement.Tiling.xml (and a few C++ doc comments) repeat the
 /// spellings as prose only.
 namespace ScrollTabKey {
 inline constexpr QLatin1String TabStyle("tabStyle");
@@ -166,7 +166,7 @@ inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 }
 
 /// Keys of the scrolling BEHAVIOUR map that crosses the daemon → KWin effect
-/// boundary on org.plasmazones.Scrolling (scrollEffectBehaviour /
+/// boundary on org.phosphor_works.Placement.Scrolling (scrollEffectBehaviour /
 /// scrollEffectBehaviourChanged): three already-resolved screen-id lists, the
 /// per-context focus-follows-mouse and crop-straddlers rule slots and the
 /// vertical-axis MEMBERSHIP (a screen in the list runs its strip vertically;
@@ -184,7 +184,7 @@ inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 /// TilingHandler reads it; one home for the spellings, on
 /// ScrollTabKey's terms, so a rename is a compile error on both sides rather
 /// than a lookup that silently misses its diagnostic label. The XML DocString
-/// in dbus/org.plasmazones.Scrolling.xml repeats them as prose only.
+/// in dbus/org.phosphor_works.Placement.Scrolling.xml repeats them as prose only.
 namespace ScrollBehaviourKey {
 inline constexpr QLatin1String FocusFollowsMouse("focusFollowsMouse");
 inline constexpr QLatin1String CropStraddlers("cropStraddlers");
@@ -238,7 +238,7 @@ inline constexpr QLatin1String TabPosition("tabPosition");
 inline constexpr QLatin1String TabLength("tabLength");
 }
 
-/// Keys of the STRIP MODEL payload, org.plasmazones.Scrolling.stripModelJson:
+/// Keys of the STRIP MODEL payload, org.phosphor_works.Placement.Scrolling.stripModelJson:
 /// the whole strip of one screen as the Phosphor shell's placement map draws
 /// it, columns on and off screen alike, in pixels along the strip's own axis.
 /// Spelled here so the daemon's serializer (scrollingadaptor.cpp) and the
@@ -284,7 +284,7 @@ inline constexpr QLatin1String Minimized("minimized");
 }
 
 /// Keys of the drop-proxy JSON a shell registers on
-/// org.plasmazones.WindowDrag (registerDropProxy). The Phosphor shell's
+/// org.phosphor_works.Placement.WindowDrag (registerDropProxy). The Phosphor shell's
 /// placement map is a miniature of a snapping screen's zones; registering it
 /// as a drop proxy lets a real compositor drag that lands on the miniature
 /// resolve to the full-size zone under the cursor. The shell builds the
@@ -309,14 +309,14 @@ inline constexpr QLatin1String Id("id");
 /// the launcher can detect "already running" without scanning the bus.
 namespace Apps {
 namespace Settings {
-inline constexpr QLatin1String ServiceName("org.plasmazones.Settings.App");
-inline constexpr QLatin1String ObjectPath("/SettingsApp");
-inline constexpr QLatin1String Interface("org.plasmazones.SettingsController");
+inline constexpr QLatin1String ServiceName("org.phosphor_works.Facet");
+inline constexpr QLatin1String ObjectPath("/org/phosphor_works/Facet");
+inline constexpr QLatin1String Interface("org.phosphor_works.Facet");
 }
 namespace Editor {
-inline constexpr QLatin1String ServiceName("org.plasmazones.Editor.App");
-inline constexpr QLatin1String ObjectPath("/EditorApp");
-inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
+inline constexpr QLatin1String ServiceName("org.phosphor_works.PlasmaZones.Editor");
+inline constexpr QLatin1String ObjectPath("/org/phosphor_works/PlasmaZones/Editor");
+inline constexpr QLatin1String Interface("org.phosphor_works.PlasmaZones.Editor");
 }
 }
 
@@ -356,19 +356,19 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       ApiVersion exactly, so those steps were unobservable outside the
 //       branch. A new change AFTER v5 ships needs v6.
 //
-//       Interfaces. The org.plasmazones.Autotile lifecycle surface moved
-//       wholesale to the engine-neutral org.plasmazones.Tiling interface
+//       Interfaces. The org.phosphor_works.Placement.Autotile lifecycle surface moved
+//       wholesale to the engine-neutral org.phosphor_works.Placement.Tiling interface
 //       (property managedScreens, signal managedScreensChanged), with
-//       engine-specific verbs split onto org.plasmazones.Autotile /
-//       org.plasmazones.Scrolling. The scrolling tab indicators moved from a
+//       engine-specific verbs split onto org.phosphor_works.Placement.Autotile /
+//       org.phosphor_works.Placement.Scrolling. The scrolling tab indicators moved from a
 //       daemon-rendered layer surface into the KWin effect's own paint pass,
-//       so org.plasmazones.Scrolling LOST scrollTabSurfaces and
-//       scrollTabSurfaceChanged and org.plasmazones.Tiling GAINED the
+//       so org.phosphor_works.Placement.Scrolling LOST scrollTabSurfaces and
+//       scrollTabSurfaceChanged and org.phosphor_works.Placement.Tiling GAINED the
 //       transport that replaces them (scrollTabStrips / scrollTabStripsChanged,
 //       scrollTabPaintOverrides / scrollTabPaintOverridesChanged,
 //       scrollTabColors / scrollTabColorsChanged).
 //
-//       org.plasmazones.Overlay GAINED setWindowThumbnailDmabuf, the zero-copy
+//       org.phosphor_works.Placement.Overlay GAINED setWindowThumbnailDmabuf, the zero-copy
 //       thumbnail path. A false reply routes the caller back to the existing
 //       setSnapAssistThumbnail, which is what makes it safe for a peer to try
 //       the dma-buf form first, so the two are one transport with a fallback
@@ -786,7 +786,7 @@ inline constexpr int CommittedSizeTolerancePx = 1;
 inline constexpr int SyncCallTimeoutMs = 500;
 
 // Timeout for the kwin-effect's daemon-readiness probe (an Introspect call
-// fired against the org.plasmazones service to detect "daemon up but the
+// fired against the org.phosphor_works.Placement service to detect "daemon up but the
 // daemonReady signal was emitted before the effect connected"). 3 s gives
 // the daemon ample time to answer once its event loop is responsive while
 // still keeping the effect from hanging on a wedged daemon.

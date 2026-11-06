@@ -19,7 +19,7 @@ LOG="$2"
 kwjs_ok
 newdesk 1 Two
 setting snapAssistEnabled false
-Q4=$(PZ org.plasmazones.LayoutRegistry.createLayoutFromJson '{"id":"{7a1d0c55-4f2e-4b8a-9d3c-1e5f6a7b8c91}","name":"Q4","type":1,"zones":[{"name":"A","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.25,"height":1.0}},{"name":"B","zoneNumber":2,"relativeGeometry":{"x":0.25,"y":0,"width":0.25,"height":1.0}},{"name":"C","zoneNumber":3,"relativeGeometry":{"x":0.5,"y":0,"width":0.25,"height":1.0}},{"name":"D","zoneNumber":4,"relativeGeometry":{"x":0.75,"y":0,"width":0.25,"height":1.0}}]}')
+Q4=$(PZ org.phosphor_works.Placement.LayoutRegistry.createLayoutFromJson '{"id":"{7a1d0c55-4f2e-4b8a-9d3c-1e5f6a7b8c91}","name":"Q4","type":1,"zones":[{"name":"A","zoneNumber":1,"relativeGeometry":{"x":0,"y":0,"width":0.25,"height":1.0}},{"name":"B","zoneNumber":2,"relativeGeometry":{"x":0.25,"y":0,"width":0.25,"height":1.0}},{"name":"C","zoneNumber":3,"relativeGeometry":{"x":0.5,"y":0,"width":0.25,"height":1.0}},{"name":"D","zoneNumber":4,"relativeGeometry":{"x":0.75,"y":0,"width":0.25,"height":1.0}}]}')
 echo "Q4 layout: $Q4"
 case "$Q4" in "{"*) ;; *) stage_fail "createLayoutFromJson returned no layout id ($Q4)" ;; esac
 sleep 1
@@ -34,10 +34,10 @@ on pw 'w[i].desktops = [workspace.desktops[0], workspace.desktops[1]]; workspace
 sleep 1.5
 pwstate() { echo "cur=$(curdesk) pw $(geo pw) zone='$(zoneof "$ID")'"; }
 desk 1
-PZ org.plasmazones.Control.snapWindowToZone "$ID" 1 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$ID" 1 Virtual-0 >/dev/null
 sleep 1.5
 desk 2
-PZ org.plasmazones.Control.snapWindowToZone "$ID" 2 Virtual-0 >/dev/null
+PZ org.phosphor_works.Placement.Control.snapWindowToZone "$ID" 2 Virtual-0 >/dev/null
 sleep 1.5
 Z2=$(zoneof "$ID")
 echo "desktop 2 before the split: $(pwstate)"
@@ -49,10 +49,10 @@ case "$Z2" in "{"*) ;; *) stage_fail "pw did not snap into zone 2 on desktop 2 (
 [ "$Z1" != "$Z2" ] || stage_fail "pw reads the same zone on both desktops before the split"
 dmark
 SPLIT='{"screens":[{"index":0,"displayName":"L","region":{"x":0,"y":0,"width":0.5,"height":1}},{"index":1,"displayName":"R","region":{"x":0.5,"y":0,"width":0.5,"height":1}}]}'
-PZ org.plasmazones.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT" >/dev/null
+PZ org.phosphor_works.Placement.Screen.setVirtualScreenConfig Virtual-0 "$SPLIT" >/dev/null
 sleep 3
 for vs in Virtual-0/vs:0 Virtual-0/vs:1; do
-    L=$(PZ org.plasmazones.LayoutRegistry.getLayoutForScreen "$vs")
+    L=$(PZ org.phosphor_works.Placement.LayoutRegistry.getLayoutForScreen "$vs")
     [ "$L" = "$Q4" ] || stage_fail "$vs does not run Q4 after the split ($L)"
 done
 echo "desktop 1 after the split: $(pwstate)"
@@ -69,7 +69,7 @@ echo "desktop 2 after the split: $(pwstate)"
 check "pw's zone on desktop 2 after the split" "$(zoneof "$ID")" = "$Z2"
 check "release lines naming pw since move_window_right" "$(dlog "released .*$W|releaseMembership.*$W" | wc -l)" -eq 0
 dmark
-PZ org.plasmazones.Screen.setVirtualScreenConfig Virtual-0 '{"screens":[]}' >/dev/null
+PZ org.phosphor_works.Placement.Screen.setVirtualScreenConfig Virtual-0 '{"screens":[]}' >/dev/null
 sleep 3
 echo "desktop 2 after the un-split: $(pwstate)"
 check "pw's zone on desktop 2 after the un-split" "$(zoneof "$ID")" = "$Z2"

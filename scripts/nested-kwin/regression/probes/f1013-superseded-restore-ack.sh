@@ -72,7 +72,7 @@ for try in 1 2 3 4 5 6; do
                 sleep 2
             fi
         done
-        PZ org.plasmazones.Tiling.retile Virtual-1 >/dev/null
+        PZ org.phosphor_works.Placement.Tiling.retile Virtual-1 >/dev/null
         sleep 2.5
         echo "  re-staged: $(both)"
         staged || {

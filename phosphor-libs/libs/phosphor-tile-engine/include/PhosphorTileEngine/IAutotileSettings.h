@@ -55,4 +55,4 @@ public:
 
 } // namespace PhosphorEngine
 
-Q_DECLARE_INTERFACE(PhosphorEngine::IAutotileSettings, "org.plasmazones.IAutotileSettings")
+Q_DECLARE_INTERFACE(PhosphorEngine::IAutotileSettings, "org.phosphor_works.Placement.IAutotileSettings")

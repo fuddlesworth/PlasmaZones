@@ -3923,7 +3923,7 @@ private Q_SLOTS:
     /// so it would otherwise stay frozen until something unrelated damaged it.
     void slotSessionIdleChanged(bool idle);
 
-    /// Fetch the unified Rule store via `org.plasmazones.Rules.
+    /// Fetch the unified Rule store via `org.phosphor_works.Placement.Rules.
     /// getAllRules`, filter to rules carrying any effect-consumed
     /// (Tag::Effect) action, and forward them to the shader manager — the
     /// sole source of per-window effect overrides. The effect's ONE
