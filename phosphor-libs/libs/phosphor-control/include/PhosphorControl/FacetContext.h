@@ -23,6 +23,7 @@ class IBackend;
 namespace PhosphorControl {
 
 class FacetHost;
+class ISearchProvider;
 class PageController;
 class StagingDomain;
 
@@ -53,6 +54,13 @@ public:
     /// Apply, Discard and the dirty flag.
     void registerDomain(StagingDomain* domain);
 
+    /// Register a dynamic search source, for content the metadata cannot
+    /// list (rules, layouts, shaders). It must outlive the module, which is
+    /// never unloaded. Its entries' page ids are this module's pages, or
+    /// pages its extensions are on. Declare `"SearchProviders": true` in the
+    /// metadata, or the module is not loaded for a search.
+    void registerSearchProvider(ISearchProvider* provider);
+
     /// Register the section for the extension @p localExtensionId the
     /// metadata declares: its staging domain, which joins Apply, Discard and
     /// the dirty flag and counts toward the page it is added to, and the QML
@@ -82,6 +90,7 @@ private:
     const FacetModuleMetadata& m_metadata;
     QSet<QString> m_registeredPages;
     QSet<QString> m_registeredExtensions;
+    QList<ISearchProvider*> m_searchProviders;
     QList<QPointer<StagingDomain>> m_domains;
     QStringList m_errors;
 };

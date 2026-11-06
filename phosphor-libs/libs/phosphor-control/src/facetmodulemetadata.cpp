@@ -154,6 +154,21 @@ FacetModuleMetadata FacetModuleMetadata::parse(const QJsonObject& json, const QL
             problems.append(QStringLiteral("page %1 is declared twice").arg(page.id));
             continue;
         }
+        bool anchorsValid = true;
+        QSet<QString> anchorSet;
+        for (const QString& anchor : std::as_const(page.anchors)) {
+            if (!moduleIdPattern().match(anchor).hasMatch() || anchorSet.contains(anchor)) {
+                problems.append(QStringLiteral("page %1 has anchor %2, which is listed twice or does not match "
+                                               "[A-Za-z0-9][A-Za-z0-9._-]*")
+                                    .arg(page.id, anchor));
+                anchorsValid = false;
+                break;
+            }
+            anchorSet.insert(anchor);
+        }
+        if (!anchorsValid) {
+            continue;
+        }
         pageIds.insert(page.id);
         declared.append(page);
     }
@@ -298,6 +313,43 @@ FacetModuleMetadata FacetModuleMetadata::parse(const QJsonObject& json, const QL
         extensionIds.insert(extension.id);
         metadata.extensions.append(extension);
     }
+
+    const QJsonArray search = json.value(QLatin1String("Search")).toArray();
+    for (const QJsonValue& value : search) {
+        const QJsonObject object = value.toObject();
+        FacetSearchEntryMetadata entry;
+        entry.page = object.value(QLatin1String("Page")).toString();
+        entry.anchor = object.value(QLatin1String("Anchor")).toString();
+        const QString kind = object.value(QLatin1String("Kind")).toString(QStringLiteral("Setting"));
+        entry.section = kind == QLatin1String("Section");
+        entry.title = localized(object, QStringLiteral("Title"), locale).toString();
+        entry.keywords = stringList(localized(object, QStringLiteral("Keywords"), locale));
+        entry.advancedOnly = object.value(QLatin1String("AdvancedOnly")).toBool(false);
+        const QString where = entry.page + QLatin1Char('#') + entry.anchor;
+        const FacetPageMetadata* const target = metadata.page(entry.page);
+        if (!target) {
+            problems.append(QStringLiteral("search entry %1 is on page %2, which the module does not declare")
+                                .arg(where, entry.page));
+            continue;
+        }
+        if (!target->anchors.contains(entry.anchor)) {
+            problems.append(
+                QStringLiteral("search entry %1 names anchor %2, which page %3 does not list in \"Anchors\"")
+                    .arg(where, entry.anchor, entry.page));
+            continue;
+        }
+        if (kind != QLatin1String("Setting") && kind != QLatin1String("Section")) {
+            problems.append(
+                QStringLiteral("search entry %1 has \"Kind\" %2, which is not Setting or Section").arg(where, kind));
+            continue;
+        }
+        if (entry.title.isEmpty()) {
+            problems.append(QStringLiteral("search entry %1 has no \"Title\"").arg(where));
+            continue;
+        }
+        metadata.search.append(entry);
+    }
+    metadata.searchProviders = json.value(QLatin1String("SearchProviders")).toBool(false);
 
     if (errors) {
         errors->append(problems);

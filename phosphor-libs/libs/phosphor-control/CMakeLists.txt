@@ -63,6 +63,9 @@ endif()
 if(NOT DEFINED KDE_INSTALL_BINDIR)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
+if(NOT DEFINED KDE_INSTALL_LIBEXECDIR)
+    set(KDE_INSTALL_LIBEXECDIR ${CMAKE_INSTALL_LIBEXECDIR})
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dependencies
@@ -167,6 +170,7 @@ set(phosphorcontrol_SRCS
     src/facetmodulemetadata.cpp
     src/facetcontext.cpp
     src/facethost.cpp
+    src/facetplaceholderpage_p.h
     src/facettesthost.cpp
 )
 
@@ -322,6 +326,7 @@ set(phosphorcontrol_qml_FILES
     qml/AboutPageShell.qml
     qml/FacetSlot.qml
     qml/FacetExtensionFrame.qml
+    qml/FacetUnavailablePage.qml
 )
 
 # JS helpers shared by the QML chrome — kept separate from QML_FILES
@@ -531,6 +536,24 @@ install(TARGETS PhosphorControl
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Facet module build support
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# phosphor-facet-metadata generates a module's translated metadata, anchor
+# list and lupdate strings, and validates the metadata at build time.
+# phosphor_add_facet_module_metadata() drives it; a module built out of tree
+# gets both from find_package(PhosphorControl).
+add_executable(phosphor-facet-metadata tools/phosphor-facet-metadata/main.cpp)
+add_executable(PhosphorControl::phosphor-facet-metadata ALIAS phosphor-facet-metadata)
+target_link_libraries(phosphor-facet-metadata PRIVATE PhosphorControl::PhosphorControl Qt6::Core)
+install(TARGETS phosphor-facet-metadata
+    EXPORT PhosphorControlTargets
+    RUNTIME DESTINATION ${KDE_INSTALL_LIBEXECDIR}
+)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PhosphorFacetModule.cmake)
+install(FILES cmake/PhosphorFacetModule.cmake DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorControl)
 
 install(EXPORT PhosphorControlTargets
     FILE PhosphorControlTargets.cmake

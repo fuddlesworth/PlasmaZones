@@ -102,6 +102,21 @@ bool FacetContext::registerExtension(const QString& localExtensionId, StagingDom
     return true;
 }
 
+void FacetContext::registerSearchProvider(ISearchProvider* provider)
+{
+    if (!provider) {
+        m_errors.append(QStringLiteral("registered a null search provider"));
+        return;
+    }
+    if (!m_metadata.searchProviders) {
+        m_errors.append(
+            QStringLiteral("registered a search provider without \"SearchProviders\": true in its metadata"));
+        return;
+    }
+    m_searchProviders.append(provider);
+    m_host->addSearchProvider(provider);
+}
+
 PhosphorConfig::IBackend* FacetContext::configBackend(const QString& path, const ConfigBackendFactory& create)
 {
     if (!QDir::isAbsolutePath(path)) {

@@ -163,6 +163,28 @@ private Q_SLOTS:
         QCOMPARE(metadata.slotVersion(page, slot), version);
     }
 
+    void parsesSearchEntries()
+    {
+        QStringList errors;
+        const FacetModuleMetadata metadata = FacetModuleMetadata::parse(json(R"({
+            "Id": "m", "Name": "M", "SearchProviders": true,
+            "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["speed", "size"] } ],
+            "Search": [ { "Page": "p", "Anchor": "speed", "Title": "Speed", "Title[de]": "Tempo",
+                          "Keywords": ["fast"], "AdvancedOnly": true },
+                        { "Page": "p", "Anchor": "size", "Kind": "Section", "Title": "Size" } ] })"),
+                                                                        QLocale(QStringLiteral("de_DE")), &errors);
+        QVERIFY2(errors.isEmpty(), qPrintable(errors.join(QLatin1Char('\n'))));
+        QVERIFY(metadata.searchProviders);
+        QCOMPARE(metadata.search.size(), 2);
+        QCOMPARE(metadata.search.at(0).title, QStringLiteral("Tempo"));
+        QCOMPARE(metadata.search.at(0).keywords, QStringList{QStringLiteral("fast")});
+        QVERIFY(metadata.search.at(0).advancedOnly);
+        QVERIFY(!metadata.search.at(0).section);
+        QVERIFY(metadata.search.at(1).section);
+        QVERIFY(
+            !FacetModuleMetadata::parse(json(R"({ "Id": "m", "Name": "M" })"), QLocale::c(), &errors).searchProviders);
+    }
+
     void reportsEveryProblem_data()
     {
         QTest::addColumn<QByteArray>("text");
@@ -231,6 +253,27 @@ private Q_SLOTS:
         QTest::newRow("extension without name") << QByteArray(R"({ "Id": "m", "Name": "M",
                    "Extensions": [ { "Id": "e", "Target": "o:p", "Slot": "top" } ] })")
                                                 << QStringLiteral("extension e has no \"Name\"");
+        QTest::newRow("anchor with a colon") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["a:b"] } ] })")
+                                             << QStringLiteral("has anchor a:b");
+        QTest::newRow("anchor listed twice") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["a", "a"] } ] })")
+                                             << QStringLiteral("has anchor a,");
+        QTest::newRow("search entry on an undeclared page") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Search": [ { "Page": "x", "Anchor": "a", "Title": "T" } ] })")
+                                                            << QStringLiteral("search entry x#a is on page x");
+        QTest::newRow("search entry at an unlisted anchor") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["a"] } ],
+                   "Search": [ { "Page": "p", "Anchor": "b", "Title": "T" } ] })")
+                                                            << QStringLiteral("names anchor b");
+        QTest::newRow("search entry of an unknown kind") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["a"] } ],
+                   "Search": [ { "Page": "p", "Anchor": "a", "Kind": "Thing", "Title": "T" } ] })")
+                                                         << QStringLiteral("\"Kind\" Thing");
+        QTest::newRow("search entry without a title") << QByteArray(R"({ "Id": "m", "Name": "M",
+                   "Pages": [ { "Id": "p", "Name": "P", "Anchors": ["a"] } ],
+                   "Search": [ { "Page": "p", "Anchor": "a" } ] })")
+                                                      << QStringLiteral("p#a has no \"Title\"");
     }
 
     void reportsEveryProblem()

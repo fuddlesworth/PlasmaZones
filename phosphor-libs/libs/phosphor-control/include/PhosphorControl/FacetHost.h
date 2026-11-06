@@ -30,6 +30,9 @@ namespace PhosphorControl {
 
 class ApplicationController;
 class FacetContext;
+class FacetPlaceholderPage;
+class ISearchProvider;
+class SearchController;
 class PageController;
 class StagingDomain;
 
@@ -97,6 +100,11 @@ public:
     void setLocale(const QLocale& locale);
     /// Turn the catalog's live reload off, for tests. Before start().
     void setLiveReload(bool enabled);
+    /// Index every module's pages, search entries and extensions in
+    /// @p search, which must outlive the host. Set before start(). A module
+    /// whose metadata says `SearchProviders` loads the first time the query
+    /// is not empty, so its dynamic providers join the results.
+    void setSearchController(SearchController* search);
 
     /// Find the modules and build the placeholder sidebar. Call once.
     void start();
@@ -134,6 +142,8 @@ public:
     [[nodiscard]] QList<StagingDomain*> moduleDomains(const QString& moduleId) const;
     /// The page ids the module of @p moduleId registered while loading.
     [[nodiscard]] QStringList boundPages(const QString& moduleId) const;
+    /// The search providers the module of @p moduleId registered while loading.
+    [[nodiscard]] QList<ISearchProvider*> searchProviders(const QString& moduleId) const;
 
     /// The config backend modules share for the file at @p path, or null
     /// when no module opened it (FacetContext::configBackend).
@@ -154,12 +164,18 @@ private:
     bool bindPage(Module& module, const QString& scopedId, PageController* controller, const QUrl& qmlSource);
     void addDomain(StagingDomain* domain);
     void addExtension(Module& module, const QString& localId, StagingDomain* domain, const QUrl& qmlSource);
+    void addSearchProvider(ISearchProvider* provider);
+    void indexModule(const Module& module);
+    void indexExtensions();
+    void loadSearchProviders();
     PhosphorConfig::IBackend*
     sharedConfigBackend(const QString& path,
                         const std::function<std::unique_ptr<PhosphorConfig::IBackend>(const QString&)>& create);
     void resolveExtensions();
     [[nodiscard]] QVariantList extensionsFor(const QString& pageId, const QString& slot) const;
-    PageController* placeholder(const QString& id);
+    FacetPlaceholderPage* placeholder(const QString& id);
+    [[nodiscard]] static bool canRetry(const Module& module);
+    void updateUnavailablePages(const Module& module);
     void ensureCategoryNode(const QString& categoryId);
     void setFailed(Module& module, const QString& reason);
     [[nodiscard]] QString readSentinel() const;
@@ -167,6 +183,9 @@ private:
     void clearSentinel() const;
 
     QPointer<ApplicationController> m_controller;
+    QPointer<SearchController> m_search;
+    QSet<QString> m_indexedExtensions;
+    bool m_searchProvidersLoaded = false;
     std::unique_ptr<PhosphorRegistry::PluginCatalog> m_catalog;
     QString m_sentinelPath;
     QLocale m_locale;
@@ -175,7 +194,7 @@ private:
     QHash<QString, std::shared_ptr<Module>> m_modules;
     QHash<QString, FacetCategoryMetadata> m_categories;
     QSet<QString> m_registeredCategoryNodes;
-    QHash<QString, PageController*> m_placeholders;
+    QHash<QString, FacetPlaceholderPage*> m_placeholders;
     struct ActiveExtension;
     QHash<QString, QList<std::shared_ptr<ActiveExtension>>> m_extensionsByPage;
     QList<RefusedExtension> m_refusedExtensions;

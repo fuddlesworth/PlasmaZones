@@ -70,6 +70,23 @@ struct PHOSPHORCONTROL_EXPORT FacetExtensionMetadata
     int order = 0;
 };
 
+/// A static search target on one of the module's pages: a setting or section
+/// at one of the page's anchors. Facet indexes these from the metadata, so
+/// search finds them before the module loads.
+struct PHOSPHORCONTROL_EXPORT FacetSearchEntryMetadata
+{
+    /// The module's local page id.
+    QString page;
+    /// One of that page's anchors.
+    QString anchor;
+    /// `"Kind": "Section"`; a setting otherwise.
+    bool section = false;
+    QString title;
+    QStringList keywords;
+    /// The row shows only in advanced mode (SearchEntry::advancedOnly).
+    bool advancedOnly = false;
+};
+
 /// The metadata a Facet module embeds with Q_PLUGIN_METADATA:
 ///
 ///     {
@@ -84,12 +101,19 @@ struct PHOSPHORCONTROL_EXPORT FacetExtensionMetadata
 ///       "ExtensionPoints": [{"Page": "effect", "Id": "outline", "Version": 1}],
 ///       "Extensions": [{"Id": "snap-assist", "Target": "placement:snapping/behavior",
 ///                       "Slot": "after:drag-modifier", "TargetVersion": 1,
-///                       "Name": "KWin snap assist", "Keywords": ["assist"], "Order": 10}]
+///                       "Name": "KWin snap assist", "Keywords": ["assist"], "Order": 10}],
+///       "Search": [{"Page": "effect", "Anchor": "blur", "Kind": "Setting", "Title": "Blur",
+///                   "Keywords": ["frost"], "AdvancedOnly": false}],
+///       "SearchProviders": false
 ///     }
 ///
-/// `Name`, `Description` and `Keywords` may carry `[<locale>]` variants
-/// (`Name[de]`, `Name[pt_BR]`), generated from the module's translations at
-/// build time. parse() picks the best one for the locale.
+/// `Name`, `Description`, `Keywords` and a search entry's `Title` may carry
+/// `[<locale>]` variants (`Name[de]`, `Name[pt_BR]`), generated from the
+/// module's translations at build time by phosphor_add_facet_module().
+/// parse() picks the best one for the locale. Anchors match
+/// `[A-Za-z0-9][A-Za-z0-9._-]*`, and a search entry's anchor must be one its
+/// page lists. `SearchProviders` says the module registers dynamic search
+/// providers, so Facet loads it the first time the user searches.
 struct PHOSPHORCONTROL_EXPORT FacetModuleMetadata
 {
     QString id;
@@ -108,6 +132,8 @@ struct PHOSPHORCONTROL_EXPORT FacetModuleMetadata
     QList<FacetPageMetadata> pages;
     QList<FacetExtensionPointMetadata> extensionPoints;
     QList<FacetExtensionMetadata> extensions;
+    QList<FacetSearchEntryMetadata> search;
+    bool searchProviders = false;
 
     /// Parse @p json for @p locale. Every problem is appended to @p errors;
     /// the metadata is usable only when none was added.
