@@ -175,6 +175,13 @@ public:
      *  systems mutate it but the UI cannot see it. */
     bool registerPage(Entry entry);
 
+    /// Replace the controller and QML source of the registered page @p id,
+    /// keeping its place in the tree, title and icon. This is how a page
+    /// registered with a placeholder controller (a Facet module that has not
+    /// loaded yet) gets its real one. Refuses an unknown id, a null controller,
+    /// or a controller already registered for another page. Emits pageBound.
+    bool bindPage(const QString& id, PageController* controller, const QUrl& qmlSource);
+
     /// Stamp a page's simple/advanced tier after it has been registered.
     /// No-op (with a warning) for an unknown id, and a no-op when the tier is
     /// already what you are setting. Kept separate from registerPage so the
@@ -321,6 +328,8 @@ public:
 
 Q_SIGNALS:
     void pageRegistered(const QString& id);
+    /// A registered page got a new controller and QML source (bindPage).
+    void pageBound(const QString& id);
     void showAdvancedChanged();
     /// The set of entries visible under the current mode may have changed —
     /// either the mode flipped or an entry was restamped. Consumers that

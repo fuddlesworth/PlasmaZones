@@ -9,6 +9,8 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+
+#include <functional>
 #include <QtQml/qqmlregistration.h>
 
 #include "PhosphorControl/PageRegistry.h"
@@ -151,6 +153,18 @@ public:
      *  Used for cross-cutting state shared across multiple pages. */
     void registerDomain(StagingDomain* domain);
 
+    /// Give the already-registered page @p id its real controller and QML
+    /// source (PageRegistry::bindPage), and track the controller like a
+    /// registered page. Used when a Facet module loads into placeholder pages.
+    bool bindPage(const QString& id, PageController* controller, const QUrl& qmlSource);
+
+    /// Called with the target page id at the start of every setCurrentPageId
+    /// to a known page, before currentPageIdChanged is emitted. FacetHost
+    /// uses it to load a page's module synchronously, so the page host only
+    /// ever sees the real page. Pass an empty function to remove it.
+    using NavigationHook = std::function<void(const QString& pageId)>;
+    void setNavigationHook(NavigationHook hook);
+
     /** Navigate to the previous / next navigable page (one with a
      *  qmlSource) in the registry's in-order traversal. The current
      *  page is skipped; the list wraps at boundaries. Returns the id
@@ -266,6 +280,7 @@ private:
     PageRegistry* m_registry = nullptr;
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
+    NavigationHook m_navigationHook;
     // Back/forward navigation history (see canGoBack/goBack). The back
     // stack's last entry is the page goBack() lands on; symmetric for
     // the forward stack. m_navigatingHistory suppresses recording while
