@@ -153,6 +153,13 @@ public:
         /// sites that omit the trailing field don't trip
         /// -Wmissing-field-initializers.
         QString counterpartId{};
+        /// The page's QML root declares `controller` and `settingsApp`, and
+        /// PageHost sets them when it creates the page, before any binding
+        /// runs, so the page may declare them `required`. A page without the
+        /// flag gets them assigned after creation, if it declares them. Every
+        /// page bound with bindPage() has it: it is part of the Facet module
+        /// contract.
+        bool passesContext = false;
     };
 
     explicit PageRegistry(QObject* parent = nullptr);
@@ -181,6 +188,11 @@ public:
     /// loaded yet) gets its real one. Refuses an unknown id, a null controller,
     /// or a controller already registered for another page. Emits pageBound.
     bool bindPage(const QString& id, PageController* controller, const QUrl& qmlSource);
+
+    /// Mark page @p id as one whose QML is created with `controller` and
+    /// `settingsApp` already set (Entry::passesContext). Set it before the
+    /// page is first shown. Warns for an unknown id.
+    void setPassesContext(const QString& id, bool passesContext);
 
     /// Stamp a page's simple/advanced tier after it has been registered.
     /// No-op (with a warning) for an unknown id, and a no-op when the tier is

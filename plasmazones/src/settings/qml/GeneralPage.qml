@@ -10,6 +10,10 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
     // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
     // Frame rate + audio spectrum drive EVERY shader category (overlay,
@@ -71,7 +75,7 @@ SettingsFlickable {
                         valueRole: "value"
                         // Machine-dependent, so enumerated by the page
                         // controller instead of declared in the schema.
-                        model: settingsController.generalPage.availableGpus
+                        model: root.controller.availableGpus
                         storedValue: appSettings.gpuDevice
                         // Guard the write: `enabled` does not reach an
                         // already-open popup (it re-parents to the Overlay),
@@ -124,7 +128,7 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     type: Kirigami.MessageType.Information
                     text: settingsController.daemonRunning ? i18n("Stop the daemon to change rendering settings.") : i18n("Rendering changes take effect after restarting the daemon.")
-                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend || appSettings.gpuDevice !== settingsController.generalPage.startupGpuDevice
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== root.controller.startupRenderingBackend || appSettings.gpuDevice !== root.controller.startupGpuDevice
                 }
             }
         }
@@ -532,8 +536,8 @@ SettingsFlickable {
             }
 
             minWidth: appSettings.minimumWindowWidth
-            minWidthFrom: settingsController.generalPage.minimumWindowWidthMin
-            minWidthTo: settingsController.generalPage.minimumWindowWidthMax
+            minWidthFrom: root.controller.minimumWindowWidthMin
+            minWidthTo: root.controller.minimumWindowWidthMax
             minWidthDescription: i18n("Windows narrower than this are excluded")
             minWidthDisabledDescription: i18n("Disabled (no width threshold)")
             minWidthAccessibleName: i18n("Minimum window width")
@@ -542,8 +546,8 @@ SettingsFlickable {
             }
 
             minHeight: appSettings.minimumWindowHeight
-            minHeightFrom: settingsController.generalPage.minimumWindowHeightMin
-            minHeightTo: settingsController.generalPage.minimumWindowHeightMax
+            minHeightFrom: root.controller.minimumWindowHeightMin
+            minHeightTo: root.controller.minimumWindowHeightMax
             minHeightDescription: i18n("Windows shorter than this are excluded")
             minHeightDisabledDescription: i18n("Disabled (no height threshold)")
             minHeightAccessibleName: i18n("Minimum window height")

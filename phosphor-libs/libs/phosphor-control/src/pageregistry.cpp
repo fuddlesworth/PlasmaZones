@@ -32,6 +32,7 @@ bool PageRegistry::bindPage(const QString& id, PageController* controller, const
     Entry& entry = m_pages[*index];
     if (entry.controller.data() == controller) {
         entry.qmlSource = qmlSource;
+        entry.passesContext = true;
         Q_EMIT pageBound(id);
         return true;
     }
@@ -47,8 +48,19 @@ bool PageRegistry::bindPage(const QString& id, PageController* controller, const
     m_controllerSet.insert(controller);
     entry.controller = controller;
     entry.qmlSource = qmlSource;
+    entry.passesContext = true;
     Q_EMIT pageBound(id);
     return true;
+}
+
+void PageRegistry::setPassesContext(const QString& id, bool passesContext)
+{
+    const auto index = m_indexById.constFind(id);
+    if (index == m_indexById.cend()) {
+        qWarning() << "PageRegistry::setPassesContext: unknown page" << id;
+        return;
+    }
+    m_pages[*index].passesContext = passesContext;
 }
 
 bool PageRegistry::registerPage(Entry entry)
@@ -475,6 +487,7 @@ constexpr QLatin1String QmlSource{"qmlSource"};
 constexpr QLatin1String IsCollapsible{"isCollapsible"};
 constexpr QLatin1String HasDividerAfter{"hasDividerAfter"};
 constexpr QLatin1String HasQmlSource{"hasQmlSource"};
+constexpr QLatin1String PassesContext{"passesContext"};
 } // namespace EntryKeys
 
 } // namespace
@@ -497,6 +510,7 @@ QVariantMap entryToVariant(const PageRegistry::Entry& e)
     m.insert(EntryKeys::IsCollapsible, e.isCollapsible);
     m.insert(EntryKeys::HasDividerAfter, e.hasDividerAfter);
     m.insert(EntryKeys::HasQmlSource, !e.qmlSource.isEmpty());
+    m.insert(EntryKeys::PassesContext, e.passesContext);
     return m;
 }
 } // namespace

@@ -9,9 +9,13 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
     // Page-scoped Q_PROPERTY surface for the Editor page lives on the
     // sub-controller; SettingsController exposes it as a child QObject.
-    readonly property var settingsBridge: settingsController.editorPage
+    readonly property var settingsBridge: root.controller
 
     contentHeight: content.implicitHeight
     clip: true

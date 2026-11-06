@@ -589,6 +589,17 @@ void SettingsController::buildApplicationController()
     // Sync activePage ↔ ApplicationController.currentPageId. Both directions
     // are guarded against re-entrancy by comparing the incoming value to the
     // already-stored one before propagating.
+    // Pages that take their own controller as `controller`, set before their
+    // bindings run, instead of reading it off settingsController. Each moves
+    // here as it is untangled from the hub (the Facet module contract that
+    // every page will follow).
+    const QList<PhosphorControl::PageController*> pagesWithContext = {
+        m_profilesPage.get(),        m_generalPage,          m_editorPage,        m_tilingBehaviorPage,
+        m_tilingAlgorithmPage.get(), m_windowAppearancePage, m_overlaysPage.get()};
+    for (const PhosphorControl::PageController* page : pagesWithContext) {
+        m_app->registry()->setPassesContext(page->id(), true);
+    }
+
     m_app->setCurrentPageId(m_activePage);
     // Context object for both connections below is `m_app.get()`, so Qt
     // auto-disconnects them when `m_app` is destroyed — no manual

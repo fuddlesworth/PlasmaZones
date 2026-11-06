@@ -37,7 +37,11 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    readonly property var bridge: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
+    readonly property var bridge: root.controller.bridge
 
     // Q_INVOKABLE results are not reactive across the QML boundary — refresh
     // manually on profilesChanged.

@@ -13,6 +13,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -57,14 +58,29 @@ class TestPageHost : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void init()
+    {
+        // A page created with a property it does not declare is a contract
+        // break, not noise.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("non-existent property")));
+    }
+
     void initTestCase()
     {
         QVERIFY(m_dir.isValid());
         for (const char* name : {"first", "second"}) {
             QFile page(m_dir.filePath(QString::fromLatin1(name) + QStringLiteral(".qml")));
             QVERIFY(page.open(QIODevice::WriteOnly));
-            page.write(QByteArray("import QtQuick\nItem { objectName: \"") + name + "\" }\n");
+            // A bound page is a module page, which declares both.
+            page.write(QByteArray("import QtQuick\nItem { objectName: \"") + name
+                       + "\"; property var controller; property var settingsApp }\n");
         }
+        QFile required(m_dir.filePath(QStringLiteral("required.qml")));
+        QVERIFY(required.open(QIODevice::WriteOnly));
+        required.write(
+            "import QtQuick\nItem {\n    id: page\n    required property QtObject controller\n"
+            "    required property QtObject settingsApp\n"
+            "    Item { objectName: \"saw:\" + (page.controller ? page.controller.objectName : \"null\") }\n}\n");
     }
 
     void showsTheNewQmlWhenTheCurrentPageIsBound()
@@ -101,10 +117,35 @@ private Q_SLOTS:
         });
         QQmlComponent component(&engine);
         component.setData("import org.phosphor.control\nFacetUnavailablePage { width: 400; height: 300 }\n", QUrl());
-        std::unique_ptr<QObject> page(component.create());
+        QObject placeholder;
+        placeholder.setProperty("unavailableReason", QStringLiteral("it broke"));
+        ApplicationController app;
+        std::unique_ptr<QObject> page(component.createWithInitialProperties(
+            {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&placeholder)},
+             {QStringLiteral("settingsApp"), QVariant::fromValue<QObject*>(&app)}}));
         QVERIFY2(page, qPrintable(component.errorString()));
         QCoreApplication::processEvents();
         QVERIFY2(warnings.isEmpty(), qPrintable(warnings.isEmpty() ? QString() : warnings.first().toString()));
+    }
+
+    void aPageThatPassesContextHasItsControllerFromTheStart()
+    {
+        ApplicationController controller;
+        auto* const page = new SimplePage(QStringLiteral("p"), &controller);
+        page->setObjectName(QStringLiteral("the-controller"));
+        controller.registerPage(page, QString(), QStringLiteral("P"), url(QStringLiteral("required")));
+        controller.registry()->setPassesContext(QStringLiteral("p"), true);
+        controller.setCurrentPageId(QStringLiteral("p"));
+
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import org.phosphor.control\nPageHost {}\n", QUrl());
+        std::unique_ptr<QObject> created(component.createWithInitialProperties(
+            {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&controller)}}));
+        QVERIFY2(created, qPrintable(component.errorString()));
+        auto* const host = qobject_cast<QQuickItem*>(created.get());
+        // The page records what it saw when its bindings first ran.
+        QTRY_VERIFY(hasItem(host, QStringLiteral("saw:the-controller")));
     }
 
 private:

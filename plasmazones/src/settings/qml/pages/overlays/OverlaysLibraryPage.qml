@@ -19,7 +19,13 @@ import QtQuick
  * in their own packs.
  */
 ShaderBrowserPage {
-    bridge: settingsController.overlaysPage
+    id: page
+
+    // Set by PageHost before the page's bindings run (passesContext).
+    required property var controller
+    required property var settingsApp
+
+    bridge: page.controller
     settingsCategory: "OverlaysLibraryFilterBar"
     infoBannerText: i18nc("@info banner on the overlay shader browser", "Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.")
     // Closures (not pre-evaluated strings) so `i18ncp` runs with the
